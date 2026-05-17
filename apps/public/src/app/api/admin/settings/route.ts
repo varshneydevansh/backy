@@ -36,6 +36,7 @@ import type { BackyJsonObject, BackyJsonValue, BackySettings, MediaItem, MediaVe
 
 export const runtime = 'nodejs';
 
+const ADMIN_SETTINGS_SCHEMA = 'backy.admin-settings.v1';
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
@@ -304,29 +305,65 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
   const integrations = parseJsonObject(settings) || {};
   const commerce = parseJsonObject(parseJsonObject(integrations.integrations)?.commerce) || {};
   const paymentProvider = stringValue(commerce.paymentProvider) === 'stripe' ? 'stripe' : stringValue(commerce.paymentProvider) || 'none';
-  const taxProvider = stringValue(commerce.taxProvider) === 'stripe' ? 'stripe' : stringValue(commerce.taxProvider) || 'manual';
+  const taxProviderValue = stringValue(commerce.taxProvider);
+  const taxProvider = ['http', 'stripe', 'taxjar', 'avalara'].includes(taxProviderValue) ? taxProviderValue : 'manual';
   const shippingLabelProvider = ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider))
     ? stringValue(commerce.shippingLabelProvider)
     : 'manual';
+  const shippingProviderValue = stringValue(commerce.shippingProvider);
+  const shippingProvider = ['http', 'easypost', 'shippo'].includes(shippingProviderValue) ? shippingProviderValue : 'manual';
+  const discountProviderValue = stringValue(commerce.discountProvider);
+  const discountProvider = ['http', 'stripe'].includes(discountProviderValue) ? discountProviderValue : 'manual';
   const stripeSecretKey = envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']);
   const stripeApiBaseUrl = envValue(['BACKY_STRIPE_API_BASE_URL', 'STRIPE_API_BASE_URL']);
+  const stripeApiVersion = envValue(['BACKY_STRIPE_API_VERSION', 'STRIPE_API_VERSION']);
   const stripeTaxApiBaseUrl = envValue(['BACKY_STRIPE_TAX_API_BASE_URL']);
+  const stripeDiscountApiBaseUrl = envValue(['BACKY_STRIPE_DISCOUNT_API_BASE_URL']);
   const stripeRefundApiBaseUrl = envValue(['BACKY_STRIPE_REFUND_API_BASE_URL']);
+  const taxJarApiKey = envValue(['BACKY_TAXJAR_API_KEY', 'TAXJAR_API_KEY']);
+  const taxJarApiBaseUrl = envValue(['BACKY_TAXJAR_API_BASE_URL', 'TAXJAR_API_BASE_URL']);
+  const avalaraAccountId = envValue(['BACKY_AVALARA_ACCOUNT_ID', 'AVALARA_ACCOUNT_ID']);
+  const avalaraLicenseKey = envValue(['BACKY_AVALARA_LICENSE_KEY', 'AVALARA_LICENSE_KEY']);
+  const avalaraCompanyCode = envValue(['BACKY_AVALARA_COMPANY_CODE', 'AVALARA_COMPANY_CODE']);
+  const avalaraApiBaseUrl = envValue(['BACKY_AVALARA_API_BASE_URL', 'AVALARA_API_BASE_URL']);
   const paypalAccessToken = envValue(['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN']);
   const paypalApiBaseUrl = envValue(['BACKY_PAYPAL_API_BASE_URL', 'PAYPAL_API_BASE_URL']);
+  const paddleApiKey = envValue(['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']);
+  const paddleApiBaseUrl = envValue(['BACKY_PADDLE_API_BASE_URL', 'PADDLE_API_BASE_URL']);
   const squareAccessToken = envValue(['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN']);
   const squareApiBaseUrl = envValue(['BACKY_SQUARE_API_BASE_URL', 'SQUARE_API_BASE_URL']);
   const squareVersion = envValue(['BACKY_SQUARE_VERSION', 'SQUARE_VERSION']);
   const adyenApiKey = envValue(['BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY']);
   const adyenMerchantAccount = envValue(['BACKY_ADYEN_MERCHANT_ACCOUNT', 'ADYEN_MERCHANT_ACCOUNT']);
   const adyenApiBaseUrl = envValue(['BACKY_ADYEN_API_BASE_URL', 'ADYEN_API_BASE_URL']);
+  const adyenRecurringApiBaseUrl = envValue(['BACKY_ADYEN_RECURRING_API_BASE_URL', 'ADYEN_RECURRING_API_BASE_URL']);
   const mollieApiKey = envValue(['BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY']);
   const mollieApiBaseUrl = envValue(['BACKY_MOLLIE_API_BASE_URL', 'MOLLIE_API_BASE_URL']);
+  const razorpayKeyId = envValue(['BACKY_RAZORPAY_KEY_ID', 'RAZORPAY_KEY_ID']);
+  const razorpayKeySecret = envValue(['BACKY_RAZORPAY_KEY_SECRET', 'RAZORPAY_KEY_SECRET']);
+  const razorpayApiBaseUrl = envValue(['BACKY_RAZORPAY_API_BASE_URL', 'RAZORPAY_API_BASE_URL']);
   const easyPostApiKey = envValue(['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY']);
   const easyPostApiBaseUrl = envValue(['BACKY_EASYPOST_API_BASE_URL', 'EASYPOST_API_BASE_URL']);
   const shippoApiKey = envValue(['BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY']);
   const shippoApiBaseUrl = envValue(['BACKY_SHIPPO_API_BASE_URL', 'SHIPPO_API_BASE_URL']);
-  const stripeRequired = paymentProvider === 'stripe' || taxProvider === 'stripe';
+  const shopifyAdminAccessToken = envValue(['BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_ADMIN_ACCESS_TOKEN']);
+  const shopifyStoreDomain = envValue(['BACKY_SHOPIFY_STORE_DOMAIN', 'SHOPIFY_STORE_DOMAIN']);
+  const shopifyAdminApiBaseUrl = envValue(['BACKY_SHOPIFY_ADMIN_API_BASE_URL', 'SHOPIFY_ADMIN_API_BASE_URL']);
+  const bigCommerceAccessToken = envValue(['BACKY_BIGCOMMERCE_ACCESS_TOKEN', 'BIGCOMMERCE_ACCESS_TOKEN']);
+  const bigCommerceStoreHash = envValue(['BACKY_BIGCOMMERCE_STORE_HASH', 'BIGCOMMERCE_STORE_HASH']);
+  const bigCommerceApiBaseUrl = envValue(['BACKY_BIGCOMMERCE_API_BASE_URL', 'BIGCOMMERCE_API_BASE_URL']);
+  const wooCommerceConsumerKey = envValue(['BACKY_WOOCOMMERCE_CONSUMER_KEY', 'WOOCOMMERCE_CONSUMER_KEY']);
+  const wooCommerceConsumerSecret = envValue(['BACKY_WOOCOMMERCE_CONSUMER_SECRET', 'WOOCOMMERCE_CONSUMER_SECRET']);
+  const wooCommerceStoreUrl = envValue(['BACKY_WOOCOMMERCE_STORE_URL', 'WOOCOMMERCE_STORE_URL']);
+  const wooCommerceApiBaseUrl = envValue(['BACKY_WOOCOMMERCE_API_BASE_URL', 'WOOCOMMERCE_API_BASE_URL']);
+  const etsyAccessToken = envValue(['BACKY_ETSY_ACCESS_TOKEN', 'ETSY_ACCESS_TOKEN']);
+  const etsyApiKey = envValue(['BACKY_ETSY_API_KEY', 'ETSY_API_KEY']);
+  const etsyShopId = envValue(['BACKY_ETSY_SHOP_ID', 'ETSY_SHOP_ID']);
+  const etsyApiBaseUrl = envValue(['BACKY_ETSY_API_BASE_URL', 'ETSY_API_BASE_URL']);
+  const magentoAccessToken = envValue(['BACKY_MAGENTO_ACCESS_TOKEN', 'MAGENTO_ACCESS_TOKEN']);
+  const magentoStoreUrl = envValue(['BACKY_MAGENTO_STORE_URL', 'MAGENTO_STORE_URL']);
+  const magentoApiBaseUrl = envValue(['BACKY_MAGENTO_API_BASE_URL', 'MAGENTO_API_BASE_URL']);
+  const stripeRequired = paymentProvider === 'stripe' || taxProvider === 'stripe' || discountProvider === 'stripe';
   const missing = [
     resolution.reference && !resolution.secret
       ? `${resolution.envKeys.join(' or ') || 'commerce webhook secret env'}`
@@ -334,10 +371,16 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
     stripeRequired && !stripeSecretKey
       ? 'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY'
       : '',
-    shippingLabelProvider === 'easypost' && !easyPostApiKey
+    taxProvider === 'taxjar' && !taxJarApiKey
+      ? 'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY'
+      : '',
+    taxProvider === 'avalara' && (!avalaraAccountId || !avalaraLicenseKey || !avalaraCompanyCode)
+      ? 'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID, BACKY_AVALARA_LICENSE_KEY/AVALARA_LICENSE_KEY, and BACKY_AVALARA_COMPANY_CODE/AVALARA_COMPANY_CODE'
+      : '',
+    (shippingLabelProvider === 'easypost' || shippingProvider === 'easypost') && !easyPostApiKey
       ? 'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY'
       : '',
-    shippingLabelProvider === 'shippo' && !shippoApiKey
+    (shippingLabelProvider === 'shippo' || shippingProvider === 'shippo') && !shippoApiKey
       ? 'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY'
       : '',
   ].filter(Boolean);
@@ -349,25 +392,103 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
     webhookSecretEnvKeys: resolution.envKeys,
     stripeSecretConfigured: Boolean(stripeSecretKey),
     stripeApiBaseUrl: stripeApiBaseUrl || 'https://api.stripe.com',
+    stripeApiVersion: stripeApiVersion || undefined,
     stripeTaxApiBaseUrl: stripeTaxApiBaseUrl || stripeApiBaseUrl || 'https://api.stripe.com',
+    stripeDiscountApiBaseUrl: stripeDiscountApiBaseUrl || stripeApiBaseUrl || 'https://api.stripe.com',
     stripeRefundApiBaseUrl: stripeRefundApiBaseUrl || stripeApiBaseUrl || 'https://api.stripe.com',
+    taxJarApiKeyConfigured: Boolean(taxJarApiKey),
+    taxJarApiBaseUrl: taxJarApiBaseUrl || 'https://api.taxjar.com/v2',
+    avalaraAccountConfigured: Boolean(avalaraAccountId),
+    avalaraLicenseKeyConfigured: Boolean(avalaraLicenseKey),
+    avalaraCompanyCodeConfigured: Boolean(avalaraCompanyCode),
+    avalaraApiBaseUrl: avalaraApiBaseUrl || 'https://sandbox-rest.avatax.com',
     paypalAccessTokenConfigured: Boolean(paypalAccessToken),
     paypalApiBaseUrl: paypalApiBaseUrl || 'https://api-m.paypal.com',
+    paddleApiKeyConfigured: Boolean(paddleApiKey),
+    paddleApiBaseUrl: paddleApiBaseUrl || 'https://api.paddle.com',
     squareAccessTokenConfigured: Boolean(squareAccessToken),
     squareApiBaseUrl: squareApiBaseUrl || 'https://connect.squareup.com',
     squareVersion: squareVersion || '2026-01-22',
     adyenApiKeyConfigured: Boolean(adyenApiKey),
     adyenMerchantAccountConfigured: Boolean(adyenMerchantAccount),
     adyenApiBaseUrl: adyenApiBaseUrl || 'https://checkout-test.adyen.com/v71',
+    adyenRecurringApiBaseUrl: adyenRecurringApiBaseUrl || 'https://pal-test.adyen.com/pal/servlet/Recurring/v68',
     mollieApiKeyConfigured: Boolean(mollieApiKey),
     mollieApiBaseUrl: mollieApiBaseUrl || 'https://api.mollie.com/v2',
+    razorpayKeyIdConfigured: Boolean(razorpayKeyId),
+    razorpayKeySecretConfigured: Boolean(razorpayKeySecret),
+    razorpayApiBaseUrl: razorpayApiBaseUrl || 'https://api.razorpay.com',
     paymentProvider,
     taxProvider,
+    shippingProvider,
+    discountProvider,
     easyPostApiKeyConfigured: Boolean(easyPostApiKey),
     easyPostApiBaseUrl: easyPostApiBaseUrl || 'https://api.easypost.com/v2',
     shippoApiKeyConfigured: Boolean(shippoApiKey),
     shippoApiBaseUrl: shippoApiBaseUrl || 'https://api.goshippo.com',
     shippingLabelProvider,
+    shopifyAdminAccessTokenConfigured: Boolean(shopifyAdminAccessToken),
+    shopifyStoreConfigured: Boolean(shopifyStoreDomain || shopifyAdminApiBaseUrl),
+    shopifyStoreDomain,
+    shopifyAdminApiBaseUrl,
+    bigCommerceAccessTokenConfigured: Boolean(bigCommerceAccessToken),
+    bigCommerceStoreConfigured: Boolean(bigCommerceStoreHash || bigCommerceApiBaseUrl),
+    bigCommerceStoreHash,
+    bigCommerceApiBaseUrl,
+    wooCommerceConsumerKeyConfigured: Boolean(wooCommerceConsumerKey),
+    wooCommerceConsumerSecretConfigured: Boolean(wooCommerceConsumerSecret),
+    wooCommerceStoreConfigured: Boolean(wooCommerceStoreUrl || wooCommerceApiBaseUrl),
+    wooCommerceStoreUrl,
+    wooCommerceApiBaseUrl,
+    etsyAccessTokenConfigured: Boolean(etsyAccessToken),
+    etsyApiKeyConfigured: Boolean(etsyApiKey),
+    etsyShopConfigured: Boolean(etsyShopId),
+    etsyShopId,
+    etsyApiBaseUrl: etsyApiBaseUrl || 'https://api.etsy.com/v3/application',
+    magentoAccessTokenConfigured: Boolean(magentoAccessToken),
+    magentoStoreConfigured: Boolean(magentoStoreUrl || magentoApiBaseUrl),
+    magentoStoreUrl,
+    magentoApiBaseUrl,
+    missing,
+  };
+};
+
+const getInteractiveComponentRuntimeSummary = () => {
+  const registryProvider = envValue(['BACKY_COMPONENT_REGISTRY_PROVIDER', 'BACKY_INTERACTIVE_COMPONENT_REGISTRY_PROVIDER']) || 'local';
+  const registryUrl = envValue(['BACKY_COMPONENT_REGISTRY_URL', 'BACKY_INTERACTIVE_COMPONENT_REGISTRY_URL']);
+  const bundleBaseUrl = envValue(['BACKY_COMPONENT_BUNDLE_BASE_URL', 'BACKY_INTERACTIVE_COMPONENT_BUNDLE_BASE_URL']);
+  const sandboxOrigin = envValue(['BACKY_COMPONENT_SANDBOX_ORIGIN', 'BACKY_INTERACTIVE_SANDBOX_ORIGIN']);
+  const cspPolicy = envValue(['BACKY_COMPONENT_SANDBOX_CSP', 'BACKY_INTERACTIVE_SANDBOX_CSP']);
+  const signingKey = envValue(['BACKY_COMPONENT_REGISTRY_SIGNING_KEY', 'BACKY_INTERACTIVE_COMPONENT_SIGNING_KEY']);
+  const reviewRequired = !['0', 'false', 'no', 'off'].includes(
+    (envValue(['BACKY_COMPONENT_REGISTRY_REVIEW_REQUIRED', 'BACKY_INTERACTIVE_REVIEW_REQUIRED']) || 'true').toLowerCase(),
+  );
+  const customCodeEnabled = ['1', 'true', 'yes', 'on'].includes(
+    envValue(['BACKY_CUSTOM_CODE_COMPONENTS_ENABLED', 'BACKY_INTERACTIVE_CUSTOM_CODE_ENABLED']).toLowerCase(),
+  );
+  const iframeSandbox = envValue(['BACKY_COMPONENT_IFRAME_SANDBOX', 'BACKY_INTERACTIVE_IFRAME_SANDBOX'])
+    || 'allow-scripts allow-forms';
+  const allowedConnectSrc = envValue(['BACKY_COMPONENT_ALLOWED_CONNECT_SRC', 'BACKY_INTERACTIVE_ALLOWED_CONNECT_SRC']);
+  const missing = [
+    registryProvider !== 'local' && !registryUrl ? 'BACKY_COMPONENT_REGISTRY_URL' : '',
+    customCodeEnabled && !sandboxOrigin ? 'BACKY_COMPONENT_SANDBOX_ORIGIN' : '',
+    customCodeEnabled && !cspPolicy ? 'BACKY_COMPONENT_SANDBOX_CSP' : '',
+    customCodeEnabled && !signingKey ? 'BACKY_COMPONENT_REGISTRY_SIGNING_KEY' : '',
+  ].filter(Boolean);
+
+  return {
+    registryProvider,
+    registryConfigured: registryProvider === 'local' || Boolean(registryUrl),
+    registryUrl: registryUrl || undefined,
+    bundleBaseUrl: bundleBaseUrl || undefined,
+    signingKeyConfigured: Boolean(signingKey),
+    reviewRequired,
+    customCodeEnabled,
+    sandboxOrigin: sandboxOrigin || undefined,
+    cspConfigured: Boolean(cspPolicy),
+    iframeSandbox,
+    allowedConnectSrc: allowedConnectSrc || undefined,
+    configured: missing.length === 0,
     missing,
   };
 };
@@ -621,6 +742,16 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
   const apiKeys = settingsApiKeys(settings);
 
   return {
+    schemaVersion: ADMIN_SETTINGS_SCHEMA,
+    scope: {
+      workspaceSettingsScope: 'global',
+      siteSettingsScope: 'site',
+      siteSettingsEndpointTemplate: '/api/admin/sites/:siteId/settings',
+    },
+    endpoints: {
+      workspaceSettings: '/api/admin/settings',
+      siteSettings: '/api/admin/sites/:siteId/settings',
+    },
     deliveryMode: settings.deliveryMode === 'custom-frontend' ? 'custom-frontend' : 'managed-hosting',
     apiKeys: {
       publicApiKey: apiKeys.publicApiKey,
@@ -636,6 +767,7 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
     runtimeVercel: getVercelRuntimeSummary(),
     runtimeNotifications: getNotificationRuntimeSummary(),
     runtimeCommerce: getCommerceRuntimeSummary(settings),
+    runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary(),
     updatedAt: settings.updatedAt,
   };
 };
@@ -738,10 +870,15 @@ const validateCommerceProviderEndpoints = (integrations: unknown): string | null
       url: stringValue(commerce.fulfillmentProviderUrl),
       label: 'Fulfillment endpoint URL',
     },
+    {
+      provider: stringValue(commerce.subscriptionActionProvider || commerce.subscriptionLifecycleProvider),
+      url: stringValue(commerce.subscriptionActionProviderUrl || commerce.subscriptionLifecycleProviderUrl),
+      label: 'Subscription lifecycle endpoint URL',
+    },
   ];
 
   for (const check of checks) {
-    if (check.provider === 'http' && !check.url.trim()) {
+    if (['http', 'generic-http', 'custom-http'].includes(check.provider) && !check.url.trim()) {
       return `${check.label} is required when its provider is set to HTTP.`;
     }
     if (check.url.trim() && !validateWebhookUrl(check.url).ok) {
@@ -1165,18 +1302,26 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       shippingBaseAmount: Math.max(0, numberValue(commerce.shippingBaseAmount, 8)),
       shippingWeightRate: Math.max(0, numberValue(commerce.shippingWeightRate, 1.25)),
       discountPercent: Math.max(0, Math.min(100, numberValue(commerce.discountPercent, 10))),
-      taxProvider: ['http', 'stripe'].includes(stringValue(commerce.taxProvider))
+      taxProvider: ['http', 'stripe', 'taxjar', 'avalara'].includes(stringValue(commerce.taxProvider))
         ? stringValue(commerce.taxProvider)
         : 'manual',
       taxProviderUrl: stringValue(commerce.taxProviderUrl),
-      shippingProvider: stringValue(commerce.shippingProvider) === 'http' ? 'http' : 'manual',
+      shippingProvider: ['http', 'easypost', 'shippo'].includes(stringValue(commerce.shippingProvider))
+        ? stringValue(commerce.shippingProvider)
+        : 'manual',
       shippingProviderUrl: stringValue(commerce.shippingProviderUrl),
-      discountProvider: stringValue(commerce.discountProvider) === 'http' ? 'http' : 'manual',
+      discountProvider: ['http', 'stripe'].includes(stringValue(commerce.discountProvider))
+        ? stringValue(commerce.discountProvider)
+        : 'manual',
       discountProviderUrl: stringValue(commerce.discountProviderUrl),
       catalogSyncProvider: ['http', 'generic-http', 'custom-http'].includes(stringValue(commerce.catalogSyncProvider))
         ? stringValue(commerce.catalogSyncProvider)
         : 'manual',
       catalogSyncProviderUrl: stringValue(commerce.catalogSyncProviderUrl),
+      subscriptionActionProvider: ['http', 'generic-http', 'custom-http'].includes(stringValue(commerce.subscriptionActionProvider || commerce.subscriptionLifecycleProvider))
+        ? stringValue(commerce.subscriptionActionProvider || commerce.subscriptionLifecycleProvider)
+        : 'manual',
+      subscriptionActionProviderUrl: stringValue(commerce.subscriptionActionProviderUrl || commerce.subscriptionLifecycleProviderUrl),
       shippingLabelProvider: ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider))
         ? stringValue(commerce.shippingLabelProvider)
         : 'manual',
@@ -1277,6 +1422,7 @@ interface InfrastructureCheckInput {
   runtimeVercel: ReturnType<typeof getVercelRuntimeSummary>;
   runtimeNotifications: ReturnType<typeof getNotificationRuntimeSummary>;
   runtimeCommerce: ReturnType<typeof getCommerceRuntimeSummary>;
+  runtimeInteractiveComponents: ReturnType<typeof getInteractiveComponentRuntimeSummary>;
 }
 
 type StorageProvisioningStatus = 'ready' | 'blocked';
@@ -1452,7 +1598,7 @@ const optionalRuntimeImport = async <TModule,>(specifier: string): Promise<TModu
 };
 
 const makeInfrastructureDiagnostic = (
-  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce',
+  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce' | 'interactiveComponents',
   label: string,
   checks: Array<{ label: string; ready: boolean; required: boolean; detail: string }>,
 ) => {
@@ -1488,6 +1634,7 @@ const buildInfrastructureDiagnostics = ({
   runtimeVercel,
   runtimeNotifications,
   runtimeCommerce,
+  runtimeInteractiveComponents,
 }: InfrastructureCheckInput) => {
   const storage = parseJsonObject(integrations.storage) || {};
   const supabase = parseJsonObject(integrations.supabase) || {};
@@ -1675,25 +1822,139 @@ const buildInfrastructureDiagnostics = ({
       },
       {
         label: 'Stripe API execution',
-        ready: !(stringValue(commerce.paymentProvider) === 'stripe' || stringValue(commerce.taxProvider) === 'stripe') || Boolean(runtimeCommerce.stripeSecretConfigured),
-        required: stringValue(commerce.paymentProvider) === 'stripe' || stringValue(commerce.taxProvider) === 'stripe',
+        ready: !(stringValue(commerce.paymentProvider) === 'stripe' || stringValue(commerce.taxProvider) === 'stripe' || stringValue(commerce.discountProvider) === 'stripe') || Boolean(runtimeCommerce.stripeSecretConfigured),
+        required: stringValue(commerce.paymentProvider) === 'stripe' || stringValue(commerce.taxProvider) === 'stripe' || stringValue(commerce.discountProvider) === 'stripe',
         detail: runtimeCommerce.stripeSecretConfigured
-          ? 'Stripe API key is available server-side for checkout sessions, tax calculations, and provider refunds.'
+          ? 'Stripe API key is available server-side for checkout sessions, tax calculations, promotion-code discounts, and provider refunds.'
           : 'Set BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY before relying on Stripe execution.',
       },
       {
-        label: 'Shipping label execution',
-        ready: stringValue(commerce.shippingLabelProvider) === 'shippo'
+        label: 'Refund provider execution',
+        ready: Boolean(
+          runtimeCommerce.stripeSecretConfigured ||
+            runtimeCommerce.paypalAccessTokenConfigured ||
+            runtimeCommerce.squareAccessTokenConfigured ||
+            (runtimeCommerce.adyenApiKeyConfigured && runtimeCommerce.adyenMerchantAccountConfigured) ||
+            runtimeCommerce.mollieApiKeyConfigured ||
+            (runtimeCommerce.razorpayKeyIdConfigured && runtimeCommerce.razorpayKeySecretConfigured),
+        ),
+        required: false,
+        detail: [
+          runtimeCommerce.stripeSecretConfigured ? 'Stripe refunds ready.' : '',
+          runtimeCommerce.paypalAccessTokenConfigured ? 'PayPal refunds ready.' : '',
+          runtimeCommerce.squareAccessTokenConfigured ? 'Square refunds ready.' : '',
+          runtimeCommerce.adyenApiKeyConfigured && runtimeCommerce.adyenMerchantAccountConfigured ? 'Adyen refunds ready.' : '',
+          runtimeCommerce.mollieApiKeyConfigured ? 'Mollie refunds ready.' : '',
+          runtimeCommerce.razorpayKeyIdConfigured && runtimeCommerce.razorpayKeySecretConfigured ? 'Razorpay refunds ready.' : '',
+        ].filter(Boolean).join(' ') || 'Set payment provider credentials before relying on direct order refund execution.',
+      },
+      {
+        label: 'TaxJar API execution',
+        ready: stringValue(commerce.taxProvider) !== 'taxjar' || Boolean(runtimeCommerce.taxJarApiKeyConfigured),
+        required: stringValue(commerce.taxProvider) === 'taxjar',
+        detail: runtimeCommerce.taxJarApiKeyConfigured
+          ? 'TaxJar API key is available server-side for order tax quote calculations.'
+          : 'Set BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY before relying on TaxJar execution.',
+      },
+      {
+        label: 'Avalara API execution',
+        ready: stringValue(commerce.taxProvider) !== 'avalara' || Boolean(runtimeCommerce.avalaraAccountConfigured && runtimeCommerce.avalaraLicenseKeyConfigured && runtimeCommerce.avalaraCompanyCodeConfigured),
+        required: stringValue(commerce.taxProvider) === 'avalara',
+        detail: runtimeCommerce.avalaraAccountConfigured && runtimeCommerce.avalaraLicenseKeyConfigured && runtimeCommerce.avalaraCompanyCodeConfigured
+          ? 'Avalara account, license key, and company code are available server-side for order tax quote calculations.'
+          : 'Set BACKY_AVALARA_ACCOUNT_ID, BACKY_AVALARA_LICENSE_KEY, and BACKY_AVALARA_COMPANY_CODE before relying on Avalara execution.',
+      },
+      {
+        label: 'Catalog provider credentials',
+        ready: Boolean(
+          runtimeCommerce.shopifyAdminAccessTokenConfigured ||
+            runtimeCommerce.bigCommerceAccessTokenConfigured ||
+            (runtimeCommerce.wooCommerceConsumerKeyConfigured && runtimeCommerce.wooCommerceConsumerSecretConfigured) ||
+            (runtimeCommerce.etsyAccessTokenConfigured && runtimeCommerce.etsyApiKeyConfigured && runtimeCommerce.etsyShopConfigured) ||
+            (runtimeCommerce.magentoAccessTokenConfigured && runtimeCommerce.magentoStoreConfigured) ||
+            stringValue(commerce.catalogSyncProvider) === 'http',
+        ),
+        required: false,
+        detail: [
+          runtimeCommerce.shopifyAdminAccessTokenConfigured && runtimeCommerce.shopifyStoreConfigured ? 'Shopify catalog sync ready.' : '',
+          runtimeCommerce.bigCommerceAccessTokenConfigured && runtimeCommerce.bigCommerceStoreConfigured ? 'BigCommerce catalog sync ready.' : '',
+          runtimeCommerce.wooCommerceConsumerKeyConfigured && runtimeCommerce.wooCommerceConsumerSecretConfigured && runtimeCommerce.wooCommerceStoreConfigured ? 'WooCommerce catalog sync ready.' : '',
+          runtimeCommerce.etsyAccessTokenConfigured && runtimeCommerce.etsyApiKeyConfigured && runtimeCommerce.etsyShopConfigured ? 'Etsy draft listing sync ready.' : '',
+          runtimeCommerce.magentoAccessTokenConfigured && runtimeCommerce.magentoStoreConfigured ? 'Magento catalog sync ready.' : '',
+          stringValue(commerce.catalogSyncProvider) === 'http' ? 'HTTP catalog sync endpoint is configured in Settings.' : '',
+        ].filter(Boolean).join(' ') || 'Set catalog provider credentials or configure the HTTP catalog sync endpoint before relying on direct product sync execution.',
+      },
+      {
+        label: 'Shipping provider execution',
+        ready: (stringValue(commerce.shippingLabelProvider) === 'shippo' || stringValue(commerce.shippingProvider) === 'shippo')
           ? Boolean(runtimeCommerce.shippoApiKeyConfigured)
-          : stringValue(commerce.shippingLabelProvider) !== 'easypost' || Boolean(runtimeCommerce.easyPostApiKeyConfigured),
-        required: ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider)),
-        detail: stringValue(commerce.shippingLabelProvider) === 'shippo'
+          : !['easypost'].includes(stringValue(commerce.shippingLabelProvider)) && stringValue(commerce.shippingProvider) !== 'easypost' || Boolean(runtimeCommerce.easyPostApiKeyConfigured),
+        required: ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider)) || ['easypost', 'shippo'].includes(stringValue(commerce.shippingProvider)),
+        detail: stringValue(commerce.shippingLabelProvider) === 'shippo' || stringValue(commerce.shippingProvider) === 'shippo'
           ? runtimeCommerce.shippoApiKeyConfigured
-            ? 'Shippo API key is available server-side for label purchase and refund requests.'
-            : 'Set BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY before enabling Shippo label execution.'
+            ? 'Shippo API key is available server-side for shipping quotes, label purchase, tracking, and refund requests.'
+            : 'Set BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY before enabling Shippo shipping execution.'
           : runtimeCommerce.easyPostApiKeyConfigured
-            ? 'EasyPost API key is available server-side for label purchase, void, and tracking refresh.'
-            : 'Set BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY before enabling EasyPost label execution.',
+            ? 'EasyPost API key is available server-side for shipping quotes, label purchase, void, and tracking refresh.'
+            : 'Set BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY before enabling EasyPost shipping execution.',
+      },
+      {
+        label: 'Subscription lifecycle execution',
+        ready: ['http', 'generic-http', 'custom-http'].includes(stringValue(commerce.subscriptionActionProvider))
+          ? Boolean(stringValue(commerce.subscriptionActionProviderUrl))
+          : Boolean(
+            runtimeCommerce.stripeSecretConfigured ||
+            runtimeCommerce.paypalAccessTokenConfigured ||
+            runtimeCommerce.paddleApiKeyConfigured ||
+            runtimeCommerce.squareAccessTokenConfigured ||
+            (runtimeCommerce.adyenApiKeyConfigured && runtimeCommerce.adyenMerchantAccountConfigured) ||
+            runtimeCommerce.mollieApiKeyConfigured ||
+            (runtimeCommerce.razorpayKeyIdConfigured && runtimeCommerce.razorpayKeySecretConfigured),
+          ),
+        required: ['http', 'generic-http', 'custom-http'].includes(stringValue(commerce.subscriptionActionProvider)),
+        detail: ['http', 'generic-http', 'custom-http'].includes(stringValue(commerce.subscriptionActionProvider))
+          ? stringValue(commerce.subscriptionActionProviderUrl)
+            ? 'HTTP subscription lifecycle adapter endpoint is configured in Settings.'
+            : 'Set the subscription lifecycle endpoint before relying on generic HTTP subscription actions.'
+          : [
+            runtimeCommerce.stripeSecretConfigured ? 'Stripe subscription actions ready.' : '',
+            runtimeCommerce.paypalAccessTokenConfigured ? 'PayPal subscription actions ready.' : '',
+            runtimeCommerce.paddleApiKeyConfigured ? 'Paddle subscription actions ready.' : '',
+            runtimeCommerce.squareAccessTokenConfigured ? 'Square subscription actions ready.' : '',
+            runtimeCommerce.adyenApiKeyConfigured && runtimeCommerce.adyenMerchantAccountConfigured ? 'Adyen cancellation actions ready.' : '',
+            runtimeCommerce.mollieApiKeyConfigured ? 'Mollie cancellation actions ready.' : '',
+            runtimeCommerce.razorpayKeyIdConfigured && runtimeCommerce.razorpayKeySecretConfigured ? 'Razorpay subscription actions ready.' : '',
+          ].filter(Boolean).join(' ') || 'Configure native provider credentials or a generic HTTP subscription lifecycle adapter before relying on direct subscription actions.',
+      },
+    ]),
+    makeInfrastructureDiagnostic('interactiveComponents', 'Interactive component platform', [
+      {
+        label: 'Component registry',
+        ready: Boolean(runtimeInteractiveComponents.registryConfigured),
+        required: true,
+        detail: runtimeInteractiveComponents.registryConfigured
+          ? `${runtimeInteractiveComponents.registryProvider} registry metadata is available.`
+          : `Missing ${runtimeInteractiveComponents.missing.join(', ') || 'component registry configuration'}.`,
+      },
+      {
+        label: 'Signed bundle review',
+        ready: Boolean(runtimeInteractiveComponents.signingKeyConfigured || !runtimeInteractiveComponents.customCodeEnabled),
+        required: Boolean(runtimeInteractiveComponents.customCodeEnabled),
+        detail: runtimeInteractiveComponents.signingKeyConfigured
+          ? 'Registry signing key is configured server-side.'
+          : runtimeInteractiveComponents.customCodeEnabled
+            ? 'Custom code components need a server-side registry signing key.'
+            : 'Custom code components are disabled; trusted built-in components can still render.',
+      },
+      {
+        label: 'Sandbox runtime',
+        ready: !runtimeInteractiveComponents.customCodeEnabled || Boolean(runtimeInteractiveComponents.sandboxOrigin && runtimeInteractiveComponents.cspConfigured),
+        required: Boolean(runtimeInteractiveComponents.customCodeEnabled),
+        detail: runtimeInteractiveComponents.customCodeEnabled
+          ? runtimeInteractiveComponents.sandboxOrigin && runtimeInteractiveComponents.cspConfigured
+            ? 'Custom code components will render in a sandboxed iframe with CSP.'
+            : 'Set sandbox origin and CSP before enabling custom code component execution.'
+          : 'Custom code components are disabled; fallback and registry metadata remain available.',
       },
     ]),
   ];
@@ -3552,6 +3813,7 @@ export async function POST(request: NextRequest) {
           runtimeVercel: getVercelRuntimeSummary(),
           runtimeNotifications: getNotificationRuntimeSummary(),
           runtimeCommerce: getCommerceRuntimeSummary(getAdminSettings()),
+          runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary(),
         };
       const normalizedIntegrations = mediaStorageCheck
         ? mergeMediaStorageIntegrations(currentSettings.integrations, body.integrations)
@@ -3581,6 +3843,7 @@ export async function POST(request: NextRequest) {
         runtimeVercel: currentSettings.runtimeVercel,
         runtimeNotifications: currentSettings.runtimeNotifications,
         runtimeCommerce: currentSettings.runtimeCommerce,
+        runtimeInteractiveComponents: currentSettings.runtimeInteractiveComponents,
       });
       const historyEntry = body.recordHistory === true && !mediaStorageCheck
         ? buildDeploymentHistoryEntry({

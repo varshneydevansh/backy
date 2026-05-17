@@ -48,6 +48,7 @@
     "typecheck": "tsc --noEmit",
     "test:runtime": "npm run build && node scripts/runtime-config-smoke.mjs",
     "test:repositories": "npm run build && node scripts/repository-contract-smoke.mjs",
+    "test:forms-postgres-preflight-contract": "node scripts/forms-postgres-preflight-contract-smoke.mjs",
     "test:forms-postgres": "npm run build && node scripts/forms-postgres-smoke.mjs",
     "test:supabase-rls": "node scripts/supabase-rls-smoke.mjs",
     "generate": "drizzle-kit generate",

@@ -1,0 +1,350 @@
+name: Backy Release Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      certify_database:
+        description: Run Forms and SDK Supabase/Postgres certification with BACKY_DATABASE_URL.
+        required: true
+        type: boolean
+        default: true
+      disposable_database_confirmed:
+        description: Required with certify_database=true; confirms BACKY_DATABASE_URL is disposable and migrated.
+        required: true
+        type: boolean
+        default: false
+      database_expected_host:
+        description: Optional expected Postgres/Supabase hostname before database certification connects.
+        required: false
+        type: string
+      database_expected_name:
+        description: Optional expected Postgres database name before database certification connects.
+        required: false
+        type: string
+      certify_settings_providers:
+        description: Run Settings provider certification.
+        required: true
+        type: boolean
+        default: true
+      certify_commerce_providers:
+        description: Run Commerce provider certification.
+        required: true
+        type: boolean
+        default: true
+      certify_storage:
+        description: Run live storage provisioning diagnostics.
+        required: true
+        type: boolean
+        default: true
+      storage_provider:
+        description: Expected media storage provider for Settings certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - local
+          - s3
+          - supabase
+      certify_rotation:
+        description: Run storage credential rotation diagnostics.
+        required: true
+        type: boolean
+        default: false
+      certify_vercel_secrets:
+        description: Run Vercel env secret-manager dry-run planning.
+        required: true
+        type: boolean
+        default: false
+      vercel_project_id:
+        description: Optional expected Vercel project id for Settings secret-manager certification.
+        required: false
+        type: string
+      vercel_team_id:
+        description: Optional expected Vercel team id for Settings secret-manager certification.
+        required: false
+        type: string
+      certify_notification:
+        description: Run live notification webhook delivery diagnostics.
+        required: true
+        type: boolean
+        default: true
+      notification_provider:
+        description: Expected notification runtime provider for Settings certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - webhook
+          - http-endpoint
+          - resend
+          - smtp
+          - local-outbox
+      payment_provider:
+        description: Expected payment/refund provider for Commerce certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - paypal
+          - paddle
+          - square
+          - adyen
+          - mollie
+          - razorpay
+      tax_provider:
+        description: Expected tax quote provider for Commerce certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - taxjar
+          - avalara
+          - http
+      shipping_provider:
+        description: Expected shipping quote or label provider for Commerce certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - easypost
+          - shippo
+          - http
+      catalog_provider:
+        description: Expected product catalog provider for Commerce certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - shopify
+          - bigcommerce
+          - woocommerce
+          - etsy
+          - magento
+          - http
+      subscription_provider:
+        description: Expected subscription lifecycle provider for Commerce certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - paypal
+          - paddle
+          - square
+          - adyen
+          - mollie
+          - http
+      webhook_provider:
+        description: Expected provider-managed webhook family for Commerce certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - paypal
+          - paddle
+          - square
+          - adyen
+          - mollie
+          - generic
+
+jobs:
+  release-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BACKY_ADMIN_API_KEY: release-cert-${{ github.run_id }}-${{ github.run_attempt }}
+      BACKY_DATABASE_URL: ${{ secrets.BACKY_DATABASE_URL }}
+      BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST: ${{ inputs.database_expected_host }}
+      BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE: ${{ inputs.database_expected_name }}
+      BACKY_DATA_MODE: ${{ inputs.certify_database && 'database' || 'demo' }}
+      BACKY_SDK_REQUIRE_DATABASE: ${{ inputs.certify_database && '1' || '0' }}
+      BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: ${{ inputs.certify_settings_providers && '1' || '0' }}
+      BACKY_SETTINGS_CERTIFY_STORAGE: ${{ inputs.certify_storage && '1' || '0' }}
+      BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER: ${{ inputs.storage_provider }}
+      BACKY_SETTINGS_CERTIFY_ROTATION: ${{ inputs.certify_rotation && '1' || '0' }}
+      BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS: ${{ inputs.certify_vercel_secrets && '1' || '0' }}
+      BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID: ${{ inputs.vercel_project_id }}
+      BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID: ${{ inputs.vercel_team_id }}
+      BACKY_SETTINGS_CERTIFY_NOTIFICATION: ${{ inputs.certify_notification && '1' || '0' }}
+      BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER: ${{ inputs.notification_provider }}
+      BACKY_SETTINGS_CERTIFICATION_BASE_URL: ${{ vars.BACKY_SETTINGS_CERTIFICATION_BASE_URL }}
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: ${{ inputs.certify_commerce_providers && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_PAYMENT: ${{ inputs.certify_commerce_providers && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: ${{ inputs.payment_provider }}
+      BACKY_COMMERCE_CERTIFY_TAX: ${{ inputs.certify_commerce_providers && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: ${{ inputs.tax_provider }}
+      BACKY_COMMERCE_CERTIFY_SHIPPING: ${{ inputs.certify_commerce_providers && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: ${{ inputs.shipping_provider }}
+      BACKY_COMMERCE_CERTIFY_CATALOG: ${{ inputs.certify_commerce_providers && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: ${{ inputs.catalog_provider }}
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: ${{ inputs.certify_commerce_providers && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: ${{ inputs.subscription_provider }}
+      BACKY_COMMERCE_CERTIFY_WEBHOOKS: ${{ inputs.certify_commerce_providers && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER: ${{ inputs.webhook_provider }}
+      BACKY_COMMERCE_CERTIFICATION_BASE_URL: ${{ vars.BACKY_COMMERCE_CERTIFICATION_BASE_URL }}
+      BACKY_STORAGE_PROVIDER: ${{ vars.BACKY_STORAGE_PROVIDER }}
+      BACKY_SUPABASE_URL: ${{ secrets.BACKY_SUPABASE_URL }}
+      BACKY_SUPABASE_ANON_KEY: ${{ secrets.BACKY_SUPABASE_ANON_KEY }}
+      BACKY_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BACKY_SUPABASE_SERVICE_ROLE_KEY }}
+      BACKY_SUPABASE_STORAGE_BUCKET: ${{ vars.BACKY_SUPABASE_STORAGE_BUCKET }}
+      BACKY_STORAGE_BUCKET: ${{ vars.BACKY_STORAGE_BUCKET }}
+      BACKY_STORAGE_PUBLIC_BASE_URL: ${{ vars.BACKY_STORAGE_PUBLIC_BASE_URL }}
+      BACKY_S3_ACCESS_KEY_ID: ${{ secrets.BACKY_S3_ACCESS_KEY_ID }}
+      BACKY_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKY_S3_SECRET_ACCESS_KEY }}
+      BACKY_S3_BUCKET: ${{ vars.BACKY_S3_BUCKET }}
+      BACKY_S3_REGION: ${{ vars.BACKY_S3_REGION }}
+      BACKY_S3_ENDPOINT: ${{ vars.BACKY_S3_ENDPOINT }}
+      BACKY_S3_PUBLIC_URL: ${{ vars.BACKY_S3_PUBLIC_URL }}
+      BACKY_S3_NEXT_ACCESS_KEY_ID: ${{ secrets.BACKY_S3_NEXT_ACCESS_KEY_ID }}
+      BACKY_S3_NEXT_SECRET_ACCESS_KEY: ${{ secrets.BACKY_S3_NEXT_SECRET_ACCESS_KEY }}
+      BACKY_S3_NEXT_BUCKET: ${{ vars.BACKY_S3_NEXT_BUCKET }}
+      BACKY_S3_NEXT_REGION: ${{ vars.BACKY_S3_NEXT_REGION }}
+      BACKY_S3_NEXT_ENDPOINT: ${{ vars.BACKY_S3_NEXT_ENDPOINT }}
+      BACKY_S3_NEXT_PUBLIC_URL: ${{ vars.BACKY_S3_NEXT_PUBLIC_URL }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+      BACKY_VERCEL_API_BASE_URL: ${{ vars.BACKY_VERCEL_API_BASE_URL }}
+      BACKY_RESEND_API_KEY: ${{ secrets.BACKY_RESEND_API_KEY }}
+      BACKY_SMTP_HOST: ${{ vars.BACKY_SMTP_HOST }}
+      BACKY_SMTP_USER: ${{ secrets.BACKY_SMTP_USER }}
+      BACKY_SMTP_PASSWORD: ${{ secrets.BACKY_SMTP_PASSWORD }}
+      BACKY_EMAIL_DELIVERY_ENDPOINT: ${{ secrets.BACKY_EMAIL_DELIVERY_ENDPOINT }}
+      BACKY_COMMERCE_WEBHOOK_SECRET: ${{ secrets.BACKY_COMMERCE_WEBHOOK_SECRET }}
+      BACKY_STRIPE_SECRET_KEY: ${{ secrets.BACKY_STRIPE_SECRET_KEY }}
+      BACKY_STRIPE_API_BASE_URL: ${{ vars.BACKY_STRIPE_API_BASE_URL }}
+      BACKY_STRIPE_TAX_API_BASE_URL: ${{ vars.BACKY_STRIPE_TAX_API_BASE_URL }}
+      BACKY_STRIPE_DISCOUNT_API_BASE_URL: ${{ vars.BACKY_STRIPE_DISCOUNT_API_BASE_URL }}
+      BACKY_STRIPE_REFUND_API_BASE_URL: ${{ vars.BACKY_STRIPE_REFUND_API_BASE_URL }}
+      BACKY_TAXJAR_API_KEY: ${{ secrets.BACKY_TAXJAR_API_KEY }}
+      BACKY_TAXJAR_API_BASE_URL: ${{ vars.BACKY_TAXJAR_API_BASE_URL }}
+      BACKY_AVALARA_ACCOUNT_ID: ${{ secrets.BACKY_AVALARA_ACCOUNT_ID }}
+      BACKY_AVALARA_LICENSE_KEY: ${{ secrets.BACKY_AVALARA_LICENSE_KEY }}
+      BACKY_AVALARA_COMPANY_CODE: ${{ vars.BACKY_AVALARA_COMPANY_CODE }}
+      BACKY_AVALARA_API_BASE_URL: ${{ vars.BACKY_AVALARA_API_BASE_URL }}
+      BACKY_EASYPOST_API_KEY: ${{ secrets.BACKY_EASYPOST_API_KEY }}
+      BACKY_EASYPOST_API_BASE_URL: ${{ vars.BACKY_EASYPOST_API_BASE_URL }}
+      BACKY_SHIPPO_API_KEY: ${{ secrets.BACKY_SHIPPO_API_KEY }}
+      BACKY_SHIPPO_API_BASE_URL: ${{ vars.BACKY_SHIPPO_API_BASE_URL }}
+      BACKY_PAYPAL_ACCESS_TOKEN: ${{ secrets.BACKY_PAYPAL_ACCESS_TOKEN }}
+      BACKY_PAYPAL_API_BASE_URL: ${{ vars.BACKY_PAYPAL_API_BASE_URL }}
+      BACKY_PADDLE_API_KEY: ${{ secrets.BACKY_PADDLE_API_KEY }}
+      BACKY_PADDLE_API_BASE_URL: ${{ vars.BACKY_PADDLE_API_BASE_URL }}
+      BACKY_SQUARE_ACCESS_TOKEN: ${{ secrets.BACKY_SQUARE_ACCESS_TOKEN }}
+      BACKY_SQUARE_API_BASE_URL: ${{ vars.BACKY_SQUARE_API_BASE_URL }}
+      BACKY_ADYEN_API_KEY: ${{ secrets.BACKY_ADYEN_API_KEY }}
+      BACKY_ADYEN_MERCHANT_ACCOUNT: ${{ vars.BACKY_ADYEN_MERCHANT_ACCOUNT }}
+      BACKY_ADYEN_API_BASE_URL: ${{ vars.BACKY_ADYEN_API_BASE_URL }}
+      BACKY_ADYEN_RECURRING_API_BASE_URL: ${{ vars.BACKY_ADYEN_RECURRING_API_BASE_URL }}
+      BACKY_MOLLIE_API_KEY: ${{ secrets.BACKY_MOLLIE_API_KEY }}
+      BACKY_MOLLIE_API_BASE_URL: ${{ vars.BACKY_MOLLIE_API_BASE_URL }}
+      BACKY_RAZORPAY_KEY_ID: ${{ secrets.BACKY_RAZORPAY_KEY_ID }}
+      BACKY_RAZORPAY_KEY_SECRET: ${{ secrets.BACKY_RAZORPAY_KEY_SECRET }}
+      BACKY_RAZORPAY_API_BASE_URL: ${{ vars.BACKY_RAZORPAY_API_BASE_URL }}
+      BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN }}
+      BACKY_SHOPIFY_STORE_DOMAIN: ${{ vars.BACKY_SHOPIFY_STORE_DOMAIN }}
+      BACKY_SHOPIFY_ADMIN_API_BASE_URL: ${{ vars.BACKY_SHOPIFY_ADMIN_API_BASE_URL }}
+      BACKY_BIGCOMMERCE_ACCESS_TOKEN: ${{ secrets.BACKY_BIGCOMMERCE_ACCESS_TOKEN }}
+      BACKY_BIGCOMMERCE_STORE_HASH: ${{ vars.BACKY_BIGCOMMERCE_STORE_HASH }}
+      BACKY_BIGCOMMERCE_API_BASE_URL: ${{ vars.BACKY_BIGCOMMERCE_API_BASE_URL }}
+      BACKY_WOOCOMMERCE_CONSUMER_KEY: ${{ secrets.BACKY_WOOCOMMERCE_CONSUMER_KEY }}
+      BACKY_WOOCOMMERCE_CONSUMER_SECRET: ${{ secrets.BACKY_WOOCOMMERCE_CONSUMER_SECRET }}
+      BACKY_WOOCOMMERCE_STORE_URL: ${{ vars.BACKY_WOOCOMMERCE_STORE_URL }}
+      BACKY_WOOCOMMERCE_API_BASE_URL: ${{ vars.BACKY_WOOCOMMERCE_API_BASE_URL }}
+      BACKY_ETSY_ACCESS_TOKEN: ${{ secrets.BACKY_ETSY_ACCESS_TOKEN }}
+      BACKY_ETSY_API_KEY: ${{ secrets.BACKY_ETSY_API_KEY }}
+      BACKY_ETSY_SHOP_ID: ${{ vars.BACKY_ETSY_SHOP_ID }}
+      BACKY_ETSY_API_BASE_URL: ${{ vars.BACKY_ETSY_API_BASE_URL }}
+      BACKY_MAGENTO_ACCESS_TOKEN: ${{ secrets.BACKY_MAGENTO_ACCESS_TOKEN }}
+      BACKY_MAGENTO_STORE_URL: ${{ vars.BACKY_MAGENTO_STORE_URL }}
+      BACKY_MAGENTO_API_BASE_URL: ${{ vars.BACKY_MAGENTO_API_BASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run local release preflight contracts
+        run: |
+          npm run test:release-certification-preflight-contract
+          npm run test:forms-postgres-preflight-contract
+          npm run test:sdk-postgres-preflight-contract
+          npm run test:settings-provider-certification-preflight-contract
+          npm run test:commerce-provider-certification-preflight-contract
+
+      - name: Run non-secret release certification doctor
+        run: npm run doctor:release-certification
+
+      - name: Write non-secret release certification summary
+        run: |
+          settings_external=false
+          commerce_external=false
+          if [ -n "$BACKY_SETTINGS_CERTIFICATION_BASE_URL" ]; then settings_external=true; fi
+          if [ -n "$BACKY_COMMERCE_CERTIFICATION_BASE_URL" ]; then commerce_external=true; fi
+          {
+            echo "## Backy Release Certification"
+            echo ""
+            echo "| Gate | Requested | Non-secret target evidence |"
+            echo "| --- | --- | --- |"
+            echo "| Database | ${{ inputs.certify_database }} | expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
+            echo "| Settings providers | ${{ inputs.certify_settings_providers }} | external target configured: $settings_external |"
+            echo "| Commerce providers | ${{ inputs.certify_commerce_providers }} | external target configured: $commerce_external |"
+            echo ""
+            echo "| Selector | Value |"
+            echo "| --- | --- |"
+            echo "| storage_provider | ${{ inputs.storage_provider }} |"
+            echo "| notification_provider | ${{ inputs.notification_provider }} |"
+            echo "| payment_provider | ${{ inputs.payment_provider }} |"
+            echo "| tax_provider | ${{ inputs.tax_provider }} |"
+            echo "| shipping_provider | ${{ inputs.shipping_provider }} |"
+            echo "| catalog_provider | ${{ inputs.catalog_provider }} |"
+            echo "| subscription_provider | ${{ inputs.subscription_provider }} |"
+            echo "| webhook_provider | ${{ inputs.webhook_provider }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require disposable Postgres or Supabase database URL
+        if: ${{ inputs.certify_database }}
+        run: |
+          if [ -z "$BACKY_DATABASE_URL" ]; then
+            echo "::error::Set BACKY_DATABASE_URL to a disposable migrated Supabase/Postgres database before running release database certification."
+            exit 1
+          fi
+          if [ "${{ inputs.disposable_database_confirmed }}" != "true" ]; then
+            echo "::error::Set disposable_database_confirmed=true before running release database certification."
+            exit 1
+          fi
+
+      - name: Run Forms Postgres certification
+        if: ${{ inputs.certify_database }}
+        run: npm run ci:forms-postgres
+
+      - name: Run SDK Postgres certification
+        if: ${{ inputs.certify_database }}
+        run: npm run ci:sdk-postgres-smoke
+
+      - name: Run Settings provider certification
+        if: ${{ inputs.certify_settings_providers }}
+        run: npm run ci:settings-provider-certification
+
+      - name: Run Commerce provider certification
+        if: ${{ inputs.certify_commerce_providers }}
+        run: npm run ci:commerce-provider-certification

@@ -1,169 +1,828 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
-import { createHmac } from 'node:crypto';
-import fs from 'node:fs';
-import { createServer } from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
+import { spawn } from "node:child_process";
+import { createHmac } from "node:crypto";
+import fs from "node:fs";
+import { createServer } from "node:http";
+import os from "node:os";
+import path from "node:path";
 
-const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
-const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
-const SITE_ID = process.env.BACKY_COMMERCE_SMOKE_SITE_ID || 'site-demo';
-const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const ADMIN_BASE_URL =
+  process.env.BACKY_ADMIN_BASE_URL || "http://localhost:5173";
+const API_BASE_URL =
+  process.env.BACKY_PUBLIC_API_BASE_URL || "http://localhost:3001";
+const SITE_ID = process.env.BACKY_COMMERCE_SMOKE_SITE_ID || "site-demo";
+const CHROME_BIN =
+  process.env.CHROME_BIN ||
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = Number(process.env.BACKY_COMMERCE_CDP_PORT || 9378);
-const SCREENSHOT_PATH = process.env.BACKY_COMMERCE_SCREENSHOT || path.join(os.tmpdir(), 'backy-commerce-smoke.png');
+const SCREENSHOT_PATH =
+  process.env.BACKY_COMMERCE_SCREENSHOT ||
+  path.join(os.tmpdir(), "backy-commerce-smoke.png");
 const STRIPE_MOCK_PORT = Number(process.env.BACKY_STRIPE_MOCK_PORT || 45678);
 const STRIPE_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_MOCK_PORT}`;
-const COMMERCE_PROVIDER_MOCK_PORT = Number(process.env.BACKY_COMMERCE_PROVIDER_MOCK_PORT || 45679);
+const COMMERCE_PROVIDER_MOCK_PORT = Number(
+  process.env.BACKY_COMMERCE_PROVIDER_MOCK_PORT || 45679,
+);
 const COMMERCE_PROVIDER_MOCK_BASE_URL = `http://127.0.0.1:${COMMERCE_PROVIDER_MOCK_PORT}`;
 
-const PRODUCT_COLLECTION_SLUG = 'products';
-const ORDERS_COLLECTION_SLUG = 'orders';
-const CUSTOMERS_COLLECTION_SLUG = 'customers';
+const PRODUCT_COLLECTION_SLUG = "products";
+const ORDERS_COLLECTION_SLUG = "orders";
+const CUSTOMERS_COLLECTION_SLUG = "customers";
 const PRODUCT_REQUIRED_FIELD_COUNT = 31;
 const ORDER_REQUIRED_FIELD_COUNT = 57;
-const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
-const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
-const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
-const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
-let apiAdminSessionToken = '';
+const FRONTEND_PRODUCT_TEMPLATE_ID = "smoke-product-contract-template";
+const FRONTEND_PRODUCT_TEMPLATE_NAME = "Smoke Frontend Product";
+const COMMERCE_WEBHOOK_SECRET = "smoke-commerce-webhook-secret";
+const COMMERCE_WEBHOOK_SECRET_REFERENCE = "env:BACKY_COMMERCE_WEBHOOK_SECRET";
+let apiAdminSessionToken = "";
 let stripeCheckoutMock = null;
 let commerceProviderMock = null;
 
 const PRODUCT_VALUE_KEYS = {
-  title: 'title',
-  sku: 'sku',
-  variants: 'variants',
-  price: 'price',
-  compareAtPrice: 'compareatprice',
-  currency: 'currency',
-  inventory: 'inventory',
-  lowStockThreshold: 'lowstockthreshold',
-  inventoryPolicy: 'inventorypolicy',
-  productType: 'producttype',
-  downloadUrl: 'downloadurl',
-  checkoutUrl: 'checkouturl',
-  subscriptionEnabled: 'subscriptionenabled',
-  subscriptionInterval: 'subscriptioninterval',
-  subscriptionTrialDays: 'subscriptiontrialdays',
-  shippingRequired: 'shippingrequired',
-  shippingProfile: 'shippingprofile',
-  weight: 'weight',
-  taxClass: 'taxclass',
-  discountCode: 'discountcode',
-  returnPolicy: 'returnpolicy',
-  imageUrl: 'imageurl',
-  galleryImages: 'galleryimages',
-  category: 'category',
-  tags: 'tags',
-  vendor: 'vendor',
-  description: 'description',
-  seoTitle: 'seotitle',
-  featured: 'featured',
-  taxable: 'taxable',
-  providerSync: 'providersync',
+  title: "title",
+  sku: "sku",
+  variants: "variants",
+  price: "price",
+  compareAtPrice: "compareatprice",
+  currency: "currency",
+  inventory: "inventory",
+  lowStockThreshold: "lowstockthreshold",
+  inventoryPolicy: "inventorypolicy",
+  productType: "producttype",
+  downloadUrl: "downloadurl",
+  checkoutUrl: "checkouturl",
+  subscriptionEnabled: "subscriptionenabled",
+  subscriptionInterval: "subscriptioninterval",
+  subscriptionTrialDays: "subscriptiontrialdays",
+  shippingRequired: "shippingrequired",
+  shippingProfile: "shippingprofile",
+  weight: "weight",
+  taxClass: "taxclass",
+  discountCode: "discountcode",
+  returnPolicy: "returnpolicy",
+  imageUrl: "imageurl",
+  galleryImages: "galleryimages",
+  category: "category",
+  tags: "tags",
+  vendor: "vendor",
+  description: "description",
+  seoTitle: "seotitle",
+  featured: "featured",
+  taxable: "taxable",
+  providerSync: "providersync",
 };
 
 const productFieldKey = (key) => PRODUCT_VALUE_KEYS[key] || key;
-const readProductValue = (values, key) => (
+const readProductValue = (values, key) =>
   Object.prototype.hasOwnProperty.call(values || {}, productFieldKey(key))
     ? values[productFieldKey(key)]
-    : values?.[key]
-);
+    : values?.[key];
 
 const PRODUCT_SCHEMA_FIELDS = [
-  { key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
-  { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true, sortOrder: 20 },
-  { key: 'price', label: 'Price', type: 'number', required: true, unique: false, sortOrder: 30 },
-  { key: productFieldKey('compareAtPrice'), label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
-  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
-  { key: 'variants', label: 'Variants', type: 'json', required: false, unique: false, sortOrder: 60, defaultValue: [] },
-  { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 70, defaultValue: 0 },
-  { key: productFieldKey('lowStockThreshold'), label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 80, defaultValue: 5 },
-  { key: productFieldKey('inventoryPolicy'), label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 90, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
-  { key: productFieldKey('productType'), label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
-  { key: productFieldKey('downloadUrl'), label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
-  { key: productFieldKey('checkoutUrl'), label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
-  { key: productFieldKey('subscriptionEnabled'), label: 'Subscription Enabled', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: false },
-  { key: productFieldKey('subscriptionInterval'), label: 'Subscription Interval', type: 'select', required: false, unique: false, sortOrder: 140, options: ['weekly', 'monthly', 'quarterly', 'yearly'], defaultValue: 'monthly' },
-  { key: productFieldKey('subscriptionTrialDays'), label: 'Subscription Trial Days', type: 'number', required: false, unique: false, sortOrder: 150, defaultValue: 0 },
-  { key: productFieldKey('shippingRequired'), label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 160, defaultValue: true },
-  { key: productFieldKey('shippingProfile'), label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 170 },
-  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 180 },
-  { key: productFieldKey('taxClass'), label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 190 },
-  { key: productFieldKey('discountCode'), label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 200 },
-  { key: productFieldKey('returnPolicy'), label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 210 },
-  { key: productFieldKey('imageUrl'), label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 220 },
-  { key: productFieldKey('galleryImages'), label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 230, defaultValue: [] },
-  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 240 },
-  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 250 },
-  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 260 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 270 },
-  { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 280 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 290, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 300, defaultValue: true },
-  { key: productFieldKey('providerSync'), label: 'Provider Sync', type: 'json', required: false, unique: false, sortOrder: 310 },
+  {
+    key: "title",
+    label: "Title",
+    type: "text",
+    required: true,
+    unique: false,
+    sortOrder: 10,
+  },
+  {
+    key: "sku",
+    label: "SKU",
+    type: "text",
+    required: true,
+    unique: true,
+    sortOrder: 20,
+  },
+  {
+    key: "price",
+    label: "Price",
+    type: "number",
+    required: true,
+    unique: false,
+    sortOrder: 30,
+  },
+  {
+    key: productFieldKey("compareAtPrice"),
+    label: "Compare at price",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 40,
+  },
+  {
+    key: "currency",
+    label: "Currency",
+    type: "text",
+    required: true,
+    unique: false,
+    sortOrder: 50,
+    defaultValue: "USD",
+  },
+  {
+    key: "variants",
+    label: "Variants",
+    type: "json",
+    required: false,
+    unique: false,
+    sortOrder: 60,
+    defaultValue: [],
+  },
+  {
+    key: "inventory",
+    label: "Inventory",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 70,
+    defaultValue: 0,
+  },
+  {
+    key: productFieldKey("lowStockThreshold"),
+    label: "Low Stock Threshold",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 80,
+    defaultValue: 5,
+  },
+  {
+    key: productFieldKey("inventoryPolicy"),
+    label: "Inventory Policy",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 90,
+    options: ["deny", "continue", "preorder"],
+    defaultValue: "deny",
+  },
+  {
+    key: productFieldKey("productType"),
+    label: "Product Type",
+    type: "select",
+    required: true,
+    unique: false,
+    sortOrder: 100,
+    options: ["physical", "digital", "service"],
+    defaultValue: "physical",
+  },
+  {
+    key: productFieldKey("downloadUrl"),
+    label: "Digital Delivery URL",
+    type: "url",
+    required: false,
+    unique: false,
+    sortOrder: 110,
+  },
+  {
+    key: productFieldKey("checkoutUrl"),
+    label: "Checkout URL",
+    type: "url",
+    required: false,
+    unique: false,
+    sortOrder: 120,
+  },
+  {
+    key: productFieldKey("subscriptionEnabled"),
+    label: "Subscription Enabled",
+    type: "boolean",
+    required: false,
+    unique: false,
+    sortOrder: 130,
+    defaultValue: false,
+  },
+  {
+    key: productFieldKey("subscriptionInterval"),
+    label: "Subscription Interval",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 140,
+    options: ["weekly", "monthly", "quarterly", "yearly"],
+    defaultValue: "monthly",
+  },
+  {
+    key: productFieldKey("subscriptionTrialDays"),
+    label: "Subscription Trial Days",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 150,
+    defaultValue: 0,
+  },
+  {
+    key: productFieldKey("shippingRequired"),
+    label: "Requires Shipping",
+    type: "boolean",
+    required: false,
+    unique: false,
+    sortOrder: 160,
+    defaultValue: true,
+  },
+  {
+    key: productFieldKey("shippingProfile"),
+    label: "Shipping Profile",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 170,
+  },
+  {
+    key: "weight",
+    label: "Weight",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 180,
+  },
+  {
+    key: productFieldKey("taxClass"),
+    label: "Tax Class",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 190,
+  },
+  {
+    key: productFieldKey("discountCode"),
+    label: "Discount Code",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 200,
+  },
+  {
+    key: productFieldKey("returnPolicy"),
+    label: "Return Policy",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 210,
+  },
+  {
+    key: productFieldKey("imageUrl"),
+    label: "Image URL",
+    type: "url",
+    required: false,
+    unique: false,
+    sortOrder: 220,
+  },
+  {
+    key: productFieldKey("galleryImages"),
+    label: "Gallery Images",
+    type: "json",
+    required: false,
+    unique: false,
+    sortOrder: 230,
+    defaultValue: [],
+  },
+  {
+    key: "category",
+    label: "Category",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 240,
+  },
+  {
+    key: "tags",
+    label: "Tags",
+    type: "tags",
+    required: false,
+    unique: false,
+    sortOrder: 250,
+  },
+  {
+    key: "vendor",
+    label: "Vendor",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 260,
+  },
+  {
+    key: "description",
+    label: "Description",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 270,
+  },
+  {
+    key: productFieldKey("seoTitle"),
+    label: "SEO Title",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 280,
+  },
+  {
+    key: "featured",
+    label: "Featured",
+    type: "boolean",
+    required: false,
+    unique: false,
+    sortOrder: 290,
+    defaultValue: false,
+  },
+  {
+    key: "taxable",
+    label: "Taxable",
+    type: "boolean",
+    required: false,
+    unique: false,
+    sortOrder: 300,
+    defaultValue: true,
+  },
+  {
+    key: productFieldKey("providerSync"),
+    label: "Provider Sync",
+    type: "json",
+    required: false,
+    unique: false,
+    sortOrder: 310,
+  },
 ];
 
 const ORDER_SCHEMA_FIELDS = [
-  { key: 'ordernumber', label: 'Order Number', type: 'text', required: true, unique: true, sortOrder: 10 },
-  { key: 'customername', label: 'Customer Name', type: 'text', required: true, unique: false, sortOrder: 20 },
-  { key: 'email', label: 'Email', type: 'email', required: true, unique: false, sortOrder: 30 },
-  { key: 'phone', label: 'Phone', type: 'text', required: false, unique: false, sortOrder: 40 },
-  { key: 'total', label: 'Total', type: 'number', required: true, unique: false, sortOrder: 50 },
-  { key: 'subtotal', label: 'Subtotal', type: 'number', required: false, unique: false, sortOrder: 55 },
-  { key: 'taxamount', label: 'Tax Amount', type: 'number', required: false, unique: false, sortOrder: 56 },
-  { key: 'shippingamount', label: 'Shipping Amount', type: 'number', required: false, unique: false, sortOrder: 57 },
-  { key: 'discountamount', label: 'Discount Amount', type: 'number', required: false, unique: false, sortOrder: 58 },
-  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 60, defaultValue: 'USD' },
-  { key: 'items', label: 'Items', type: 'richText', required: true, unique: false, sortOrder: 70 },
-  { key: 'ordersource', label: 'Order Source', type: 'select', required: false, unique: false, sortOrder: 75, options: ['web', 'manual', 'api', 'import', 'pos'], defaultValue: 'web' },
-  { key: 'checkoutsessionid', label: 'Checkout Session ID', type: 'text', required: false, unique: false, sortOrder: 76 },
-  { key: 'customerid', label: 'Customer ID', type: 'text', required: false, unique: false, sortOrder: 77 },
-  { key: 'orderstatus', label: 'Order Status', type: 'select', required: true, unique: false, sortOrder: 80, options: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'], defaultValue: 'open' },
-  { key: 'paymentstatus', label: 'Payment Status', type: 'select', required: true, unique: false, sortOrder: 90, options: ['pending', 'paid', 'failed', 'refunded'], defaultValue: 'pending' },
-  { key: 'paymentprovider', label: 'Payment Provider', type: 'text', required: false, unique: false, sortOrder: 100 },
-  { key: 'paymentreference', label: 'Payment Reference', type: 'text', required: false, unique: false, sortOrder: 110 },
-  { key: 'paidat', label: 'Paid At', type: 'date', required: false, unique: false, sortOrder: 120 },
-  { key: 'fulfillmentstatus', label: 'Fulfillment Status', type: 'select', required: true, unique: false, sortOrder: 130, options: ['unfulfilled', 'processing', 'fulfilled', 'cancelled'], defaultValue: 'unfulfilled' },
-  { key: 'fulfillmentcarrier', label: 'Fulfillment Carrier', type: 'text', required: false, unique: false, sortOrder: 140 },
-  { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
-  { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
-  { key: 'trackingstatus', label: 'Tracking Status', type: 'text', required: false, unique: false, sortOrder: 165 },
-  { key: 'trackinglastcheckedat', label: 'Tracking Last Checked At', type: 'date', required: false, unique: false, sortOrder: 166 },
-  { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
-  { key: 'shippinglabelstatus', label: 'Shipping Label Status', type: 'select', required: false, unique: false, sortOrder: 171, options: ['none', 'draft', 'purchased', 'voided'], defaultValue: 'none' },
-  { key: 'shippinglabelprovider', label: 'Shipping Label Provider', type: 'text', required: false, unique: false, sortOrder: 172 },
-  { key: 'shippinglabelid', label: 'Shipping Label ID', type: 'text', required: false, unique: false, sortOrder: 173 },
-  { key: 'shippinglabelurl', label: 'Shipping Label URL', type: 'url', required: false, unique: false, sortOrder: 174 },
-  { key: 'shippingservicelevel', label: 'Shipping Service Level', type: 'text', required: false, unique: false, sortOrder: 175 },
-  { key: 'shippinglabelcost', label: 'Shipping Label Cost', type: 'number', required: false, unique: false, sortOrder: 176 },
-  { key: 'shippinglabelcreatedat', label: 'Shipping Label Created At', type: 'date', required: false, unique: false, sortOrder: 177 },
-  { key: 'fulfillmentdispatchstatus', label: 'Fulfillment Dispatch Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
-  { key: 'fulfillmentprovider', label: 'Fulfillment Provider', type: 'text', required: false, unique: false, sortOrder: 179 },
-  { key: 'fulfillmentid', label: 'Fulfillment ID', type: 'text', required: false, unique: false, sortOrder: 180 },
-  { key: 'fulfillmentrequestedat', label: 'Fulfillment Requested At', type: 'date', required: false, unique: false, sortOrder: 181 },
-  { key: 'fulfillmentcompletedat', label: 'Fulfillment Completed At', type: 'date', required: false, unique: false, sortOrder: 182 },
-  { key: 'fulfillmentpayload', label: 'Fulfillment Payload', type: 'richText', required: false, unique: false, sortOrder: 183 },
-  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 180, defaultValue: 0 },
-  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 182, options: ['low', 'medium', 'high'], defaultValue: 'low' },
-  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 184 },
-  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 186, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
-  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
-  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 200 },
-  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 210 },
-  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 220 },
-  { key: 'providerrefundstatus', label: 'Provider Refund Status', type: 'select', required: false, unique: false, sortOrder: 221, options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
-  { key: 'providerrefundprovider', label: 'Provider Refund Provider', type: 'text', required: false, unique: false, sortOrder: 222 },
-  { key: 'providerrefundid', label: 'Provider Refund ID', type: 'text', required: false, unique: false, sortOrder: 223 },
-  { key: 'providerrefundreference', label: 'Provider Refund Reference', type: 'text', required: false, unique: false, sortOrder: 224 },
-  { key: 'providerrefundamount', label: 'Provider Refund Amount', type: 'number', required: false, unique: false, sortOrder: 225 },
-  { key: 'providerrefundreason', label: 'Provider Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 226 },
-  { key: 'providerrefundrequestedat', label: 'Provider Refund Requested At', type: 'date', required: false, unique: false, sortOrder: 227 },
-  { key: 'providerrefundcompletedat', label: 'Provider Refund Completed At', type: 'date', required: false, unique: false, sortOrder: 228 },
-  { key: 'providerrefundpayload', label: 'Provider Refund Payload', type: 'richText', required: false, unique: false, sortOrder: 229 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 240 },
+  {
+    key: "ordernumber",
+    label: "Order Number",
+    type: "text",
+    required: true,
+    unique: true,
+    sortOrder: 10,
+  },
+  {
+    key: "customername",
+    label: "Customer Name",
+    type: "text",
+    required: true,
+    unique: false,
+    sortOrder: 20,
+  },
+  {
+    key: "email",
+    label: "Email",
+    type: "email",
+    required: true,
+    unique: false,
+    sortOrder: 30,
+  },
+  {
+    key: "phone",
+    label: "Phone",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 40,
+  },
+  {
+    key: "total",
+    label: "Total",
+    type: "number",
+    required: true,
+    unique: false,
+    sortOrder: 50,
+  },
+  {
+    key: "subtotal",
+    label: "Subtotal",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 55,
+  },
+  {
+    key: "taxamount",
+    label: "Tax Amount",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 56,
+  },
+  {
+    key: "shippingamount",
+    label: "Shipping Amount",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 57,
+  },
+  {
+    key: "discountamount",
+    label: "Discount Amount",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 58,
+  },
+  {
+    key: "currency",
+    label: "Currency",
+    type: "text",
+    required: true,
+    unique: false,
+    sortOrder: 60,
+    defaultValue: "USD",
+  },
+  {
+    key: "items",
+    label: "Items",
+    type: "richText",
+    required: true,
+    unique: false,
+    sortOrder: 70,
+  },
+  {
+    key: "ordersource",
+    label: "Order Source",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 75,
+    options: ["web", "manual", "api", "import", "pos"],
+    defaultValue: "web",
+  },
+  {
+    key: "checkoutsessionid",
+    label: "Checkout Session ID",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 76,
+  },
+  {
+    key: "customerid",
+    label: "Customer ID",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 77,
+  },
+  {
+    key: "orderstatus",
+    label: "Order Status",
+    type: "select",
+    required: true,
+    unique: false,
+    sortOrder: 80,
+    options: ["open", "paid", "fulfilled", "cancelled", "refunded"],
+    defaultValue: "open",
+  },
+  {
+    key: "paymentstatus",
+    label: "Payment Status",
+    type: "select",
+    required: true,
+    unique: false,
+    sortOrder: 90,
+    options: ["pending", "paid", "failed", "refunded"],
+    defaultValue: "pending",
+  },
+  {
+    key: "paymentprovider",
+    label: "Payment Provider",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 100,
+  },
+  {
+    key: "paymentreference",
+    label: "Payment Reference",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 110,
+  },
+  {
+    key: "paidat",
+    label: "Paid At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 120,
+  },
+  {
+    key: "fulfillmentstatus",
+    label: "Fulfillment Status",
+    type: "select",
+    required: true,
+    unique: false,
+    sortOrder: 130,
+    options: ["unfulfilled", "processing", "fulfilled", "cancelled"],
+    defaultValue: "unfulfilled",
+  },
+  {
+    key: "fulfillmentcarrier",
+    label: "Fulfillment Carrier",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 140,
+  },
+  {
+    key: "trackingnumber",
+    label: "Tracking Number",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 150,
+  },
+  {
+    key: "trackingurl",
+    label: "Tracking URL",
+    type: "url",
+    required: false,
+    unique: false,
+    sortOrder: 160,
+  },
+  {
+    key: "trackingstatus",
+    label: "Tracking Status",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 165,
+  },
+  {
+    key: "trackinglastcheckedat",
+    label: "Tracking Last Checked At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 166,
+  },
+  {
+    key: "fulfilledat",
+    label: "Fulfilled At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 170,
+  },
+  {
+    key: "shippinglabelstatus",
+    label: "Shipping Label Status",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 171,
+    options: ["none", "draft", "purchased", "voided"],
+    defaultValue: "none",
+  },
+  {
+    key: "shippinglabelprovider",
+    label: "Shipping Label Provider",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 172,
+  },
+  {
+    key: "shippinglabelid",
+    label: "Shipping Label ID",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 173,
+  },
+  {
+    key: "shippinglabelurl",
+    label: "Shipping Label URL",
+    type: "url",
+    required: false,
+    unique: false,
+    sortOrder: 174,
+  },
+  {
+    key: "shippingservicelevel",
+    label: "Shipping Service Level",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 175,
+  },
+  {
+    key: "shippinglabelcost",
+    label: "Shipping Label Cost",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 176,
+  },
+  {
+    key: "shippinglabelcreatedat",
+    label: "Shipping Label Created At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 177,
+  },
+  {
+    key: "fulfillmentdispatchstatus",
+    label: "Fulfillment Dispatch Status",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 178,
+    options: ["none", "requested", "succeeded", "failed", "requires_action"],
+    defaultValue: "none",
+  },
+  {
+    key: "fulfillmentprovider",
+    label: "Fulfillment Provider",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 179,
+  },
+  {
+    key: "fulfillmentid",
+    label: "Fulfillment ID",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 180,
+  },
+  {
+    key: "fulfillmentrequestedat",
+    label: "Fulfillment Requested At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 181,
+  },
+  {
+    key: "fulfillmentcompletedat",
+    label: "Fulfillment Completed At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 182,
+  },
+  {
+    key: "fulfillmentpayload",
+    label: "Fulfillment Payload",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 183,
+  },
+  {
+    key: "riskscore",
+    label: "Risk Score",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 180,
+    defaultValue: 0,
+  },
+  {
+    key: "risklevel",
+    label: "Risk Level",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 182,
+    options: ["low", "medium", "high"],
+    defaultValue: "low",
+  },
+  {
+    key: "riskreasons",
+    label: "Risk Reasons",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 184,
+  },
+  {
+    key: "riskreviewstatus",
+    label: "Risk Review Status",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 186,
+    options: ["cleared", "pending_review", "approved", "held"],
+    defaultValue: "cleared",
+  },
+  {
+    key: "shippingaddress",
+    label: "Shipping Address",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 190,
+  },
+  {
+    key: "billingaddress",
+    label: "Billing Address",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 200,
+  },
+  {
+    key: "refundamount",
+    label: "Refund Amount",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 210,
+  },
+  {
+    key: "refundreason",
+    label: "Refund Reason",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 220,
+  },
+  {
+    key: "providerrefundstatus",
+    label: "Provider Refund Status",
+    type: "select",
+    required: false,
+    unique: false,
+    sortOrder: 221,
+    options: ["none", "requested", "succeeded", "failed", "requires_action"],
+    defaultValue: "none",
+  },
+  {
+    key: "providerrefundprovider",
+    label: "Provider Refund Provider",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 222,
+  },
+  {
+    key: "providerrefundid",
+    label: "Provider Refund ID",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 223,
+  },
+  {
+    key: "providerrefundreference",
+    label: "Provider Refund Reference",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 224,
+  },
+  {
+    key: "providerrefundamount",
+    label: "Provider Refund Amount",
+    type: "number",
+    required: false,
+    unique: false,
+    sortOrder: 225,
+  },
+  {
+    key: "providerrefundreason",
+    label: "Provider Refund Reason",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 226,
+  },
+  {
+    key: "providerrefundrequestedat",
+    label: "Provider Refund Requested At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 227,
+  },
+  {
+    key: "providerrefundcompletedat",
+    label: "Provider Refund Completed At",
+    type: "date",
+    required: false,
+    unique: false,
+    sortOrder: 228,
+  },
+  {
+    key: "providerrefundpayload",
+    label: "Provider Refund Payload",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 229,
+  },
+  {
+    key: "notes",
+    label: "Internal Notes",
+    type: "richText",
+    required: false,
+    unique: false,
+    sortOrder: 240,
+  },
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -174,38 +833,139 @@ const assert = (condition, message) => {
   }
 };
 
-const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
-  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
-    resolve(true);
-    return;
+const assertProductsApiContractsSource = () => {
+  const source = fs.readFileSync(
+    new URL("../src/routes/products.tsx", import.meta.url),
+    "utf8",
+  );
+  const providerSyncSource = fs.readFileSync(
+    new URL(
+      "../../public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/provider-sync/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const lifecycleSource = fs.readFileSync(
+    new URL(
+      "../../public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const actionSource = fs.readFileSync(
+    new URL(
+      "../../public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/[orderId]/action/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert(
+    source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),
+    "Products handoff manifest must expose API response contracts for custom frontends",
+  );
+  assert(
+    source.includes('data-testid="products-api-contracts"'),
+    "Products page must render API response contracts for custom frontends",
+  );
+  for (const schemaVersion of [
+    "backy.commerce-catalog.v1",
+    "backy.commerce-order.v1",
+    "backy.commerce-product-sync.v1",
+    "backy.product-subscription-lifecycle.v1",
+    "backy.product-subscription-action.v1",
+    "backy.interaction-event.v1",
+  ]) {
+    assert(
+      source.includes(schemaVersion),
+      `Products API contract handoff must include ${schemaVersion}`,
+    );
   }
+  assert(
+    providerSyncSource.includes("publicContractJson") &&
+      providerSyncSource.includes("productSyncResponse") &&
+      providerSyncSource.includes("PROVIDER_SYNC_SCHEMA_VERSION"),
+    "Product provider-sync endpoint must emit Backy contract/cache headers",
+  );
+  assert(
+    providerSyncSource.includes('"etsy"') &&
+      providerSyncSource.includes("executeEtsyProductSync") &&
+      providerSyncSource.includes("BACKY_ETSY_ACCESS_TOKEN"),
+    "Product provider-sync endpoint must keep the Etsy draft-listing adapter wired",
+  );
+  assert(
+    providerSyncSource.includes('"magento"') &&
+      providerSyncSource.includes("executeMagentoProductSync") &&
+      providerSyncSource.includes("BACKY_MAGENTO_ACCESS_TOKEN"),
+    "Product provider-sync endpoint must keep the Magento catalog adapter wired",
+  );
+  assert(
+    source.includes("['etsy', 'Etsy']"),
+    "Products page must expose the Etsy provider sync control",
+  );
+  assert(
+    source.includes("['magento', 'Magento']"),
+    "Products page must expose the Magento provider sync control",
+  );
+  assert(
+    lifecycleSource.includes("publicContractJson") &&
+      lifecycleSource.includes("lifecycleResponse") &&
+      lifecycleSource.includes("backy.product-subscription-lifecycle.v1"),
+    "Product subscription lifecycle endpoint must emit Backy contract/cache headers",
+  );
+  assert(
+    actionSource.includes("publicContractJson") &&
+      actionSource.includes("subscriptionActionResponse") &&
+      actionSource.includes("SUBSCRIPTION_ACTION_SCHEMA_VERSION"),
+    "Product subscription action endpoint must emit Backy contract/cache headers",
+  );
+  assert(
+    actionSource.includes('"razorpay-api"') &&
+      actionSource.includes("executeRazorpaySubscriptionAction") &&
+      actionSource.includes("BACKY_RAZORPAY_KEY_ID") &&
+      actionSource.includes("BACKY_RAZORPAY_KEY_SECRET"),
+    "Product subscription action endpoint must keep the Razorpay subscription adapter wired",
+  );
+};
 
-  const timeout = setTimeout(() => {
-    childProcess.off('exit', onExit);
-    resolve(false);
-  }, timeoutMs);
+const waitForExit = (childProcess, timeoutMs = 1500) =>
+  new Promise((resolve) => {
+    if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+      resolve(true);
+      return;
+    }
 
-  const onExit = () => {
-    clearTimeout(timeout);
-    resolve(true);
-  };
+    const timeout = setTimeout(() => {
+      childProcess.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
 
-  childProcess.once('exit', onExit);
-});
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+
+    childProcess.once("exit", onExit);
+  });
 
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'content-type': 'application/json',
-      ...((endpoint.startsWith('/api/admin/') || endpoint.includes('/events?')) && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+      "content-type": "application/json",
+      ...((endpoint.startsWith("/api/admin/") ||
+        endpoint.includes("/events?")) &&
+      apiAdminSessionToken
+        ? { authorization: `Bearer ${apiAdminSessionToken}` }
+        : {}),
       ...(options.headers || {}),
     },
   });
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.success === false) {
-    throw new Error(`${endpoint} returned ${response.status}: ${JSON.stringify(payload.error || payload).slice(0, 500)}`);
+    throw new Error(
+      `${endpoint} returned ${response.status}: ${JSON.stringify(payload.error || payload).slice(0, 500)}`,
+    );
   }
 
   return payload;
@@ -215,8 +975,12 @@ const requestApiRaw = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'content-type': 'application/json',
-      ...((endpoint.startsWith('/api/admin/') || endpoint.includes('/events?')) && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+      "content-type": "application/json",
+      ...((endpoint.startsWith("/api/admin/") ||
+        endpoint.includes("/events?")) &&
+      apiAdminSessionToken
+        ? { authorization: `Bearer ${apiAdminSessionToken}` }
+        : {}),
       ...(options.headers || {}),
     },
   });
@@ -224,67 +988,275 @@ const requestApiRaw = async (endpoint, options = {}) => {
   return { response, payload };
 };
 
-const commerceWebhookSignature = (body) => `sha256=${createHmac('sha256', COMMERCE_WEBHOOK_SECRET).update(body, 'utf8').digest('hex')}`;
+const commerceWebhookSignature = (body) =>
+  `sha256=${createHmac("sha256", COMMERCE_WEBHOOK_SECRET).update(body, "utf8").digest("hex")}`;
 
 const postCommerceWebhook = async (body, headers = {}) => {
   const rawBody = JSON.stringify(body);
   return requestApi(`/api/sites/${SITE_ID}/commerce/webhook`, {
-    method: 'POST',
+    method: "POST",
     headers: {
       ...headers,
-      'x-backy-webhook-signature': commerceWebhookSignature(rawBody),
+      "x-backy-webhook-signature": commerceWebhookSignature(rawBody),
     },
     body: rawBody,
   });
 };
 
 const stripeCheckoutExecutionEnabled = () => {
-  const secret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '';
-  const apiBaseUrl = process.env.BACKY_STRIPE_API_BASE_URL || process.env.STRIPE_API_BASE_URL || '';
+  const secret =
+    process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || "";
+  const apiBaseUrl =
+    process.env.BACKY_STRIPE_API_BASE_URL ||
+    process.env.STRIPE_API_BASE_URL ||
+    "";
   return Boolean(secret && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
 const paypalSubscriptionExecutionEnabled = () => {
-  const token = process.env.BACKY_PAYPAL_ACCESS_TOKEN || process.env.PAYPAL_ACCESS_TOKEN || '';
-  const apiBaseUrl = process.env.BACKY_PAYPAL_API_BASE_URL || process.env.PAYPAL_API_BASE_URL || '';
+  const token =
+    process.env.BACKY_PAYPAL_ACCESS_TOKEN ||
+    process.env.PAYPAL_ACCESS_TOKEN ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_PAYPAL_API_BASE_URL ||
+    process.env.PAYPAL_API_BASE_URL ||
+    "";
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
 const paddleSubscriptionExecutionEnabled = () => {
-  const token = process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || '';
-  const apiBaseUrl = process.env.BACKY_PADDLE_API_BASE_URL || process.env.PADDLE_API_BASE_URL || '';
+  const token =
+    process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || "";
+  const apiBaseUrl =
+    process.env.BACKY_PADDLE_API_BASE_URL ||
+    process.env.PADDLE_API_BASE_URL ||
+    "";
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
 const squareSubscriptionExecutionEnabled = () => {
-  const token = process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN || '';
-  const apiBaseUrl = process.env.BACKY_SQUARE_API_BASE_URL || process.env.SQUARE_API_BASE_URL || '';
+  const token =
+    process.env.BACKY_SQUARE_ACCESS_TOKEN ||
+    process.env.SQUARE_ACCESS_TOKEN ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_SQUARE_API_BASE_URL ||
+    process.env.SQUARE_API_BASE_URL ||
+    "";
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const adyenSubscriptionExecutionEnabled = () => {
+  const key =
+    process.env.BACKY_ADYEN_API_KEY || process.env.ADYEN_API_KEY || "";
+  const merchant =
+    process.env.BACKY_ADYEN_MERCHANT_ACCOUNT ||
+    process.env.ADYEN_MERCHANT_ACCOUNT ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_ADYEN_RECURRING_API_BASE_URL ||
+    process.env.ADYEN_RECURRING_API_BASE_URL ||
+    "";
+  return Boolean(key && merchant && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
+const mollieSubscriptionExecutionEnabled = () => {
+  const key =
+    process.env.BACKY_MOLLIE_API_KEY || process.env.MOLLIE_API_KEY || "";
+  const apiBaseUrl =
+    process.env.BACKY_MOLLIE_API_BASE_URL ||
+    process.env.MOLLIE_API_BASE_URL ||
+    "";
+  return Boolean(key && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
+const razorpaySubscriptionExecutionEnabled = () => {
+  const keyId =
+    process.env.BACKY_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || "";
+  const keySecret =
+    process.env.BACKY_RAZORPAY_KEY_SECRET ||
+    process.env.RAZORPAY_KEY_SECRET ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_RAZORPAY_API_BASE_URL ||
+    process.env.RAZORPAY_API_BASE_URL ||
+    "";
+  return Boolean(keyId && keySecret && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
 const paddleCatalogSyncEnabled = () => {
-  const token = process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || '';
-  const apiBaseUrl = process.env.BACKY_PADDLE_API_BASE_URL || process.env.PADDLE_API_BASE_URL || '';
+  const token =
+    process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || "";
+  const apiBaseUrl =
+    process.env.BACKY_PADDLE_API_BASE_URL ||
+    process.env.PADDLE_API_BASE_URL ||
+    "";
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
 const squareCatalogSyncEnabled = () => {
-  const token = process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN || '';
-  const apiBaseUrl = process.env.BACKY_SQUARE_API_BASE_URL || process.env.SQUARE_API_BASE_URL || '';
+  const token =
+    process.env.BACKY_SQUARE_ACCESS_TOKEN ||
+    process.env.SQUARE_ACCESS_TOKEN ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_SQUARE_API_BASE_URL ||
+    process.env.SQUARE_API_BASE_URL ||
+    "";
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const shopifyCatalogSyncEnabled = () => {
+  const token =
+    process.env.BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN ||
+    process.env.SHOPIFY_ADMIN_ACCESS_TOKEN ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_SHOPIFY_ADMIN_API_BASE_URL ||
+    process.env.SHOPIFY_ADMIN_API_BASE_URL ||
+    "";
+  return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
+const bigCommerceCatalogSyncEnabled = () => {
+  const token =
+    process.env.BACKY_BIGCOMMERCE_ACCESS_TOKEN ||
+    process.env.BIGCOMMERCE_ACCESS_TOKEN ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_BIGCOMMERCE_API_BASE_URL ||
+    process.env.BIGCOMMERCE_API_BASE_URL ||
+    "";
+  return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
+const wooCommerceCatalogSyncEnabled = () => {
+  const key =
+    process.env.BACKY_WOOCOMMERCE_CONSUMER_KEY ||
+    process.env.WOOCOMMERCE_CONSUMER_KEY ||
+    "";
+  const secret =
+    process.env.BACKY_WOOCOMMERCE_CONSUMER_SECRET ||
+    process.env.WOOCOMMERCE_CONSUMER_SECRET ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_WOOCOMMERCE_API_BASE_URL ||
+    process.env.WOOCOMMERCE_API_BASE_URL ||
+    "";
+  return Boolean(key && secret && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
+const etsyCatalogSyncEnabled = () => {
+  const token =
+    process.env.BACKY_ETSY_ACCESS_TOKEN || process.env.ETSY_ACCESS_TOKEN || "";
+  const apiKey =
+    process.env.BACKY_ETSY_API_KEY || process.env.ETSY_API_KEY || "";
+  const shopId =
+    process.env.BACKY_ETSY_SHOP_ID || process.env.ETSY_SHOP_ID || "";
+  const apiBaseUrl =
+    process.env.BACKY_ETSY_API_BASE_URL ||
+    process.env.ETSY_API_BASE_URL ||
+    "";
+  return Boolean(token && apiKey && shopId && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
+const magentoCatalogSyncEnabled = () => {
+  const token =
+    process.env.BACKY_MAGENTO_ACCESS_TOKEN ||
+    process.env.MAGENTO_ACCESS_TOKEN ||
+    "";
+  const apiBaseUrl =
+    process.env.BACKY_MAGENTO_API_BASE_URL ||
+    process.env.MAGENTO_API_BASE_URL ||
+    "";
+  return Boolean(token && apiBaseUrl === `${STRIPE_MOCK_BASE_URL}/magento/V1`);
+};
+
+const directCatalogProviderMockEnabled = () =>
+  stripeCheckoutExecutionEnabled() ||
+  paddleCatalogSyncEnabled() ||
+  squareCatalogSyncEnabled() ||
+  shopifyCatalogSyncEnabled() ||
+  bigCommerceCatalogSyncEnabled() ||
+  wooCommerceCatalogSyncEnabled() ||
+  etsyCatalogSyncEnabled() ||
+  magentoCatalogSyncEnabled();
+
 const httpSubscriptionExecutionEnabled = () => {
-  const url = process.env.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL || process.env.COMMERCE_SUBSCRIPTION_ACTION_URL || '';
+  const url =
+    process.env.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL ||
+    process.env.COMMERCE_SUBSCRIPTION_ACTION_URL ||
+    "";
   return url === `${COMMERCE_PROVIDER_MOCK_BASE_URL}/subscription/action`;
 };
 
-const readRequestBody = (request) => new Promise((resolve, reject) => {
-  const chunks = [];
-  request.on('data', (chunk) => chunks.push(chunk));
-  request.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-  request.on('error', reject);
-});
+const firstClassCheckoutProviderMockEnabled = () => {
+  const stripeSecret =
+    process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || "";
+  const stripeDiscountBaseUrl =
+    process.env.BACKY_STRIPE_DISCOUNT_API_BASE_URL ||
+    process.env.STRIPE_DISCOUNT_API_BASE_URL ||
+    process.env.BACKY_STRIPE_API_BASE_URL ||
+    process.env.STRIPE_API_BASE_URL ||
+    "";
+  const taxJarKey =
+    process.env.BACKY_TAXJAR_API_KEY || process.env.TAXJAR_API_KEY || "";
+  const taxJarBaseUrl =
+    process.env.BACKY_TAXJAR_API_BASE_URL ||
+    process.env.TAXJAR_API_BASE_URL ||
+    "";
+  const avalaraAccount =
+    process.env.BACKY_AVALARA_ACCOUNT_ID ||
+    process.env.AVALARA_ACCOUNT_ID ||
+    "";
+  const avalaraLicense =
+    process.env.BACKY_AVALARA_LICENSE_KEY ||
+    process.env.AVALARA_LICENSE_KEY ||
+    "";
+  const avalaraCompany =
+    process.env.BACKY_AVALARA_COMPANY_CODE ||
+    process.env.AVALARA_COMPANY_CODE ||
+    "";
+  const avalaraBaseUrl =
+    process.env.BACKY_AVALARA_API_BASE_URL ||
+    process.env.AVALARA_API_BASE_URL ||
+    "";
+  const easyPostKey =
+    process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY || "";
+  const easyPostBaseUrl =
+    process.env.BACKY_EASYPOST_API_BASE_URL ||
+    process.env.EASYPOST_API_BASE_URL ||
+    "";
+  const shippoKey =
+    process.env.BACKY_SHIPPO_API_KEY || process.env.SHIPPO_API_KEY || "";
+  const shippoBaseUrl =
+    process.env.BACKY_SHIPPO_API_BASE_URL ||
+    process.env.SHIPPO_API_BASE_URL ||
+    "";
+  return Boolean(
+    stripeSecret &&
+    stripeDiscountBaseUrl === COMMERCE_PROVIDER_MOCK_BASE_URL &&
+    taxJarKey &&
+    taxJarBaseUrl === `${COMMERCE_PROVIDER_MOCK_BASE_URL}/v2` &&
+    avalaraAccount &&
+    avalaraLicense &&
+    avalaraCompany &&
+    avalaraBaseUrl === COMMERCE_PROVIDER_MOCK_BASE_URL &&
+    easyPostKey &&
+    easyPostBaseUrl === `${COMMERCE_PROVIDER_MOCK_BASE_URL}/v2` &&
+    shippoKey &&
+    shippoBaseUrl === COMMERCE_PROVIDER_MOCK_BASE_URL,
+  );
+};
+
+const readRequestBody = (request) =>
+  new Promise((resolve, reject) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    request.on("error", reject);
+  });
 
 const startStripeCheckoutMock = async () => {
   const requests = [];
@@ -298,229 +1270,484 @@ const startStripeCheckoutMock = async () => {
       form: Object.fromEntries(new URLSearchParams(body).entries()),
     });
 
-    if (request.method === 'POST' && request.url === '/v1/products') {
+    if (request.method === "POST" && request.url === "/v1/products") {
       const form = new URLSearchParams(body);
       const id = `prod_mock_${requests.length}`;
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        id,
-        object: 'product',
-        active: form.get('active') !== 'false',
-        name: form.get('name'),
-        description: form.get('description'),
-        livemode: false,
-        url: `${STRIPE_MOCK_BASE_URL}/products/${id}`,
-      }));
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id,
+          object: "product",
+          active: form.get("active") !== "false",
+          name: form.get("name"),
+          description: form.get("description"),
+          livemode: false,
+          url: `${STRIPE_MOCK_BASE_URL}/products/${id}`,
+        }),
+      );
       return;
     }
 
-    if (request.method === 'POST' && request.url === '/v1/prices') {
+    if (request.method === "POST" && request.url === "/v1/prices") {
       const form = new URLSearchParams(body);
       const id = `price_mock_${requests.length}`;
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        id,
-        object: 'price',
-        active: true,
-        currency: form.get('currency'),
-        unit_amount: Number(form.get('unit_amount') || 0),
-        product: form.get('product'),
-        livemode: false,
-      }));
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id,
+          object: "price",
+          active: true,
+          currency: form.get("currency"),
+          unit_amount: Number(form.get("unit_amount") || 0),
+          product: form.get("product"),
+          livemode: false,
+        }),
+      );
       return;
     }
 
-    if (request.method === 'POST' && request.url === '/products') {
-      const payload = JSON.parse(body || '{}');
+    if (
+      request.method === "POST" &&
+      request.url === "/products" &&
+      String(request.headers.authorization || "").startsWith("Bearer ")
+    ) {
+      const payload = JSON.parse(body || "{}");
       const id = `pro_mock_${requests.length}`;
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        data: {
-          id,
-          type: 'product',
-          status: 'active',
-          name: payload.name,
-          description: payload.description,
-          tax_category: payload.tax_category,
-          image_url: payload.image_url,
-          custom_data: payload.custom_data,
-        },
-      }));
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: {
+            id,
+            type: "product",
+            status: "active",
+            name: payload.name,
+            description: payload.description,
+            tax_category: payload.tax_category,
+            image_url: payload.image_url,
+            custom_data: payload.custom_data,
+          },
+        }),
+      );
       return;
     }
 
-    if (request.method === 'POST' && request.url === '/prices') {
-      const payload = JSON.parse(body || '{}');
+    if (request.method === "POST" && request.url === "/prices") {
+      const payload = JSON.parse(body || "{}");
       const id = `pri_mock_${requests.length}`;
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        data: {
-          id,
-          type: 'price',
-          status: 'active',
-          product_id: payload.product_id,
-          description: payload.description,
-          unit_price: payload.unit_price,
-          billing_cycle: payload.billing_cycle,
-          trial_period: payload.trial_period,
-          custom_data: payload.custom_data,
-        },
-      }));
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: {
+            id,
+            type: "price",
+            status: "active",
+            product_id: payload.product_id,
+            description: payload.description,
+            unit_price: payload.unit_price,
+            billing_cycle: payload.billing_cycle,
+            trial_period: payload.trial_period,
+            custom_data: payload.custom_data,
+          },
+        }),
+      );
       return;
     }
 
-    if (request.method === 'POST' && request.url === '/v2/catalog/object') {
-      const payload = JSON.parse(body || '{}');
+    if (request.method === "POST" && request.url === "/v2/catalog/object") {
+      const payload = JSON.parse(body || "{}");
       const itemId = `sq_item_mock_${requests.length}`;
       const variationId = `sq_variation_mock_${requests.length}`;
       const item = payload.object || {};
       const itemData = item.item_data || {};
-      const variation = Array.isArray(itemData.variations) ? itemData.variations[0] || {} : {};
+      const variation = Array.isArray(itemData.variations)
+        ? itemData.variations[0] || {}
+        : {};
       const variationData = variation.item_variation_data || {};
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        catalog_object: {
-          ...item,
-          id: itemId,
-          type: 'ITEM',
-          is_deleted: false,
-          item_data: {
-            ...itemData,
-            variations: [
-              {
-                ...variation,
-                id: variationId,
-                type: 'ITEM_VARIATION',
-                is_deleted: false,
-                item_variation_data: {
-                  ...variationData,
-                  item_id: itemId,
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          catalog_object: {
+            ...item,
+            id: itemId,
+            type: "ITEM",
+            is_deleted: false,
+            item_data: {
+              ...itemData,
+              variations: [
+                {
+                  ...variation,
+                  id: variationId,
+                  type: "ITEM_VARIATION",
+                  is_deleted: false,
+                  item_variation_data: {
+                    ...variationData,
+                    item_id: itemId,
+                  },
                 },
-              },
-            ],
+              ],
+            },
           },
-        },
-        id_mappings: [
-          { client_object_id: item.id, object_id: itemId },
-          { client_object_id: variation.id, object_id: variationId },
-        ],
-      }));
+          id_mappings: [
+            { client_object_id: item.id, object_id: itemId },
+            { client_object_id: variation.id, object_id: variationId },
+          ],
+        }),
+      );
       return;
     }
 
-    const subscriptionMatch = request.url.match(/^\/v1\/subscriptions\/([^/]+)(?:\/resume)?$/);
-    if (subscriptionMatch && (request.method === 'POST' || request.method === 'DELETE')) {
-      const subscriptionId = decodeURIComponent(subscriptionMatch[1]);
-      const isResume = request.url.endsWith('/resume');
+    if (request.method === "POST" && request.url === "/products.json") {
+      const payload = JSON.parse(body || "{}");
+      const product = payload.product || {};
+      const id = `shopify_product_mock_${requests.length}`;
+      const variantId = `shopify_variant_mock_${requests.length}`;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          product: {
+            id,
+            admin_graphql_api_id: `gid://shopify/Product/${id}`,
+            title: product.title,
+            handle: "smoke-product",
+            status: product.status || "active",
+            variants: (product.variants || []).map((variant, index) => ({
+              id: index === 0 ? variantId : `${variantId}_${index}`,
+              admin_graphql_api_id: `gid://shopify/ProductVariant/${index === 0 ? variantId : `${variantId}_${index}`}`,
+              sku: variant.sku,
+              price: variant.price,
+            })),
+            metafields: product.metafields || [],
+          },
+        }),
+      );
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/catalog/products") {
+      const payload = JSON.parse(body || "{}");
+      const productId = `bigcommerce_product_mock_${requests.length}`;
+      const variantId = `bigcommerce_variant_mock_${requests.length}`;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: {
+            id: productId,
+            name: payload.name,
+            type: payload.type,
+            sku: payload.sku,
+            price: payload.price,
+            is_visible: payload.is_visible,
+            custom_fields: payload.custom_fields || [],
+            variants: (payload.variants || []).map((variant, index) => ({
+              id: index === 0 ? variantId : `${variantId}_${index}`,
+              sku: variant.sku,
+              price: variant.price,
+            })),
+          },
+        }),
+      );
+      return;
+    }
+
+    const etsyListingMatch = request.url.match(/^\/shops\/([^/]+)\/listings$/);
+    if (request.method === "POST" && etsyListingMatch) {
       const form = new URLSearchParams(body);
-      const status = request.method === 'DELETE'
-        ? 'canceled'
-        : isResume
-          ? 'active'
-          : form.has('pause_collection[behavior]')
-            ? 'paused'
-            : 'active';
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        id: subscriptionId,
-        object: 'subscription',
-        status,
-        cancel_at_period_end: false,
-        canceled_at: request.method === 'DELETE' ? Math.floor(Date.now() / 1000) : null,
-        current_period_end: Math.floor(Date.now() / 1000) + 86400,
-        pause_collection: status === 'paused' ? { behavior: form.get('pause_collection[behavior]') || 'void' } : null,
-      }));
+      const id = `etsy_listing_mock_${requests.length}`;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          listing_id: id,
+          state: "draft",
+          title: form.get("title"),
+          description: form.get("description"),
+          quantity: Number(form.get("quantity") || 0),
+          price: {
+            amount: Math.round(Number(form.get("price") || 0) * 100),
+            divisor: 100,
+            currency_code: "USD",
+          },
+          url: `${STRIPE_MOCK_BASE_URL}/listing/${id}`,
+          taxonomy_id: Number(form.get("taxonomy_id") || 0),
+          shop_id: etsyListingMatch[1],
+        }),
+      );
       return;
     }
 
-    const paypalSubscriptionMatch = request.url.match(/^\/v1\/billing\/subscriptions\/([^/]+)\/(suspend|activate|cancel)$/);
-    if (paypalSubscriptionMatch && request.method === 'POST') {
-      response.writeHead(204, { 'content-type': 'application/json' });
+    if (request.method === "POST" && request.url === "/magento/V1/products") {
+      const payload = JSON.parse(body || "{}");
+      const product = payload.product || {};
+      const id = `magento_product_mock_${requests.length}`;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id,
+          sku: product.sku,
+          name: product.name,
+          price: product.price,
+          status: product.status,
+          type_id: product.type_id,
+          custom_attributes: product.custom_attributes || [],
+        }),
+      );
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/products") {
+      const payload = JSON.parse(body || "{}");
+      const id =
+        payload.type === "variable"
+          ? `woocommerce_variable_mock_${requests.length}`
+          : `woocommerce_product_mock_${requests.length}`;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id,
+          name: payload.name,
+          type: payload.type,
+          status: payload.status,
+          sku: payload.sku,
+          price: payload.regular_price || payload.price || "49.00",
+          permalink: `${STRIPE_MOCK_BASE_URL}/product/${id}`,
+          meta_data: payload.meta_data || [],
+        }),
+      );
+      return;
+    }
+
+    const wooCommerceVariationMatch = request.url.match(
+      /^\/products\/([^/]+)\/variations$/,
+    );
+    if (request.method === "POST" && wooCommerceVariationMatch) {
+      const payload = JSON.parse(body || "{}");
+      const id = `woocommerce_variation_mock_${requests.length}`;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id,
+          sku: payload.sku,
+          price: payload.regular_price,
+          stock_quantity: payload.stock_quantity,
+          attributes: payload.attributes || [],
+        }),
+      );
+      return;
+    }
+
+    const subscriptionMatch = request.url.match(
+      /^\/v1\/subscriptions\/([^/]+)(?:\/resume)?$/,
+    );
+    if (
+      subscriptionMatch &&
+      (request.method === "POST" || request.method === "DELETE")
+    ) {
+      const subscriptionId = decodeURIComponent(subscriptionMatch[1]);
+      const isResume = request.url.endsWith("/resume");
+      const form = new URLSearchParams(body);
+      const status =
+        request.method === "DELETE"
+          ? "canceled"
+          : isResume
+            ? "active"
+            : form.has("pause_collection[behavior]")
+              ? "paused"
+              : "active";
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: subscriptionId,
+          object: "subscription",
+          status,
+          cancel_at_period_end: false,
+          canceled_at:
+            request.method === "DELETE" ? Math.floor(Date.now() / 1000) : null,
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          pause_collection:
+            status === "paused"
+              ? { behavior: form.get("pause_collection[behavior]") || "void" }
+              : null,
+        }),
+      );
+      return;
+    }
+
+    const paypalSubscriptionMatch = request.url.match(
+      /^\/v1\/billing\/subscriptions\/([^/]+)\/(suspend|activate|cancel)$/,
+    );
+    if (paypalSubscriptionMatch && request.method === "POST") {
+      response.writeHead(204, { "content-type": "application/json" });
       response.end();
       return;
     }
 
-    const paddleSubscriptionMatch = request.url.match(/^\/subscriptions\/([^/]+)\/(pause|resume|cancel)$/);
-    if (paddleSubscriptionMatch && request.method === 'POST') {
+    const paddleSubscriptionMatch = request.url.match(
+      /^\/subscriptions\/([^/]+)\/(pause|resume|cancel)$/,
+    );
+    if (paddleSubscriptionMatch && request.method === "POST") {
       const subscriptionId = decodeURIComponent(paddleSubscriptionMatch[1]);
       const action = paddleSubscriptionMatch[2];
-      const payload = JSON.parse(body || '{}');
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        data: {
-          id: subscriptionId,
-          status: action === 'pause' ? 'paused' : action === 'resume' ? 'active' : 'canceled',
-          currency_code: 'USD',
-          next_billed_at: action === 'cancel' ? null : new Date(Date.now() + 86400000).toISOString(),
-          paused_at: action === 'pause' ? new Date().toISOString() : null,
-          canceled_at: action === 'cancel' ? new Date().toISOString() : null,
-          scheduled_change: {
-            action,
-            effective_at: payload.effective_from === 'next_billing_period'
-              ? new Date(Date.now() + 86400000).toISOString()
-              : new Date().toISOString(),
+      const payload = JSON.parse(body || "{}");
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: {
+            id: subscriptionId,
+            status:
+              action === "pause"
+                ? "paused"
+                : action === "resume"
+                  ? "active"
+                  : "canceled",
+            currency_code: "USD",
+            next_billed_at:
+              action === "cancel"
+                ? null
+                : new Date(Date.now() + 86400000).toISOString(),
+            paused_at: action === "pause" ? new Date().toISOString() : null,
+            canceled_at: action === "cancel" ? new Date().toISOString() : null,
+            scheduled_change: {
+              action,
+              effective_at:
+                payload.effective_from === "next_billing_period"
+                  ? new Date(Date.now() + 86400000).toISOString()
+                  : new Date().toISOString(),
+            },
           },
-        },
-      }));
+        }),
+      );
       return;
     }
 
-    const squareSubscriptionMatch = request.url.match(/^\/v2\/subscriptions\/([^/]+)\/(pause|resume|cancel)$/);
-    if (squareSubscriptionMatch && request.method === 'POST') {
+    const squareSubscriptionMatch = request.url.match(
+      /^\/v2\/subscriptions\/([^/]+)\/(pause|resume|cancel)$/,
+    );
+    if (squareSubscriptionMatch && request.method === "POST") {
       const subscriptionId = decodeURIComponent(squareSubscriptionMatch[1]);
       const action = squareSubscriptionMatch[2];
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        subscription: {
-          id: subscriptionId,
-          status: action === 'pause' ? 'PAUSED' : action === 'resume' ? 'ACTIVE' : 'CANCELED',
-          version: 3,
-          start_date: '2026-05-16',
-          canceled_date: action === 'cancel' ? '2026-05-16' : null,
-          paid_until_date: '2026-06-16',
-          timezone: 'UTC',
-        },
-        actions: [
-          {
-            id: `sq_subscription_action_${requests.length}`,
-            type: action.toUpperCase(),
-            effective_date: '2026-05-16',
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          subscription: {
+            id: subscriptionId,
+            status:
+              action === "pause"
+                ? "PAUSED"
+                : action === "resume"
+                  ? "ACTIVE"
+                  : "CANCELED",
+            version: 3,
+            start_date: "2026-05-16",
+            canceled_date: action === "cancel" ? "2026-05-16" : null,
+            paid_until_date: "2026-06-16",
+            timezone: "UTC",
           },
-        ],
-      }));
+          actions: [
+            {
+              id: `sq_subscription_action_${requests.length}`,
+              type: action.toUpperCase(),
+              effective_date: "2026-05-16",
+            },
+          ],
+        }),
+      );
       return;
     }
 
-    if (request.method !== 'POST' || request.url !== '/v1/checkout/sessions') {
-      response.writeHead(404, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: { message: 'Not found' } }));
+    if (request.method === "POST" && request.url === "/disable") {
+      const payload = JSON.parse(body || "{}");
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          response: "[detail-successfully-disabled]",
+          merchantAccount: payload.merchantAccount,
+          shopperReference: payload.shopperReference,
+          recurringDetailReference:
+            payload.selectedRecurringDetailReference || "ALL",
+          pspReference: `adyen_disable_${requests.length}`,
+        }),
+      );
+      return;
+    }
+
+    const mollieSubscriptionMatch = request.url.match(
+      /^\/customers\/([^/]+)\/subscriptions\/([^/]+)$/,
+    );
+    if (mollieSubscriptionMatch && request.method === "DELETE") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: decodeURIComponent(mollieSubscriptionMatch[2]),
+          customerId: decodeURIComponent(mollieSubscriptionMatch[1]),
+          status: "canceled",
+          mode: "test",
+          description: "Backy smoke subscription",
+          canceledAt: new Date().toISOString(),
+        }),
+      );
+      return;
+    }
+
+    const razorpaySubscriptionMatch = request.url.match(
+      /^\/v1\/subscriptions\/([^/]+)\/(pause|resume|cancel)$/,
+    );
+    if (razorpaySubscriptionMatch && request.method === "POST") {
+      const subscriptionId = decodeURIComponent(razorpaySubscriptionMatch[1]);
+      const action = razorpaySubscriptionMatch[2];
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: subscriptionId,
+          entity: "subscription",
+          status:
+            action === "pause"
+              ? "paused"
+              : action === "resume"
+                ? "active"
+                : "cancelled",
+          plan_id: "plan_backy_smoke",
+          current_start: Math.floor(Date.now() / 1000),
+          current_end: Math.floor(Date.now() / 1000) + 86400,
+          ended_at:
+            action === "cancel" ? Math.floor(Date.now() / 1000) : null,
+          paid_count: 1,
+          remaining_count: action === "cancel" ? 0 : 11,
+        }),
+      );
+      return;
+    }
+
+    if (request.method !== "POST" || request.url !== "/v1/checkout/sessions") {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message: "Not found" } }));
       return;
     }
 
     const form = new URLSearchParams(body);
     const id = `cs_mock_${requests.length}`;
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({
-      id,
-      object: 'checkout.session',
-      url: `${STRIPE_MOCK_BASE_URL}/checkout/${id}`,
-      status: 'open',
-      payment_status: 'unpaid',
-      livemode: false,
-      client_reference_id: form.get('client_reference_id'),
-      metadata: {
-        siteId: form.get('metadata[siteId]'),
-        orderNumber: form.get('metadata[orderNumber]'),
-        orderSlug: form.get('metadata[orderSlug]'),
-        requestId: form.get('metadata[requestId]'),
-      },
-    }));
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        id,
+        object: "checkout.session",
+        url: `${STRIPE_MOCK_BASE_URL}/checkout/${id}`,
+        status: "open",
+        payment_status: "unpaid",
+        livemode: false,
+        client_reference_id: form.get("client_reference_id"),
+        metadata: {
+          siteId: form.get("metadata[siteId]"),
+          orderNumber: form.get("metadata[orderNumber]"),
+          orderSlug: form.get("metadata[orderSlug]"),
+          requestId: form.get("metadata[requestId]"),
+        },
+      }),
+    );
   });
 
   await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(STRIPE_MOCK_PORT, '127.0.0.1', () => {
-      server.off('error', reject);
+    server.once("error", reject);
+    server.listen(STRIPE_MOCK_PORT, "127.0.0.1", () => {
+      server.off("error", reject);
       resolve();
     });
   });
@@ -535,7 +1762,7 @@ const startCommerceProviderMock = async () => {
   const requests = [];
   const server = createServer(async (request, response) => {
     const body = await readRequestBody(request);
-    const payload = JSON.parse(body || '{}');
+    const payload = JSON.parse(body || "{}");
     const quote = payload.quote || {};
     const checkout = payload.checkout || {};
     requests.push({
@@ -546,53 +1773,181 @@ const startCommerceProviderMock = async () => {
       payload,
     });
 
-    if (request.method === 'POST' && request.url === '/catalog/products') {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        id: `http_product_${requests.length}`,
-        productId: `http_product_${requests.length}`,
-        priceId: `http_price_${requests.length}`,
-        reference: `provider_catalog_${requests.length}`,
-        status: 'synced',
-        url: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/catalog/products/${payload.product?.slug || payload.product?.id || requests.length}`,
-        product: {
+    if (request.method === "POST" && request.url === "/catalog/products") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
           id: `http_product_${requests.length}`,
-          name: payload.product?.title,
-          active: payload.product?.status !== 'archived',
+          productId: `http_product_${requests.length}`,
+          priceId: `http_price_${requests.length}`,
+          reference: `provider_catalog_${requests.length}`,
+          status: "synced",
           url: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/catalog/products/${payload.product?.slug || payload.product?.id || requests.length}`,
-        },
-        price: {
-          id: `http_price_${requests.length}`,
-          currency: String(payload.product?.currency || 'USD').toLowerCase(),
-          unitAmount: Math.round(Number(payload.product?.price || 0) * 100),
-        },
-        requestId: payload.requestId,
-      }));
+          product: {
+            id: `http_product_${requests.length}`,
+            name: payload.product?.title,
+            active: payload.product?.status !== "archived",
+            url: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/catalog/products/${payload.product?.slug || payload.product?.id || requests.length}`,
+          },
+          price: {
+            id: `http_price_${requests.length}`,
+            currency: String(payload.product?.currency || "USD").toLowerCase(),
+            unitAmount: Math.round(Number(payload.product?.price || 0) * 100),
+          },
+          requestId: payload.requestId,
+        }),
+      );
       return;
     }
 
-    if (request.method === 'POST' && request.url === '/subscription/action') {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        id: `http_subscription_action_${requests.length}`,
-        actionId: `http_subscription_action_${requests.length}`,
-        status: 'succeeded',
-        provider: payload.provider || 'generic-http',
-        reference: payload.subscription?.reference,
-        message: `${payload.action || 'action'} accepted`,
-        nextStatus: payload.action === 'pause' ? 'paused' : payload.action === 'resume' ? 'active' : 'cancelled',
-        requestId: payload.idempotencyKey,
-      }));
+    if (request.method === "POST" && request.url === "/subscription/action") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: `http_subscription_action_${requests.length}`,
+          actionId: `http_subscription_action_${requests.length}`,
+          status: "succeeded",
+          provider: payload.provider || "generic-http",
+          reference: payload.subscription?.reference,
+          message: `${payload.action || "action"} accepted`,
+          nextStatus:
+            payload.action === "pause"
+              ? "paused"
+              : payload.action === "resume"
+                ? "active"
+                : "cancelled",
+          requestId: payload.idempotencyKey,
+        }),
+      );
       return;
     }
 
-    if (request.method !== 'POST' || !request.url?.startsWith('/quote/')) {
-      response.writeHead(404, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: { message: 'Not found' } }));
+    if (request.method === "POST" && request.url === "/v2/taxes") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          tax: {
+            amount_to_collect: 8.25,
+            taxable_amount: payload.amount,
+            rate: 0.084,
+            transaction_reference_id: `taxjar_checkout_${requests.length}`,
+          },
+        }),
+      );
       return;
     }
 
-    const kind = request.url.split('/').pop();
+    if (
+      request.method === "POST" &&
+      request.url === "/api/v2/transactions/create"
+    ) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: `avalara_checkout_${requests.length}`,
+          code: `avalara_checkout_${requests.length}`,
+          totalTaxCalculated: 6.4,
+          lines: [
+            {
+              lineNumber: "1",
+              taxCalculated: 6.4,
+              provider: "avalara",
+            },
+          ],
+        }),
+      );
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/v2/shipments") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: `easypost_checkout_${requests.length}`,
+          rates: [
+            {
+              id: "rate_easy_ground",
+              carrier: "USPS",
+              service: "Ground",
+              rate: "11.40",
+            },
+            {
+              id: "rate_easy_express",
+              carrier: "USPS",
+              service: "Express",
+              rate: "16.90",
+            },
+          ],
+        }),
+      );
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/shipments/") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          object_id: `shippo_checkout_${requests.length}`,
+          rates: [
+            {
+              object_id: "rate_shippo_ground",
+              provider: "ShippoMock",
+              servicelevel: {
+                token: "ground",
+                name: "Ground",
+              },
+              amount: "12.30",
+            },
+            {
+              object_id: "rate_shippo_express",
+              provider: "ShippoMock",
+              servicelevel: {
+                token: "express",
+                name: "Express",
+              },
+              amount: "18.10",
+            },
+          ],
+        }),
+      );
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      request.url?.startsWith("/v1/promotion_codes?")
+    ) {
+      const url = new URL(request.url, COMMERCE_PROVIDER_MOCK_BASE_URL);
+      const code = String(url.searchParams.get("code") || "").toUpperCase();
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data:
+            code === "SMOKE10"
+              ? [
+                  {
+                    id: "promo_checkout_smoke10",
+                    code,
+                    coupon: {
+                      id: "coupon_checkout_20",
+                      percent_off: 20,
+                      currency: "usd",
+                    },
+                  },
+                ]
+              : [],
+        }),
+      );
+      return;
+    }
+
+    if (request.method !== "POST" || !request.url?.startsWith("/quote/")) {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message: "Not found" } }));
+      return;
+    }
+
+    const kind = request.url.split("/").pop();
     const discountAmount = checkout.discountCode ? 13.25 : 0;
     const fixedAmounts = {
       tax: 7.75,
@@ -600,29 +1955,35 @@ const startCommerceProviderMock = async () => {
       discount: discountAmount,
     };
     const amount = fixedAmounts[kind];
-    if (typeof amount !== 'number') {
-      response.writeHead(404, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: { message: 'Unknown provider kind' } }));
+    if (typeof amount !== "number") {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({ error: { message: "Unknown provider kind" } }),
+      );
       return;
     }
 
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({
-      [`${kind}Amount`]: amount,
-      reference: `provider_${kind}_${requests.length}`,
-      lines: [{
-        provider: 'commerce-smoke-http',
-        kind,
-        subtotal: quote.subtotal,
-        amount,
-      }],
-    }));
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        [`${kind}Amount`]: amount,
+        reference: `provider_${kind}_${requests.length}`,
+        lines: [
+          {
+            provider: "commerce-smoke-http",
+            kind,
+            subtotal: quote.subtotal,
+            amount,
+          },
+        ],
+      }),
+    );
   });
 
   await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(COMMERCE_PROVIDER_MOCK_PORT, '127.0.0.1', () => {
-      server.off('error', reject);
+    server.once("error", reject);
+    server.listen(COMMERCE_PROVIDER_MOCK_PORT, "127.0.0.1", () => {
+      server.off("error", reject);
       resolve();
     });
   });
@@ -634,20 +1995,38 @@ const startCommerceProviderMock = async () => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      email: 'admin@backy.io',
-      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
-    }),
-  });
-  const payload = await response.json().catch(() => ({}));
+  const login = (twoFactorCode) =>
+    fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "admin@backy.io",
+        password: process.env.BACKY_ADMIN_DEMO_PASSWORD || "admin123",
+        ...(twoFactorCode ? { twoFactorCode } : {}),
+      }),
+    });
 
-  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
-    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode =
+    process.env.BACKY_COMMERCE_SMOKE_MFA_CODE ||
+    process.env.BACKY_ADMIN_MFA_CODE ||
+    process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === "MFA_REQUIRED" && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
+
+  if (
+    !response.ok ||
+    payload.success === false ||
+    !payload.data?.session?.token
+  ) {
+    throw new Error(
+      `Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`,
+    );
   }
 
   apiAdminSessionToken = payload.data.session.token;
@@ -655,47 +2034,64 @@ const loginAdminApi = async () => {
 };
 
 const getFrontendDesign = async () => {
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
+  const payload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/frontend-design`,
+  );
   const frontendDesign = payload.data?.frontendDesign;
-  assert(frontendDesign?.schemaVersion === 'backy.frontend-design.v1', `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(
+    frontendDesign?.schemaVersion === "backy.frontend-design.v1",
+    `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
   return frontendDesign;
 };
 
 const patchFrontendDesign = async (frontendDesign) => {
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
-    method: 'PATCH',
-    body: JSON.stringify({ frontendDesign }),
-  });
+  const payload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/frontend-design`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ frontendDesign }),
+    },
+  );
   const updated = payload.data?.frontendDesign;
-  assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(
+    updated?.schemaVersion === "backy.frontend-design.v1",
+    `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
   return updated;
 };
 
 const getSettings = async () => {
-  const payload = await requestApi('/api/admin/settings');
+  const payload = await requestApi("/api/admin/settings");
   const settings = payload.data?.settings;
-  assert(settings?.integrations, `Settings response did not include integrations: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(
+    settings?.integrations,
+    `Settings response did not include integrations: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
   return JSON.parse(JSON.stringify(settings));
 };
 
 const getSite = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
   const site = payload.data?.site || payload.site;
-  assert(site?.id, `Site response did not include a site: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(
+    site?.id,
+    `Site response did not include a site: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
   return JSON.parse(JSON.stringify(site));
 };
 
 const patchSite = async (input) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(input),
   });
   return payload.data?.site || payload.site;
 };
 
 const patchSettingsFromSnapshot = async (settings) => {
-  const payload = await requestApi('/api/admin/settings', {
-    method: 'PATCH',
+  const payload = await requestApi("/api/admin/settings", {
+    method: "PATCH",
     body: JSON.stringify({
       deliveryMode: settings.deliveryMode,
       auth: settings.auth,
@@ -712,26 +2108,27 @@ const enableCommercePricingSettings = async (settings) => {
     ...(next.integrations || {}),
     commerce: {
       ...(next.integrations?.commerce || {}),
-      mode: 'checkout-provider',
-      paymentProvider: 'manual',
-      providerMode: 'test',
-      checkoutSuccessPath: '/checkout/success',
-      checkoutCancelPath: '/checkout/cancel',
-      providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
+      mode: "checkout-provider",
+      paymentProvider: "manual",
+      providerMode: "test",
+      checkoutSuccessPath: "/checkout/success",
+      checkoutCancelPath: "/checkout/cancel",
+      providerWebhookUrl: "https://hooks.example.com/backy-commerce-smoke",
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,customer.subscription.deleted',
+      providerWebhookEvents:
+        "checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,customer.subscription.deleted",
       webhookEventsEnabled: true,
-      reconciliationMode: 'webhook',
+      reconciliationMode: "webhook",
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: true,
-      taxProvider: 'http',
+      taxProvider: "http",
       taxProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/tax`,
-      shippingProvider: 'http',
+      shippingProvider: "http",
       shippingProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/shipping`,
-      discountProvider: 'http',
+      discountProvider: "http",
       discountProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/discount`,
-      catalogSyncProvider: 'http',
+      catalogSyncProvider: "http",
       catalogSyncProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/catalog/products`,
       taxRatePercent: 10,
       digitalTaxRatePercent: 5,
@@ -741,13 +2138,69 @@ const enableCommercePricingSettings = async (settings) => {
     },
     notifications: {
       ...(next.integrations?.notifications || {}),
-      digestFrequency: 'instant',
+      digestFrequency: "instant",
       email: {
         ...(next.integrations?.notifications?.email || {}),
         orderCreated: true,
         productLowStock: true,
-        recipient: 'commerce-ops@example.com',
+        recipient: "commerce-ops@example.com",
       },
+    },
+  };
+  return patchSettingsFromSnapshot(next);
+};
+
+const providerAddressRecord = {
+  name: "Backy Commerce Smoke",
+  street: "100 Test Street",
+  city: "New York",
+  state: "NY",
+  zip: "10001",
+  country: "US",
+};
+
+const providerParcelRecord = {
+  length: 8,
+  width: 6,
+  height: 4,
+  weight: 12,
+};
+
+const enableFirstClassCheckoutProviderSettings = async ({
+  taxProvider,
+  shippingProvider,
+}) => {
+  const current = await getSettings();
+  const next = JSON.parse(JSON.stringify(current));
+  next.integrations = {
+    ...(next.integrations || {}),
+    commerce: {
+      ...(next.integrations?.commerce || {}),
+      mode: "checkout-provider",
+      paymentProvider: "manual",
+      providerMode: "test",
+      checkoutSuccessPath: "/checkout/success",
+      checkoutCancelPath: "/checkout/cancel",
+      taxEnabled: true,
+      shippingEnabled: true,
+      discountsEnabled: true,
+      taxProvider,
+      taxProviderUrl: "",
+      shippingProvider,
+      shippingProviderUrl: "",
+      discountProvider: "stripe",
+      discountProviderUrl: "",
+      shippingOriginAddress: JSON.stringify(providerAddressRecord),
+      shippingDestinationAddress: JSON.stringify(providerAddressRecord),
+      shippingDefaultParcel: JSON.stringify(providerParcelRecord),
+      shippingDefaultCarrier: "",
+      shippingDefaultServiceLevel: "",
+      shippingDefaultRateId: "",
+      taxRatePercent: 10,
+      digitalTaxRatePercent: 5,
+      shippingBaseAmount: 12,
+      shippingWeightRate: 2,
+      discountPercent: 12,
     },
   };
   return patchSettingsFromSnapshot(next);
@@ -760,16 +2213,17 @@ const enableStripeCommerceSettings = async () => {
     ...(next.integrations || {}),
     commerce: {
       ...(next.integrations?.commerce || {}),
-      mode: 'checkout-provider',
-      paymentProvider: 'stripe',
-      providerMode: 'test',
-      checkoutSuccessPath: '/checkout/success',
-      checkoutCancelPath: '/checkout/cancel',
-      providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
+      mode: "checkout-provider",
+      paymentProvider: "stripe",
+      providerMode: "test",
+      checkoutSuccessPath: "/checkout/success",
+      checkoutCancelPath: "/checkout/cancel",
+      providerWebhookUrl: "https://hooks.example.com/backy-commerce-smoke",
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,customer.subscription.deleted',
+      providerWebhookEvents:
+        "checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,customer.subscription.deleted",
       webhookEventsEnabled: true,
-      reconciliationMode: 'webhook',
+      reconciliationMode: "webhook",
       taxEnabled: false,
       shippingEnabled: false,
       discountsEnabled: false,
@@ -784,86 +2238,103 @@ const enableStripeCommerceSettings = async () => {
 };
 
 const smokeFrontendDesignContract = () => ({
-  schemaVersion: 'backy.frontend-design.v1',
-  status: 'synced',
+  schemaVersion: "backy.frontend-design.v1",
+  status: "synced",
   source: {
-    type: 'custom-frontend',
-    label: 'Smoke commerce frontend',
-    url: 'https://example.com/smoke-commerce-frontend',
-    repository: 'example/backy-smoke-commerce-frontend',
-    branch: 'main',
+    type: "custom-frontend",
+    label: "Smoke commerce frontend",
+    url: "https://example.com/smoke-commerce-frontend",
+    repository: "example/backy-smoke-commerce-frontend",
+    branch: "main",
   },
   tokens: {
     colors: {
-      primary: '#0f766e',
-      accent: '#f59e0b',
+      primary: "#0f766e",
+      accent: "#f59e0b",
     },
     fonts: {
-      heading: 'Inter',
-      body: 'Inter',
+      heading: "Inter",
+      body: "Inter",
     },
-    customCss: ':root { --backy-smoke-commerce-primary: #0f766e; }',
+    customCss: ":root { --backy-smoke-commerce-primary: #0f766e; }",
   },
   chrome: {
-    header: { component: 'SmokeCommerceHeader', source: 'site.navigation.primary' },
-    navigation: { component: 'SmokeCommerceNavigation', source: 'site.navigation.primary' },
-    footer: { component: 'SmokeCommerceFooter', source: 'site.navigation.footer' },
+    header: {
+      component: "SmokeCommerceHeader",
+      source: "site.navigation.primary",
+    },
+    navigation: {
+      component: "SmokeCommerceNavigation",
+      source: "site.navigation.primary",
+    },
+    footer: {
+      component: "SmokeCommerceFooter",
+      source: "site.navigation.footer",
+    },
   },
   templates: [
     {
       id: FRONTEND_PRODUCT_TEMPLATE_ID,
-      type: 'product',
+      type: "product",
       name: FRONTEND_PRODUCT_TEMPLATE_NAME,
-      routePattern: '/products/smoke-contract-product',
-      description: 'Frontend contract product template used by the commerce smoke.',
+      routePattern: "/products/smoke-contract-product",
+      description:
+        "Frontend contract product template used by the commerce smoke.",
       content: {
-        title: 'Smoke frontend product',
-        slug: 'smoke-frontend-product',
-        sku: 'SMOKE-FRONTEND-PRODUCT',
+        title: "Smoke frontend product",
+        slug: "smoke-frontend-product",
+        sku: "SMOKE-FRONTEND-PRODUCT",
         price: 39,
         compareAtPrice: 59,
-        currency: 'USD',
+        currency: "USD",
         inventory: 11,
         lowStockThreshold: 3,
-        inventoryPolicy: 'deny',
-        productType: 'physical',
-        checkoutUrl: 'https://checkout.example.com/smoke-frontend-product',
+        inventoryPolicy: "deny",
+        productType: "physical",
+        checkoutUrl: "https://checkout.example.com/smoke-frontend-product",
         shippingRequired: true,
-        shippingProfile: 'standard-box',
+        shippingProfile: "standard-box",
         weight: 1.25,
-        taxClass: 'standard',
-        discountCode: 'FRONTEND10',
-        returnPolicy: 'Frontend template products allow returns within 30 days.',
-        imageUrl: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085',
-        galleryImages: ['https://images.unsplash.com/photo-1498050108023-c5249f4df085'],
-        category: 'Frontend templates',
-        tags: ['frontend-design', 'commerce'],
-        vendor: 'Backy',
-        description: 'A product seeded from a custom frontend design contract.',
-        seoTitle: 'Smoke frontend product | Backy',
+        taxClass: "standard",
+        discountCode: "FRONTEND10",
+        returnPolicy:
+          "Frontend template products allow returns within 30 days.",
+        imageUrl:
+          "https://images.unsplash.com/photo-1498050108023-c5249f4df085",
+        galleryImages: [
+          "https://images.unsplash.com/photo-1498050108023-c5249f4df085",
+        ],
+        category: "Frontend templates",
+        tags: ["frontend-design", "commerce"],
+        vendor: "Backy",
+        description: "A product seeded from a custom frontend design contract.",
+        seoTitle: "Smoke frontend product | Backy",
         featured: true,
         taxable: true,
       },
       bindingHints: [
-        { role: 'product.title', binding: 'product.title' },
-        { role: 'product.price', binding: 'product.price' },
-        { role: 'product.media', binding: 'product.imageUrl' },
+        { role: "product.title", binding: "product.title" },
+        { role: "product.price", binding: "product.price" },
+        { role: "product.media", binding: "product.imageUrl" },
       ],
     },
   ],
   editableMap: [
     {
       selector: '[data-backy-role="product-card"]',
-      role: 'product.card',
-      binding: 'product',
-      fields: ['title', 'price', 'imageUrl', 'checkoutUrl'],
+      role: "product.card",
+      binding: "product",
+      fields: ["title", "price", "imageUrl", "checkoutUrl"],
     },
   ],
-  notes: 'Temporary contract for validating product creation from custom frontend templates.',
+  notes:
+    "Temporary contract for validating product creation from custom frontend templates.",
 });
 
 const listCollections = async () => {
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections?limit=200`);
+  const payload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/collections?limit=200`,
+  );
   return payload.data?.collections || [];
 };
 
@@ -872,26 +2343,27 @@ const findCollection = async (slug) => {
   return collections.find((collection) => collection.slug === slug) || null;
 };
 
-const snapshotCollection = (collection) => (
+const snapshotCollection = (collection) =>
   collection
-    ? JSON.parse(JSON.stringify({
-        id: collection.id,
-        name: collection.name,
-        slug: collection.slug,
-        description: collection.description,
-        status: collection.status,
-        fields: (collection.fields || []).map(sanitizeSchemaField),
-        permissions: collection.permissions || {},
-        routePattern: collection.routePattern || null,
-        listRoutePattern: collection.listRoutePattern || null,
-      }))
-    : null
-);
+    ? JSON.parse(
+        JSON.stringify({
+          id: collection.id,
+          name: collection.name,
+          slug: collection.slug,
+          description: collection.description,
+          status: collection.status,
+          fields: (collection.fields || []).map(sanitizeSchemaField),
+          permissions: collection.permissions || {},
+          routePattern: collection.routePattern || null,
+          listRoutePattern: collection.listRoutePattern || null,
+        }),
+      )
+    : null;
 
 const restoreCollection = async (snapshot, currentCollection) => {
   if (snapshot) {
     await requestApi(`/api/admin/sites/${SITE_ID}/collections/${snapshot.id}`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify({
         name: snapshot.name,
         slug: snapshot.slug,
@@ -907,24 +2379,38 @@ const restoreCollection = async (snapshot, currentCollection) => {
   }
 
   if (currentCollection?.id) {
-    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${currentCollection.id}`, {
-      method: 'DELETE',
-    });
+    await requestApi(
+      `/api/admin/sites/${SITE_ID}/collections/${currentCollection.id}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 };
 
 const updateCollectionPermissions = async (collection, permissions) => {
-  assert(collection?.id, `Cannot update permissions for missing collection: ${JSON.stringify(collection)}`);
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collection.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ permissions }),
-  });
+  assert(
+    collection?.id,
+    `Cannot update permissions for missing collection: ${JSON.stringify(collection)}`,
+  );
+  const payload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/collections/${collection.id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ permissions }),
+    },
+  );
 
   return payload.data?.collection || payload.data || payload.collection;
 };
 
-const assertOrderIntakeReadinessRequiresPrivateOrders = async (ordersCollection) => {
-  assert(ordersCollection?.id, 'Orders collection was not available for order intake readiness check');
+const assertOrderIntakeReadinessRequiresPrivateOrders = async (
+  ordersCollection,
+) => {
+  assert(
+    ordersCollection?.id,
+    "Orders collection was not available for order intake readiness check",
+  );
   const originalPermissions = {
     publicRead: false,
     publicCreate: false,
@@ -941,27 +2427,59 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (ordersCollection)
   };
 
   try {
-    await updateCollectionPermissions(ordersCollection, exposedUpdatePermissions);
+    await updateCollectionPermissions(
+      ordersCollection,
+      exposedUpdatePermissions,
+    );
 
-    const catalogPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?limit=1`);
-    const catalogCommerce = catalogPayload.data?.commerce || catalogPayload.commerce;
-    assert(catalogCommerce?.capabilities?.catalog === true, `Catalog capability should remain available: ${JSON.stringify(catalogCommerce)}`);
-    assert(catalogCommerce.capabilities.orderIntake === false, `Catalog advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(catalogCommerce)}`);
+    const catalogPayload = await requestApi(
+      `/api/sites/${SITE_ID}/commerce/catalog?limit=1`,
+    );
+    const catalogCommerce =
+      catalogPayload.data?.commerce || catalogPayload.commerce;
+    assert(
+      catalogCommerce?.capabilities?.catalog === true,
+      `Catalog capability should remain available: ${JSON.stringify(catalogCommerce)}`,
+    );
+    assert(
+      catalogCommerce.capabilities.orderIntake === false,
+      `Catalog advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(catalogCommerce)}`,
+    );
 
     const manifestPayload = await requestApi(`/api/sites/${SITE_ID}/manifest`);
-    const manifestCommerce = manifestPayload.data?.site?.commerce ||
+    const manifestCommerce =
+      manifestPayload.data?.site?.commerce ||
       manifestPayload.site?.commerce ||
       manifestPayload.data?.commerce ||
       manifestPayload.commerce ||
-      (typeof manifestPayload.data?.capabilities?.commerceOrderIntake === 'boolean'
-        ? { capabilities: { orderIntake: manifestPayload.data.capabilities.commerceOrderIntake } }
+      (typeof manifestPayload.data?.capabilities?.commerceOrderIntake ===
+      "boolean"
+        ? {
+            capabilities: {
+              orderIntake:
+                manifestPayload.data.capabilities.commerceOrderIntake,
+            },
+          }
         : undefined);
-    assert(manifestCommerce?.capabilities?.orderIntake === false, `Manifest advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(manifestCommerce)}`);
+    assert(
+      manifestCommerce?.capabilities?.orderIntake === false,
+      `Manifest advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(manifestCommerce)}`,
+    );
 
-    const orderContractResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`);
-    const orderContractPayload = await orderContractResponse.json().catch(() => ({}));
-    assert(orderContractResponse.status === 409, `Order contract should reject public order collection access: ${orderContractResponse.status} ${JSON.stringify(orderContractPayload)}`);
-    assert(orderContractPayload?.error?.code === 'ORDER_QUEUE_NOT_PRIVATE', `Order contract returned wrong private queue error: ${JSON.stringify(orderContractPayload)}`);
+    const orderContractResponse = await fetch(
+      `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`,
+    );
+    const orderContractPayload = await orderContractResponse
+      .json()
+      .catch(() => ({}));
+    assert(
+      orderContractResponse.status === 409,
+      `Order contract should reject public order collection access: ${orderContractResponse.status} ${JSON.stringify(orderContractPayload)}`,
+    );
+    assert(
+      orderContractPayload?.error?.code === "ORDER_QUEUE_NOT_PRIVATE",
+      `Order contract returned wrong private queue error: ${JSON.stringify(orderContractPayload)}`,
+    );
   } finally {
     await updateCollectionPermissions(ordersCollection, originalPermissions);
   }
@@ -969,9 +2487,11 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (ordersCollection)
   const restored = await findCollection(ORDERS_COLLECTION_SLUG);
   assert(
     restored?.permissions?.publicRead === originalPermissions.publicRead &&
-    restored?.permissions?.publicCreate === originalPermissions.publicCreate &&
-    restored?.permissions?.publicUpdate === originalPermissions.publicUpdate &&
-    restored?.permissions?.publicDelete === originalPermissions.publicDelete,
+      restored?.permissions?.publicCreate ===
+        originalPermissions.publicCreate &&
+      restored?.permissions?.publicUpdate ===
+        originalPermissions.publicUpdate &&
+      restored?.permissions?.publicDelete === originalPermissions.publicDelete,
     `Orders permissions were not restored after readiness check: ${JSON.stringify(restored?.permissions)}`,
   );
 
@@ -979,20 +2499,28 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (ordersCollection)
 };
 
 const mergeSchemaFields = (currentFields = [], requiredFields = []) => {
-  const currentByKey = new Map(currentFields.map((field) => [field.key, field]));
+  const currentByKey = new Map(
+    currentFields.map((field) => [field.key, field]),
+  );
   const requiredKeys = new Set(requiredFields.map((field) => field.key));
-  const mergedRequired = requiredFields.map((field) => sanitizeSchemaField({
-    ...(currentByKey.get(field.key) || {}),
-    ...field,
-    sortOrder: field.sortOrder,
-  }));
-  const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
-  return [...mergedRequired, ...customFields].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const mergedRequired = requiredFields.map((field) =>
+    sanitizeSchemaField({
+      ...(currentByKey.get(field.key) || {}),
+      ...field,
+      sortOrder: field.sortOrder,
+    }),
+  );
+  const customFields = currentFields.filter(
+    (field) => !requiredKeys.has(field.key),
+  );
+  return [...mergedRequired, ...customFields].sort(
+    (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0),
+  );
 };
 
 const sanitizeSchemaField = (field) => {
   const nextField = { ...field };
-  if (!['select', 'tags'].includes(nextField.type)) {
+  if (!["select", "tags"].includes(nextField.type)) {
     delete nextField.options;
   }
   return nextField;
@@ -1013,7 +2541,7 @@ const upsertCollectionSchema = async ({
         name: current.name || name,
         slug,
         description: current.description || description,
-        status: 'published',
+        status: "published",
         listRoutePattern: current.listRoutePattern || listRoutePattern,
         routePattern: current.routePattern || routePattern,
         fields: mergeSchemaFields(current.fields || [], fields),
@@ -1026,7 +2554,7 @@ const upsertCollectionSchema = async ({
         name,
         slug,
         description,
-        status: 'published',
+        status: "published",
         listRoutePattern,
         routePattern,
         fields,
@@ -1038,7 +2566,7 @@ const upsertCollectionSchema = async ({
       ? `/api/admin/sites/${SITE_ID}/collections/${current.id}`
       : `/api/admin/sites/${SITE_ID}/collections`,
     {
-      method: current ? 'PATCH' : 'POST',
+      method: current ? "PATCH" : "POST",
       body: JSON.stringify(body),
     },
   );
@@ -1049,10 +2577,11 @@ const upsertCollectionSchema = async ({
 const ensureCommerceSchemasReadyViaApi = async () => {
   const products = await upsertCollectionSchema({
     slug: PRODUCT_COLLECTION_SLUG,
-    name: 'Products',
-    description: 'Sellable products controlled by Backy and available to custom frontends through collection APIs.',
-    listRoutePattern: '/products',
-    routePattern: '/products/:recordSlug',
+    name: "Products",
+    description:
+      "Sellable products controlled by Backy and available to custom frontends through collection APIs.",
+    listRoutePattern: "/products",
+    routePattern: "/products/:recordSlug",
     fields: PRODUCT_SCHEMA_FIELDS,
     permissions: {
       publicRead: true,
@@ -1063,10 +2592,11 @@ const ensureCommerceSchemasReadyViaApi = async () => {
   });
   const orders = await upsertCollectionSchema({
     slug: ORDERS_COLLECTION_SLUG,
-    name: 'Orders',
-    description: 'Commerce orders for storefronts, custom checkout flows, and fulfillment dashboards.',
-    listRoutePattern: '/orders',
-    routePattern: '/orders/:recordSlug',
+    name: "Orders",
+    description:
+      "Commerce orders for storefronts, custom checkout flows, and fulfillment dashboards.",
+    listRoutePattern: "/orders",
+    routePattern: "/orders/:recordSlug",
     fields: ORDER_SCHEMA_FIELDS,
     permissions: {
       publicRead: false,
@@ -1090,23 +2620,29 @@ const ensureCommerceSchemasReadyViaApi = async () => {
   };
 };
 
-const listCollectionRecords = async (collectionId, query = '') => {
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records${query}`);
+const listCollectionRecords = async (collectionId, query = "") => {
+  const payload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/collections/${collectionId}/records${query}`,
+  );
   return payload.data?.records || [];
 };
 
-const listAllCollectionRecords = async (collectionId, query = '') => {
-  const baseParams = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+const listAllCollectionRecords = async (collectionId, query = "") => {
+  const baseParams = new URLSearchParams(
+    query.startsWith("?") ? query.slice(1) : query,
+  );
   const records = [];
-  let offset = Number(baseParams.get('offset') || 0);
-  const limit = Number(baseParams.get('limit') || 100);
+  let offset = Number(baseParams.get("offset") || 0);
+  const limit = Number(baseParams.get("limit") || 100);
 
   for (let pageIndex = 0; pageIndex < 1000; pageIndex += 1) {
     const params = new URLSearchParams(baseParams);
-    params.set('limit', String(limit));
-    params.set('offset', String(offset));
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
 
-    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records?${params.toString()}`);
+    const payload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/collections/${collectionId}/records?${params.toString()}`,
+    );
     const pageRecords = payload.data?.records || [];
     const pagination = payload.data?.pagination || {
       limit,
@@ -1115,7 +2651,8 @@ const listAllCollectionRecords = async (collectionId, query = '') => {
     };
 
     records.push(...pageRecords);
-    const nextOffset = Number(pagination.offset || offset) + Number(pagination.limit || limit);
+    const nextOffset =
+      Number(pagination.offset || offset) + Number(pagination.limit || limit);
     if (!pagination.hasMore || nextOffset <= offset) {
       break;
     }
@@ -1127,12 +2664,18 @@ const listAllCollectionRecords = async (collectionId, query = '') => {
 };
 
 const getCollectionRecordBySlug = async (collectionId, slug) => {
-  const records = await listCollectionRecords(collectionId, `?slug=${encodeURIComponent(slug)}`);
+  const records = await listCollectionRecords(
+    collectionId,
+    `?slug=${encodeURIComponent(slug)}`,
+  );
   return records[0] || null;
 };
 
 const assertProductBillingLimitEnforced = async (productCollection, suffix) => {
-  assert(productCollection?.id, 'Products collection is required for billing limit smoke.');
+  assert(
+    productCollection?.id,
+    "Products collection is required for billing limit smoke.",
+  );
   const site = await getSite();
   const settings = await getSettings();
   const existingProducts = await listAllCollectionRecords(productCollection.id);
@@ -1149,7 +2692,7 @@ const assertProductBillingLimitEnforced = async (productCollection, suffix) => {
       ...originalIntegrations,
       commerce: {
         ...originalCommerce,
-        overageMode: 'block',
+        overageMode: "block",
       },
     },
   });
@@ -1167,26 +2710,41 @@ const assertProductBillingLimitEnforced = async (productCollection, suffix) => {
   });
 
   try {
-    const { response, payload } = await requestApiRaw(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records`, {
-      method: 'POST',
-      body: JSON.stringify({
-        slug: blockedSlug,
-        status: 'draft',
-        values: {
-          title: `Blocked Product Limit ${suffix}`,
-          sku: `BLOCKED-${suffix.toUpperCase()}`,
-          price: 29,
-          currency: 'USD',
-          producttype: 'physical',
-          inventory: 3,
-        },
-      }),
-    });
+    const { response, payload } = await requestApiRaw(
+      `/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          slug: blockedSlug,
+          status: "draft",
+          values: {
+            title: `Blocked Product Limit ${suffix}`,
+            sku: `BLOCKED-${suffix.toUpperCase()}`,
+            price: 29,
+            currency: "USD",
+            producttype: "physical",
+            inventory: 3,
+          },
+        }),
+      },
+    );
 
-    assert(response.status === 402, `Billing product limit should reject product creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
-    assert(payload?.error?.code === 'BILLING_PRODUCT_LIMIT', `Billing product limit should return BILLING_PRODUCT_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
-    const persisted = await getCollectionRecordBySlug(productCollection.id, blockedSlug);
-    assert(!persisted, `Billing-limited product creation unexpectedly persisted a product: ${JSON.stringify(persisted).slice(0, 500)}`);
+    assert(
+      response.status === 402,
+      `Billing product limit should reject product creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`,
+    );
+    assert(
+      payload?.error?.code === "BILLING_PRODUCT_LIMIT",
+      `Billing product limit should return BILLING_PRODUCT_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`,
+    );
+    const persisted = await getCollectionRecordBySlug(
+      productCollection.id,
+      blockedSlug,
+    );
+    assert(
+      !persisted,
+      `Billing-limited product creation unexpectedly persisted a product: ${JSON.stringify(persisted).slice(0, 500)}`,
+    );
   } finally {
     await patchSite({ settings: originalSiteSettings });
     await patchSettingsFromSnapshot({
@@ -1204,17 +2762,41 @@ const currentMonthStartMs = () => {
 const currentMonthRecords = (records) => {
   const monthStart = currentMonthStartMs();
   return records.filter((record) => {
-    const timestamp = Date.parse(record.createdAt || record.values?.createdat || record.values?.createdAt || '');
+    const timestamp = Date.parse(
+      record.createdAt ||
+        record.values?.createdat ||
+        record.values?.createdAt ||
+        "",
+    );
     return Number.isFinite(timestamp) && timestamp >= monthStart;
   });
 };
 
-const assertOrderBillingLimitEnforced = async ({ productCollection, ordersCollection, slug, suffix }) => {
-  assert(productCollection?.id, 'Products collection is required for order billing limit smoke.');
-  assert(ordersCollection?.id, 'Orders collection is required for order billing limit smoke.');
+const assertOrderBillingLimitEnforced = async ({
+  productCollection,
+  ordersCollection,
+  slug,
+  suffix,
+}) => {
+  assert(
+    productCollection?.id,
+    "Products collection is required for order billing limit smoke.",
+  );
+  assert(
+    ordersCollection?.id,
+    "Orders collection is required for order billing limit smoke.",
+  );
   const settings = await getSettings();
-  const existingOrders = currentMonthRecords(await listAllCollectionRecords(ordersCollection.id, '?limit=100&status=all'));
-  const productBefore = await getCollectionRecordBySlug(productCollection.id, slug);
+  const existingOrders = currentMonthRecords(
+    await listAllCollectionRecords(
+      ordersCollection.id,
+      "?limit=100&status=all",
+    ),
+  );
+  const productBefore = await getCollectionRecordBySlug(
+    productCollection.id,
+    slug,
+  );
   const originalIntegrations = settings.integrations || {};
   const originalCommerce = originalIntegrations.commerce || {};
   const blockedSessionId = `cs_blocked_order_limit_${suffix}`;
@@ -1225,33 +2807,56 @@ const assertOrderBillingLimitEnforced = async ({ productCollection, ordersCollec
       ...originalIntegrations,
       commerce: {
         ...originalCommerce,
-        overageMode: 'block',
+        overageMode: "block",
         monthlyOrderLimit: existingOrders.length,
       },
     },
   });
 
   try {
-    const { response, payload } = await requestApiRaw(`/api/sites/${SITE_ID}/commerce/orders`, {
-      method: 'POST',
-      body: JSON.stringify({
-        customer: {
-          name: 'Blocked Order Limit Buyer',
-          email: `blocked-order-limit-${suffix}@example.com`,
-        },
-        items: [{ slug, quantity: 1 }],
-        paymentProvider: 'manual',
-        paymentReference: `manual-blocked-order-limit-${suffix}`,
-        checkoutSessionId: blockedSessionId,
-      }),
-    });
+    const { response, payload } = await requestApiRaw(
+      `/api/sites/${SITE_ID}/commerce/orders`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          customer: {
+            name: "Blocked Order Limit Buyer",
+            email: `blocked-order-limit-${suffix}@example.com`,
+          },
+          items: [{ slug, quantity: 1 }],
+          paymentProvider: "manual",
+          paymentReference: `manual-blocked-order-limit-${suffix}`,
+          checkoutSessionId: blockedSessionId,
+        }),
+      },
+    );
 
-    assert(response.status === 402, `Billing order limit should reject checkout order creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
-    assert(payload?.error?.code === 'BILLING_ORDER_LIMIT', `Billing order limit should return BILLING_ORDER_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
-    const ordersAfter = await listAllCollectionRecords(ordersCollection.id, '?limit=100&status=all');
-    assert(!ordersAfter.some((record) => record.values?.checkoutsessionid === blockedSessionId), `Billing-limited checkout unexpectedly persisted an order: ${JSON.stringify(ordersAfter.slice(-3)).slice(0, 900)}`);
-    const productAfter = await getCollectionRecordBySlug(productCollection.id, slug);
-    assert(productAfter?.values?.inventory === productBefore?.values?.inventory, `Billing-limited checkout unexpectedly reserved inventory: before=${productBefore?.values?.inventory} after=${productAfter?.values?.inventory}`);
+    assert(
+      response.status === 402,
+      `Billing order limit should reject checkout order creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`,
+    );
+    assert(
+      payload?.error?.code === "BILLING_ORDER_LIMIT",
+      `Billing order limit should return BILLING_ORDER_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`,
+    );
+    const ordersAfter = await listAllCollectionRecords(
+      ordersCollection.id,
+      "?limit=100&status=all",
+    );
+    assert(
+      !ordersAfter.some(
+        (record) => record.values?.checkoutsessionid === blockedSessionId,
+      ),
+      `Billing-limited checkout unexpectedly persisted an order: ${JSON.stringify(ordersAfter.slice(-3)).slice(0, 900)}`,
+    );
+    const productAfter = await getCollectionRecordBySlug(
+      productCollection.id,
+      slug,
+    );
+    assert(
+      productAfter?.values?.inventory === productBefore?.values?.inventory,
+      `Billing-limited checkout unexpectedly reserved inventory: before=${productBefore?.values?.inventory} after=${productAfter?.values?.inventory}`,
+    );
   } finally {
     await patchSettingsFromSnapshot({
       ...settings,
@@ -1264,22 +2869,28 @@ const deleteCollectionRecord = async (collectionId, recordId) => {
   if (!collectionId || !recordId) return;
 
   try {
-    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/${recordId}`, {
-      method: 'DELETE',
-    });
+    await requestApi(
+      `/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/${recordId}`,
+      {
+        method: "DELETE",
+      },
+    );
   } catch {
-    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/bulk`, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'delete',
-        recordIds: [recordId],
-      }),
-    });
+    await requestApi(
+      `/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/bulk`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "delete",
+          recordIds: [recordId],
+        }),
+      },
+    );
   }
 };
 
 const csvEscape = (value) => {
-  const text = value === null || value === undefined ? '' : String(value);
+  const text = value === null || value === undefined ? "" : String(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
@@ -1294,7 +2905,7 @@ const fetchJson = async (endpoint) => {
 const waitForCdp = async () => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
-      return await fetchJson('/json/list');
+      return await fetchJson("/json/list");
     } catch {
       await sleep(100);
     }
@@ -1309,7 +2920,7 @@ const connectCdp = (webSocketDebuggerUrl) => {
   const pending = new Map();
   const events = [];
 
-  socket.addEventListener('message', (event) => {
+  socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
 
     if (message.id && pending.has(message.id)) {
@@ -1328,8 +2939,8 @@ const connectCdp = (webSocketDebuggerUrl) => {
   });
 
   const opened = new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', reject, { once: true });
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
   });
 
   return {
@@ -1337,7 +2948,7 @@ const connectCdp = (webSocketDebuggerUrl) => {
     opened,
     close: () => socket.close(),
     send: (method, params = {}) => {
-      const messageId = id += 1;
+      const messageId = (id += 1);
       socket.send(JSON.stringify({ id: messageId, method, params }));
       return new Promise((resolve, reject) => {
         pending.set(messageId, { resolve, reject });
@@ -1347,50 +2958,66 @@ const connectCdp = (webSocketDebuggerUrl) => {
 };
 
 const authStorageScript = (sessionToken) => `
-localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
-  state: {
-    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
-    session: {
-      token: sessionToken,
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 3600000).toISOString(),
-      authMode: 'local-demo',
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(
+  JSON.stringify({
+    state: {
+      user: {
+        id: "user-admin",
+        email: "admin@backy.io",
+        fullName: "Admin User",
+        role: "admin",
+      },
+      session: {
+        token: sessionToken,
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        authMode: "local-demo",
+      },
     },
-  },
-  version: 0,
-}))});
+    version: 0,
+  }),
+)});
 `;
 
 const evaluate = async (client, expression) => {
-  const result = await client.send('Runtime.evaluate', {
+  const result = await client.send("Runtime.evaluate", {
     expression,
     awaitPromise: true,
     returnByValue: true,
   });
 
   if (result.exceptionDetails) {
-    throw new Error(`Runtime evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
+    throw new Error(
+      `Runtime evaluation failed: ${JSON.stringify(result.exceptionDetails)}`,
+    );
   }
 
   return result.result.value;
 };
 
 const navigateToRoute = async (client, route, testId, expectedText) => {
-  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}${route}?siteId=${encodeURIComponent(SITE_ID)}` });
+  await client.send("Page.navigate", {
+    url: `${ADMIN_BASE_URL}${route}?siteId=${encodeURIComponent(SITE_ID)}`,
+  });
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const state = await evaluate(client, `(() => ({
+    const state = await evaluate(
+      client,
+      `(() => ({
       ready: Boolean(document.querySelector('[data-testid="${testId}"]')),
       expected: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
       body: document.body?.innerText?.slice(0, 500) || '',
-    }))()`);
+    }))()`,
+    );
 
     if (state.ready && state.expected) {
       return state;
     }
 
     if (attempt === 119) {
-      throw new Error(`${route} did not render expected controls: ${JSON.stringify(state)}`);
+      throw new Error(
+        `${route} did not render expected controls: ${JSON.stringify(state)}`,
+      );
     }
 
     await sleep(250);
@@ -1400,7 +3027,9 @@ const navigateToRoute = async (client, route, testId, expectedText) => {
 };
 
 const clickByText = async (client, text, options = {}) => {
-  const result = await evaluate(client, `(() => {
+  const result = await evaluate(
+    client,
+    `(() => {
     const text = ${JSON.stringify(text)};
     const exact = ${JSON.stringify(Boolean(options.exact))};
     const candidates = Array.from(document.querySelectorAll('button, a'));
@@ -1413,14 +3042,20 @@ const clickByText = async (client, text, options = {}) => {
     }
     target.click();
     return { ok: true, text: target.textContent || '', tag: target.tagName };
-  })()`);
-  assert(result.ok, `Unable to click control with text ${text}: ${JSON.stringify(result)}`);
+  })()`,
+  );
+  assert(
+    result.ok,
+    `Unable to click control with text ${text}: ${JSON.stringify(result)}`,
+  );
   await sleep(250);
   return result;
 };
 
 const clickIfPresent = async (client, text) => {
-  const result = await evaluate(client, `(() => {
+  const result = await evaluate(
+    client,
+    `(() => {
     const text = ${JSON.stringify(text)};
     const candidates = Array.from(document.querySelectorAll('button, a'));
     const matches = candidates.filter((candidate) => (candidate.textContent || '').replace(/\\s+/g, ' ').trim().toLowerCase().includes(text.toLowerCase()));
@@ -1437,7 +3072,8 @@ const clickIfPresent = async (client, text) => {
     }
     target.click();
     return { ok: true, text: target.textContent || '' };
-  })()`);
+  })()`,
+  );
 
   if (result.ok) {
     await sleep(500);
@@ -1447,20 +3083,25 @@ const clickIfPresent = async (client, text) => {
 };
 
 const waitUntilIdle = async (client, pageName) => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const state = await evaluate(client, `(() => ({
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => ({
       hasBusyButton: Array.from(document.querySelectorAll('button')).some((button) => /Saving|Setting up|Loading/.test(button.textContent || '')),
       notice: Array.from(document.querySelectorAll('div')).some((node) => /created|synced|updated|ready/i.test(node.textContent || '')),
       error: document.body?.innerText?.includes('Unable to') || false,
       body: document.body?.innerText?.slice(0, 400) || '',
-    }))()`);
+    }))()`,
+    );
 
     if (!state.hasBusyButton) {
       return state;
     }
 
     if (attempt === 99) {
-      throw new Error(`${pageName} did not become idle: ${JSON.stringify(state)}`);
+      throw new Error(
+        `${pageName} did not become idle: ${JSON.stringify(state)}`,
+      );
     }
 
     await sleep(200);
@@ -1470,7 +3111,9 @@ const waitUntilIdle = async (client, pageName) => {
 };
 
 const setLabeledControl = async (client, labelText, value, options = {}) => {
-  const result = await evaluate(client, `(() => {
+  const result = await evaluate(
+    client,
+    `(() => {
     const labelText = ${JSON.stringify(labelText)};
     const value = ${JSON.stringify(value)};
     const exact = ${JSON.stringify(Boolean(options.exact))};
@@ -1508,14 +3151,17 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
     control.dispatchEvent(new Event('input', { bubbles: true }));
     control.dispatchEvent(new Event('change', { bubbles: true }));
     return { ok: true, labelText, value: control.value, tag: control.tagName };
-  })()`);
+  })()`,
+  );
   assert(result.ok, `Unable to set ${labelText}: ${JSON.stringify(result)}`);
   await sleep(75);
   return result;
 };
 
 const setAriaControl = async (client, ariaLabel, value) => {
-  const result = await evaluate(client, `(() => {
+  const result = await evaluate(
+    client,
+    `(() => {
     const ariaLabel = ${JSON.stringify(ariaLabel)};
     const value = ${JSON.stringify(value)};
     const control = document.querySelector('[aria-label="' + CSS.escape(ariaLabel) + '"]');
@@ -1535,13 +3181,24 @@ const setAriaControl = async (client, ariaLabel, value) => {
     control.dispatchEvent(new Event('input', { bubbles: true }));
     control.dispatchEvent(new Event('change', { bubbles: true }));
     return { ok: true, ariaLabel, value: control.value };
-  })()`);
-  assert(result.ok, `Unable to set aria control ${ariaLabel}: ${JSON.stringify(result)}`);
+  })()`,
+  );
+  assert(
+    result.ok,
+    `Unable to set aria control ${ariaLabel}: ${JSON.stringify(result)}`,
+  );
   await sleep(75);
   return result;
 };
 
-const ensureCollectionReadyFromUi = async (client, route, testId, expectedText, setupText, readyCheck) => {
+const ensureCollectionReadyFromUi = async (
+  client,
+  route,
+  testId,
+  expectedText,
+  setupText,
+  readyCheck,
+) => {
   await navigateToRoute(client, route, testId, expectedText);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -1555,13 +3212,15 @@ const ensureCollectionReadyFromUi = async (client, route, testId, expectedText, 
       await waitUntilIdle(client, route);
     }
 
-    const clickedSync = await clickIfPresent(client, 'Sync Schema');
+    const clickedSync = await clickIfPresent(client, "Sync Schema");
     if (clickedSync) {
       await waitUntilIdle(client, route);
     }
 
     if (attempt === 79) {
-      throw new Error(`${route} collection did not become ready: ${JSON.stringify(state)}`);
+      throw new Error(
+        `${route} collection did not become ready: ${JSON.stringify(state)}`,
+      );
     }
 
     await sleep(250);
@@ -1570,84 +3229,108 @@ const ensureCollectionReadyFromUi = async (client, route, testId, expectedText, 
   return null;
 };
 
-const ensureOrdersReady = async (client) => ensureCollectionReadyFromUi(
-  client,
-  '/orders',
-  'orders-command-center',
-  'Order command center',
-  'Set up orders',
-  async () => {
-    const collection = await findCollection(ORDERS_COLLECTION_SLUG);
-    return {
-      ready: Boolean(
-        collection?.id &&
-        collection.status === 'published' &&
-        !collection.permissions?.publicRead &&
-        !collection.permissions?.publicCreate &&
-        !collection.permissions?.publicUpdate &&
-        !collection.permissions?.publicDelete &&
-        (collection.fields?.length || 0) >= ORDER_REQUIRED_FIELD_COUNT
-      ),
-      collectionId: collection?.id,
-      fieldCount: collection?.fields?.length || 0,
-      permissions: collection?.permissions,
-    };
-  },
-);
+const ensureOrdersReady = async (client) =>
+  ensureCollectionReadyFromUi(
+    client,
+    "/orders",
+    "orders-command-center",
+    "Order command center",
+    "Set up orders",
+    async () => {
+      const collection = await findCollection(ORDERS_COLLECTION_SLUG);
+      return {
+        ready: Boolean(
+          collection?.id &&
+          collection.status === "published" &&
+          !collection.permissions?.publicRead &&
+          !collection.permissions?.publicCreate &&
+          !collection.permissions?.publicUpdate &&
+          !collection.permissions?.publicDelete &&
+          (collection.fields?.length || 0) >= ORDER_REQUIRED_FIELD_COUNT,
+        ),
+        collectionId: collection?.id,
+        fieldCount: collection?.fields?.length || 0,
+        permissions: collection?.permissions,
+      };
+    },
+  );
 
-const ensureProductsReady = async (client) => ensureCollectionReadyFromUi(
-  client,
-  '/products',
-  'products-command-center',
-  'Catalog command center',
-  'Set up products',
-  async () => {
-    const collection = await findCollection(PRODUCT_COLLECTION_SLUG);
-    return {
-      ready: Boolean(
-        collection?.id &&
-        collection.status === 'published' &&
-        collection.permissions?.publicRead &&
-        (collection.fields?.length || 0) >= PRODUCT_REQUIRED_FIELD_COUNT
-      ),
-      collectionId: collection?.id,
-      fieldCount: collection?.fields?.length || 0,
-      permissions: collection?.permissions,
-    };
-  },
-);
+const ensureProductsReady = async (client) =>
+  ensureCollectionReadyFromUi(
+    client,
+    "/products",
+    "products-command-center",
+    "Catalog command center",
+    "Set up products",
+    async () => {
+      const collection = await findCollection(PRODUCT_COLLECTION_SLUG);
+      return {
+        ready: Boolean(
+          collection?.id &&
+          collection.status === "published" &&
+          collection.permissions?.publicRead &&
+          (collection.fields?.length || 0) >= PRODUCT_REQUIRED_FIELD_COUNT,
+        ),
+        collectionId: collection?.id,
+        fieldCount: collection?.fields?.length || 0,
+        permissions: collection?.permissions,
+      };
+    },
+  );
 
 const fillProductEditor = async (client, suffix) => {
   const slug = `commerce-smoke-${suffix}`;
-  await setLabeledControl(client, 'Title', `Commerce Smoke ${suffix}`);
-  await setLabeledControl(client, 'Slug', slug);
-  await setLabeledControl(client, 'SKU', `SMOKE-${suffix.toUpperCase()}`);
-  await setLabeledControl(client, 'Price', '49');
-  await setLabeledControl(client, 'Compare at', '79');
-  await setLabeledControl(client, 'Currency', 'USD');
-  await setLabeledControl(client, 'Stock', '7');
-  await setLabeledControl(client, 'Low stock at', '4');
-  await setLabeledControl(client, 'Inventory policy', 'deny');
-  await setLabeledControl(client, 'Type', 'physical');
-  await setLabeledControl(client, 'Checkout URL', `https://checkout.example.com/${slug}`);
-  await setLabeledControl(client, 'Subscription', true);
+  await setLabeledControl(client, "Title", `Commerce Smoke ${suffix}`);
+  await setLabeledControl(client, "Slug", slug);
+  await setLabeledControl(client, "SKU", `SMOKE-${suffix.toUpperCase()}`);
+  await setLabeledControl(client, "Price", "49");
+  await setLabeledControl(client, "Compare at", "79");
+  await setLabeledControl(client, "Currency", "USD");
+  await setLabeledControl(client, "Stock", "7");
+  await setLabeledControl(client, "Low stock at", "4");
+  await setLabeledControl(client, "Inventory policy", "deny");
+  await setLabeledControl(client, "Type", "physical");
+  await setLabeledControl(
+    client,
+    "Checkout URL",
+    `https://checkout.example.com/${slug}`,
+  );
+  await setLabeledControl(client, "Subscription", true);
   await sleep(150);
-  await setLabeledControl(client, 'Subscription interval', 'monthly');
-  await setLabeledControl(client, 'Trial days', '14');
-  await setLabeledControl(client, 'Tax class', 'standard');
-  await setLabeledControl(client, 'Shipping profile', 'standard-box');
-  await setLabeledControl(client, 'Discount code', 'SMOKE10');
-  await setLabeledControl(client, 'Return policy', '30-day returns for unopened smoke-test products.');
-  await setAriaControl(client, 'Image URL', 'https://images.unsplash.com/photo-1498050108023-c5249f4df085');
-  await setLabeledControl(client, 'Category', 'Templates');
-  await setLabeledControl(client, 'Vendor', 'Backy');
-  await setLabeledControl(client, 'Description', 'A smoke-tested commerce product that verifies catalog publishing, storefront API handoff, and order intake inventory reservation.');
-  await setLabeledControl(client, 'SEO title', `Commerce Smoke ${suffix} | Backy`);
-  await setLabeledControl(client, 'Status', 'published');
-  await setLabeledControl(client, 'Featured', true);
-  await setLabeledControl(client, 'Taxable', true);
-  await setLabeledControl(client, 'Ships', true);
-  const generatedVariantMatrix = await evaluate(client, `(() => {
+  await setLabeledControl(client, "Subscription interval", "monthly");
+  await setLabeledControl(client, "Trial days", "14");
+  await setLabeledControl(client, "Tax class", "standard");
+  await setLabeledControl(client, "Shipping profile", "standard-box");
+  await setLabeledControl(client, "Discount code", "SMOKE10");
+  await setLabeledControl(
+    client,
+    "Return policy",
+    "30-day returns for unopened smoke-test products.",
+  );
+  await setAriaControl(
+    client,
+    "Image URL",
+    "https://images.unsplash.com/photo-1498050108023-c5249f4df085",
+  );
+  await setLabeledControl(client, "Category", "Templates");
+  await setLabeledControl(client, "Vendor", "Backy");
+  await setLabeledControl(
+    client,
+    "Description",
+    "A smoke-tested commerce product that verifies catalog publishing, storefront API handoff, and order intake inventory reservation.",
+  );
+  await setLabeledControl(
+    client,
+    "SEO title",
+    `Commerce Smoke ${suffix} | Backy`,
+  );
+  await setLabeledControl(client, "Status", "published");
+  await setLabeledControl(client, "Featured", true);
+  await setLabeledControl(client, "Taxable", true);
+  await setLabeledControl(client, "Ships", true);
+  const generatedVariantMatrix = await evaluate(
+    client,
+    `(() => {
     const setNativeValue = (element, value) => {
       const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value');
       descriptor?.set?.call(element, value);
@@ -1678,10 +3361,16 @@ const fillProductEditor = async (client, suffix) => {
     setNativeValue(stock, '4');
     button.click();
     return { ok: true };
-  })()`);
-  assert(generatedVariantMatrix.ok, `Unable to generate product variant matrix: ${JSON.stringify(generatedVariantMatrix)}`);
+  })()`,
+  );
+  assert(
+    generatedVariantMatrix.ok,
+    `Unable to generate product variant matrix: ${JSON.stringify(generatedVariantMatrix)}`,
+  );
   await sleep(500);
-  const generatedVariantState = await evaluate(client, `(() => {
+  const generatedVariantState = await evaluate(
+    client,
+    `(() => {
     const text = document.querySelector('[data-testid="products-variant-matrix"]')?.parentElement?.textContent || document.body?.innerText || '';
     return {
       hasSmallBlack: text.includes('S / Black') && text.includes('Size: S / Color: Black'),
@@ -1689,31 +3378,37 @@ const fillProductEditor = async (client, suffix) => {
       countText: text.match(/\\d+\\/50/)?.[0] || '',
       text: text.slice(0, 1400),
     };
-  })()`);
+  })()`,
+  );
   assert(
     generatedVariantState.hasSmallBlack &&
       generatedVariantState.hasMediumWhite &&
-      generatedVariantState.countText === '4/50',
+      generatedVariantState.countText === "4/50",
     `Product variant matrix did not render generated combinations: ${JSON.stringify(generatedVariantState)}`,
   );
 
   await sleep(500);
-  await clickByText(client, 'Create Product', { exact: true });
+  await clickByText(client, "Create Product", { exact: true });
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const state = await evaluate(client, `(() => ({
+    const state = await evaluate(
+      client,
+      `(() => ({
       created: document.body?.innerText?.includes('Product created.') || false,
       titleVisible: document.body?.innerText?.includes(${JSON.stringify(`Commerce Smoke ${suffix}`)}) || false,
       buttonText: Array.from(document.querySelectorAll('button')).map((button) => button.textContent || '').join(' | '),
       body: document.body?.innerText?.slice(0, 500) || '',
-    }))()`);
+    }))()`,
+    );
 
     if (state.created && state.titleVisible) {
       return { slug, state };
     }
 
     if (attempt === 79) {
-      throw new Error(`Product was not created from UI: ${JSON.stringify(state)}`);
+      throw new Error(
+        `Product was not created from UI: ${JSON.stringify(state)}`,
+      );
     }
 
     await sleep(250);
@@ -1724,7 +3419,9 @@ const fillProductEditor = async (client, suffix) => {
 
 const clickFrontendTemplateCreateProduct = async (client) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const result = await evaluate(client, `(() => {
+    const result = await evaluate(
+      client,
+      `(() => {
       const section = document.querySelector('[data-testid="products-frontend-template-options"]');
       const button = document.querySelector('[data-testid="products-frontend-template-${FRONTEND_PRODUCT_TEMPLATE_ID}"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
@@ -1738,14 +3435,17 @@ const clickFrontendTemplateCreateProduct = async (client) => {
       }
       button.click();
       return { ok: true, text: button.textContent || '' };
-    })()`);
+    })()`,
+    );
 
     if (result.ok) {
       return;
     }
 
     if (attempt === 79) {
-      throw new Error(`Unable to click frontend product template Create product: ${JSON.stringify(result)}`);
+      throw new Error(
+        `Unable to click frontend product template Create product: ${JSON.stringify(result)}`,
+      );
     }
 
     await sleep(250);
@@ -1754,19 +3454,32 @@ const clickFrontendTemplateCreateProduct = async (client) => {
 
 const waitForFrontendTemplateProduct = async (productCollection) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const records = await listAllCollectionRecords(productCollection.id, '?limit=100&status=all');
-    const record = records.find((candidate) => candidate.values?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID);
+    const records = await listAllCollectionRecords(
+      productCollection.id,
+      "?limit=100&status=all",
+    );
+    const record = records.find(
+      (candidate) =>
+        candidate.values?.frontendDesignTemplateId ===
+        FRONTEND_PRODUCT_TEMPLATE_ID,
+    );
 
     if (record) {
       return record;
     }
 
     if (attempt === 99) {
-      throw new Error(`Frontend product template was not created: ${JSON.stringify(records.map((record) => ({
-        id: record.id,
-        slug: record.slug,
-        values: record.values,
-      })).slice(0, 8))}`);
+      throw new Error(
+        `Frontend product template was not created: ${JSON.stringify(
+          records
+            .map((record) => ({
+              id: record.id,
+              slug: record.slug,
+              values: record.values,
+            }))
+            .slice(0, 8),
+        )}`,
+      );
     }
 
     await sleep(250);
@@ -1776,8 +3489,14 @@ const waitForFrontendTemplateProduct = async (productCollection) => {
 };
 
 const deleteExistingFrontendTemplateProducts = async (productCollection) => {
-  const records = await listAllCollectionRecords(productCollection.id, '?limit=100&status=all');
-  const staleRecords = records.filter((record) => record.values?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID);
+  const records = await listAllCollectionRecords(
+    productCollection.id,
+    "?limit=100&status=all",
+  );
+  const staleRecords = records.filter(
+    (record) =>
+      record.values?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID,
+  );
 
   for (const record of staleRecords) {
     await deleteCollectionRecord(productCollection.id, record.id);
@@ -1785,228 +3504,820 @@ const deleteExistingFrontendTemplateProducts = async (productCollection) => {
 };
 
 const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
-  assert(record?.values?.title === 'Smoke frontend product', `Frontend product title mismatch: ${JSON.stringify(record?.values)}`);
-  assert(record.values.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID, `Frontend template id was not stored: ${JSON.stringify(record.values)}`);
-  assert(record.values.frontendDesignTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME, `Frontend template name was not stored: ${JSON.stringify(record.values)}`);
-  assert(record.values.frontendDesignSource?.label === 'Smoke commerce frontend', `Frontend source snapshot missing: ${JSON.stringify(record.values)}`);
-  assert(record.values.frontendDesignRoutePattern === '/products/smoke-contract-product', `Frontend route pattern missing: ${JSON.stringify(record.values)}`);
-  assert(record.values.frontendDesignChrome?.header?.component === 'SmokeCommerceHeader', `Frontend chrome snapshot missing: ${JSON.stringify(record.values)}`);
-  assert(record.values.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(record.values)}`);
-  assert(Array.isArray(record.values.frontendDesignBindingHints) && record.values.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(record.values)}`);
-  assert(readProductValue(record.values, 'price') === 39, `Frontend product price mismatch: ${readProductValue(record.values, 'price')}`);
-  assert(readProductValue(record.values, 'inventory') === 11, `Frontend product inventory mismatch: ${readProductValue(record.values, 'inventory')}`);
-  assert(readProductValue(record.values, 'shippingProfile') === 'standard-box', `Frontend product shipping profile mismatch: ${readProductValue(record.values, 'shippingProfile')}`);
-  assert(readProductValue(record.values, 'taxClass') === 'standard', `Frontend product tax class mismatch: ${readProductValue(record.values, 'taxClass')}`);
-  assert(readProductValue(record.values, 'discountCode') === 'FRONTEND10', `Frontend product discount code mismatch: ${readProductValue(record.values, 'discountCode')}`);
-  assert(readProductValue(record.values, 'returnPolicy') === 'Frontend template products allow returns within 30 days.', `Frontend product return policy mismatch: ${readProductValue(record.values, 'returnPolicy')}`);
+  assert(
+    record?.values?.title === "Smoke frontend product",
+    `Frontend product title mismatch: ${JSON.stringify(record?.values)}`,
+  );
+  assert(
+    record.values.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID,
+    `Frontend template id was not stored: ${JSON.stringify(record.values)}`,
+  );
+  assert(
+    record.values.frontendDesignTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME,
+    `Frontend template name was not stored: ${JSON.stringify(record.values)}`,
+  );
+  assert(
+    record.values.frontendDesignSource?.label === "Smoke commerce frontend",
+    `Frontend source snapshot missing: ${JSON.stringify(record.values)}`,
+  );
+  assert(
+    record.values.frontendDesignRoutePattern ===
+      "/products/smoke-contract-product",
+    `Frontend route pattern missing: ${JSON.stringify(record.values)}`,
+  );
+  assert(
+    record.values.frontendDesignChrome?.header?.component ===
+      "SmokeCommerceHeader",
+    `Frontend chrome snapshot missing: ${JSON.stringify(record.values)}`,
+  );
+  assert(
+    record.values.frontendDesignTokens?.fonts?.heading === "Inter",
+    `Frontend token snapshot missing: ${JSON.stringify(record.values)}`,
+  );
+  assert(
+    Array.isArray(record.values.frontendDesignBindingHints) &&
+      record.values.frontendDesignBindingHints.length === 3,
+    `Frontend binding hints missing: ${JSON.stringify(record.values)}`,
+  );
+  assert(
+    readProductValue(record.values, "price") === 39,
+    `Frontend product price mismatch: ${readProductValue(record.values, "price")}`,
+  );
+  assert(
+    readProductValue(record.values, "inventory") === 11,
+    `Frontend product inventory mismatch: ${readProductValue(record.values, "inventory")}`,
+  );
+  assert(
+    readProductValue(record.values, "shippingProfile") === "standard-box",
+    `Frontend product shipping profile mismatch: ${readProductValue(record.values, "shippingProfile")}`,
+  );
+  assert(
+    readProductValue(record.values, "taxClass") === "standard",
+    `Frontend product tax class mismatch: ${readProductValue(record.values, "taxClass")}`,
+  );
+  assert(
+    readProductValue(record.values, "discountCode") === "FRONTEND10",
+    `Frontend product discount code mismatch: ${readProductValue(record.values, "discountCode")}`,
+  );
+  assert(
+    readProductValue(record.values, "returnPolicy") ===
+      "Frontend template products allow returns within 30 days.",
+    `Frontend product return policy mismatch: ${readProductValue(record.values, "returnPolicy")}`,
+  );
 
-  const publishPayload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/bulk`, {
-    method: 'POST',
-    body: JSON.stringify({
-      action: 'updateStatus',
-      status: 'published',
-      recordIds: [record.id],
-    }),
-  });
-  assert(publishPayload.data?.updated === 1, `Frontend template product was not published: ${JSON.stringify(publishPayload).slice(0, 500)}`);
+  const publishPayload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/bulk`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: "updateStatus",
+        status: "published",
+        recordIds: [record.id],
+      }),
+    },
+  );
+  assert(
+    publishPayload.data?.updated === 1,
+    `Frontend template product was not published: ${JSON.stringify(publishPayload).slice(0, 500)}`,
+  );
 
-  const catalog = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(record.slug)}`);
+  const catalog = await requestApi(
+    `/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(record.slug)}`,
+  );
   const product = catalog.data?.products?.[0] || catalog.products?.[0];
-  assert(product?.design?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID, `Public catalog did not expose frontend product design metadata: ${JSON.stringify(product)}`);
-  assert(product.design.frontendDesignTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME, `Public catalog did not expose frontend template name: ${JSON.stringify(product.design)}`);
-  assert(product.design.frontendDesignSource?.label === 'Smoke commerce frontend', `Public catalog did not expose frontend source: ${JSON.stringify(product.design)}`);
-  assert(product.design.frontendDesignBindingHints?.length === 3, `Public catalog did not expose binding hints: ${JSON.stringify(product.design)}`);
+  assert(
+    product?.design?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID,
+    `Public catalog did not expose frontend product design metadata: ${JSON.stringify(product)}`,
+  );
+  assert(
+    product.design.frontendDesignTemplateName ===
+      FRONTEND_PRODUCT_TEMPLATE_NAME,
+    `Public catalog did not expose frontend template name: ${JSON.stringify(product.design)}`,
+  );
+  assert(
+    product.design.frontendDesignSource?.label === "Smoke commerce frontend",
+    `Public catalog did not expose frontend source: ${JSON.stringify(product.design)}`,
+  );
+  assert(
+    product.design.frontendDesignBindingHints?.length === 3,
+    `Public catalog did not expose binding hints: ${JSON.stringify(product.design)}`,
+  );
 
   return product;
 };
 
-const assertPublicCommerce = async ({ productCollection, ordersCollection, slug, commerceProviderMock }) => {
-  const productRecord = await getCollectionRecordBySlug(productCollection.id, slug);
+const assertFirstClassCheckoutProviderExecution = async ({
+  slug,
+  taxProvider,
+  shippingProvider,
+  expectedTaxAmount,
+  expectedShippingAmount,
+  expectedProviderUrls,
+  commerceProviderMock,
+}) => {
+  await enableFirstClassCheckoutProviderSettings({
+    taxProvider,
+    shippingProvider,
+  });
+  const providerRequestStart = commerceProviderMock?.requests.length || 0;
+  const orderPayload = await requestApi(
+    `/api/sites/${SITE_ID}/commerce/orders`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        customer: {
+          name: `Commerce Smoke ${taxProvider} ${shippingProvider}`,
+          email: `commerce-smoke-${taxProvider}-${shippingProvider}@example.com`,
+        },
+        items: [{ slug, quantity: 1 }],
+        shippingAddress: JSON.stringify(providerAddressRecord),
+        billingAddress: JSON.stringify(providerAddressRecord),
+        paymentProvider: "manual",
+        paymentReference: `manual-${taxProvider}-${shippingProvider}-${slug}`,
+        checkoutSessionId: `cs_${taxProvider}_${shippingProvider}_${slug}`,
+        discountCode: "SMOKE10",
+      }),
+    },
+  );
+
+  const quote = orderPayload.data?.quote;
+  const order = orderPayload.data?.order;
+  assert(
+    order?.id,
+    `First-class provider checkout did not create an order: ${JSON.stringify(orderPayload).slice(0, 500)}`,
+  );
+  assert(
+    quote?.subtotal === 49,
+    `First-class provider checkout subtotal was unexpected: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    quote.discountAmount === 9.8,
+    `Stripe promotion-code discount was not applied: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    quote.taxAmount === expectedTaxAmount,
+    `${taxProvider} tax quote was not applied: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    quote.shippingAmount === expectedShippingAmount,
+    `${shippingProvider} shipping quote was not applied: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    order.total ===
+      Number(
+        (49 - 9.8 + expectedTaxAmount + expectedShippingAmount).toFixed(2),
+      ),
+    `First-class provider checkout total was unexpected: ${JSON.stringify({ order, quote })}`,
+  );
+  const providerAdjustments = quote.providerAdjustments || [];
+  assert(
+    providerAdjustments.some(
+      (adjustment) =>
+        adjustment.kind === "tax" &&
+        adjustment.provider === taxProvider &&
+        adjustment.status === "succeeded" &&
+        adjustment.amount === expectedTaxAmount,
+    ),
+    `First-class tax provider adjustment missing: ${JSON.stringify(providerAdjustments)}`,
+  );
+  assert(
+    providerAdjustments.some(
+      (adjustment) =>
+        adjustment.kind === "shipping" &&
+        adjustment.provider === shippingProvider &&
+        adjustment.status === "succeeded" &&
+        adjustment.amount === expectedShippingAmount,
+    ),
+    `First-class shipping provider adjustment missing: ${JSON.stringify(providerAdjustments)}`,
+  );
+  assert(
+    providerAdjustments.some(
+      (adjustment) =>
+        adjustment.kind === "discount" &&
+        adjustment.provider === "stripe" &&
+        adjustment.status === "succeeded" &&
+        adjustment.amount === 9.8,
+    ),
+    `Stripe discount provider adjustment missing: ${JSON.stringify(providerAdjustments)}`,
+  );
+
+  const checkoutProviderRequests = (commerceProviderMock?.requests || []).slice(
+    providerRequestStart,
+  );
+  for (const expectedUrl of expectedProviderUrls) {
+    assert(
+      checkoutProviderRequests.some(
+        (request) =>
+          request.url === expectedUrl ||
+          request.url?.startsWith(`${expectedUrl}?`),
+      ),
+      `Expected first-class provider request ${expectedUrl} was not sent: ${JSON.stringify(checkoutProviderRequests)}`,
+    );
+  }
+  assert(
+    checkoutProviderRequests.some(
+      (request) =>
+        request.method === "GET" &&
+        request.url?.startsWith("/v1/promotion_codes?"),
+    ),
+    `Stripe promotion code lookup was not sent: ${JSON.stringify(checkoutProviderRequests)}`,
+  );
+};
+
+const assertPublicCommerce = async ({
+  productCollection,
+  ordersCollection,
+  slug,
+  commerceProviderMock,
+}) => {
+  const productRecord = await getCollectionRecordBySlug(
+    productCollection.id,
+    slug,
+  );
   assert(productRecord, `Created product record was not found by slug ${slug}`);
-  assert(productRecord.status === 'published', `Created product was not published: ${productRecord.status}`);
-  assert(productRecord.values?.inventory === 7, `Created product inventory was unexpected: ${productRecord.values?.inventory}`);
-  assert(readProductValue(productRecord.values, 'subscriptionEnabled') === true, `Created product subscription flag was unexpected: ${JSON.stringify(productRecord.values)}`);
-  assert(readProductValue(productRecord.values, 'subscriptionInterval') === 'monthly', `Created product subscription interval was unexpected: ${JSON.stringify(productRecord.values)}`);
-  assert(readProductValue(productRecord.values, 'subscriptionTrialDays') === 14, `Created product subscription trial days was unexpected: ${JSON.stringify(productRecord.values)}`);
+  assert(
+    productRecord.status === "published",
+    `Created product was not published: ${productRecord.status}`,
+  );
+  assert(
+    productRecord.values?.inventory === 7,
+    `Created product inventory was unexpected: ${productRecord.values?.inventory}`,
+  );
+  assert(
+    readProductValue(productRecord.values, "subscriptionEnabled") === true,
+    `Created product subscription flag was unexpected: ${JSON.stringify(productRecord.values)}`,
+  );
+  assert(
+    readProductValue(productRecord.values, "subscriptionInterval") ===
+      "monthly",
+    `Created product subscription interval was unexpected: ${JSON.stringify(productRecord.values)}`,
+  );
+  assert(
+    readProductValue(productRecord.values, "subscriptionTrialDays") === 14,
+    `Created product subscription trial days was unexpected: ${JSON.stringify(productRecord.values)}`,
+  );
   assert(
     Array.isArray(productRecord.values?.variants) &&
       productRecord.values.variants.length === 4 &&
-      productRecord.values.variants.some((variant) => variant?.title === 'S / Black' && variant?.option === 'Size: S / Color: Black' && variant?.price === 59 && variant?.inventory === 4),
+      productRecord.values.variants.some(
+        (variant) =>
+          variant?.title === "S / Black" &&
+          variant?.option === "Size: S / Color: Black" &&
+          variant?.price === 59 &&
+          variant?.inventory === 4,
+      ),
     `Created product variant matrix did not persist: ${JSON.stringify(productRecord.values?.variants)}`,
   );
 
-  const catalog = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(slug)}`);
+  const catalog = await requestApi(
+    `/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(slug)}`,
+  );
   const product = catalog.data?.products?.[0] || catalog.products?.[0];
   assert(product, `Public catalog did not return ${slug}`);
-  assert(product.price === 49, `Public product price was unexpected: ${product.price}`);
-  assert(product.compareAtPrice === 79, `Public compare-at price was unexpected: ${product.compareAtPrice}`);
-  assert(product.productType === 'physical', `Public product type was unexpected: ${product.productType}`);
-  assert(product.imageUrl === 'https://images.unsplash.com/photo-1498050108023-c5249f4df085', `Public image URL was unexpected: ${product.imageUrl}`);
-  assert(product.variants?.length === 4, `Public product variants were not generated from matrix: ${JSON.stringify(product.variants)}`);
-  assert(product.variants.some((variant) => variant.sku === `SMOKE-${slug.split('-').at(-1)?.toUpperCase()}-S-BLACK` || (variant.title === 'S / Black' && variant.option === 'Size: S / Color: Black')), `Public product variant matrix missing S / Black: ${JSON.stringify(product.variants)}`);
-  assert(product.inventory?.quantity === 7, `Public product inventory was unexpected: ${JSON.stringify(product.inventory)}`);
-  assert(product.inventory?.lowStockThreshold === 4, `Public low stock threshold was unexpected: ${JSON.stringify(product.inventory)}`);
-  assert(product.inventory?.policy === 'deny', `Public inventory policy was unexpected: ${JSON.stringify(product.inventory)}`);
-  assert(product.featured === true, 'Public product featured flag was not true');
-  assert(product.checkout?.url === `https://checkout.example.com/${slug}`, `Public checkout URL was unexpected: ${JSON.stringify(product.checkout)}`);
-  assert(product.checkout?.discountCode === 'SMOKE10', `Public discount code was unexpected: ${JSON.stringify(product.checkout)}`);
-  assert(product.subscription?.enabled === true, `Public subscription flag was unexpected: ${JSON.stringify(product.subscription)}`);
-  assert(product.subscription?.interval === 'monthly', `Public subscription interval was unexpected: ${JSON.stringify(product.subscription)}`);
-  assert(product.subscription?.trialDays === 14, `Public subscription trial days was unexpected: ${JSON.stringify(product.subscription)}`);
-  assert(product.delivery?.shippingProfile === 'standard-box', `Public shipping profile was unexpected: ${JSON.stringify(product.delivery)}`);
-  assert(product.delivery?.taxClass === 'standard', `Public tax class was unexpected: ${JSON.stringify(product.delivery)}`);
-  assert(product.delivery?.returnPolicy === '30-day returns for unopened smoke-test products.', `Public return policy was unexpected: ${JSON.stringify(product.delivery)}`);
-
-  const invalidQuantityResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      customer: {
-        name: 'Commerce Smoke Buyer',
-        email: 'commerce-smoke-invalid-quantity@example.com',
-      },
-      items: [{ slug, quantity: 1.5 }],
-    }),
-  });
-  const invalidQuantityPayload = await invalidQuantityResponse.json().catch(() => ({}));
-  assert(invalidQuantityResponse.status === 400, `Fractional checkout quantity should be rejected: ${invalidQuantityResponse.status} ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`);
-  assert(invalidQuantityPayload.error?.code === 'VALIDATION_ERROR', `Fractional checkout quantity returned wrong error: ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`);
   assert(
-    JSON.stringify(invalidQuantityPayload.error?.details || []).includes('whole number between 1 and 999'),
+    product.price === 49,
+    `Public product price was unexpected: ${product.price}`,
+  );
+  assert(
+    product.compareAtPrice === 79,
+    `Public compare-at price was unexpected: ${product.compareAtPrice}`,
+  );
+  assert(
+    product.productType === "physical",
+    `Public product type was unexpected: ${product.productType}`,
+  );
+  assert(
+    product.imageUrl ===
+      "https://images.unsplash.com/photo-1498050108023-c5249f4df085",
+    `Public image URL was unexpected: ${product.imageUrl}`,
+  );
+  assert(
+    product.variants?.length === 4,
+    `Public product variants were not generated from matrix: ${JSON.stringify(product.variants)}`,
+  );
+  assert(
+    product.variants.some(
+      (variant) =>
+        variant.sku ===
+          `SMOKE-${slug.split("-").at(-1)?.toUpperCase()}-S-BLACK` ||
+        (variant.title === "S / Black" &&
+          variant.option === "Size: S / Color: Black"),
+    ),
+    `Public product variant matrix missing S / Black: ${JSON.stringify(product.variants)}`,
+  );
+  assert(
+    product.inventory?.quantity === 7,
+    `Public product inventory was unexpected: ${JSON.stringify(product.inventory)}`,
+  );
+  assert(
+    product.inventory?.lowStockThreshold === 4,
+    `Public low stock threshold was unexpected: ${JSON.stringify(product.inventory)}`,
+  );
+  assert(
+    product.inventory?.policy === "deny",
+    `Public inventory policy was unexpected: ${JSON.stringify(product.inventory)}`,
+  );
+  assert(
+    product.featured === true,
+    "Public product featured flag was not true",
+  );
+  assert(
+    product.checkout?.url === `https://checkout.example.com/${slug}`,
+    `Public checkout URL was unexpected: ${JSON.stringify(product.checkout)}`,
+  );
+  assert(
+    product.checkout?.discountCode === "SMOKE10",
+    `Public discount code was unexpected: ${JSON.stringify(product.checkout)}`,
+  );
+  assert(
+    product.subscription?.enabled === true,
+    `Public subscription flag was unexpected: ${JSON.stringify(product.subscription)}`,
+  );
+  assert(
+    product.subscription?.interval === "monthly",
+    `Public subscription interval was unexpected: ${JSON.stringify(product.subscription)}`,
+  );
+  assert(
+    product.subscription?.trialDays === 14,
+    `Public subscription trial days was unexpected: ${JSON.stringify(product.subscription)}`,
+  );
+  assert(
+    product.delivery?.shippingProfile === "standard-box",
+    `Public shipping profile was unexpected: ${JSON.stringify(product.delivery)}`,
+  );
+  assert(
+    product.delivery?.taxClass === "standard",
+    `Public tax class was unexpected: ${JSON.stringify(product.delivery)}`,
+  );
+  assert(
+    product.delivery?.returnPolicy ===
+      "30-day returns for unopened smoke-test products.",
+    `Public return policy was unexpected: ${JSON.stringify(product.delivery)}`,
+  );
+
+  const invalidQuantityResponse = await fetch(
+    `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        customer: {
+          name: "Commerce Smoke Buyer",
+          email: "commerce-smoke-invalid-quantity@example.com",
+        },
+        items: [{ slug, quantity: 1.5 }],
+      }),
+    },
+  );
+  const invalidQuantityPayload = await invalidQuantityResponse
+    .json()
+    .catch(() => ({}));
+  assert(
+    invalidQuantityResponse.status === 400,
+    `Fractional checkout quantity should be rejected: ${invalidQuantityResponse.status} ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`,
+  );
+  assert(
+    invalidQuantityPayload.error?.code === "VALIDATION_ERROR",
+    `Fractional checkout quantity returned wrong error: ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`,
+  );
+  assert(
+    JSON.stringify(invalidQuantityPayload.error?.details || []).includes(
+      "whole number between 1 and 999",
+    ),
     `Fractional checkout quantity did not expose the quantity validation detail: ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`,
   );
 
-  const defaultQuantityPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
-    method: 'POST',
-    body: JSON.stringify({
-      customer: {
-        name: 'Commerce Smoke Default Quantity',
-        email: 'commerce-smoke-default-quantity@example.com',
-      },
-      items: [{ slug }],
-      paymentProvider: 'manual',
-      paymentReference: `manual-default-${slug}`,
-      checkoutSessionId: `cs_default_${slug}`,
-    }),
-  });
+  const defaultQuantityPayload = await requestApi(
+    `/api/sites/${SITE_ID}/commerce/orders`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        customer: {
+          name: "Commerce Smoke Default Quantity",
+          email: "commerce-smoke-default-quantity@example.com",
+        },
+        items: [{ slug }],
+        paymentProvider: "manual",
+        paymentReference: `manual-default-${slug}`,
+        checkoutSessionId: `cs_default_${slug}`,
+      }),
+    },
+  );
   const defaultQuantityOrder = defaultQuantityPayload.data?.order;
   const defaultQuantityLineItem = defaultQuantityPayload.data?.lineItems?.[0];
-  assert(defaultQuantityOrder?.itemCount === 1, `Omitted checkout quantity did not default order item count to 1: ${JSON.stringify(defaultQuantityPayload).slice(0, 500)}`);
-  assert(defaultQuantityLineItem?.quantity === 1, `Omitted checkout quantity did not default line item quantity to 1: ${JSON.stringify(defaultQuantityPayload).slice(0, 500)}`);
+  assert(
+    defaultQuantityOrder?.itemCount === 1,
+    `Omitted checkout quantity did not default order item count to 1: ${JSON.stringify(defaultQuantityPayload).slice(0, 500)}`,
+  );
+  assert(
+    defaultQuantityLineItem?.quantity === 1,
+    `Omitted checkout quantity did not default line item quantity to 1: ${JSON.stringify(defaultQuantityPayload).slice(0, 500)}`,
+  );
 
-  const productAfterDefaultQuantity = await getCollectionRecordBySlug(productCollection.id, slug);
-  assert(productAfterDefaultQuantity.values?.inventory === 6, `Default checkout quantity did not reserve exactly one item: ${productAfterDefaultQuantity.values?.inventory}`);
+  const productAfterDefaultQuantity = await getCollectionRecordBySlug(
+    productCollection.id,
+    slug,
+  );
+  assert(
+    productAfterDefaultQuantity.values?.inventory === 6,
+    `Default checkout quantity did not reserve exactly one item: ${productAfterDefaultQuantity.values?.inventory}`,
+  );
 
   const providerRequestStart = commerceProviderMock?.requests.length || 0;
-  const orderPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
-    method: 'POST',
-    body: JSON.stringify({
-      customer: {
-        name: 'Commerce Smoke Buyer',
-        email: 'commerce-smoke@example.com',
-        phone: '+1 555 0101',
-      },
-      items: [{ slug, quantity: 2 }],
-      shippingAddress: '100 Test Street, New York, NY',
-      billingAddress: '100 Test Street, New York, NY',
-      notes: 'Smoke order created through public commerce order intake.',
-      paymentProvider: 'manual',
-      paymentReference: `manual-${slug}`,
-      checkoutSessionId: `cs_${slug}`,
-      discountCode: 'SMOKE10',
-    }),
-  });
+  const orderPayload = await requestApi(
+    `/api/sites/${SITE_ID}/commerce/orders`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        customer: {
+          name: "Commerce Smoke Buyer",
+          email: "commerce-smoke@example.com",
+          phone: "+1 555 0101",
+        },
+        items: [{ slug, quantity: 2 }],
+        shippingAddress: "100 Test Street, New York, NY",
+        billingAddress: "100 Test Street, New York, NY",
+        notes: "Smoke order created through public commerce order intake.",
+        paymentProvider: "manual",
+        paymentReference: `manual-${slug}`,
+        checkoutSessionId: `cs_${slug}`,
+        discountCode: "SMOKE10",
+      }),
+    },
+  );
 
   const order = orderPayload.data?.order;
   const customer = orderPayload.data?.customer;
   const checkoutSession = orderPayload.data?.checkoutSession;
   const quote = orderPayload.data?.quote;
   const deliveries = orderPayload.data?.deliveries || [];
-  assert(order?.id, `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`);
-  assert(customer?.id, `Public order intake did not return a customer link: ${JSON.stringify(orderPayload).slice(0, 500)}`);
-  assert(deliveries.some((delivery) => delivery.channel === 'email' && delivery.status === 'succeeded' && delivery.provider === 'local-outbox'), `Public order intake did not report local order email delivery: ${JSON.stringify(deliveries)}`);
-  assert(deliveries.some((delivery) => delivery.channel === 'email' && delivery.event === 'product.low_stock' && delivery.status === 'succeeded' && delivery.provider === 'local-outbox'), `Public order intake did not report product low-stock email delivery: ${JSON.stringify(deliveries)}`);
-  assert(checkoutSession?.id === `cs_${slug}`, `Checkout session id was unexpected: ${JSON.stringify(checkoutSession)}`);
-  assert(checkoutSession.provider === 'manual', `Checkout session provider was unexpected: ${JSON.stringify(checkoutSession)}`);
-  assert(checkoutSession.amountTotal === 102, `Checkout session amount was unexpected: ${JSON.stringify(checkoutSession)}`);
-  assert(checkoutSession.url?.includes('/checkout/success'), `Checkout session handoff URL was unexpected: ${JSON.stringify(checkoutSession)}`);
-  assert(quote?.subtotal === 98, `Quote subtotal was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.discountAmount === 13.25, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.shippingAmount === 9.5, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.taxAmount === 7.75, `Quote tax was unexpected: ${JSON.stringify(quote)}`);
-  assert(order.total === 102, `Order total was unexpected: ${JSON.stringify({ order, quote })}`);
+  assert(
+    order?.id,
+    `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`,
+  );
+  assert(
+    customer?.id,
+    `Public order intake did not return a customer link: ${JSON.stringify(orderPayload).slice(0, 500)}`,
+  );
+  assert(
+    deliveries.some(
+      (delivery) =>
+        delivery.channel === "email" &&
+        delivery.status === "succeeded" &&
+        delivery.provider === "local-outbox",
+    ),
+    `Public order intake did not report local order email delivery: ${JSON.stringify(deliveries)}`,
+  );
+  assert(
+    deliveries.some(
+      (delivery) =>
+        delivery.channel === "email" &&
+        delivery.event === "product.low_stock" &&
+        delivery.status === "succeeded" &&
+        delivery.provider === "local-outbox",
+    ),
+    `Public order intake did not report product low-stock email delivery: ${JSON.stringify(deliveries)}`,
+  );
+  assert(
+    checkoutSession?.id === `cs_${slug}`,
+    `Checkout session id was unexpected: ${JSON.stringify(checkoutSession)}`,
+  );
+  assert(
+    checkoutSession.provider === "manual",
+    `Checkout session provider was unexpected: ${JSON.stringify(checkoutSession)}`,
+  );
+  assert(
+    checkoutSession.amountTotal === 102,
+    `Checkout session amount was unexpected: ${JSON.stringify(checkoutSession)}`,
+  );
+  assert(
+    checkoutSession.url?.includes("/checkout/success"),
+    `Checkout session handoff URL was unexpected: ${JSON.stringify(checkoutSession)}`,
+  );
+  assert(
+    quote?.subtotal === 98,
+    `Quote subtotal was unexpected: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    quote.discountAmount === 13.25,
+    `Quote discount was unexpected: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    quote.shippingAmount === 9.5,
+    `Quote shipping was unexpected: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    quote.taxAmount === 7.75,
+    `Quote tax was unexpected: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    order.total === 102,
+    `Order total was unexpected: ${JSON.stringify({ order, quote })}`,
+  );
   const providerAdjustments = quote.providerAdjustments || [];
-  assert(providerAdjustments.some((adjustment) => adjustment.kind === 'tax' && adjustment.status === 'succeeded' && adjustment.amount === 7.75), `Public quote did not include succeeded tax provider adjustment: ${JSON.stringify(quote)}`);
-  assert(providerAdjustments.some((adjustment) => adjustment.kind === 'shipping' && adjustment.status === 'succeeded' && adjustment.amount === 9.5), `Public quote did not include succeeded shipping provider adjustment: ${JSON.stringify(quote)}`);
-  assert(providerAdjustments.some((adjustment) => adjustment.kind === 'discount' && adjustment.status === 'succeeded' && adjustment.amount === 13.25), `Public quote did not include succeeded discount provider adjustment: ${JSON.stringify(quote)}`);
-  const checkoutProviderRequests = (commerceProviderMock?.requests || []).slice(providerRequestStart);
-  assert(checkoutProviderRequests.some((request) => request.url === '/quote/tax' && request.headers['x-backy-provider-kind'] === 'tax'), `Tax quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`);
-  assert(checkoutProviderRequests.some((request) => request.url === '/quote/shipping' && request.headers['x-backy-provider-kind'] === 'shipping'), `Shipping quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`);
-  assert(checkoutProviderRequests.some((request) => request.url === '/quote/discount' && request.headers['x-backy-provider-kind'] === 'discount'), `Discount quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`);
-  assert(quote.pricing?.rules?.taxRatePercent === 10, `Quote pricing rules were not exposed: ${JSON.stringify(quote)}`);
-  assert(order.itemCount === 2, `Order item count was unexpected: ${order.itemCount}`);
-  assert(orderPayload.data?.risk?.level === 'medium' && orderPayload.data?.risk?.reviewStatus === 'pending_review', `Order risk assessment was not returned: ${JSON.stringify(orderPayload.data?.risk)}`);
+  assert(
+    providerAdjustments.some(
+      (adjustment) =>
+        adjustment.kind === "tax" &&
+        adjustment.status === "succeeded" &&
+        adjustment.amount === 7.75,
+    ),
+    `Public quote did not include succeeded tax provider adjustment: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    providerAdjustments.some(
+      (adjustment) =>
+        adjustment.kind === "shipping" &&
+        adjustment.status === "succeeded" &&
+        adjustment.amount === 9.5,
+    ),
+    `Public quote did not include succeeded shipping provider adjustment: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    providerAdjustments.some(
+      (adjustment) =>
+        adjustment.kind === "discount" &&
+        adjustment.status === "succeeded" &&
+        adjustment.amount === 13.25,
+    ),
+    `Public quote did not include succeeded discount provider adjustment: ${JSON.stringify(quote)}`,
+  );
+  const checkoutProviderRequests = (commerceProviderMock?.requests || []).slice(
+    providerRequestStart,
+  );
+  assert(
+    checkoutProviderRequests.some(
+      (request) =>
+        request.url === "/quote/tax" &&
+        request.headers["x-backy-provider-kind"] === "tax",
+    ),
+    `Tax quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`,
+  );
+  assert(
+    checkoutProviderRequests.some(
+      (request) =>
+        request.url === "/quote/shipping" &&
+        request.headers["x-backy-provider-kind"] === "shipping",
+    ),
+    `Shipping quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`,
+  );
+  assert(
+    checkoutProviderRequests.some(
+      (request) =>
+        request.url === "/quote/discount" &&
+        request.headers["x-backy-provider-kind"] === "discount",
+    ),
+    `Discount quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`,
+  );
+  assert(
+    quote.pricing?.rules?.taxRatePercent === 10,
+    `Quote pricing rules were not exposed: ${JSON.stringify(quote)}`,
+  );
+  assert(
+    order.itemCount === 2,
+    `Order item count was unexpected: ${order.itemCount}`,
+  );
+  assert(
+    orderPayload.data?.risk?.level === "medium" &&
+      orderPayload.data?.risk?.reviewStatus === "pending_review",
+    `Order risk assessment was not returned: ${JSON.stringify(orderPayload.data?.risk)}`,
+  );
 
-  const updatedProduct = await getCollectionRecordBySlug(productCollection.id, slug);
-  assert(updatedProduct.values?.inventory === 4, `Inventory reservation did not reduce stock to 4 after default and explicit checkout quantities: ${updatedProduct.values?.inventory}`);
+  const updatedProduct = await getCollectionRecordBySlug(
+    productCollection.id,
+    slug,
+  );
+  assert(
+    updatedProduct.values?.inventory === 4,
+    `Inventory reservation did not reduce stock to 4 after default and explicit checkout quantities: ${updatedProduct.values?.inventory}`,
+  );
 
-  const orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-  assert(orderRecord?.id, `Order record was not available in private queue by slug ${order.slug}`);
-  assert(orderRecord.values?.customername === 'Commerce Smoke Buyer', 'Order customer name was not persisted');
-  assert(orderRecord.values?.customerid === customer.id, `Order did not link to the private customer profile: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.checkoutsessionid === checkoutSession.id, `Order checkout session was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.paymentprovider === checkoutSession.provider, `Order payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.paymentreference === checkoutSession.reference, `Order payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.subtotal === 98, `Order subtotal was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.discountamount === 13.25, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.shippingamount === 9.5, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.taxamount === 7.75, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.riskscore === 25, `Order risk score was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.risklevel === 'medium', `Order risk level was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.riskreviewstatus === 'pending_review', `Order risk review status was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(String(orderRecord.values?.riskreasons || '').includes('Manual payment capture'), `Order risk reasons were not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.shippinglabelstatus === 'none', `Order shipping label default was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.providerrefundstatus === 'none', `Order provider refund default was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  const orderRecord = await getCollectionRecordBySlug(
+    ordersCollection.id,
+    order.slug,
+  );
+  assert(
+    orderRecord?.id,
+    `Order record was not available in private queue by slug ${order.slug}`,
+  );
+  assert(
+    orderRecord.values?.customername === "Commerce Smoke Buyer",
+    "Order customer name was not persisted",
+  );
+  assert(
+    orderRecord.values?.customerid === customer.id,
+    `Order did not link to the private customer profile: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.checkoutsessionid === checkoutSession.id,
+    `Order checkout session was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.paymentprovider === checkoutSession.provider,
+    `Order payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.paymentreference === checkoutSession.reference,
+    `Order payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.subtotal === 98,
+    `Order subtotal was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.discountamount === 13.25,
+    `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.shippingamount === 9.5,
+    `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.taxamount === 7.75,
+    `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.riskscore === 25,
+    `Order risk score was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.risklevel === "medium",
+    `Order risk level was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.riskreviewstatus === "pending_review",
+    `Order risk review status was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    String(orderRecord.values?.riskreasons || "").includes(
+      "Manual payment capture",
+    ),
+    `Order risk reasons were not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.shippinglabelstatus === "none",
+    `Order shipping label default was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
+  assert(
+    orderRecord.values?.providerrefundstatus === "none",
+    `Order provider refund default was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
 
-  const orderEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-order&requestId=${encodeURIComponent(orderPayload.requestId || '')}&limit=20`);
-  const orderEvents = orderEventsPayload.data?.events || orderEventsPayload.events || [];
-  const orderDeliveryEvents = orderEvents.filter((event) => event.metadata?.orderId === order.id && event.metadata?.channel === 'email');
-  const orderDeliveryStatuses = new Set(orderDeliveryEvents.map((event) => event.status));
-  assert(orderDeliveryStatuses.has('queued') && orderDeliveryStatuses.has('succeeded'), `Commerce order delivery events were not exposed through /events: ${JSON.stringify(orderEventsPayload)}`);
-  const succeededOrderEmailEvent = orderDeliveryEvents.find((event) => event.status === 'succeeded');
-  assert(succeededOrderEmailEvent?.target === 'mailto:commerce-ops@example.com', `Commerce order delivery target was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`);
-  assert(succeededOrderEmailEvent?.metadata?.provider === 'local-outbox', `Commerce order delivery provider metadata was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`);
-  assert(succeededOrderEmailEvent?.metadata?.orderNumber === order.orderNumber, `Commerce order delivery metadata did not include order number: ${JSON.stringify(succeededOrderEmailEvent)}`);
-  const productEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-product&requestId=${encodeURIComponent(orderPayload.requestId || '')}&limit=20`);
-  const productEvents = productEventsPayload.data?.events || productEventsPayload.events || [];
-  const productDeliveryEvents = productEvents.filter((event) => event.metadata?.productSlug === slug && event.metadata?.event === 'product.low_stock');
-  const productDeliveryStatuses = new Set(productDeliveryEvents.map((event) => event.status));
-  assert(productDeliveryStatuses.has('queued') && productDeliveryStatuses.has('succeeded'), `Product low-stock delivery events were not exposed through /events: ${JSON.stringify(productEventsPayload)}`);
-  const succeededProductEmailEvent = productDeliveryEvents.find((event) => event.status === 'succeeded');
-  assert(succeededProductEmailEvent?.target === 'mailto:commerce-ops@example.com', `Product low-stock delivery target was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
-  assert(succeededProductEmailEvent?.metadata?.provider === 'local-outbox', `Product low-stock provider metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
-  assert(succeededProductEmailEvent?.metadata?.inventory === 4, `Product low-stock inventory metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
-  assert(succeededProductEmailEvent?.metadata?.lowStockThreshold === 4, `Product low-stock threshold metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
-  assert(orderRecord.values?.total === 102, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  const orderEventsPayload = await requestApi(
+    `/api/sites/${SITE_ID}/events?kind=commerce-order&requestId=${encodeURIComponent(orderPayload.requestId || "")}&limit=20`,
+  );
+  const orderEvents =
+    orderEventsPayload.data?.events || orderEventsPayload.events || [];
+  const orderDeliveryEvents = orderEvents.filter(
+    (event) =>
+      event.metadata?.orderId === order.id &&
+      event.metadata?.channel === "email",
+  );
+  const orderDeliveryStatuses = new Set(
+    orderDeliveryEvents.map((event) => event.status),
+  );
+  assert(
+    orderDeliveryStatuses.has("queued") &&
+      orderDeliveryStatuses.has("succeeded"),
+    `Commerce order delivery events were not exposed through /events: ${JSON.stringify(orderEventsPayload)}`,
+  );
+  const succeededOrderEmailEvent = orderDeliveryEvents.find(
+    (event) => event.status === "succeeded",
+  );
+  assert(
+    succeededOrderEmailEvent?.target === "mailto:commerce-ops@example.com",
+    `Commerce order delivery target was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`,
+  );
+  assert(
+    succeededOrderEmailEvent?.metadata?.provider === "local-outbox",
+    `Commerce order delivery provider metadata was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`,
+  );
+  assert(
+    succeededOrderEmailEvent?.metadata?.orderNumber === order.orderNumber,
+    `Commerce order delivery metadata did not include order number: ${JSON.stringify(succeededOrderEmailEvent)}`,
+  );
+  const productEventsPayload = await requestApi(
+    `/api/sites/${SITE_ID}/events?kind=commerce-product&requestId=${encodeURIComponent(orderPayload.requestId || "")}&limit=20`,
+  );
+  const productEvents =
+    productEventsPayload.data?.events || productEventsPayload.events || [];
+  const productDeliveryEvents = productEvents.filter(
+    (event) =>
+      event.metadata?.productSlug === slug &&
+      event.metadata?.event === "product.low_stock",
+  );
+  const productDeliveryStatuses = new Set(
+    productDeliveryEvents.map((event) => event.status),
+  );
+  assert(
+    productDeliveryStatuses.has("queued") &&
+      productDeliveryStatuses.has("succeeded"),
+    `Product low-stock delivery events were not exposed through /events: ${JSON.stringify(productEventsPayload)}`,
+  );
+  const succeededProductEmailEvent = productDeliveryEvents.find(
+    (event) => event.status === "succeeded",
+  );
+  assert(
+    succeededProductEmailEvent?.target === "mailto:commerce-ops@example.com",
+    `Product low-stock delivery target was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`,
+  );
+  assert(
+    succeededProductEmailEvent?.metadata?.provider === "local-outbox",
+    `Product low-stock provider metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`,
+  );
+  assert(
+    succeededProductEmailEvent?.metadata?.inventory === 4,
+    `Product low-stock inventory metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`,
+  );
+  assert(
+    succeededProductEmailEvent?.metadata?.lowStockThreshold === 4,
+    `Product low-stock threshold metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`,
+  );
+  assert(
+    orderRecord.values?.total === 102,
+    `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`,
+  );
 
   const customersCollection = await findCollection(CUSTOMERS_COLLECTION_SLUG);
-  assert(customersCollection?.id, 'Private customers collection was not created from checkout intake');
-  assert(customersCollection.permissions?.publicRead === false && customersCollection.permissions?.publicCreate === false, `Customers collection was not private: ${JSON.stringify(customersCollection.permissions)}`);
-  const customerRecord = await getCollectionRecordBySlug(customersCollection.id, customer.slug);
-  assert(customerRecord?.id === customer.id, `Customer record was not available by slug ${customer.slug}: ${JSON.stringify(customerRecord)}`);
-  assert(customerRecord.values?.email === 'commerce-smoke@example.com', `Customer email was not persisted: ${JSON.stringify(customerRecord.values)}`);
-  assert(customerRecord.values?.ordercount === 1, `Customer order count was unexpected: ${JSON.stringify(customerRecord.values)}`);
-  assert(customerRecord.values?.totalspent === 102, `Customer total spent was unexpected: ${JSON.stringify(customerRecord.values)}`);
-  assert(customerRecord.values?.lastorderid === order.id, `Customer last order id was unexpected: ${JSON.stringify(customerRecord.values)}`);
-  assert(customerRecord.values?.lastordernumber === order.orderNumber, `Customer last order number was unexpected: ${JSON.stringify(customerRecord.values)}`);
-  assert(customerRecord.values?.sourcevalues?.lastCheckoutOrder?.orderId === order.id, `Customer source order id was unexpected: ${JSON.stringify(customerRecord.values?.sourcevalues)}`);
+  assert(
+    customersCollection?.id,
+    "Private customers collection was not created from checkout intake",
+  );
+  assert(
+    customersCollection.permissions?.publicRead === false &&
+      customersCollection.permissions?.publicCreate === false,
+    `Customers collection was not private: ${JSON.stringify(customersCollection.permissions)}`,
+  );
+  const customerRecord = await getCollectionRecordBySlug(
+    customersCollection.id,
+    customer.slug,
+  );
+  assert(
+    customerRecord?.id === customer.id,
+    `Customer record was not available by slug ${customer.slug}: ${JSON.stringify(customerRecord)}`,
+  );
+  assert(
+    customerRecord.values?.email === "commerce-smoke@example.com",
+    `Customer email was not persisted: ${JSON.stringify(customerRecord.values)}`,
+  );
+  assert(
+    customerRecord.values?.ordercount === 1,
+    `Customer order count was unexpected: ${JSON.stringify(customerRecord.values)}`,
+  );
+  assert(
+    customerRecord.values?.totalspent === 102,
+    `Customer total spent was unexpected: ${JSON.stringify(customerRecord.values)}`,
+  );
+  assert(
+    customerRecord.values?.lastorderid === order.id,
+    `Customer last order id was unexpected: ${JSON.stringify(customerRecord.values)}`,
+  );
+  assert(
+    customerRecord.values?.lastordernumber === order.orderNumber,
+    `Customer last order number was unexpected: ${JSON.stringify(customerRecord.values)}`,
+  );
+  assert(
+    customerRecord.values?.sourcevalues?.lastCheckoutOrder?.orderId ===
+      order.id,
+    `Customer source order id was unexpected: ${JSON.stringify(customerRecord.values?.sourcevalues)}`,
+  );
+
+  if (firstClassCheckoutProviderMockEnabled()) {
+    const checkoutProviderSettingsSnapshot = await getSettings();
+    try {
+      await assertFirstClassCheckoutProviderExecution({
+        slug,
+        taxProvider: "taxjar",
+        shippingProvider: "easypost",
+        expectedTaxAmount: 8.25,
+        expectedShippingAmount: 11.4,
+        expectedProviderUrls: ["/v2/taxes", "/v2/shipments"],
+        commerceProviderMock,
+      });
+      await assertFirstClassCheckoutProviderExecution({
+        slug,
+        taxProvider: "avalara",
+        shippingProvider: "shippo",
+        expectedTaxAmount: 6.4,
+        expectedShippingAmount: 12.3,
+        expectedProviderUrls: ["/api/v2/transactions/create", "/shipments/"],
+        commerceProviderMock,
+      });
+    } finally {
+      await patchSettingsFromSnapshot(checkoutProviderSettingsSnapshot);
+    }
+  } else {
+    console.warn(
+      "[commerce-smoke] Skipping first-class checkout provider execution; mock provider environment variables are not configured on the public app.",
+    );
+  }
 
   const webhookRequestId = `commerce-webhook-${slug}`;
   const webhookBody = {
     id: `evt_${slug}`,
-    type: 'checkout.session.completed',
+    type: "checkout.session.completed",
     data: {
       object: {
         id: checkoutSession.id,
@@ -2020,41 +4331,107 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug,
       },
     },
   };
-  const invalidSignatureResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/commerce/webhook`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-request-id': `${webhookRequestId}-invalid-signature`,
-      'x-backy-webhook-signature': 'sha256=0000000000000000000000000000000000000000000000000000000000000000',
+  const invalidSignatureResponse = await fetch(
+    `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/webhook`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": `${webhookRequestId}-invalid-signature`,
+        "x-backy-webhook-signature":
+          "sha256=0000000000000000000000000000000000000000000000000000000000000000",
+      },
+      body: JSON.stringify(webhookBody),
     },
-    body: JSON.stringify(webhookBody),
+  );
+  const invalidSignaturePayload = await invalidSignatureResponse
+    .json()
+    .catch(() => ({}));
+  assert(
+    invalidSignatureResponse.status === 401,
+    `Invalid commerce webhook signature should be rejected: ${invalidSignatureResponse.status} ${JSON.stringify(invalidSignaturePayload)}`,
+  );
+  assert(
+    invalidSignaturePayload?.error?.code ===
+      "COMMERCE_WEBHOOK_SIGNATURE_INVALID",
+    `Invalid commerce webhook signature returned wrong code: ${JSON.stringify(invalidSignaturePayload)}`,
+  );
+
+  const webhookPayload = await postCommerceWebhook(webhookBody, {
+    "x-request-id": webhookRequestId,
   });
-  const invalidSignaturePayload = await invalidSignatureResponse.json().catch(() => ({}));
-  assert(invalidSignatureResponse.status === 401, `Invalid commerce webhook signature should be rejected: ${invalidSignatureResponse.status} ${JSON.stringify(invalidSignaturePayload)}`);
-  assert(invalidSignaturePayload?.error?.code === 'COMMERCE_WEBHOOK_SIGNATURE_INVALID', `Invalid commerce webhook signature returned wrong code: ${JSON.stringify(invalidSignaturePayload)}`);
+  assert(
+    webhookPayload.data?.event?.status === "paid",
+    `Commerce webhook did not mark payment paid: ${JSON.stringify(webhookPayload)}`,
+  );
+  assert(
+    webhookPayload.data?.order?.paymentStatus === "paid",
+    `Commerce webhook order response was unexpected: ${JSON.stringify(webhookPayload)}`,
+  );
 
-  const webhookPayload = await postCommerceWebhook(webhookBody, { 'x-request-id': webhookRequestId });
-  assert(webhookPayload.data?.event?.status === 'paid', `Commerce webhook did not mark payment paid: ${JSON.stringify(webhookPayload)}`);
-  assert(webhookPayload.data?.order?.paymentStatus === 'paid', `Commerce webhook order response was unexpected: ${JSON.stringify(webhookPayload)}`);
+  const settledOrderRecord = await getCollectionRecordBySlug(
+    ordersCollection.id,
+    order.slug,
+  );
+  assert(
+    settledOrderRecord.values?.orderstatus === "paid",
+    `Webhook did not persist paid order status: ${JSON.stringify(settledOrderRecord.values)}`,
+  );
+  assert(
+    settledOrderRecord.values?.paymentstatus === "paid",
+    `Webhook did not persist paid payment status: ${JSON.stringify(settledOrderRecord.values)}`,
+  );
+  assert(
+    settledOrderRecord.values?.paymentreference === `pi_${slug}`,
+    `Webhook did not persist payment reference: ${JSON.stringify(settledOrderRecord.values)}`,
+  );
+  assert(
+    Boolean(settledOrderRecord.values?.paidat),
+    `Webhook did not persist paid timestamp: ${JSON.stringify(settledOrderRecord.values)}`,
+  );
+  assert(
+    String(settledOrderRecord.values?.notes || "").includes(
+      "checkout.session.completed",
+    ),
+    `Webhook settlement note missing: ${JSON.stringify(settledOrderRecord.values)}`,
+  );
 
-  const settledOrderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-  assert(settledOrderRecord.values?.orderstatus === 'paid', `Webhook did not persist paid order status: ${JSON.stringify(settledOrderRecord.values)}`);
-  assert(settledOrderRecord.values?.paymentstatus === 'paid', `Webhook did not persist paid payment status: ${JSON.stringify(settledOrderRecord.values)}`);
-  assert(settledOrderRecord.values?.paymentreference === `pi_${slug}`, `Webhook did not persist payment reference: ${JSON.stringify(settledOrderRecord.values)}`);
-  assert(Boolean(settledOrderRecord.values?.paidat), `Webhook did not persist paid timestamp: ${JSON.stringify(settledOrderRecord.values)}`);
-  assert(String(settledOrderRecord.values?.notes || '').includes('checkout.session.completed'), `Webhook settlement note missing: ${JSON.stringify(settledOrderRecord.values)}`);
+  const duplicateWebhookPayload = await postCommerceWebhook(webhookBody, {
+    "x-request-id": `${webhookRequestId}-duplicate`,
+  });
+  assert(
+    duplicateWebhookPayload.data?.event?.status === "duplicate",
+    `Duplicate commerce webhook was not idempotent: ${JSON.stringify(duplicateWebhookPayload)}`,
+  );
+  const duplicateOrderRecord = await getCollectionRecordBySlug(
+    ordersCollection.id,
+    order.slug,
+  );
+  const settlementNoteMatches =
+    String(duplicateOrderRecord.values?.notes || "").match(
+      /checkout\.session\.completed/g,
+    ) || [];
+  assert(
+    settlementNoteMatches.length === 1,
+    `Duplicate commerce webhook appended a second settlement note: ${JSON.stringify(duplicateOrderRecord.values)}`,
+  );
 
-  const duplicateWebhookPayload = await postCommerceWebhook(webhookBody, { 'x-request-id': `${webhookRequestId}-duplicate` });
-  assert(duplicateWebhookPayload.data?.event?.status === 'duplicate', `Duplicate commerce webhook was not idempotent: ${JSON.stringify(duplicateWebhookPayload)}`);
-  const duplicateOrderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-  const settlementNoteMatches = String(duplicateOrderRecord.values?.notes || '').match(/checkout\.session\.completed/g) || [];
-  assert(settlementNoteMatches.length === 1, `Duplicate commerce webhook appended a second settlement note: ${JSON.stringify(duplicateOrderRecord.values)}`);
-
-  const commerceEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-webhook&requestId=${encodeURIComponent(webhookRequestId)}`);
-  const commerceEvents = commerceEventsPayload.data?.events || commerceEventsPayload.events || [];
-  const commerceEvent = commerceEvents.find((event) => event.metadata?.providerEventId === `evt_${slug}`);
-  assert(commerceEvent?.status === 'succeeded', `Commerce webhook event was not exposed through /events: ${JSON.stringify(commerceEventsPayload)}`);
-  assert(commerceEvent.metadata?.orderId === order.id, `Commerce webhook event did not include order id: ${JSON.stringify(commerceEvent)}`);
+  const commerceEventsPayload = await requestApi(
+    `/api/sites/${SITE_ID}/events?kind=commerce-webhook&requestId=${encodeURIComponent(webhookRequestId)}`,
+  );
+  const commerceEvents =
+    commerceEventsPayload.data?.events || commerceEventsPayload.events || [];
+  const commerceEvent = commerceEvents.find(
+    (event) => event.metadata?.providerEventId === `evt_${slug}`,
+  );
+  assert(
+    commerceEvent?.status === "succeeded",
+    `Commerce webhook event was not exposed through /events: ${JSON.stringify(commerceEventsPayload)}`,
+  );
+  assert(
+    commerceEvent.metadata?.orderId === order.id,
+    `Commerce webhook event did not include order id: ${JSON.stringify(commerceEvent)}`,
+  );
 
   const stripeCheckoutExecution = await assertStripeCheckoutExecution({
     productCollection,
@@ -2064,148 +4441,833 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug,
     slug,
   });
 
-  return { productRecord, updatedProduct, order, orderRecord: settledOrderRecord, customersCollection, customerRecord, stripeCheckoutExecution };
+  return {
+    productRecord,
+    updatedProduct,
+    order,
+    orderRecord: settledOrderRecord,
+    customersCollection,
+    customerRecord,
+    stripeCheckoutExecution,
+  };
 };
 
-const assertProductProviderSync = async ({ productCollection, productRecord }) => {
+const assertProductProviderSync = async ({
+  productCollection,
+  productRecord,
+}) => {
   const beforeRequests = stripeCheckoutMock?.requests.length || 0;
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
-    method: 'POST',
-    body: JSON.stringify({ provider: 'stripe' }),
-  });
+  const payload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+    {
+      method: "POST",
+      body: JSON.stringify({ provider: "stripe" }),
+    },
+  );
   const sync = payload.data?.sync || payload.sync;
   const updated = payload.data?.product || payload.product;
-  assert(sync?.provider === 'stripe', `Product provider sync did not return Stripe metadata: ${JSON.stringify(payload).slice(0, 500)}`);
-  assert(['handoff', 'synced', 'failed'].includes(sync.status), `Product provider sync returned unexpected status: ${JSON.stringify(sync)}`);
-  assert(updated?.id === productRecord.id, `Product provider sync did not return the updated product: ${JSON.stringify(updated)}`);
+  assert(
+    sync?.provider === "stripe",
+    `Product provider sync did not return Stripe metadata: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
+  assert(
+    ["handoff", "synced", "failed"].includes(sync.status),
+    `Product provider sync returned unexpected status: ${JSON.stringify(sync)}`,
+  );
+  assert(
+    updated?.id === productRecord.id,
+    `Product provider sync did not return the updated product: ${JSON.stringify(updated)}`,
+  );
 
-  const refreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
-  const persisted = readProductValue(refreshed.values, 'providerSync');
-  assert(persisted?.requestId === sync.requestId, `Product provider sync was not persisted: ${JSON.stringify(refreshed.values)}`);
-  assert(persisted.status === sync.status, `Persisted provider sync status differed: ${JSON.stringify({ persisted, sync })}`);
+  const refreshed = await getCollectionRecordBySlug(
+    productCollection.id,
+    productRecord.slug,
+  );
+  const persisted = readProductValue(refreshed.values, "providerSync");
+  assert(
+    persisted?.requestId === sync.requestId,
+    `Product provider sync was not persisted: ${JSON.stringify(refreshed.values)}`,
+  );
+  assert(
+    persisted.status === sync.status,
+    `Persisted provider sync status differed: ${JSON.stringify({ persisted, sync })}`,
+  );
 
   if (stripeCheckoutExecutionEnabled()) {
-    assert(sync.status === 'synced', `Stripe product provider sync did not execute against the mock provider: ${JSON.stringify(sync)}`);
-    assert(/^prod_mock_/.test(sync.product?.id || ''), `Stripe product id was not returned: ${JSON.stringify(sync)}`);
-    assert(/^price_mock_/.test(sync.price?.id || ''), `Stripe price id was not returned: ${JSON.stringify(sync)}`);
-    const productRequest = stripeCheckoutMock.requests.slice(beforeRequests).find((request) => request.url === '/v1/products');
-    const priceRequest = stripeCheckoutMock.requests.slice(beforeRequests).find((request) => request.url === '/v1/prices');
-    const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
-    assert(productRequest?.headers.authorization === `Bearer ${expectedSecret}`, `Stripe product sync did not use bearer auth: ${JSON.stringify(productRequest)}`);
-    assert(productRequest.form.name === readProductValue(productRecord.values, 'title'), `Stripe product form did not include product name: ${JSON.stringify(productRequest.form)}`);
-    assert(productRequest.form['metadata[backyProductId]'] === productRecord.id, `Stripe product form did not include Backy product metadata: ${JSON.stringify(productRequest.form)}`);
-    assert(priceRequest?.form.product === sync.product.id, `Stripe price form did not target the created product: ${JSON.stringify(priceRequest?.form)}`);
-    assert(priceRequest.form.currency === String(readProductValue(productRecord.values, 'currency')).toLowerCase(), `Stripe price form currency was unexpected: ${JSON.stringify(priceRequest.form)}`);
-    assert(Number(priceRequest.form.unit_amount) === 4900, `Stripe price form amount was unexpected: ${JSON.stringify(priceRequest.form)}`);
-    assert(priceRequest.form['recurring[interval]'] === 'month', `Stripe price form did not include subscription recurrence: ${JSON.stringify(priceRequest.form)}`);
+    assert(
+      sync.status === "synced",
+      `Stripe product provider sync did not execute against the mock provider: ${JSON.stringify(sync)}`,
+    );
+    assert(
+      /^prod_mock_/.test(sync.product?.id || ""),
+      `Stripe product id was not returned: ${JSON.stringify(sync)}`,
+    );
+    assert(
+      /^price_mock_/.test(sync.price?.id || ""),
+      `Stripe price id was not returned: ${JSON.stringify(sync)}`,
+    );
+    const productRequest = stripeCheckoutMock.requests
+      .slice(beforeRequests)
+      .find((request) => request.url === "/v1/products");
+    const priceRequest = stripeCheckoutMock.requests
+      .slice(beforeRequests)
+      .find((request) => request.url === "/v1/prices");
+    const expectedSecret =
+      process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+    assert(
+      productRequest?.headers.authorization === `Bearer ${expectedSecret}`,
+      `Stripe product sync did not use bearer auth: ${JSON.stringify(productRequest)}`,
+    );
+    assert(
+      productRequest.form.name ===
+        readProductValue(productRecord.values, "title"),
+      `Stripe product form did not include product name: ${JSON.stringify(productRequest.form)}`,
+    );
+    assert(
+      productRequest.form["metadata[backyProductId]"] === productRecord.id,
+      `Stripe product form did not include Backy product metadata: ${JSON.stringify(productRequest.form)}`,
+    );
+    assert(
+      priceRequest?.form.product === sync.product.id,
+      `Stripe price form did not target the created product: ${JSON.stringify(priceRequest?.form)}`,
+    );
+    assert(
+      priceRequest.form.currency ===
+        String(
+          readProductValue(productRecord.values, "currency"),
+        ).toLowerCase(),
+      `Stripe price form currency was unexpected: ${JSON.stringify(priceRequest.form)}`,
+    );
+    assert(
+      Number(priceRequest.form.unit_amount) === 4900,
+      `Stripe price form amount was unexpected: ${JSON.stringify(priceRequest.form)}`,
+    );
+    assert(
+      priceRequest.form["recurring[interval]"] === "month",
+      `Stripe price form did not include subscription recurrence: ${JSON.stringify(priceRequest.form)}`,
+    );
   } else {
-    assert(sync.status === 'handoff', `Product provider sync should fall back to handoff without Stripe mock env: ${JSON.stringify(sync)}`);
-    assert(sync.executionMode === 'handoff', `Product provider sync handoff mode was unexpected: ${JSON.stringify(sync)}`);
-    assert(String(sync.reason || '').includes('STRIPE_SECRET_KEY'), `Product provider sync did not explain missing Stripe credentials: ${JSON.stringify(sync)}`);
+    assert(
+      sync.status === "handoff",
+      `Product provider sync should fall back to handoff without Stripe mock env: ${JSON.stringify(sync)}`,
+    );
+    assert(
+      sync.executionMode === "handoff",
+      `Product provider sync handoff mode was unexpected: ${JSON.stringify(sync)}`,
+    );
+    assert(
+      String(sync.reason || "").includes("STRIPE_SECRET_KEY"),
+      `Product provider sync did not explain missing Stripe credentials: ${JSON.stringify(sync)}`,
+    );
   }
 
   if (paddleCatalogSyncEnabled()) {
     const beforePaddleRequests = stripeCheckoutMock?.requests.length || 0;
-    const paddlePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
-      method: 'POST',
-      body: JSON.stringify({ provider: 'paddle' }),
-    });
+    const paddlePayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+      {
+        method: "POST",
+        body: JSON.stringify({ provider: "paddle" }),
+      },
+    );
     const paddleSync = paddlePayload.data?.sync || paddlePayload.sync;
     const paddleUpdated = paddlePayload.data?.product || paddlePayload.product;
-    assert(paddleSync?.provider === 'paddle', `Paddle product provider sync did not return Paddle metadata: ${JSON.stringify(paddlePayload).slice(0, 500)}`);
-    assert(paddleSync.status === 'synced', `Paddle product provider sync did not execute against the mock provider: ${JSON.stringify(paddleSync)}`);
-    assert(paddleSync.executionMode === 'paddle-api', `Paddle product sync execution mode was unexpected: ${JSON.stringify(paddleSync)}`);
-    assert(/^pro_mock_/.test(paddleSync.product?.id || ''), `Paddle product id was not returned: ${JSON.stringify(paddleSync)}`);
-    assert(/^pri_mock_/.test(paddleSync.price?.id || ''), `Paddle price id was not returned: ${JSON.stringify(paddleSync)}`);
-    assert(paddleSync.price?.unitAmount === 4900, `Paddle price amount was unexpected: ${JSON.stringify(paddleSync.price)}`);
-    assert(paddleUpdated?.id === productRecord.id, `Paddle product provider sync did not return the updated product: ${JSON.stringify(paddleUpdated)}`);
+    assert(
+      paddleSync?.provider === "paddle",
+      `Paddle product provider sync did not return Paddle metadata: ${JSON.stringify(paddlePayload).slice(0, 500)}`,
+    );
+    assert(
+      paddleSync.status === "synced",
+      `Paddle product provider sync did not execute against the mock provider: ${JSON.stringify(paddleSync)}`,
+    );
+    assert(
+      paddleSync.executionMode === "paddle-api",
+      `Paddle product sync execution mode was unexpected: ${JSON.stringify(paddleSync)}`,
+    );
+    assert(
+      /^pro_mock_/.test(paddleSync.product?.id || ""),
+      `Paddle product id was not returned: ${JSON.stringify(paddleSync)}`,
+    );
+    assert(
+      /^pri_mock_/.test(paddleSync.price?.id || ""),
+      `Paddle price id was not returned: ${JSON.stringify(paddleSync)}`,
+    );
+    assert(
+      paddleSync.price?.unitAmount === 4900,
+      `Paddle price amount was unexpected: ${JSON.stringify(paddleSync.price)}`,
+    );
+    assert(
+      paddleUpdated?.id === productRecord.id,
+      `Paddle product provider sync did not return the updated product: ${JSON.stringify(paddleUpdated)}`,
+    );
 
-    const paddleRequests = stripeCheckoutMock.requests.slice(beforePaddleRequests);
-    const paddleProductRequest = paddleRequests.find((request) => request.method === 'POST' && request.url === '/products');
-    const paddlePriceRequest = paddleRequests.find((request) => request.method === 'POST' && request.url === '/prices');
-    assert(paddleProductRequest?.headers.authorization === 'Bearer paddle_smoke_api_key', `Paddle product sync did not send bearer auth: ${JSON.stringify(paddleProductRequest?.headers)}`);
-    assert(paddlePriceRequest?.headers.authorization === 'Bearer paddle_smoke_api_key', `Paddle price sync did not send bearer auth: ${JSON.stringify(paddlePriceRequest?.headers)}`);
-    const paddleProductBody = JSON.parse(paddleProductRequest.body || '{}');
-    const paddlePriceBody = JSON.parse(paddlePriceRequest.body || '{}');
-    assert(paddleProductBody.name === readProductValue(productRecord.values, 'title'), `Paddle product body did not include product name: ${JSON.stringify(paddleProductBody)}`);
-    assert(paddleProductBody.tax_category === 'standard', `Paddle product body did not include the default tax category: ${JSON.stringify(paddleProductBody)}`);
-    assert(paddleProductBody.custom_data?.backyProductId === productRecord.id, `Paddle product body did not include Backy product metadata: ${JSON.stringify(paddleProductBody)}`);
-    assert(paddleProductBody.custom_data?.backySku === readProductValue(productRecord.values, 'sku'), `Paddle product body did not include Backy SKU metadata: ${JSON.stringify(paddleProductBody)}`);
-    assert(paddlePriceBody.product_id === paddleSync.product.id, `Paddle price body did not target the created product: ${JSON.stringify(paddlePriceBody)}`);
-    assert(paddlePriceBody.unit_price?.amount === '4900', `Paddle price amount was unexpected: ${JSON.stringify(paddlePriceBody)}`);
-    assert(paddlePriceBody.unit_price?.currency_code === String(readProductValue(productRecord.values, 'currency')).toUpperCase(), `Paddle price currency was unexpected: ${JSON.stringify(paddlePriceBody)}`);
-    assert(paddlePriceBody.billing_cycle?.interval === 'month' && paddlePriceBody.billing_cycle?.frequency === 1, `Paddle price body did not include monthly subscription recurrence: ${JSON.stringify(paddlePriceBody)}`);
-    assert(paddlePriceBody.trial_period?.interval === 'day' && paddlePriceBody.trial_period?.frequency === 14, `Paddle price body did not include trial period: ${JSON.stringify(paddlePriceBody)}`);
+    const paddleRequests =
+      stripeCheckoutMock.requests.slice(beforePaddleRequests);
+    const paddleProductRequest = paddleRequests.find(
+      (request) => request.method === "POST" && request.url === "/products",
+    );
+    const paddlePriceRequest = paddleRequests.find(
+      (request) => request.method === "POST" && request.url === "/prices",
+    );
+    const expectedPaddleAuth = `Bearer ${process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY}`;
+    assert(
+      paddleProductRequest?.headers.authorization === expectedPaddleAuth,
+      `Paddle product sync did not send bearer auth: ${JSON.stringify(paddleProductRequest?.headers)}`,
+    );
+    assert(
+      paddlePriceRequest?.headers.authorization === expectedPaddleAuth,
+      `Paddle price sync did not send bearer auth: ${JSON.stringify(paddlePriceRequest?.headers)}`,
+    );
+    const paddleProductBody = JSON.parse(paddleProductRequest.body || "{}");
+    const paddlePriceBody = JSON.parse(paddlePriceRequest.body || "{}");
+    assert(
+      paddleProductBody.name ===
+        readProductValue(productRecord.values, "title"),
+      `Paddle product body did not include product name: ${JSON.stringify(paddleProductBody)}`,
+    );
+    assert(
+      paddleProductBody.tax_category === "standard",
+      `Paddle product body did not include the default tax category: ${JSON.stringify(paddleProductBody)}`,
+    );
+    assert(
+      paddleProductBody.custom_data?.backyProductId === productRecord.id,
+      `Paddle product body did not include Backy product metadata: ${JSON.stringify(paddleProductBody)}`,
+    );
+    assert(
+      paddleProductBody.custom_data?.backySku ===
+        readProductValue(productRecord.values, "sku"),
+      `Paddle product body did not include Backy SKU metadata: ${JSON.stringify(paddleProductBody)}`,
+    );
+    assert(
+      paddlePriceBody.product_id === paddleSync.product.id,
+      `Paddle price body did not target the created product: ${JSON.stringify(paddlePriceBody)}`,
+    );
+    assert(
+      paddlePriceBody.unit_price?.amount === "4900",
+      `Paddle price amount was unexpected: ${JSON.stringify(paddlePriceBody)}`,
+    );
+    assert(
+      paddlePriceBody.unit_price?.currency_code ===
+        String(
+          readProductValue(productRecord.values, "currency"),
+        ).toUpperCase(),
+      `Paddle price currency was unexpected: ${JSON.stringify(paddlePriceBody)}`,
+    );
+    assert(
+      paddlePriceBody.billing_cycle?.interval === "month" &&
+        paddlePriceBody.billing_cycle?.frequency === 1,
+      `Paddle price body did not include monthly subscription recurrence: ${JSON.stringify(paddlePriceBody)}`,
+    );
+    assert(
+      paddlePriceBody.trial_period?.interval === "day" &&
+        paddlePriceBody.trial_period?.frequency === 14,
+      `Paddle price body did not include trial period: ${JSON.stringify(paddlePriceBody)}`,
+    );
 
-    const paddleRefreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
-    const paddlePersisted = readProductValue(paddleRefreshed.values, 'providerSync');
-    assert(paddlePersisted?.requestId === paddleSync.requestId, `Paddle product provider sync was not persisted: ${JSON.stringify(paddleRefreshed.values)}`);
-    assert(paddlePersisted.executionMode === 'paddle-api', `Persisted Paddle provider sync mode differed: ${JSON.stringify(paddlePersisted)}`);
+    const paddleRefreshed = await getCollectionRecordBySlug(
+      productCollection.id,
+      productRecord.slug,
+    );
+    const paddlePersisted = readProductValue(
+      paddleRefreshed.values,
+      "providerSync",
+    );
+    assert(
+      paddlePersisted?.requestId === paddleSync.requestId,
+      `Paddle product provider sync was not persisted: ${JSON.stringify(paddleRefreshed.values)}`,
+    );
+    assert(
+      paddlePersisted.executionMode === "paddle-api",
+      `Persisted Paddle provider sync mode differed: ${JSON.stringify(paddlePersisted)}`,
+    );
   }
 
   if (squareCatalogSyncEnabled()) {
     const beforeSquareRequests = stripeCheckoutMock?.requests.length || 0;
-    const squarePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
-      method: 'POST',
-      body: JSON.stringify({ provider: 'square' }),
-    });
+    const squarePayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+      {
+        method: "POST",
+        body: JSON.stringify({ provider: "square" }),
+      },
+    );
     const squareSync = squarePayload.data?.sync || squarePayload.sync;
     const squareUpdated = squarePayload.data?.product || squarePayload.product;
-    assert(squareSync?.provider === 'square', `Square product provider sync did not return Square metadata: ${JSON.stringify(squarePayload).slice(0, 500)}`);
-    assert(squareSync.status === 'synced', `Square product provider sync did not execute against the mock provider: ${JSON.stringify(squareSync)}`);
-    assert(squareSync.executionMode === 'square-api', `Square product sync execution mode was unexpected: ${JSON.stringify(squareSync)}`);
-    assert(/^sq_item_mock_/.test(squareSync.product?.id || ''), `Square item id was not returned: ${JSON.stringify(squareSync)}`);
-    assert(/^sq_variation_mock_/.test(squareSync.price?.id || ''), `Square variation id was not returned: ${JSON.stringify(squareSync)}`);
-    assert(squareSync.price?.unitAmount === 4900, `Square variation price amount was unexpected: ${JSON.stringify(squareSync.price)}`);
-    assert(squareUpdated?.id === productRecord.id, `Square product provider sync did not return the updated product: ${JSON.stringify(squareUpdated)}`);
+    assert(
+      squareSync?.provider === "square",
+      `Square product provider sync did not return Square metadata: ${JSON.stringify(squarePayload).slice(0, 500)}`,
+    );
+    assert(
+      squareSync.status === "synced",
+      `Square product provider sync did not execute against the mock provider: ${JSON.stringify(squareSync)}`,
+    );
+    assert(
+      squareSync.executionMode === "square-api",
+      `Square product sync execution mode was unexpected: ${JSON.stringify(squareSync)}`,
+    );
+    assert(
+      /^sq_item_mock_/.test(squareSync.product?.id || ""),
+      `Square item id was not returned: ${JSON.stringify(squareSync)}`,
+    );
+    assert(
+      /^sq_variation_mock_/.test(squareSync.price?.id || ""),
+      `Square variation id was not returned: ${JSON.stringify(squareSync)}`,
+    );
+    assert(
+      squareSync.price?.unitAmount === 4900,
+      `Square variation price amount was unexpected: ${JSON.stringify(squareSync.price)}`,
+    );
+    assert(
+      squareUpdated?.id === productRecord.id,
+      `Square product provider sync did not return the updated product: ${JSON.stringify(squareUpdated)}`,
+    );
 
-    const squareRequests = stripeCheckoutMock.requests.slice(beforeSquareRequests);
-    const squareCatalogRequest = squareRequests.find((request) => request.method === 'POST' && request.url === '/v2/catalog/object');
-    assert(squareCatalogRequest?.headers.authorization === 'Bearer square_smoke_access_token', `Square product sync did not send bearer auth: ${JSON.stringify(squareCatalogRequest?.headers)}`);
-    assert(squareCatalogRequest.headers['square-version'] === (process.env.BACKY_SQUARE_VERSION || process.env.SQUARE_VERSION || '2026-01-22'), `Square product sync did not send Square-Version: ${JSON.stringify(squareCatalogRequest.headers)}`);
-    const squareBody = JSON.parse(squareCatalogRequest.body || '{}');
+    const squareRequests =
+      stripeCheckoutMock.requests.slice(beforeSquareRequests);
+    const squareCatalogRequest = squareRequests.find(
+      (request) =>
+        request.method === "POST" && request.url === "/v2/catalog/object",
+    );
+    assert(
+      squareCatalogRequest?.headers.authorization ===
+        `Bearer ${process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN}`,
+      `Square product sync did not send bearer auth: ${JSON.stringify(squareCatalogRequest?.headers)}`,
+    );
+    assert(
+      squareCatalogRequest.headers["square-version"] ===
+        (process.env.BACKY_SQUARE_VERSION ||
+          process.env.SQUARE_VERSION ||
+          "2026-01-22"),
+      `Square product sync did not send Square-Version: ${JSON.stringify(squareCatalogRequest.headers)}`,
+    );
+    const squareBody = JSON.parse(squareCatalogRequest.body || "{}");
     const squareObject = squareBody.object || {};
     const squareItemData = squareObject.item_data || {};
-    const squareVariation = Array.isArray(squareItemData.variations) ? squareItemData.variations[0] || {} : {};
+    const squareVariation = Array.isArray(squareItemData.variations)
+      ? squareItemData.variations[0] || {}
+      : {};
     const squareVariationData = squareVariation.item_variation_data || {};
-    assert(squareBody.idempotency_key, `Square catalog body did not include idempotency key: ${JSON.stringify(squareBody)}`);
-    assert(squareObject.type === 'ITEM', `Square catalog body did not create an ITEM: ${JSON.stringify(squareBody)}`);
-    assert(squareItemData.name === readProductValue(productRecord.values, 'title'), `Square item body did not include product name: ${JSON.stringify(squareBody)}`);
-    assert(squareVariation.type === 'ITEM_VARIATION', `Square catalog body did not include an ITEM_VARIATION: ${JSON.stringify(squareBody)}`);
-    assert(squareVariationData.sku === readProductValue(productRecord.values, 'sku'), `Square variation body did not include SKU: ${JSON.stringify(squareBody)}`);
-    assert(squareVariationData.price_money?.amount === 4900, `Square variation body amount was unexpected: ${JSON.stringify(squareBody)}`);
-    assert(squareVariationData.price_money?.currency === String(readProductValue(productRecord.values, 'currency')).toUpperCase(), `Square variation body currency was unexpected: ${JSON.stringify(squareBody)}`);
+    assert(
+      squareBody.idempotency_key,
+      `Square catalog body did not include idempotency key: ${JSON.stringify(squareBody)}`,
+    );
+    assert(
+      squareObject.type === "ITEM",
+      `Square catalog body did not create an ITEM: ${JSON.stringify(squareBody)}`,
+    );
+    assert(
+      squareItemData.name === readProductValue(productRecord.values, "title"),
+      `Square item body did not include product name: ${JSON.stringify(squareBody)}`,
+    );
+    assert(
+      squareVariation.type === "ITEM_VARIATION",
+      `Square catalog body did not include an ITEM_VARIATION: ${JSON.stringify(squareBody)}`,
+    );
+    assert(
+      squareVariationData.sku === readProductValue(productRecord.values, "sku"),
+      `Square variation body did not include SKU: ${JSON.stringify(squareBody)}`,
+    );
+    assert(
+      squareVariationData.price_money?.amount === 4900,
+      `Square variation body amount was unexpected: ${JSON.stringify(squareBody)}`,
+    );
+    assert(
+      squareVariationData.price_money?.currency ===
+        String(
+          readProductValue(productRecord.values, "currency"),
+        ).toUpperCase(),
+      `Square variation body currency was unexpected: ${JSON.stringify(squareBody)}`,
+    );
 
-    const squareRefreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
-    const squarePersisted = readProductValue(squareRefreshed.values, 'providerSync');
-    assert(squarePersisted?.requestId === squareSync.requestId, `Square product provider sync was not persisted: ${JSON.stringify(squareRefreshed.values)}`);
-    assert(squarePersisted.executionMode === 'square-api', `Persisted Square provider sync mode differed: ${JSON.stringify(squarePersisted)}`);
+    const squareRefreshed = await getCollectionRecordBySlug(
+      productCollection.id,
+      productRecord.slug,
+    );
+    const squarePersisted = readProductValue(
+      squareRefreshed.values,
+      "providerSync",
+    );
+    assert(
+      squarePersisted?.requestId === squareSync.requestId,
+      `Square product provider sync was not persisted: ${JSON.stringify(squareRefreshed.values)}`,
+    );
+    assert(
+      squarePersisted.executionMode === "square-api",
+      `Persisted Square provider sync mode differed: ${JSON.stringify(squarePersisted)}`,
+    );
+  }
+
+  if (shopifyCatalogSyncEnabled()) {
+    const beforeShopifyRequests = stripeCheckoutMock?.requests.length || 0;
+    const shopifyPayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+      {
+        method: "POST",
+        body: JSON.stringify({ provider: "shopify" }),
+      },
+    );
+    const shopifySync = shopifyPayload.data?.sync || shopifyPayload.sync;
+    assert(
+      shopifySync?.provider === "shopify",
+      `Shopify product provider sync did not return Shopify metadata: ${JSON.stringify(shopifyPayload).slice(0, 500)}`,
+    );
+    assert(
+      shopifySync.status === "synced",
+      `Shopify product provider sync did not execute against the mock provider: ${JSON.stringify(shopifySync)}`,
+    );
+    assert(
+      shopifySync.executionMode === "shopify-api",
+      `Shopify product sync execution mode was unexpected: ${JSON.stringify(shopifySync)}`,
+    );
+    assert(
+      /^gid:\/\/shopify\/Product\/shopify_product_mock_/.test(
+        shopifySync.product?.id || "",
+      ),
+      `Shopify product id was not returned: ${JSON.stringify(shopifySync)}`,
+    );
+    assert(
+      /^gid:\/\/shopify\/ProductVariant\/shopify_variant_mock_/.test(
+        shopifySync.price?.id || "",
+      ),
+      `Shopify variant id was not returned: ${JSON.stringify(shopifySync)}`,
+    );
+    const shopifyRequest = stripeCheckoutMock.requests
+      .slice(beforeShopifyRequests)
+      .find(
+        (request) =>
+          request.method === "POST" && request.url === "/products.json",
+      );
+    assert(
+      shopifyRequest?.headers["x-shopify-access-token"] ===
+        (process.env.BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN ||
+          process.env.SHOPIFY_ADMIN_ACCESS_TOKEN),
+      `Shopify product sync did not send access token: ${JSON.stringify(shopifyRequest?.headers)}`,
+    );
+    const shopifyBody = JSON.parse(shopifyRequest.body || "{}");
+    assert(
+      shopifyBody.product?.title ===
+        readProductValue(productRecord.values, "title"),
+      `Shopify product body did not include product title: ${JSON.stringify(shopifyBody)}`,
+    );
+    assert(
+      Array.isArray(shopifyBody.product?.variants) &&
+        shopifyBody.product.variants.length === 4,
+      `Shopify product body did not include Backy variants: ${JSON.stringify(shopifyBody)}`,
+    );
+    assert(
+      shopifyBody.product?.metafields?.some(
+        (field) =>
+          field.namespace === "backy" &&
+          field.key === "product_id" &&
+          field.value === productRecord.id,
+      ),
+      `Shopify product body did not include Backy product metafield: ${JSON.stringify(shopifyBody)}`,
+    );
+    const shopifyRefreshed = await getCollectionRecordBySlug(
+      productCollection.id,
+      productRecord.slug,
+    );
+    const shopifyPersisted = readProductValue(
+      shopifyRefreshed.values,
+      "providerSync",
+    );
+    assert(
+      shopifyPersisted?.requestId === shopifySync.requestId,
+      `Shopify product provider sync was not persisted: ${JSON.stringify(shopifyRefreshed.values)}`,
+    );
+    assert(
+      shopifyPersisted.executionMode === "shopify-api",
+      `Persisted Shopify provider sync mode differed: ${JSON.stringify(shopifyPersisted)}`,
+    );
+  }
+
+  if (bigCommerceCatalogSyncEnabled()) {
+    const beforeBigCommerceRequests = stripeCheckoutMock?.requests.length || 0;
+    const bigCommercePayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+      {
+        method: "POST",
+        body: JSON.stringify({ provider: "bigcommerce" }),
+      },
+    );
+    const bigCommerceSync =
+      bigCommercePayload.data?.sync || bigCommercePayload.sync;
+    assert(
+      bigCommerceSync?.provider === "bigcommerce",
+      `BigCommerce product provider sync did not return BigCommerce metadata: ${JSON.stringify(bigCommercePayload).slice(0, 500)}`,
+    );
+    assert(
+      bigCommerceSync.status === "synced",
+      `BigCommerce product provider sync did not execute against the mock provider: ${JSON.stringify(bigCommerceSync)}`,
+    );
+    assert(
+      bigCommerceSync.executionMode === "bigcommerce-api",
+      `BigCommerce product sync execution mode was unexpected: ${JSON.stringify(bigCommerceSync)}`,
+    );
+    assert(
+      /^bigcommerce_product_mock_/.test(bigCommerceSync.product?.id || ""),
+      `BigCommerce product id was not returned: ${JSON.stringify(bigCommerceSync)}`,
+    );
+    assert(
+      /^bigcommerce_variant_mock_/.test(bigCommerceSync.price?.id || ""),
+      `BigCommerce variant id was not returned: ${JSON.stringify(bigCommerceSync)}`,
+    );
+    const bigCommerceRequest = stripeCheckoutMock.requests
+      .slice(beforeBigCommerceRequests)
+      .find(
+        (request) =>
+          request.method === "POST" && request.url === "/catalog/products",
+      );
+    assert(
+      bigCommerceRequest?.headers["x-auth-token"] ===
+        (process.env.BACKY_BIGCOMMERCE_ACCESS_TOKEN ||
+          process.env.BIGCOMMERCE_ACCESS_TOKEN),
+      `BigCommerce product sync did not send auth token: ${JSON.stringify(bigCommerceRequest?.headers)}`,
+    );
+    const bigCommerceBody = JSON.parse(bigCommerceRequest.body || "{}");
+    assert(
+      bigCommerceBody.name === readProductValue(productRecord.values, "title"),
+      `BigCommerce product body did not include product title: ${JSON.stringify(bigCommerceBody)}`,
+    );
+    assert(
+      Array.isArray(bigCommerceBody.variants) &&
+        bigCommerceBody.variants.length === 4,
+      `BigCommerce product body did not include Backy variants: ${JSON.stringify(bigCommerceBody)}`,
+    );
+    assert(
+      bigCommerceBody.custom_fields?.some(
+        (field) =>
+          field.name === "backyProductId" && field.value === productRecord.id,
+      ),
+      `BigCommerce product body did not include Backy product custom field: ${JSON.stringify(bigCommerceBody)}`,
+    );
+    const bigCommerceRefreshed = await getCollectionRecordBySlug(
+      productCollection.id,
+      productRecord.slug,
+    );
+    const bigCommercePersisted = readProductValue(
+      bigCommerceRefreshed.values,
+      "providerSync",
+    );
+    assert(
+      bigCommercePersisted?.requestId === bigCommerceSync.requestId,
+      `BigCommerce product provider sync was not persisted: ${JSON.stringify(bigCommerceRefreshed.values)}`,
+    );
+    assert(
+      bigCommercePersisted.executionMode === "bigcommerce-api",
+      `Persisted BigCommerce provider sync mode differed: ${JSON.stringify(bigCommercePersisted)}`,
+    );
+  }
+
+  if (wooCommerceCatalogSyncEnabled()) {
+    const beforeWooCommerceRequests = stripeCheckoutMock?.requests.length || 0;
+    const wooCommercePayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+      {
+        method: "POST",
+        body: JSON.stringify({ provider: "woocommerce" }),
+      },
+    );
+    const wooCommerceSync =
+      wooCommercePayload.data?.sync || wooCommercePayload.sync;
+    assert(
+      wooCommerceSync?.provider === "woocommerce",
+      `WooCommerce product provider sync did not return WooCommerce metadata: ${JSON.stringify(wooCommercePayload).slice(0, 500)}`,
+    );
+    assert(
+      wooCommerceSync.status === "synced",
+      `WooCommerce product provider sync did not execute against the mock provider: ${JSON.stringify(wooCommerceSync)}`,
+    );
+    assert(
+      wooCommerceSync.executionMode === "woocommerce-api",
+      `WooCommerce product sync execution mode was unexpected: ${JSON.stringify(wooCommerceSync)}`,
+    );
+    assert(
+      /^woocommerce_variable_mock_/.test(wooCommerceSync.product?.id || ""),
+      `WooCommerce variable product id was not returned: ${JSON.stringify(wooCommerceSync)}`,
+    );
+    assert(
+      /^woocommerce_variation_mock_/.test(wooCommerceSync.price?.id || ""),
+      `WooCommerce variation id was not returned: ${JSON.stringify(wooCommerceSync)}`,
+    );
+    const wooCommerceRequests = stripeCheckoutMock.requests.slice(
+      beforeWooCommerceRequests,
+    );
+    const wooProductRequest = wooCommerceRequests.find(
+      (request) => request.method === "POST" && request.url === "/products",
+    );
+    const wooVariationRequests = wooCommerceRequests.filter(
+      (request) =>
+        request.method === "POST" &&
+        /\/products\/[^/]+\/variations$/.test(request.url),
+    );
+    const expectedAuth = `Basic ${Buffer.from(`${process.env.BACKY_WOOCOMMERCE_CONSUMER_KEY || process.env.WOOCOMMERCE_CONSUMER_KEY}:${process.env.BACKY_WOOCOMMERCE_CONSUMER_SECRET || process.env.WOOCOMMERCE_CONSUMER_SECRET}`).toString("base64")}`;
+    assert(
+      wooProductRequest?.headers.authorization === expectedAuth,
+      `WooCommerce product sync did not send basic auth: ${JSON.stringify(wooProductRequest?.headers)}`,
+    );
+    const wooProductBody = JSON.parse(wooProductRequest.body || "{}");
+    assert(
+      wooProductBody.name === readProductValue(productRecord.values, "title"),
+      `WooCommerce product body did not include product title: ${JSON.stringify(wooProductBody)}`,
+    );
+    assert(
+      wooProductBody.type === "variable",
+      `WooCommerce product body did not create a variable product for variants: ${JSON.stringify(wooProductBody)}`,
+    );
+    assert(
+      wooProductBody.meta_data?.some(
+        (field) =>
+          field.key === "backy_product_id" && field.value === productRecord.id,
+      ),
+      `WooCommerce product body did not include Backy product metadata: ${JSON.stringify(wooProductBody)}`,
+    );
+    assert(
+      wooVariationRequests.length === 4,
+      `WooCommerce product sync did not create one variation per Backy variant: ${JSON.stringify(wooCommerceRequests)}`,
+    );
+    const firstWooVariationBody = JSON.parse(
+      wooVariationRequests[0].body || "{}",
+    );
+    assert(
+      firstWooVariationBody.attributes?.[0]?.name === "Variant",
+      `WooCommerce variation body did not include Variant attribute: ${JSON.stringify(firstWooVariationBody)}`,
+    );
+    const wooCommerceRefreshed = await getCollectionRecordBySlug(
+      productCollection.id,
+      productRecord.slug,
+    );
+    const wooCommercePersisted = readProductValue(
+      wooCommerceRefreshed.values,
+      "providerSync",
+    );
+    assert(
+      wooCommercePersisted?.requestId === wooCommerceSync.requestId,
+      `WooCommerce product provider sync was not persisted: ${JSON.stringify(wooCommerceRefreshed.values)}`,
+    );
+    assert(
+      wooCommercePersisted.executionMode === "woocommerce-api",
+      `Persisted WooCommerce provider sync mode differed: ${JSON.stringify(wooCommercePersisted)}`,
+    );
+  }
+
+  if (etsyCatalogSyncEnabled()) {
+    const beforeEtsyRequests = stripeCheckoutMock?.requests.length || 0;
+    const etsyPayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+      {
+        method: "POST",
+        body: JSON.stringify({ provider: "etsy" }),
+      },
+    );
+    const etsySync = etsyPayload.data?.sync || etsyPayload.sync;
+    assert(
+      etsySync?.provider === "etsy",
+      `Etsy product provider sync did not return Etsy metadata: ${JSON.stringify(etsyPayload).slice(0, 500)}`,
+    );
+    assert(
+      etsySync.status === "synced",
+      `Etsy product provider sync did not execute against the mock provider: ${JSON.stringify(etsySync)}`,
+    );
+    assert(
+      etsySync.executionMode === "etsy-api",
+      `Etsy product sync execution mode was unexpected: ${JSON.stringify(etsySync)}`,
+    );
+    assert(
+      /^etsy_listing_mock_/.test(etsySync.product?.id || ""),
+      `Etsy listing id was not returned: ${JSON.stringify(etsySync)}`,
+    );
+    const etsyRequest = stripeCheckoutMock.requests
+      .slice(beforeEtsyRequests)
+      .find(
+        (request) =>
+          request.method === "POST" &&
+          /^\/shops\/[^/]+\/listings$/.test(request.url),
+      );
+    assert(
+      etsyRequest?.headers.authorization ===
+        `Bearer ${process.env.BACKY_ETSY_ACCESS_TOKEN || process.env.ETSY_ACCESS_TOKEN}`,
+      `Etsy product sync did not send bearer auth: ${JSON.stringify(etsyRequest?.headers)}`,
+    );
+    assert(
+      etsyRequest?.headers["x-api-key"] ===
+        (process.env.BACKY_ETSY_API_KEY || process.env.ETSY_API_KEY),
+      `Etsy product sync did not send API key: ${JSON.stringify(etsyRequest?.headers)}`,
+    );
+    const etsyParams = new URLSearchParams(etsyRequest.body || "");
+    const etsyForm = Object.fromEntries(etsyParams.entries());
+    assert(
+      etsyForm.title === readProductValue(productRecord.values, "title"),
+      `Etsy listing body did not include product title: ${JSON.stringify(etsyForm)}`,
+    );
+    assert(
+      etsyParams.getAll("sku[]").includes(readProductValue(productRecord.values, "sku")),
+      `Etsy listing body did not include product SKU: ${JSON.stringify(etsyForm)}`,
+    );
+    assert(
+      etsyForm.taxonomy_id ===
+        (process.env.BACKY_ETSY_TAXONOMY_ID || process.env.ETSY_TAXONOMY_ID || "1"),
+      `Etsy listing body did not include taxonomy id: ${JSON.stringify(etsyForm)}`,
+    );
+    const etsyRefreshed = await getCollectionRecordBySlug(
+      productCollection.id,
+      productRecord.slug,
+    );
+    const etsyPersisted = readProductValue(etsyRefreshed.values, "providerSync");
+    assert(
+      etsyPersisted?.requestId === etsySync.requestId,
+      `Etsy product provider sync was not persisted: ${JSON.stringify(etsyRefreshed.values)}`,
+    );
+    assert(
+      etsyPersisted.executionMode === "etsy-api",
+      `Persisted Etsy provider sync mode differed: ${JSON.stringify(etsyPersisted)}`,
+    );
+  }
+
+  if (magentoCatalogSyncEnabled()) {
+    const beforeMagentoRequests = stripeCheckoutMock?.requests.length || 0;
+    const magentoPayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+      {
+        method: "POST",
+        body: JSON.stringify({ provider: "magento" }),
+      },
+    );
+    const magentoSync = magentoPayload.data?.sync || magentoPayload.sync;
+    assert(
+      magentoSync?.provider === "magento",
+      `Magento product provider sync did not return Magento metadata: ${JSON.stringify(magentoPayload).slice(0, 500)}`,
+    );
+    assert(
+      magentoSync.status === "synced",
+      `Magento product provider sync did not execute against the mock provider: ${JSON.stringify(magentoSync)}`,
+    );
+    assert(
+      magentoSync.executionMode === "magento-api",
+      `Magento product sync execution mode was unexpected: ${JSON.stringify(magentoSync)}`,
+    );
+    assert(
+      /^magento_product_mock_/.test(magentoSync.product?.id || ""),
+      `Magento product id was not returned: ${JSON.stringify(magentoSync)}`,
+    );
+    const magentoRequest = stripeCheckoutMock.requests
+      .slice(beforeMagentoRequests)
+      .find(
+        (request) =>
+          request.method === "POST" &&
+          request.url === "/magento/V1/products",
+      );
+    assert(
+      magentoRequest?.headers.authorization ===
+        `Bearer ${process.env.BACKY_MAGENTO_ACCESS_TOKEN || process.env.MAGENTO_ACCESS_TOKEN}`,
+      `Magento product sync did not send bearer auth: ${JSON.stringify(magentoRequest?.headers)}`,
+    );
+    const magentoBody = JSON.parse(magentoRequest.body || "{}");
+    assert(
+      magentoBody.product?.name === readProductValue(productRecord.values, "title"),
+      `Magento product body did not include product title: ${JSON.stringify(magentoBody)}`,
+    );
+    assert(
+      magentoBody.product?.sku === readProductValue(productRecord.values, "sku"),
+      `Magento product body did not include product SKU: ${JSON.stringify(magentoBody)}`,
+    );
+    assert(
+      magentoBody.product?.custom_attributes?.some(
+        (attribute) =>
+          attribute.attribute_code === "backy_product_id" &&
+          attribute.value === productRecord.id,
+      ),
+      `Magento product body did not include Backy product metadata: ${JSON.stringify(magentoBody)}`,
+    );
+    const magentoRefreshed = await getCollectionRecordBySlug(
+      productCollection.id,
+      productRecord.slug,
+    );
+    const magentoPersisted = readProductValue(
+      magentoRefreshed.values,
+      "providerSync",
+    );
+    assert(
+      magentoPersisted?.requestId === magentoSync.requestId,
+      `Magento product provider sync was not persisted: ${JSON.stringify(magentoRefreshed.values)}`,
+    );
+    assert(
+      magentoPersisted.executionMode === "magento-api",
+      `Persisted Magento provider sync mode differed: ${JSON.stringify(magentoPersisted)}`,
+    );
   }
 
   const beforeHttpRequests = commerceProviderMock?.requests.length || 0;
-  const httpPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
-    method: 'POST',
-    body: JSON.stringify({ provider: 'http' }),
-  });
+  const httpPayload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+    {
+      method: "POST",
+      body: JSON.stringify({ provider: "http" }),
+    },
+  );
   const httpSync = httpPayload.data?.sync || httpPayload.sync;
   const httpUpdated = httpPayload.data?.product || httpPayload.product;
-  assert(httpSync?.provider === 'http', `HTTP product provider sync did not return HTTP metadata: ${JSON.stringify(httpPayload).slice(0, 500)}`);
-  assert(httpSync.status === 'synced', `HTTP product provider sync did not execute against the mock provider: ${JSON.stringify(httpSync)}`);
-  assert(httpSync.executionMode === 'http-api', `HTTP product sync execution mode was unexpected: ${JSON.stringify(httpSync)}`);
-  assert(/^http_product_/.test(httpSync.product?.id || ''), `HTTP product sync did not persist provider product id: ${JSON.stringify(httpSync)}`);
-  assert(/^http_price_/.test(httpSync.price?.id || ''), `HTTP product sync did not persist provider price id: ${JSON.stringify(httpSync)}`);
-  assert(httpUpdated?.id === productRecord.id, `HTTP product provider sync did not return the updated product: ${JSON.stringify(httpUpdated)}`);
-  const catalogRequest = commerceProviderMock.requests.slice(beforeHttpRequests).find((request) => request.url === '/catalog/products');
-  assert(catalogRequest?.headers['x-backy-provider-kind'] === 'product-catalog', `HTTP product sync did not mark provider kind: ${JSON.stringify(catalogRequest)}`);
-  assert(catalogRequest.payload?.schemaVersion === 'backy.commerce-product-sync.v1', `HTTP product sync payload schema was unexpected: ${JSON.stringify(catalogRequest?.payload)}`);
-  assert(catalogRequest.payload?.siteId === SITE_ID, `HTTP product sync payload site id was unexpected: ${JSON.stringify(catalogRequest?.payload)}`);
-  assert(catalogRequest.payload?.product?.id === productRecord.id, `HTTP product sync payload product id was unexpected: ${JSON.stringify(catalogRequest?.payload)}`);
-  assert(catalogRequest.payload?.product?.subscription?.enabled === true, `HTTP product sync payload did not include subscription metadata: ${JSON.stringify(catalogRequest?.payload)}`);
+  assert(
+    httpSync?.provider === "http",
+    `HTTP product provider sync did not return HTTP metadata: ${JSON.stringify(httpPayload).slice(0, 500)}`,
+  );
+  assert(
+    httpSync.status === "synced",
+    `HTTP product provider sync did not execute against the mock provider: ${JSON.stringify(httpSync)}`,
+  );
+  assert(
+    httpSync.executionMode === "http-api",
+    `HTTP product sync execution mode was unexpected: ${JSON.stringify(httpSync)}`,
+  );
+  assert(
+    /^http_product_/.test(httpSync.product?.id || ""),
+    `HTTP product sync did not persist provider product id: ${JSON.stringify(httpSync)}`,
+  );
+  assert(
+    /^http_price_/.test(httpSync.price?.id || ""),
+    `HTTP product sync did not persist provider price id: ${JSON.stringify(httpSync)}`,
+  );
+  assert(
+    httpUpdated?.id === productRecord.id,
+    `HTTP product provider sync did not return the updated product: ${JSON.stringify(httpUpdated)}`,
+  );
+  const catalogRequest = commerceProviderMock.requests
+    .slice(beforeHttpRequests)
+    .find((request) => request.url === "/catalog/products");
+  assert(
+    catalogRequest?.headers["x-backy-provider-kind"] === "product-catalog",
+    `HTTP product sync did not mark provider kind: ${JSON.stringify(catalogRequest)}`,
+  );
+  assert(
+    catalogRequest.payload?.schemaVersion === "backy.commerce-product-sync.v1",
+    `HTTP product sync payload schema was unexpected: ${JSON.stringify(catalogRequest?.payload)}`,
+  );
+  assert(
+    catalogRequest.payload?.siteId === SITE_ID,
+    `HTTP product sync payload site id was unexpected: ${JSON.stringify(catalogRequest?.payload)}`,
+  );
+  assert(
+    catalogRequest.payload?.product?.id === productRecord.id,
+    `HTTP product sync payload product id was unexpected: ${JSON.stringify(catalogRequest?.payload)}`,
+  );
+  assert(
+    catalogRequest.payload?.product?.subscription?.enabled === true,
+    `HTTP product sync payload did not include subscription metadata: ${JSON.stringify(catalogRequest?.payload)}`,
+  );
 
-  const httpRefreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
-  const httpPersisted = readProductValue(httpRefreshed.values, 'providerSync');
-  assert(httpPersisted?.requestId === httpSync.requestId, `HTTP product provider sync was not persisted: ${JSON.stringify(httpRefreshed.values)}`);
-  assert(httpPersisted.executionMode === 'http-api', `Persisted HTTP provider sync mode differed: ${JSON.stringify(httpPersisted)}`);
+  const httpRefreshed = await getCollectionRecordBySlug(
+    productCollection.id,
+    productRecord.slug,
+  );
+  const httpPersisted = readProductValue(httpRefreshed.values, "providerSync");
+  assert(
+    httpPersisted?.requestId === httpSync.requestId,
+    `HTTP product provider sync was not persisted: ${JSON.stringify(httpRefreshed.values)}`,
+  );
+  assert(
+    httpPersisted.executionMode === "http-api",
+    `Persisted HTTP provider sync mode differed: ${JSON.stringify(httpPersisted)}`,
+  );
 
   return httpRefreshed;
 };
@@ -2218,7 +5280,11 @@ const assertStripeCheckoutExecution = async ({
   slug,
 }) => {
   if (!stripeCheckoutExecutionEnabled()) {
-    return { skipped: true, reason: 'BACKY_STRIPE_SECRET_KEY and BACKY_STRIPE_API_BASE_URL mock env were not configured' };
+    return {
+      skipped: true,
+      reason:
+        "BACKY_STRIPE_SECRET_KEY and BACKY_STRIPE_API_BASE_URL mock env were not configured",
+    };
   }
 
   const beforeRequests = stripeCheckoutMock?.requests.length || 0;
@@ -2226,367 +5292,1099 @@ const assertStripeCheckoutExecution = async ({
   await enableStripeCommerceSettings();
 
   try {
-    const stripePayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
-      method: 'POST',
-      body: JSON.stringify({
-        customer: {
-          name: 'Commerce Stripe Smoke Buyer',
-          email: 'commerce-stripe-smoke@example.com',
-        },
-        items: [{ slug, quantity: 1 }],
-        shippingAddress: '200 Provider Street, New York, NY',
-        billingAddress: '200 Provider Street, New York, NY',
-        notes: 'Smoke subscription order created through Stripe checkout execution.',
-      }),
-    });
+    const stripePayload = await requestApi(
+      `/api/sites/${SITE_ID}/commerce/orders`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          customer: {
+            name: "Commerce Stripe Smoke Buyer",
+            email: "commerce-stripe-smoke@example.com",
+          },
+          items: [{ slug, quantity: 1 }],
+          shippingAddress: "200 Provider Street, New York, NY",
+          billingAddress: "200 Provider Street, New York, NY",
+          notes:
+            "Smoke subscription order created through Stripe checkout execution.",
+        }),
+      },
+    );
 
     const checkoutSession = stripePayload.data?.checkoutSession;
     const order = stripePayload.data?.order;
-    assert(checkoutSession?.provider === 'stripe', `Stripe checkout did not select Stripe provider: ${JSON.stringify(checkoutSession)}`);
-    assert(checkoutSession.status === 'provider_created', `Stripe checkout was not executed: ${JSON.stringify(checkoutSession)}`);
-    assert(/^cs_mock_/.test(checkoutSession.id), `Stripe checkout did not return provider session id: ${JSON.stringify(checkoutSession)}`);
-    assert(checkoutSession.url === `${STRIPE_MOCK_BASE_URL}/checkout/${checkoutSession.id}`, `Stripe checkout did not expose provider URL: ${JSON.stringify(checkoutSession)}`);
-    assert(checkoutSession.reference === `stripe:${checkoutSession.id}`, `Stripe checkout reference did not use provider session id: ${JSON.stringify(checkoutSession)}`);
-    assert(checkoutSession.amountTotal === 49, `Stripe subscription checkout amount was unexpected: ${JSON.stringify(checkoutSession)}`);
-    assert(checkoutSession.providerPayload?.mode === 'subscription', `Stripe provider payload did not switch to subscription mode: ${JSON.stringify(checkoutSession.providerPayload)}`);
-    assert(checkoutSession.providerPayload?.providerResponse?.id === checkoutSession.id, `Stripe provider response was not exposed safely: ${JSON.stringify(checkoutSession.providerPayload)}`);
+    assert(
+      checkoutSession?.provider === "stripe",
+      `Stripe checkout did not select Stripe provider: ${JSON.stringify(checkoutSession)}`,
+    );
+    assert(
+      checkoutSession.status === "provider_created",
+      `Stripe checkout was not executed: ${JSON.stringify(checkoutSession)}`,
+    );
+    assert(
+      /^cs_mock_/.test(checkoutSession.id),
+      `Stripe checkout did not return provider session id: ${JSON.stringify(checkoutSession)}`,
+    );
+    assert(
+      checkoutSession.url ===
+        `${STRIPE_MOCK_BASE_URL}/checkout/${checkoutSession.id}`,
+      `Stripe checkout did not expose provider URL: ${JSON.stringify(checkoutSession)}`,
+    );
+    assert(
+      checkoutSession.reference === `stripe:${checkoutSession.id}`,
+      `Stripe checkout reference did not use provider session id: ${JSON.stringify(checkoutSession)}`,
+    );
+    assert(
+      checkoutSession.amountTotal === 49,
+      `Stripe subscription checkout amount was unexpected: ${JSON.stringify(checkoutSession)}`,
+    );
+    assert(
+      checkoutSession.providerPayload?.mode === "subscription",
+      `Stripe provider payload did not switch to subscription mode: ${JSON.stringify(checkoutSession.providerPayload)}`,
+    );
+    assert(
+      checkoutSession.providerPayload?.providerResponse?.id ===
+        checkoutSession.id,
+      `Stripe provider response was not exposed safely: ${JSON.stringify(checkoutSession.providerPayload)}`,
+    );
 
     const stripeRequest = stripeCheckoutMock.requests[beforeRequests];
-    assert(stripeRequest?.method === 'POST' && stripeRequest.url === '/v1/checkout/sessions', `Stripe mock did not receive checkout session create: ${JSON.stringify(stripeCheckoutMock.requests)}`);
-    const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
-    assert(stripeRequest.headers.authorization === `Bearer ${expectedSecret}`, `Stripe mock did not receive bearer auth: ${JSON.stringify(stripeRequest.headers)}`);
-    assert(stripeRequest.form.mode === 'subscription', `Stripe checkout form did not request subscription mode: ${JSON.stringify(stripeRequest.form)}`);
-    assert(stripeRequest.form.client_reference_id === checkoutSession.metadata.orderNumber, `Stripe checkout form did not include order reference: ${JSON.stringify(stripeRequest.form)}`);
-    assert(stripeRequest.form['metadata[siteId]'] === SITE_ID, `Stripe checkout form did not include site metadata: ${JSON.stringify(stripeRequest.form)}`);
-    assert(stripeRequest.form['metadata[orderSlug]'] === checkoutSession.metadata.orderSlug, `Stripe checkout form did not include order slug metadata: ${JSON.stringify(stripeRequest.form)}`);
-    assert(stripeRequest.form.success_url?.includes('{CHECKOUT_SESSION_ID}'), `Stripe checkout success URL did not include provider session placeholder: ${JSON.stringify(stripeRequest.form)}`);
-    assert(stripeRequest.form['line_items[0][price_data][recurring][interval]'] === 'month', `Stripe checkout did not send monthly recurring price data: ${JSON.stringify(stripeRequest.form)}`);
-    assert(stripeRequest.form['subscription_data[trial_period_days]'] === '14', `Stripe checkout did not send the product trial days: ${JSON.stringify(stripeRequest.form)}`);
-    assert(Number(stripeRequest.form['line_items[0][price_data][unit_amount]']) === Math.round(checkoutSession.amountTotal * 100), `Stripe checkout amount did not match subscription price: ${JSON.stringify({ form: stripeRequest.form, checkoutSession })}`);
-    assert(stripeRequest.form['metadata[amountTotal]'] === String(checkoutSession.amountTotal), `Stripe checkout metadata did not include quote total: ${JSON.stringify(stripeRequest.form)}`);
+    assert(
+      stripeRequest?.method === "POST" &&
+        stripeRequest.url === "/v1/checkout/sessions",
+      `Stripe mock did not receive checkout session create: ${JSON.stringify(stripeCheckoutMock.requests)}`,
+    );
+    const expectedSecret =
+      process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+    assert(
+      stripeRequest.headers.authorization === `Bearer ${expectedSecret}`,
+      `Stripe mock did not receive bearer auth: ${JSON.stringify(stripeRequest.headers)}`,
+    );
+    assert(
+      stripeRequest.form.mode === "subscription",
+      `Stripe checkout form did not request subscription mode: ${JSON.stringify(stripeRequest.form)}`,
+    );
+    assert(
+      stripeRequest.form.client_reference_id ===
+        checkoutSession.metadata.orderNumber,
+      `Stripe checkout form did not include order reference: ${JSON.stringify(stripeRequest.form)}`,
+    );
+    assert(
+      stripeRequest.form["metadata[siteId]"] === SITE_ID,
+      `Stripe checkout form did not include site metadata: ${JSON.stringify(stripeRequest.form)}`,
+    );
+    assert(
+      stripeRequest.form["metadata[orderSlug]"] ===
+        checkoutSession.metadata.orderSlug,
+      `Stripe checkout form did not include order slug metadata: ${JSON.stringify(stripeRequest.form)}`,
+    );
+    assert(
+      stripeRequest.form.success_url?.includes("{CHECKOUT_SESSION_ID}"),
+      `Stripe checkout success URL did not include provider session placeholder: ${JSON.stringify(stripeRequest.form)}`,
+    );
+    assert(
+      stripeRequest.form["line_items[0][price_data][recurring][interval]"] ===
+        "month",
+      `Stripe checkout did not send monthly recurring price data: ${JSON.stringify(stripeRequest.form)}`,
+    );
+    assert(
+      stripeRequest.form["subscription_data[trial_period_days]"] === "14",
+      `Stripe checkout did not send the product trial days: ${JSON.stringify(stripeRequest.form)}`,
+    );
+    assert(
+      Number(stripeRequest.form["line_items[0][price_data][unit_amount]"]) ===
+        Math.round(checkoutSession.amountTotal * 100),
+      `Stripe checkout amount did not match subscription price: ${JSON.stringify({ form: stripeRequest.form, checkoutSession })}`,
+    );
+    assert(
+      stripeRequest.form["metadata[amountTotal]"] ===
+        String(checkoutSession.amountTotal),
+      `Stripe checkout metadata did not include quote total: ${JSON.stringify(stripeRequest.form)}`,
+    );
 
-    let orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.checkoutsessionid === checkoutSession.id, `Stripe checkout session id was not persisted: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.paymentprovider === 'stripe', `Stripe payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.paymentreference === `stripe:${checkoutSession.id}`, `Stripe payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`);
+    let orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.checkoutsessionid === checkoutSession.id,
+      `Stripe checkout session id was not persisted: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.paymentprovider === "stripe",
+      `Stripe payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `stripe:${checkoutSession.id}`,
+      `Stripe payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const subscriptionWebhookPayload = await postCommerceWebhook({
-      id: `evt_sub_${slug}`,
-      type: 'checkout.session.completed',
-      data: {
-        object: {
-          id: checkoutSession.id,
-          subscription: `sub_${slug}`,
-          amount_total: Math.round(checkoutSession.amountTotal * 100),
-          currency: checkoutSession.currency.toLowerCase(),
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
+    const subscriptionWebhookPayload = await postCommerceWebhook(
+      {
+        id: `evt_sub_${slug}`,
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: checkoutSession.id,
+            subscription: `sub_${slug}`,
+            amount_total: Math.round(checkoutSession.amountTotal * 100),
+            currency: checkoutSession.currency.toLowerCase(),
+            metadata: {
+              orderNumber: order.orderNumber,
+              orderSlug: order.slug,
+            },
           },
         },
       },
-    }, { 'x-request-id': `commerce-subscription-webhook-${slug}` });
-    assert(subscriptionWebhookPayload.data?.event?.status === 'paid', `Stripe subscription webhook did not mark payment paid: ${JSON.stringify(subscriptionWebhookPayload)}`);
-    assert(subscriptionWebhookPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription webhook did not return the subscription reference: ${JSON.stringify(subscriptionWebhookPayload)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription webhook did not persist paid status: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription webhook did not persist subscription reference: ${JSON.stringify(orderRecord.values)}`);
-    assert(String(orderRecord.values?.notes || '').includes('checkout.session.completed'), `Stripe subscription webhook settlement note missing: ${JSON.stringify(orderRecord.values)}`);
+      { "x-request-id": `commerce-subscription-webhook-${slug}` },
+    );
+    assert(
+      subscriptionWebhookPayload.data?.event?.status === "paid",
+      `Stripe subscription webhook did not mark payment paid: ${JSON.stringify(subscriptionWebhookPayload)}`,
+    );
+    assert(
+      subscriptionWebhookPayload.data?.order?.paymentReference ===
+        `sub_${slug}`,
+      `Stripe subscription webhook did not return the subscription reference: ${JSON.stringify(subscriptionWebhookPayload)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.paymentstatus === "paid",
+      `Stripe subscription webhook did not persist paid status: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `sub_${slug}`,
+      `Stripe subscription webhook did not persist subscription reference: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "checkout.session.completed",
+      ),
+      `Stripe subscription webhook settlement note missing: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const renewalInvoicePayload = await postCommerceWebhook({
-      id: `evt_invoice_${slug}`,
-      type: 'invoice.payment_succeeded',
-      data: {
-        object: {
-          id: `in_${slug}`,
-          object: 'invoice',
-          subscription: `sub_${slug}`,
-          payment_intent: `pi_invoice_${slug}`,
-          amount_paid: Math.round(checkoutSession.amountTotal * 100),
-          currency: checkoutSession.currency.toLowerCase(),
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
+    const renewalInvoicePayload = await postCommerceWebhook(
+      {
+        id: `evt_invoice_${slug}`,
+        type: "invoice.payment_succeeded",
+        data: {
+          object: {
+            id: `in_${slug}`,
+            object: "invoice",
+            subscription: `sub_${slug}`,
+            payment_intent: `pi_invoice_${slug}`,
+            amount_paid: Math.round(checkoutSession.amountTotal * 100),
+            currency: checkoutSession.currency.toLowerCase(),
+            metadata: {
+              orderNumber: order.orderNumber,
+              orderSlug: order.slug,
+            },
           },
         },
       },
-    }, { 'x-request-id': `commerce-subscription-invoice-${slug}` });
-    assert(renewalInvoicePayload.data?.event?.status === 'paid', `Stripe subscription renewal invoice did not mark payment paid: ${JSON.stringify(renewalInvoicePayload)}`);
-    assert(renewalInvoicePayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription renewal invoice should keep the subscription reference: ${JSON.stringify(renewalInvoicePayload)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription renewal invoice changed paid status unexpectedly: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription renewal invoice did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
-    assert(String(orderRecord.values?.notes || '').includes('invoice.payment_succeeded'), `Stripe subscription renewal invoice settlement note missing: ${JSON.stringify(orderRecord.values)}`);
+      { "x-request-id": `commerce-subscription-invoice-${slug}` },
+    );
+    assert(
+      renewalInvoicePayload.data?.event?.status === "paid",
+      `Stripe subscription renewal invoice did not mark payment paid: ${JSON.stringify(renewalInvoicePayload)}`,
+    );
+    assert(
+      renewalInvoicePayload.data?.order?.paymentReference === `sub_${slug}`,
+      `Stripe subscription renewal invoice should keep the subscription reference: ${JSON.stringify(renewalInvoicePayload)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.paymentstatus === "paid",
+      `Stripe subscription renewal invoice changed paid status unexpectedly: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `sub_${slug}`,
+      `Stripe subscription renewal invoice did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "invoice.payment_succeeded",
+      ),
+      `Stripe subscription renewal invoice settlement note missing: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const dunningPayload = await postCommerceWebhook({
-      id: `evt_subscription_past_due_${slug}`,
-      type: 'customer.subscription.updated',
-      data: {
-        object: {
-          id: `sub_${slug}`,
-          object: 'subscription',
-          status: 'past_due',
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
+    const dunningPayload = await postCommerceWebhook(
+      {
+        id: `evt_subscription_past_due_${slug}`,
+        type: "customer.subscription.updated",
+        data: {
+          object: {
+            id: `sub_${slug}`,
+            object: "subscription",
+            status: "past_due",
+            metadata: {
+              orderNumber: order.orderNumber,
+              orderSlug: order.slug,
+            },
           },
         },
       },
-    }, { 'x-request-id': `commerce-subscription-dunning-${slug}` });
-    assert(dunningPayload.data?.event?.status === 'failed', `Stripe subscription dunning webhook did not mark payment failed: ${JSON.stringify(dunningPayload)}`);
-    assert(dunningPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription dunning webhook should keep the subscription reference: ${JSON.stringify(dunningPayload)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.paymentstatus === 'failed', `Stripe subscription dunning webhook did not persist failed payment state: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription dunning webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
-    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.updated'), `Stripe subscription dunning settlement note missing: ${JSON.stringify(orderRecord.values)}`);
+      { "x-request-id": `commerce-subscription-dunning-${slug}` },
+    );
+    assert(
+      dunningPayload.data?.event?.status === "failed",
+      `Stripe subscription dunning webhook did not mark payment failed: ${JSON.stringify(dunningPayload)}`,
+    );
+    assert(
+      dunningPayload.data?.order?.paymentReference === `sub_${slug}`,
+      `Stripe subscription dunning webhook should keep the subscription reference: ${JSON.stringify(dunningPayload)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.paymentstatus === "failed",
+      `Stripe subscription dunning webhook did not persist failed payment state: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `sub_${slug}`,
+      `Stripe subscription dunning webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "customer.subscription.updated",
+      ),
+      `Stripe subscription dunning settlement note missing: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const pausedPayload = await postCommerceWebhook({
-      id: `evt_subscription_paused_${slug}`,
-      type: 'customer.subscription.paused',
-      data: {
-        object: {
-          id: `sub_${slug}`,
-          object: 'subscription',
-          status: 'paused',
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
+    const pausedPayload = await postCommerceWebhook(
+      {
+        id: `evt_subscription_paused_${slug}`,
+        type: "customer.subscription.paused",
+        data: {
+          object: {
+            id: `sub_${slug}`,
+            object: "subscription",
+            status: "paused",
+            metadata: {
+              orderNumber: order.orderNumber,
+              orderSlug: order.slug,
+            },
           },
         },
       },
-    }, { 'x-request-id': `commerce-subscription-paused-${slug}` });
-    assert(pausedPayload.data?.event?.status === 'paused', `Stripe subscription pause webhook did not record paused lifecycle state: ${JSON.stringify(pausedPayload)}`);
-    assert(pausedPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription pause webhook should keep the subscription reference: ${JSON.stringify(pausedPayload)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription pause webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
-    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.paused'), `Stripe subscription pause lifecycle note missing: ${JSON.stringify(orderRecord.values)}`);
+      { "x-request-id": `commerce-subscription-paused-${slug}` },
+    );
+    assert(
+      pausedPayload.data?.event?.status === "paused",
+      `Stripe subscription pause webhook did not record paused lifecycle state: ${JSON.stringify(pausedPayload)}`,
+    );
+    assert(
+      pausedPayload.data?.order?.paymentReference === `sub_${slug}`,
+      `Stripe subscription pause webhook should keep the subscription reference: ${JSON.stringify(pausedPayload)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `sub_${slug}`,
+      `Stripe subscription pause webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "customer.subscription.paused",
+      ),
+      `Stripe subscription pause lifecycle note missing: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const resumedPayload = await postCommerceWebhook({
-      id: `evt_subscription_resumed_${slug}`,
-      type: 'customer.subscription.resumed',
-      data: {
-        object: {
-          id: `sub_${slug}`,
-          object: 'subscription',
-          status: 'active',
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
+    const resumedPayload = await postCommerceWebhook(
+      {
+        id: `evt_subscription_resumed_${slug}`,
+        type: "customer.subscription.resumed",
+        data: {
+          object: {
+            id: `sub_${slug}`,
+            object: "subscription",
+            status: "active",
+            metadata: {
+              orderNumber: order.orderNumber,
+              orderSlug: order.slug,
+            },
           },
         },
       },
-    }, { 'x-request-id': `commerce-subscription-resumed-${slug}` });
-    assert(resumedPayload.data?.event?.status === 'resumed', `Stripe subscription resume webhook did not record resumed lifecycle state: ${JSON.stringify(resumedPayload)}`);
-    assert(resumedPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription resume webhook should keep the subscription reference: ${JSON.stringify(resumedPayload)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription resume webhook did not restore paid payment state: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription resume webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
-    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.resumed'), `Stripe subscription resume lifecycle note missing: ${JSON.stringify(orderRecord.values)}`);
+      { "x-request-id": `commerce-subscription-resumed-${slug}` },
+    );
+    assert(
+      resumedPayload.data?.event?.status === "resumed",
+      `Stripe subscription resume webhook did not record resumed lifecycle state: ${JSON.stringify(resumedPayload)}`,
+    );
+    assert(
+      resumedPayload.data?.order?.paymentReference === `sub_${slug}`,
+      `Stripe subscription resume webhook should keep the subscription reference: ${JSON.stringify(resumedPayload)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.paymentstatus === "paid",
+      `Stripe subscription resume webhook did not restore paid payment state: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `sub_${slug}`,
+      `Stripe subscription resume webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "customer.subscription.resumed",
+      ),
+      `Stripe subscription resume lifecycle note missing: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const trialEndingPayload = await postCommerceWebhook({
-      id: `evt_subscription_trial_end_${slug}`,
-      type: 'customer.subscription.trial_will_end',
-      data: {
-        object: {
-          id: `sub_${slug}`,
-          object: 'subscription',
-          status: 'trialing',
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
+    const trialEndingPayload = await postCommerceWebhook(
+      {
+        id: `evt_subscription_trial_end_${slug}`,
+        type: "customer.subscription.trial_will_end",
+        data: {
+          object: {
+            id: `sub_${slug}`,
+            object: "subscription",
+            status: "trialing",
+            metadata: {
+              orderNumber: order.orderNumber,
+              orderSlug: order.slug,
+            },
           },
         },
       },
-    }, { 'x-request-id': `commerce-subscription-trial-ending-${slug}` });
-    assert(trialEndingPayload.data?.event?.status === 'trial_will_end', `Stripe subscription trial-ending webhook did not record trial lifecycle state: ${JSON.stringify(trialEndingPayload)}`);
-    assert(trialEndingPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription trial-ending webhook should keep the subscription reference: ${JSON.stringify(trialEndingPayload)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription trial-ending webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
-    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.trial_will_end'), `Stripe subscription trial-ending lifecycle note missing: ${JSON.stringify(orderRecord.values)}`);
+      { "x-request-id": `commerce-subscription-trial-ending-${slug}` },
+    );
+    assert(
+      trialEndingPayload.data?.event?.status === "trial_will_end",
+      `Stripe subscription trial-ending webhook did not record trial lifecycle state: ${JSON.stringify(trialEndingPayload)}`,
+    );
+    assert(
+      trialEndingPayload.data?.order?.paymentReference === `sub_${slug}`,
+      `Stripe subscription trial-ending webhook should keep the subscription reference: ${JSON.stringify(trialEndingPayload)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `sub_${slug}`,
+      `Stripe subscription trial-ending webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "customer.subscription.trial_will_end",
+      ),
+      `Stripe subscription trial-ending lifecycle note missing: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const cancellationPayload = await postCommerceWebhook({
-      id: `evt_subscription_deleted_${slug}`,
-      type: 'customer.subscription.deleted',
-      data: {
-        object: {
-          id: `sub_${slug}`,
-          object: 'subscription',
-          status: 'canceled',
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
+    const cancellationPayload = await postCommerceWebhook(
+      {
+        id: `evt_subscription_deleted_${slug}`,
+        type: "customer.subscription.deleted",
+        data: {
+          object: {
+            id: `sub_${slug}`,
+            object: "subscription",
+            status: "canceled",
+            metadata: {
+              orderNumber: order.orderNumber,
+              orderSlug: order.slug,
+            },
           },
         },
       },
-    }, { 'x-request-id': `commerce-subscription-cancelled-${slug}` });
-    assert(cancellationPayload.data?.event?.status === 'cancelled', `Stripe subscription cancellation webhook did not cancel the order: ${JSON.stringify(cancellationPayload)}`);
-    assert(cancellationPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription cancellation webhook should keep the subscription reference: ${JSON.stringify(cancellationPayload)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(orderRecord.values?.orderstatus === 'cancelled', `Stripe subscription cancellation webhook did not persist cancelled order state: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.fulfillmentstatus === 'cancelled', `Stripe subscription cancellation webhook did not cancel fulfillment: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription cancellation webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
-    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.deleted'), `Stripe subscription cancellation settlement note missing: ${JSON.stringify(orderRecord.values)}`);
+      { "x-request-id": `commerce-subscription-cancelled-${slug}` },
+    );
+    assert(
+      cancellationPayload.data?.event?.status === "cancelled",
+      `Stripe subscription cancellation webhook did not cancel the order: ${JSON.stringify(cancellationPayload)}`,
+    );
+    assert(
+      cancellationPayload.data?.order?.paymentReference === `sub_${slug}`,
+      `Stripe subscription cancellation webhook should keep the subscription reference: ${JSON.stringify(cancellationPayload)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      orderRecord.values?.orderstatus === "cancelled",
+      `Stripe subscription cancellation webhook did not persist cancelled order state: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.fulfillmentstatus === "cancelled",
+      `Stripe subscription cancellation webhook did not cancel fulfillment: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values?.paymentreference === `sub_${slug}`,
+      `Stripe subscription cancellation webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "customer.subscription.deleted",
+      ),
+      `Stripe subscription cancellation settlement note missing: ${JSON.stringify(orderRecord.values)}`,
+    );
 
-    const subscriptionAnalyticsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/analytics`);
+    const subscriptionAnalyticsPayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/orders/analytics`,
+    );
     const subscriptionAnalytics = subscriptionAnalyticsPayload.data?.analytics;
-    assert(subscriptionAnalytics?.operations?.subscriptionOrderCount >= 1, `Order analytics did not count subscription orders: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
-    assert(subscriptionAnalytics.operations.subscriptionRenewalCount >= 1, `Order analytics did not count subscription renewals: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
-    assert(subscriptionAnalytics.operations.subscriptionDunningCount >= 1, `Order analytics did not count subscription dunning attention: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
-    assert(subscriptionAnalytics.operations.subscriptionPausedCount >= 1, `Order analytics did not count subscription pauses: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
-    assert(subscriptionAnalytics.operations.subscriptionResumedCount >= 1, `Order analytics did not count subscription resumes: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
-    assert(subscriptionAnalytics.operations.subscriptionTrialEndingCount >= 1, `Order analytics did not count subscription trial-ending notices: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
-    assert(subscriptionAnalytics.operations.subscriptionCancelledCount >= 1, `Order analytics did not count subscription cancellations: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+    assert(
+      subscriptionAnalytics?.operations?.subscriptionOrderCount >= 1,
+      `Order analytics did not count subscription orders: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`,
+    );
+    assert(
+      subscriptionAnalytics.operations.subscriptionRenewalCount >= 1,
+      `Order analytics did not count subscription renewals: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`,
+    );
+    assert(
+      subscriptionAnalytics.operations.subscriptionDunningCount >= 1,
+      `Order analytics did not count subscription dunning attention: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`,
+    );
+    assert(
+      subscriptionAnalytics.operations.subscriptionPausedCount >= 1,
+      `Order analytics did not count subscription pauses: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`,
+    );
+    assert(
+      subscriptionAnalytics.operations.subscriptionResumedCount >= 1,
+      `Order analytics did not count subscription resumes: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`,
+    );
+    assert(
+      subscriptionAnalytics.operations.subscriptionTrialEndingCount >= 1,
+      `Order analytics did not count subscription trial-ending notices: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`,
+    );
+    assert(
+      subscriptionAnalytics.operations.subscriptionCancelledCount >= 1,
+      `Order analytics did not count subscription cancellations: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`,
+    );
 
-    const lifecyclePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions`);
-    const lifecycle = lifecyclePayload.data?.lifecycle || lifecyclePayload.lifecycle;
-    assert(lifecycle?.schemaVersion === 'backy.product-subscription-lifecycle.v1', `Product subscription lifecycle schema was unexpected: ${JSON.stringify(lifecyclePayload).slice(0, 500)}`);
-    assert(lifecycle.product?.id === productRecord.id, `Product subscription lifecycle targeted the wrong product: ${JSON.stringify(lifecycle?.product)}`);
-    assert(lifecycle.summary?.total >= 1, `Product subscription lifecycle did not count subscription orders: ${JSON.stringify(lifecycle?.summary)}`);
-    assert(lifecycle.summary?.cancelled >= 1, `Product subscription lifecycle did not count cancellation settlement: ${JSON.stringify(lifecycle?.summary)}`);
-    assert(lifecycle.subscriptions?.some((entry) => entry.subscriptionReference === `sub_${slug}`), `Product subscription lifecycle did not expose the subscription reference: ${JSON.stringify(lifecycle?.subscriptions)}`);
-    const stripeLifecycleEntry = lifecycle.subscriptions?.find((entry) => entry.subscriptionReference === `sub_${slug}`);
-    assert(stripeLifecycleEntry?.paymentProvider === 'stripe', `Product subscription lifecycle did not expose payment provider readiness: ${JSON.stringify(stripeLifecycleEntry)}`);
-    assert(stripeLifecycleEntry?.actionExecutionMode === 'stripe-api', `Product subscription lifecycle did not expose Stripe execution readiness: ${JSON.stringify(stripeLifecycleEntry)}`);
-    assert(lifecycle.execution?.schemaVersion === 'backy.product-subscription-execution-readiness.v1', `Product subscription execution readiness schema was unexpected: ${JSON.stringify(lifecycle?.execution)}`);
-    assert(lifecycle.execution?.summary?.executableSubscriptions >= 1, `Product subscription execution readiness did not count executable subscriptions: ${JSON.stringify(lifecycle?.execution)}`);
-    assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'stripe' && provider.configured === true && provider.executionMode === 'stripe-api'), `Product subscription execution readiness omitted Stripe provider state: ${JSON.stringify(lifecycle?.execution)}`);
+    const lifecyclePayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions`,
+    );
+    const lifecycle =
+      lifecyclePayload.data?.lifecycle || lifecyclePayload.lifecycle;
+    assert(
+      lifecycle?.schemaVersion === "backy.product-subscription-lifecycle.v1",
+      `Product subscription lifecycle schema was unexpected: ${JSON.stringify(lifecyclePayload).slice(0, 500)}`,
+    );
+    assert(
+      lifecycle.product?.id === productRecord.id,
+      `Product subscription lifecycle targeted the wrong product: ${JSON.stringify(lifecycle?.product)}`,
+    );
+    assert(
+      lifecycle.summary?.total >= 1,
+      `Product subscription lifecycle did not count subscription orders: ${JSON.stringify(lifecycle?.summary)}`,
+    );
+    assert(
+      lifecycle.summary?.cancelled >= 1,
+      `Product subscription lifecycle did not count cancellation settlement: ${JSON.stringify(lifecycle?.summary)}`,
+    );
+    assert(
+      lifecycle.subscriptions?.some(
+        (entry) => entry.subscriptionReference === `sub_${slug}`,
+      ),
+      `Product subscription lifecycle did not expose the subscription reference: ${JSON.stringify(lifecycle?.subscriptions)}`,
+    );
+    const stripeLifecycleEntry = lifecycle.subscriptions?.find(
+      (entry) => entry.subscriptionReference === `sub_${slug}`,
+    );
+    assert(
+      stripeLifecycleEntry?.paymentProvider === "stripe",
+      `Product subscription lifecycle did not expose payment provider readiness: ${JSON.stringify(stripeLifecycleEntry)}`,
+    );
+    assert(
+      stripeLifecycleEntry?.actionExecutionMode === "stripe-api",
+      `Product subscription lifecycle did not expose Stripe execution readiness: ${JSON.stringify(stripeLifecycleEntry)}`,
+    );
+    assert(
+      lifecycle.execution?.schemaVersion ===
+        "backy.product-subscription-execution-readiness.v1",
+      `Product subscription execution readiness schema was unexpected: ${JSON.stringify(lifecycle?.execution)}`,
+    );
+    assert(
+      lifecycle.execution?.summary?.executableSubscriptions >= 1,
+      `Product subscription execution readiness did not count executable subscriptions: ${JSON.stringify(lifecycle?.execution)}`,
+    );
+    assert(
+      lifecycle.execution?.providers?.some(
+        (provider) =>
+          provider.provider === "stripe" &&
+          provider.configured === true &&
+          provider.executionMode === "stripe-api",
+      ),
+      `Product subscription execution readiness omitted Stripe provider state: ${JSON.stringify(lifecycle?.execution)}`,
+    );
     if (paypalSubscriptionExecutionEnabled()) {
-      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'paypal' && provider.configured === true && provider.executionMode === 'paypal-api'), `Product subscription execution readiness omitted PayPal provider state: ${JSON.stringify(lifecycle?.execution)}`);
+      assert(
+        lifecycle.execution?.providers?.some(
+          (provider) =>
+            provider.provider === "paypal" &&
+            provider.configured === true &&
+            provider.executionMode === "paypal-api",
+        ),
+        `Product subscription execution readiness omitted PayPal provider state: ${JSON.stringify(lifecycle?.execution)}`,
+      );
     }
     if (paddleSubscriptionExecutionEnabled()) {
-      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'paddle' && provider.configured === true && provider.executionMode === 'paddle-api'), `Product subscription execution readiness omitted Paddle provider state: ${JSON.stringify(lifecycle?.execution)}`);
+      assert(
+        lifecycle.execution?.providers?.some(
+          (provider) =>
+            provider.provider === "paddle" &&
+            provider.configured === true &&
+            provider.executionMode === "paddle-api",
+        ),
+        `Product subscription execution readiness omitted Paddle provider state: ${JSON.stringify(lifecycle?.execution)}`,
+      );
     }
     if (squareSubscriptionExecutionEnabled()) {
-      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'square' && provider.configured === true && provider.executionMode === 'square-api'), `Product subscription execution readiness omitted Square provider state: ${JSON.stringify(lifecycle?.execution)}`);
+      assert(
+        lifecycle.execution?.providers?.some(
+          (provider) =>
+            provider.provider === "square" &&
+            provider.configured === true &&
+            provider.executionMode === "square-api",
+        ),
+        `Product subscription execution readiness omitted Square provider state: ${JSON.stringify(lifecycle?.execution)}`,
+      );
+    }
+    if (adyenSubscriptionExecutionEnabled()) {
+      assert(
+        lifecycle.execution?.providers?.some(
+          (provider) =>
+            provider.provider === "adyen" &&
+            provider.configured === true &&
+            provider.executionMode === "adyen-api",
+        ),
+        `Product subscription execution readiness omitted Adyen provider state: ${JSON.stringify(lifecycle?.execution)}`,
+      );
+    }
+    if (mollieSubscriptionExecutionEnabled()) {
+      assert(
+        lifecycle.execution?.providers?.some(
+          (provider) =>
+            provider.provider === "mollie" &&
+            provider.configured === true &&
+            provider.executionMode === "mollie-api",
+        ),
+        `Product subscription execution readiness omitted Mollie provider state: ${JSON.stringify(lifecycle?.execution)}`,
+      );
     }
     if (httpSubscriptionExecutionEnabled()) {
-      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'http' && provider.configured === true && provider.executionMode === 'http-api'), `Product subscription execution readiness omitted HTTP provider state: ${JSON.stringify(lifecycle?.execution)}`);
+      assert(
+        lifecycle.execution?.providers?.some(
+          (provider) =>
+            provider.provider === "http" &&
+            provider.configured === true &&
+            provider.executionMode === "http-api",
+        ),
+        `Product subscription execution readiness omitted HTTP provider state: ${JSON.stringify(lifecycle?.execution)}`,
+      );
     }
-    assert(lifecycle.contract?.webhookApi?.includes('/commerce/webhook'), `Product subscription lifecycle contract omitted webhook API: ${JSON.stringify(lifecycle?.contract)}`);
+    assert(
+      lifecycle.contract?.webhookApi?.includes("/commerce/webhook"),
+      `Product subscription lifecycle contract omitted webhook API: ${JSON.stringify(lifecycle?.contract)}`,
+    );
 
     const beforeActionRequests = stripeCheckoutMock.requests.length;
-    const actionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'cancel',
-        reason: 'Smoke provider subscription cancellation action.',
-      }),
-    });
-    const subscriptionAction = actionPayload.data?.action || actionPayload.action;
-    assert(subscriptionAction?.schemaVersion === 'backy.product-subscription-action.v1', `Subscription action schema was unexpected: ${JSON.stringify(actionPayload).slice(0, 500)}`);
-    assert(subscriptionAction.status === 'succeeded', `Subscription action did not execute against Stripe mock: ${JSON.stringify(subscriptionAction)}`);
-    assert(subscriptionAction.executionMode === 'stripe-api', `Subscription action did not use Stripe execution: ${JSON.stringify(subscriptionAction)}`);
-    assert(subscriptionAction.subscriptionReference === `sub_${slug}`, `Subscription action used the wrong subscription reference: ${JSON.stringify(subscriptionAction)}`);
-    const actionRequest = stripeCheckoutMock.requests.slice(beforeActionRequests).find((request) => request.method === 'DELETE' && request.url === `/v1/subscriptions/sub_${slug}`);
-    assert(actionRequest, `Stripe mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeActionRequests))}`);
-    assert(actionRequest.headers.authorization === `Bearer ${expectedSecret}`, `Stripe subscription action did not send bearer auth: ${JSON.stringify(actionRequest.headers)}`);
-    assert(actionRequest.form['metadata[backy_subscription_action]'] === 'cancel', `Stripe subscription action omitted action metadata: ${JSON.stringify(actionRequest.form)}`);
-    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
-    assert(String(orderRecord.values?.notes || '').includes('Subscription action executed succeeded'), `Subscription action note was not persisted: ${JSON.stringify(orderRecord.values)}`);
-    assert(Array.isArray(orderRecord.values?.subscriptionactionhistory), `Subscription action history was not persisted: ${JSON.stringify(orderRecord.values)}`);
-    assert(orderRecord.values.subscriptionactionhistory[0]?.id === subscriptionAction.id, `Subscription action history did not store the latest action id: ${JSON.stringify(orderRecord.values.subscriptionactionhistory)}`);
-    assert(orderRecord.values.subscriptionactionhistory[0]?.executionMode === 'stripe-api', `Subscription action history did not store execution mode: ${JSON.stringify(orderRecord.values.subscriptionactionhistory)}`);
+    const actionPayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "cancel",
+          reason: "Smoke provider subscription cancellation action.",
+        }),
+      },
+    );
+    const subscriptionAction =
+      actionPayload.data?.action || actionPayload.action;
+    assert(
+      subscriptionAction?.schemaVersion ===
+        "backy.product-subscription-action.v1",
+      `Subscription action schema was unexpected: ${JSON.stringify(actionPayload).slice(0, 500)}`,
+    );
+    assert(
+      subscriptionAction.status === "succeeded",
+      `Subscription action did not execute against Stripe mock: ${JSON.stringify(subscriptionAction)}`,
+    );
+    assert(
+      subscriptionAction.executionMode === "stripe-api",
+      `Subscription action did not use Stripe execution: ${JSON.stringify(subscriptionAction)}`,
+    );
+    assert(
+      subscriptionAction.subscriptionReference === `sub_${slug}`,
+      `Subscription action used the wrong subscription reference: ${JSON.stringify(subscriptionAction)}`,
+    );
+    const actionRequest = stripeCheckoutMock.requests
+      .slice(beforeActionRequests)
+      .find(
+        (request) =>
+          request.method === "DELETE" &&
+          request.url === `/v1/subscriptions/sub_${slug}`,
+      );
+    assert(
+      actionRequest,
+      `Stripe mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeActionRequests))}`,
+    );
+    assert(
+      actionRequest.headers.authorization === `Bearer ${expectedSecret}`,
+      `Stripe subscription action did not send bearer auth: ${JSON.stringify(actionRequest.headers)}`,
+    );
+    assert(
+      actionRequest.form["metadata[backy_subscription_action]"] === "cancel",
+      `Stripe subscription action omitted action metadata: ${JSON.stringify(actionRequest.form)}`,
+    );
+    orderRecord = await getCollectionRecordBySlug(
+      ordersCollection.id,
+      order.slug,
+    );
+    assert(
+      String(orderRecord.values?.notes || "").includes(
+        "Subscription action executed succeeded",
+      ),
+      `Subscription action note was not persisted: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      Array.isArray(orderRecord.values?.subscriptionactionhistory),
+      `Subscription action history was not persisted: ${JSON.stringify(orderRecord.values)}`,
+    );
+    assert(
+      orderRecord.values.subscriptionactionhistory[0]?.id ===
+        subscriptionAction.id,
+      `Subscription action history did not store the latest action id: ${JSON.stringify(orderRecord.values.subscriptionactionhistory)}`,
+    );
+    assert(
+      orderRecord.values.subscriptionactionhistory[0]?.executionMode ===
+        "stripe-api",
+      `Subscription action history did not store execution mode: ${JSON.stringify(orderRecord.values.subscriptionactionhistory)}`,
+    );
 
-    const lifecycleAfterActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions`);
-    const lifecycleAfterAction = lifecycleAfterActionPayload.data?.lifecycle || lifecycleAfterActionPayload.lifecycle;
-    const lifecycleActionEntry = lifecycleAfterAction?.subscriptions?.find((entry) => entry.subscriptionReference === `sub_${slug}`);
-    assert(lifecycleActionEntry?.lastAction?.id === subscriptionAction.id, `Product lifecycle did not expose last subscription action: ${JSON.stringify(lifecycleActionEntry)}`);
-    assert(lifecycleActionEntry?.actionHistory?.[0]?.executionMode === 'stripe-api', `Product lifecycle did not expose subscription action history: ${JSON.stringify(lifecycleActionEntry)}`);
+    const lifecycleAfterActionPayload = await requestApi(
+      `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions`,
+    );
+    const lifecycleAfterAction =
+      lifecycleAfterActionPayload.data?.lifecycle ||
+      lifecycleAfterActionPayload.lifecycle;
+    const lifecycleActionEntry = lifecycleAfterAction?.subscriptions?.find(
+      (entry) => entry.subscriptionReference === `sub_${slug}`,
+    );
+    assert(
+      lifecycleActionEntry?.lastAction?.id === subscriptionAction.id,
+      `Product lifecycle did not expose last subscription action: ${JSON.stringify(lifecycleActionEntry)}`,
+    );
+    assert(
+      lifecycleActionEntry?.actionHistory?.[0]?.executionMode === "stripe-api",
+      `Product lifecycle did not expose subscription action history: ${JSON.stringify(lifecycleActionEntry)}`,
+    );
 
     if (paypalSubscriptionExecutionEnabled()) {
       const beforePayPalActionRequests = stripeCheckoutMock.requests.length;
-      const paypalActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'cancel',
-          provider: 'paypal',
-          subscriptionReference: `I-${slug}`,
-          reason: 'Smoke PayPal subscription cancellation action.',
-        }),
-      });
-      const paypalSubscriptionAction = paypalActionPayload.data?.action || paypalActionPayload.action;
-      assert(paypalSubscriptionAction?.status === 'succeeded', `PayPal subscription action did not execute against mock: ${JSON.stringify(paypalActionPayload).slice(0, 500)}`);
-      assert(paypalSubscriptionAction.executionMode === 'paypal-api', `PayPal subscription action did not use PayPal execution: ${JSON.stringify(paypalSubscriptionAction)}`);
-      assert(paypalSubscriptionAction.subscriptionReference === `I-${slug}`, `PayPal subscription action used the wrong subscription reference: ${JSON.stringify(paypalSubscriptionAction)}`);
-      const paypalActionRequest = stripeCheckoutMock.requests.slice(beforePayPalActionRequests).find((request) => request.method === 'POST' && request.url === `/v1/billing/subscriptions/I-${slug}/cancel`);
-      assert(paypalActionRequest, `PayPal mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePayPalActionRequests))}`);
-      assert(paypalActionRequest.headers.authorization === 'Bearer paypal_smoke_access_token', `PayPal subscription action did not send bearer auth: ${JSON.stringify(paypalActionRequest.headers)}`);
-      assert(paypalActionRequest.headers['paypal-request-id'], `PayPal subscription action did not send idempotency header: ${JSON.stringify(paypalActionRequest.headers)}`);
+      const paypalActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "cancel",
+            provider: "paypal",
+            subscriptionReference: `I-${slug}`,
+            reason: "Smoke PayPal subscription cancellation action.",
+          }),
+        },
+      );
+      const paypalSubscriptionAction =
+        paypalActionPayload.data?.action || paypalActionPayload.action;
+      assert(
+        paypalSubscriptionAction?.status === "succeeded",
+        `PayPal subscription action did not execute against mock: ${JSON.stringify(paypalActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        paypalSubscriptionAction.executionMode === "paypal-api",
+        `PayPal subscription action did not use PayPal execution: ${JSON.stringify(paypalSubscriptionAction)}`,
+      );
+      assert(
+        paypalSubscriptionAction.subscriptionReference === `I-${slug}`,
+        `PayPal subscription action used the wrong subscription reference: ${JSON.stringify(paypalSubscriptionAction)}`,
+      );
+      const paypalActionRequest = stripeCheckoutMock.requests
+        .slice(beforePayPalActionRequests)
+        .find(
+          (request) =>
+            request.method === "POST" &&
+            request.url === `/v1/billing/subscriptions/I-${slug}/cancel`,
+        );
+      assert(
+        paypalActionRequest,
+        `PayPal mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePayPalActionRequests))}`,
+      );
+      assert(
+        paypalActionRequest.headers.authorization ===
+          `Bearer ${process.env.BACKY_PAYPAL_ACCESS_TOKEN || process.env.PAYPAL_ACCESS_TOKEN}`,
+        `PayPal subscription action did not send bearer auth: ${JSON.stringify(paypalActionRequest.headers)}`,
+      );
+      assert(
+        paypalActionRequest.headers["paypal-request-id"],
+        `PayPal subscription action did not send idempotency header: ${JSON.stringify(paypalActionRequest.headers)}`,
+      );
     }
 
     if (paddleSubscriptionExecutionEnabled()) {
       const beforePaddleActionRequests = stripeCheckoutMock.requests.length;
-      const paddleActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'pause',
-          provider: 'paddle',
-          subscriptionReference: `sub_paddle_${slug}`,
-          reason: 'Smoke Paddle subscription pause action.',
-        }),
-      });
-      const paddleSubscriptionAction = paddleActionPayload.data?.action || paddleActionPayload.action;
-      assert(paddleSubscriptionAction?.status === 'succeeded', `Paddle subscription action did not execute against mock: ${JSON.stringify(paddleActionPayload).slice(0, 500)}`);
-      assert(paddleSubscriptionAction.executionMode === 'paddle-api', `Paddle subscription action did not use Paddle execution: ${JSON.stringify(paddleSubscriptionAction)}`);
-      assert(paddleSubscriptionAction.subscriptionReference === `sub_paddle_${slug}`, `Paddle subscription action used the wrong subscription reference: ${JSON.stringify(paddleSubscriptionAction)}`);
-      const paddleActionRequest = stripeCheckoutMock.requests.slice(beforePaddleActionRequests).find((request) => request.method === 'POST' && request.url === `/subscriptions/sub_paddle_${slug}/pause`);
-      assert(paddleActionRequest, `Paddle mock did not receive subscription pause action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePaddleActionRequests))}`);
-      assert(paddleActionRequest.headers.authorization === 'Bearer paddle_smoke_api_key', `Paddle subscription action did not send bearer auth: ${JSON.stringify(paddleActionRequest.headers)}`);
-      const paddleActionBody = JSON.parse(paddleActionRequest.body || '{}');
-      assert(paddleActionBody.effective_from === 'next_billing_period', `Paddle subscription pause body was unexpected: ${JSON.stringify(paddleActionBody)}`);
+      const paddleActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "pause",
+            provider: "paddle",
+            subscriptionReference: `sub_paddle_${slug}`,
+            reason: "Smoke Paddle subscription pause action.",
+          }),
+        },
+      );
+      const paddleSubscriptionAction =
+        paddleActionPayload.data?.action || paddleActionPayload.action;
+      assert(
+        paddleSubscriptionAction?.status === "succeeded",
+        `Paddle subscription action did not execute against mock: ${JSON.stringify(paddleActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        paddleSubscriptionAction.executionMode === "paddle-api",
+        `Paddle subscription action did not use Paddle execution: ${JSON.stringify(paddleSubscriptionAction)}`,
+      );
+      assert(
+        paddleSubscriptionAction.subscriptionReference === `sub_paddle_${slug}`,
+        `Paddle subscription action used the wrong subscription reference: ${JSON.stringify(paddleSubscriptionAction)}`,
+      );
+      const paddleActionRequest = stripeCheckoutMock.requests
+        .slice(beforePaddleActionRequests)
+        .find(
+          (request) =>
+            request.method === "POST" &&
+            request.url === `/subscriptions/sub_paddle_${slug}/pause`,
+        );
+      assert(
+        paddleActionRequest,
+        `Paddle mock did not receive subscription pause action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePaddleActionRequests))}`,
+      );
+      assert(
+        paddleActionRequest.headers.authorization ===
+          `Bearer ${process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY}`,
+        `Paddle subscription action did not send bearer auth: ${JSON.stringify(paddleActionRequest.headers)}`,
+      );
+      const paddleActionBody = JSON.parse(paddleActionRequest.body || "{}");
+      assert(
+        paddleActionBody.effective_from === "next_billing_period",
+        `Paddle subscription pause body was unexpected: ${JSON.stringify(paddleActionBody)}`,
+      );
     }
 
     if (squareSubscriptionExecutionEnabled()) {
       const beforeSquareActionRequests = stripeCheckoutMock.requests.length;
-      const squareActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'pause',
-          provider: 'square',
-          subscriptionReference: `sq_sub_${slug}`,
-          reason: 'Smoke Square subscription pause action.',
-        }),
-      });
-      const squareSubscriptionAction = squareActionPayload.data?.action || squareActionPayload.action;
-      assert(squareSubscriptionAction?.status === 'succeeded', `Square subscription action did not execute against mock: ${JSON.stringify(squareActionPayload).slice(0, 500)}`);
-      assert(squareSubscriptionAction.executionMode === 'square-api', `Square subscription action did not use Square execution: ${JSON.stringify(squareSubscriptionAction)}`);
-      assert(squareSubscriptionAction.subscriptionReference === `sq_sub_${slug}`, `Square subscription action used the wrong subscription reference: ${JSON.stringify(squareSubscriptionAction)}`);
-      const squareActionRequest = stripeCheckoutMock.requests.slice(beforeSquareActionRequests).find((request) => request.method === 'POST' && request.url === `/v2/subscriptions/sq_sub_${slug}/pause`);
-      assert(squareActionRequest, `Square mock did not receive subscription pause action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeSquareActionRequests))}`);
-      assert(squareActionRequest.headers.authorization === 'Bearer square_smoke_access_token', `Square subscription action did not send bearer auth: ${JSON.stringify(squareActionRequest.headers)}`);
-      assert(squareActionRequest.headers['square-version'] === (process.env.BACKY_SQUARE_VERSION || process.env.SQUARE_VERSION || '2026-01-22'), `Square subscription action did not send Square-Version: ${JSON.stringify(squareActionRequest.headers)}`);
-      const squareActionBody = JSON.parse(squareActionRequest.body || '{}');
-      assert(squareActionBody.pause_reason === 'Smoke Square subscription pause action.', `Square subscription pause body was unexpected: ${JSON.stringify(squareActionBody)}`);
+      const squareActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "pause",
+            provider: "square",
+            subscriptionReference: `sq_sub_${slug}`,
+            reason: "Smoke Square subscription pause action.",
+          }),
+        },
+      );
+      const squareSubscriptionAction =
+        squareActionPayload.data?.action || squareActionPayload.action;
+      assert(
+        squareSubscriptionAction?.status === "succeeded",
+        `Square subscription action did not execute against mock: ${JSON.stringify(squareActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        squareSubscriptionAction.executionMode === "square-api",
+        `Square subscription action did not use Square execution: ${JSON.stringify(squareSubscriptionAction)}`,
+      );
+      assert(
+        squareSubscriptionAction.subscriptionReference === `sq_sub_${slug}`,
+        `Square subscription action used the wrong subscription reference: ${JSON.stringify(squareSubscriptionAction)}`,
+      );
+      const squareActionRequest = stripeCheckoutMock.requests
+        .slice(beforeSquareActionRequests)
+        .find(
+          (request) =>
+            request.method === "POST" &&
+            request.url === `/v2/subscriptions/sq_sub_${slug}/pause`,
+        );
+      assert(
+        squareActionRequest,
+        `Square mock did not receive subscription pause action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeSquareActionRequests))}`,
+      );
+      assert(
+        squareActionRequest.headers.authorization ===
+          `Bearer ${process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN}`,
+        `Square subscription action did not send bearer auth: ${JSON.stringify(squareActionRequest.headers)}`,
+      );
+      assert(
+        squareActionRequest.headers["square-version"] ===
+          (process.env.BACKY_SQUARE_VERSION ||
+            process.env.SQUARE_VERSION ||
+            "2026-01-22"),
+        `Square subscription action did not send Square-Version: ${JSON.stringify(squareActionRequest.headers)}`,
+      );
+      const squareActionBody = JSON.parse(squareActionRequest.body || "{}");
+      assert(
+        squareActionBody.pause_reason ===
+          "Smoke Square subscription pause action.",
+        `Square subscription pause body was unexpected: ${JSON.stringify(squareActionBody)}`,
+      );
+    }
+
+    if (adyenSubscriptionExecutionEnabled()) {
+      const beforeAdyenActionRequests = stripeCheckoutMock.requests.length;
+      const adyenActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "cancel",
+            provider: "adyen",
+            subscriptionReference: `shopper_${slug}:adyen_recurring_${slug}`,
+            reason: "Smoke Adyen subscription cancellation action.",
+          }),
+        },
+      );
+      const adyenSubscriptionAction =
+        adyenActionPayload.data?.action || adyenActionPayload.action;
+      assert(
+        adyenSubscriptionAction?.status === "succeeded",
+        `Adyen subscription action did not execute against mock: ${JSON.stringify(adyenActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        adyenSubscriptionAction.executionMode === "adyen-api",
+        `Adyen subscription action did not use Adyen execution: ${JSON.stringify(adyenSubscriptionAction)}`,
+      );
+      assert(
+        adyenSubscriptionAction.subscriptionReference ===
+          `shopper_${slug}:adyen_recurring_${slug}`,
+        `Adyen subscription action used the wrong subscription reference: ${JSON.stringify(adyenSubscriptionAction)}`,
+      );
+      const adyenActionRequest = stripeCheckoutMock.requests
+        .slice(beforeAdyenActionRequests)
+        .find(
+          (request) => request.method === "POST" && request.url === "/disable",
+        );
+      assert(
+        adyenActionRequest,
+        `Adyen mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeAdyenActionRequests))}`,
+      );
+      assert(
+        adyenActionRequest.headers["x-api-key"] ===
+          (process.env.BACKY_ADYEN_API_KEY || process.env.ADYEN_API_KEY),
+        `Adyen subscription action did not send API key auth: ${JSON.stringify(adyenActionRequest.headers)}`,
+      );
+      const adyenActionBody = JSON.parse(adyenActionRequest.body || "{}");
+      assert(
+        adyenActionBody.merchantAccount ===
+          (process.env.BACKY_ADYEN_MERCHANT_ACCOUNT ||
+            process.env.ADYEN_MERCHANT_ACCOUNT),
+        `Adyen subscription action did not send merchant account: ${JSON.stringify(adyenActionBody)}`,
+      );
+      assert(
+        adyenActionBody.shopperReference === `shopper_${slug}`,
+        `Adyen subscription action used wrong shopper reference: ${JSON.stringify(adyenActionBody)}`,
+      );
+      assert(
+        adyenActionBody.selectedRecurringDetailReference ===
+          `adyen_recurring_${slug}`,
+        `Adyen subscription action used wrong recurring detail: ${JSON.stringify(adyenActionBody)}`,
+      );
+    }
+
+    if (mollieSubscriptionExecutionEnabled()) {
+      const beforeMollieActionRequests = stripeCheckoutMock.requests.length;
+      const mollieActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "cancel",
+            provider: "mollie",
+            subscriptionReference: `cst_${slug}:sub_mollie_${slug}`,
+            reason: "Smoke Mollie subscription cancellation action.",
+          }),
+        },
+      );
+      const mollieSubscriptionAction =
+        mollieActionPayload.data?.action || mollieActionPayload.action;
+      assert(
+        mollieSubscriptionAction?.status === "succeeded",
+        `Mollie subscription action did not execute against mock: ${JSON.stringify(mollieActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        mollieSubscriptionAction.executionMode === "mollie-api",
+        `Mollie subscription action did not use Mollie execution: ${JSON.stringify(mollieSubscriptionAction)}`,
+      );
+      assert(
+        mollieSubscriptionAction.subscriptionReference ===
+          `cst_${slug}:sub_mollie_${slug}`,
+        `Mollie subscription action used the wrong subscription reference: ${JSON.stringify(mollieSubscriptionAction)}`,
+      );
+      const mollieActionRequest = stripeCheckoutMock.requests
+        .slice(beforeMollieActionRequests)
+        .find(
+          (request) =>
+            request.method === "DELETE" &&
+            request.url ===
+              `/customers/cst_${slug}/subscriptions/sub_mollie_${slug}`,
+        );
+      assert(
+        mollieActionRequest,
+        `Mollie mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeMollieActionRequests))}`,
+      );
+      assert(
+        mollieActionRequest.headers.authorization ===
+          `Bearer ${process.env.BACKY_MOLLIE_API_KEY || process.env.MOLLIE_API_KEY}`,
+        `Mollie subscription action did not send bearer auth: ${JSON.stringify(mollieActionRequest.headers)}`,
+      );
+    }
+
+    if (razorpaySubscriptionExecutionEnabled()) {
+      const beforeRazorpayActionRequests = stripeCheckoutMock.requests.length;
+      const razorpayActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "resume",
+            provider: "razorpay",
+            subscriptionReference: `sub_razorpay_${slug}`,
+            reason: "Smoke Razorpay subscription resume action.",
+          }),
+        },
+      );
+      const razorpaySubscriptionAction =
+        razorpayActionPayload.data?.action || razorpayActionPayload.action;
+      assert(
+        razorpaySubscriptionAction?.status === "succeeded",
+        `Razorpay subscription action did not execute against mock: ${JSON.stringify(razorpayActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        razorpaySubscriptionAction.executionMode === "razorpay-api",
+        `Razorpay subscription action did not use Razorpay execution: ${JSON.stringify(razorpaySubscriptionAction)}`,
+      );
+      assert(
+        razorpaySubscriptionAction.subscriptionReference ===
+          `sub_razorpay_${slug}`,
+        `Razorpay subscription action used the wrong subscription reference: ${JSON.stringify(razorpaySubscriptionAction)}`,
+      );
+      const razorpayActionRequest = stripeCheckoutMock.requests
+        .slice(beforeRazorpayActionRequests)
+        .find(
+          (request) =>
+            request.method === "POST" &&
+            request.url ===
+              `/v1/subscriptions/sub_razorpay_${slug}/resume`,
+        );
+      assert(
+        razorpayActionRequest,
+        `Razorpay mock did not receive subscription resume action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeRazorpayActionRequests))}`,
+      );
+      const expectedRazorpayAuth = `Basic ${Buffer.from(`${process.env.BACKY_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID}:${process.env.BACKY_RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET}`).toString("base64")}`;
+      assert(
+        razorpayActionRequest.headers.authorization === expectedRazorpayAuth,
+        `Razorpay subscription action did not send Basic auth: ${JSON.stringify(razorpayActionRequest.headers)}`,
+      );
+      const razorpayActionBody = JSON.parse(
+        razorpayActionRequest.body || "{}",
+      );
+      assert(
+        razorpayActionBody.resume_at === "now",
+        `Razorpay subscription resume body was unexpected: ${JSON.stringify(razorpayActionBody)}`,
+      );
+      assert(
+        razorpayActionBody.notes?.backy_subscription_action === "resume",
+        `Razorpay subscription action omitted Backy metadata: ${JSON.stringify(razorpayActionBody)}`,
+      );
     }
 
     if (httpSubscriptionExecutionEnabled()) {
-      const beforeHttpSubscriptionRequests = commerceProviderMock.requests.length;
-      const httpActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'pause',
-          provider: 'generic-http',
-          subscriptionReference: `http-sub-${slug}`,
-          reason: 'Smoke generic HTTP subscription pause action.',
-        }),
-      });
-      const httpSubscriptionAction = httpActionPayload.data?.action || httpActionPayload.action;
-      assert(httpSubscriptionAction?.status === 'succeeded', `HTTP subscription action did not execute against mock: ${JSON.stringify(httpActionPayload).slice(0, 500)}`);
-      assert(httpSubscriptionAction.executionMode === 'http-api', `HTTP subscription action did not use HTTP execution: ${JSON.stringify(httpSubscriptionAction)}`);
-      assert(httpSubscriptionAction.subscriptionReference === `http-sub-${slug}`, `HTTP subscription action used the wrong subscription reference: ${JSON.stringify(httpSubscriptionAction)}`);
-      const httpActionRequest = commerceProviderMock.requests.slice(beforeHttpSubscriptionRequests).find((request) => request.method === 'POST' && request.url === '/subscription/action');
-      assert(httpActionRequest, `HTTP provider mock did not receive subscription action: ${JSON.stringify(commerceProviderMock.requests.slice(beforeHttpSubscriptionRequests))}`);
-      assert(httpActionRequest.headers['x-backy-provider-kind'] === 'subscription-action', `HTTP subscription action omitted provider-kind header: ${JSON.stringify(httpActionRequest.headers)}`);
-      assert(httpActionRequest.headers['x-backy-subscription-action'] === 'pause', `HTTP subscription action omitted action header: ${JSON.stringify(httpActionRequest.headers)}`);
-      assert(httpActionRequest.payload?.schemaVersion === 'backy.product-subscription-action-request.v1', `HTTP subscription action sent unexpected schema: ${JSON.stringify(httpActionRequest.payload)}`);
-      assert(httpActionRequest.payload?.subscription?.reference === `http-sub-${slug}`, `HTTP subscription action sent wrong reference: ${JSON.stringify(httpActionRequest.payload)}`);
+      const beforeHttpSubscriptionRequests =
+        commerceProviderMock.requests.length;
+      const httpActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "pause",
+            provider: "generic-http",
+            subscriptionReference: `http-sub-${slug}`,
+            reason: "Smoke generic HTTP subscription pause action.",
+          }),
+        },
+      );
+      const httpSubscriptionAction =
+        httpActionPayload.data?.action || httpActionPayload.action;
+      assert(
+        httpSubscriptionAction?.status === "succeeded",
+        `HTTP subscription action did not execute against mock: ${JSON.stringify(httpActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        httpSubscriptionAction.executionMode === "http-api",
+        `HTTP subscription action did not use HTTP execution: ${JSON.stringify(httpSubscriptionAction)}`,
+      );
+      assert(
+        httpSubscriptionAction.subscriptionReference === `http-sub-${slug}`,
+        `HTTP subscription action used the wrong subscription reference: ${JSON.stringify(httpSubscriptionAction)}`,
+      );
+      const httpActionRequest = commerceProviderMock.requests
+        .slice(beforeHttpSubscriptionRequests)
+        .find(
+          (request) =>
+            request.method === "POST" && request.url === "/subscription/action",
+        );
+      assert(
+        httpActionRequest,
+        `HTTP provider mock did not receive subscription action: ${JSON.stringify(commerceProviderMock.requests.slice(beforeHttpSubscriptionRequests))}`,
+      );
+      assert(
+        httpActionRequest.headers["x-backy-provider-kind"] ===
+          "subscription-action",
+        `HTTP subscription action omitted provider-kind header: ${JSON.stringify(httpActionRequest.headers)}`,
+      );
+      assert(
+        httpActionRequest.headers["x-backy-subscription-action"] === "pause",
+        `HTTP subscription action omitted action header: ${JSON.stringify(httpActionRequest.headers)}`,
+      );
+      assert(
+        httpActionRequest.payload?.schemaVersion ===
+          "backy.product-subscription-action-request.v1",
+        `HTTP subscription action sent unexpected schema: ${JSON.stringify(httpActionRequest.payload)}`,
+      );
+      assert(
+        httpActionRequest.payload?.subscription?.reference ===
+          `http-sub-${slug}`,
+        `HTTP subscription action sent wrong reference: ${JSON.stringify(httpActionRequest.payload)}`,
+      );
     }
 
     const stripeCustomerRecord = customersCollection?.id
-      ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')
+      ? await getCollectionRecordBySlug(
+          customersCollection.id,
+          "commerce-stripe-smoke-at-example-com",
+        )
       : null;
     if (stripeCustomerRecord?.id) {
-      await deleteCollectionRecord(customersCollection.id, stripeCustomerRecord.id);
+      await deleteCollectionRecord(
+        customersCollection.id,
+        stripeCustomerRecord.id,
+      );
     }
     if (orderRecord?.id) {
       await deleteCollectionRecord(ordersCollection.id, orderRecord.id);
@@ -2607,137 +6405,229 @@ const assertStripeCheckoutExecution = async ({
 const assertProductCsvImport = async ({ productCollection, suffix }) => {
   const slug = `commerce-import-${suffix}`;
   const headers = [
-    'slug',
-    'status',
-    'scheduledAt',
-    'title',
-    'sku',
-    'price',
-    productFieldKey('compareAtPrice'),
-    'currency',
-    'variants',
-    'inventory',
-    productFieldKey('lowStockThreshold'),
-    productFieldKey('inventoryPolicy'),
-    productFieldKey('productType'),
-    productFieldKey('downloadUrl'),
-    productFieldKey('checkoutUrl'),
-    productFieldKey('subscriptionEnabled'),
-    productFieldKey('subscriptionInterval'),
-    productFieldKey('subscriptionTrialDays'),
-    productFieldKey('shippingRequired'),
-    productFieldKey('shippingProfile'),
-    'weight',
-    productFieldKey('taxClass'),
-    productFieldKey('discountCode'),
-    productFieldKey('returnPolicy'),
-    productFieldKey('imageUrl'),
-    productFieldKey('galleryImages'),
-    'category',
-    'tags',
-    'vendor',
-    'description',
-    productFieldKey('seoTitle'),
-    'featured',
-    'taxable',
+    "slug",
+    "status",
+    "scheduledAt",
+    "title",
+    "sku",
+    "price",
+    productFieldKey("compareAtPrice"),
+    "currency",
+    "variants",
+    "inventory",
+    productFieldKey("lowStockThreshold"),
+    productFieldKey("inventoryPolicy"),
+    productFieldKey("productType"),
+    productFieldKey("downloadUrl"),
+    productFieldKey("checkoutUrl"),
+    productFieldKey("subscriptionEnabled"),
+    productFieldKey("subscriptionInterval"),
+    productFieldKey("subscriptionTrialDays"),
+    productFieldKey("shippingRequired"),
+    productFieldKey("shippingProfile"),
+    "weight",
+    productFieldKey("taxClass"),
+    productFieldKey("discountCode"),
+    productFieldKey("returnPolicy"),
+    productFieldKey("imageUrl"),
+    productFieldKey("galleryImages"),
+    "category",
+    "tags",
+    "vendor",
+    "description",
+    productFieldKey("seoTitle"),
+    "featured",
+    "taxable",
   ];
   const row = [
     slug,
-    'published',
-    '',
+    "published",
+    "",
     `Imported Commerce ${suffix}`,
     `CSV-${suffix.toUpperCase()}`,
-    '99',
-    '129',
-    'USD',
-    JSON.stringify([{ id: 'csv-team', title: 'Team', sku: `CSV-${suffix.toUpperCase()}-TEAM`, option: 'Seats', price: 149, inventory: 3 }]),
-    '0',
-    '4',
-    'continue',
-    'digital',
+    "99",
+    "129",
+    "USD",
+    JSON.stringify([
+      {
+        id: "csv-team",
+        title: "Team",
+        sku: `CSV-${suffix.toUpperCase()}-TEAM`,
+        option: "Seats",
+        price: 149,
+        inventory: 3,
+      },
+    ]),
+    "0",
+    "4",
+    "continue",
+    "digital",
     `https://downloads.example.com/${slug}.zip`,
-    '',
-    'true',
-    'yearly',
-    '30',
-    'false',
-    'digital-delivery',
-    '',
-    'digital-standard',
-    'CSV10',
-    'CSV imports can be refunded within 7 days.',
-    'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22%230f766e%22/%3E%3Ctext x=%2232%22 y=%2238%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22%3ECSV%3C/text%3E%3C/svg%3E',
-    JSON.stringify(['data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22%230f766e%22/%3E%3Ctext x=%2232%22 y=%2238%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22%3ECSV%3C/text%3E%3C/svg%3E']),
-    'Templates',
-    'csv,imported',
-    'Backy',
-    'Imported by the commerce smoke test.',
+    "",
+    "true",
+    "yearly",
+    "30",
+    "false",
+    "digital-delivery",
+    "",
+    "digital-standard",
+    "CSV10",
+    "CSV imports can be refunded within 7 days.",
+    "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22%230f766e%22/%3E%3Ctext x=%2232%22 y=%2238%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22%3ECSV%3C/text%3E%3C/svg%3E",
+    JSON.stringify([
+      "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22%230f766e%22/%3E%3Ctext x=%2232%22 y=%2238%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22%3ECSV%3C/text%3E%3C/svg%3E",
+    ]),
+    "Templates",
+    "csv,imported",
+    "Backy",
+    "Imported by the commerce smoke test.",
     `Imported Commerce ${suffix}`,
-    'true',
-    'false',
+    "true",
+    "false",
   ];
-  const csv = `${headers.join(',')}\n${row.map(csvEscape).join(',')}\n`;
+  const csv = `${headers.join(",")}\n${row.map(csvEscape).join(",")}\n`;
 
-  const result = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/import?upsert=true`, {
-    method: 'POST',
-    headers: { 'content-type': 'text/csv; charset=utf-8' },
-    body: csv,
-  });
+  const result = await requestApi(
+    `/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/import?upsert=true`,
+    {
+      method: "POST",
+      headers: { "content-type": "text/csv; charset=utf-8" },
+      body: csv,
+    },
+  );
   const summary = result.data?.import;
-  assert(summary?.created === 1 || summary?.updated === 1, `Product CSV import did not save a record: ${JSON.stringify(summary)}`);
-  assert(summary.skipped === 0, `Product CSV import skipped rows: ${JSON.stringify(summary)}`);
+  assert(
+    summary?.created === 1 || summary?.updated === 1,
+    `Product CSV import did not save a record: ${JSON.stringify(summary)}`,
+  );
+  assert(
+    summary.skipped === 0,
+    `Product CSV import skipped rows: ${JSON.stringify(summary)}`,
+  );
 
   const record = await getCollectionRecordBySlug(productCollection.id, slug);
   assert(record?.id, `Imported product was not found by slug ${slug}`);
-  assert(record.values?.price === 99, `Imported price did not stay numeric: ${JSON.stringify(record.values?.price)}`);
-  assert(record.values?.inventory === 0, `Imported digital inventory did not stay numeric zero: ${JSON.stringify(record.values?.inventory)}`);
-  assert(readProductValue(record.values, 'subscriptionEnabled') === true, `Imported subscription flag did not stay boolean true: ${JSON.stringify(readProductValue(record.values, 'subscriptionEnabled'))}`);
-  assert(readProductValue(record.values, 'subscriptionInterval') === 'yearly', `Imported subscription interval did not persist: ${JSON.stringify(readProductValue(record.values, 'subscriptionInterval'))}`);
-  assert(readProductValue(record.values, 'subscriptionTrialDays') === 30, `Imported subscription trial days did not stay numeric: ${JSON.stringify(readProductValue(record.values, 'subscriptionTrialDays'))}`);
-  assert(readProductValue(record.values, 'shippingRequired') === false, `Imported shipping flag did not stay boolean false: ${JSON.stringify(readProductValue(record.values, 'shippingRequired'))}`);
-  assert(readProductValue(record.values, 'shippingProfile') === 'digital-delivery', `Imported shipping profile did not persist: ${JSON.stringify(readProductValue(record.values, 'shippingProfile'))}`);
-  assert(readProductValue(record.values, 'taxClass') === 'digital-standard', `Imported tax class did not persist: ${JSON.stringify(readProductValue(record.values, 'taxClass'))}`);
-  assert(readProductValue(record.values, 'discountCode') === 'CSV10', `Imported discount code did not persist: ${JSON.stringify(readProductValue(record.values, 'discountCode'))}`);
-  assert(readProductValue(record.values, 'returnPolicy') === 'CSV imports can be refunded within 7 days.', `Imported return policy did not persist: ${JSON.stringify(readProductValue(record.values, 'returnPolicy'))}`);
-  assert(record.values?.taxable === false, `Imported taxable flag did not stay boolean false: ${JSON.stringify(record.values?.taxable)}`);
-  assert(record.values?.featured === true, `Imported featured flag did not stay boolean true: ${JSON.stringify(record.values?.featured)}`);
-  assert(Array.isArray(record.values?.tags) && record.values.tags.includes('imported'), `Imported tags did not parse as an array: ${JSON.stringify(record.values?.tags)}`);
-  assert(Array.isArray(record.values?.variants) && record.values.variants.length === 1, `Imported variants did not parse JSON: ${JSON.stringify(record.values?.variants)}`);
+  assert(
+    record.values?.price === 99,
+    `Imported price did not stay numeric: ${JSON.stringify(record.values?.price)}`,
+  );
+  assert(
+    record.values?.inventory === 0,
+    `Imported digital inventory did not stay numeric zero: ${JSON.stringify(record.values?.inventory)}`,
+  );
+  assert(
+    readProductValue(record.values, "subscriptionEnabled") === true,
+    `Imported subscription flag did not stay boolean true: ${JSON.stringify(readProductValue(record.values, "subscriptionEnabled"))}`,
+  );
+  assert(
+    readProductValue(record.values, "subscriptionInterval") === "yearly",
+    `Imported subscription interval did not persist: ${JSON.stringify(readProductValue(record.values, "subscriptionInterval"))}`,
+  );
+  assert(
+    readProductValue(record.values, "subscriptionTrialDays") === 30,
+    `Imported subscription trial days did not stay numeric: ${JSON.stringify(readProductValue(record.values, "subscriptionTrialDays"))}`,
+  );
+  assert(
+    readProductValue(record.values, "shippingRequired") === false,
+    `Imported shipping flag did not stay boolean false: ${JSON.stringify(readProductValue(record.values, "shippingRequired"))}`,
+  );
+  assert(
+    readProductValue(record.values, "shippingProfile") === "digital-delivery",
+    `Imported shipping profile did not persist: ${JSON.stringify(readProductValue(record.values, "shippingProfile"))}`,
+  );
+  assert(
+    readProductValue(record.values, "taxClass") === "digital-standard",
+    `Imported tax class did not persist: ${JSON.stringify(readProductValue(record.values, "taxClass"))}`,
+  );
+  assert(
+    readProductValue(record.values, "discountCode") === "CSV10",
+    `Imported discount code did not persist: ${JSON.stringify(readProductValue(record.values, "discountCode"))}`,
+  );
+  assert(
+    readProductValue(record.values, "returnPolicy") ===
+      "CSV imports can be refunded within 7 days.",
+    `Imported return policy did not persist: ${JSON.stringify(readProductValue(record.values, "returnPolicy"))}`,
+  );
+  assert(
+    record.values?.taxable === false,
+    `Imported taxable flag did not stay boolean false: ${JSON.stringify(record.values?.taxable)}`,
+  );
+  assert(
+    record.values?.featured === true,
+    `Imported featured flag did not stay boolean true: ${JSON.stringify(record.values?.featured)}`,
+  );
+  assert(
+    Array.isArray(record.values?.tags) &&
+      record.values.tags.includes("imported"),
+    `Imported tags did not parse as an array: ${JSON.stringify(record.values?.tags)}`,
+  );
+  assert(
+    Array.isArray(record.values?.variants) &&
+      record.values.variants.length === 1,
+    `Imported variants did not parse JSON: ${JSON.stringify(record.values?.variants)}`,
+  );
 
-  const catalog = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(slug)}`);
+  const catalog = await requestApi(
+    `/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(slug)}`,
+  );
   const product = catalog.data?.products?.[0] || catalog.products?.[0];
-  assert(product?.productType === 'digital', `Imported public product type was unexpected: ${JSON.stringify(product)}`);
-  assert(product.inventory?.quantity === 0, `Imported public inventory quantity was unexpected: ${JSON.stringify(product?.inventory)}`);
-  assert(product.inventory?.inStock === true, `Imported zero-inventory digital product should be in stock: ${JSON.stringify(product?.inventory)}`);
-  assert(product.inventory?.lowStock === false, `Imported zero-inventory digital product should not be low stock: ${JSON.stringify(product?.inventory)}`);
-  assert(product.subscription?.enabled === true && product.subscription?.interval === 'yearly' && product.subscription?.trialDays === 30, `Imported public subscription metadata was unexpected: ${JSON.stringify(product?.subscription)}`);
+  assert(
+    product?.productType === "digital",
+    `Imported public product type was unexpected: ${JSON.stringify(product)}`,
+  );
+  assert(
+    product.inventory?.quantity === 0,
+    `Imported public inventory quantity was unexpected: ${JSON.stringify(product?.inventory)}`,
+  );
+  assert(
+    product.inventory?.inStock === true,
+    `Imported zero-inventory digital product should be in stock: ${JSON.stringify(product?.inventory)}`,
+  );
+  assert(
+    product.inventory?.lowStock === false,
+    `Imported zero-inventory digital product should not be low stock: ${JSON.stringify(product?.inventory)}`,
+  );
+  assert(
+    product.subscription?.enabled === true &&
+      product.subscription?.interval === "yearly" &&
+      product.subscription?.trialDays === 30,
+    `Imported public subscription metadata was unexpected: ${JSON.stringify(product?.subscription)}`,
+  );
 
   return record;
 };
 
 const assertProductsLayout = async (client) => {
-  await clickByText(client, 'Refresh', { exact: true }).catch(() => null);
-  await waitUntilIdle(client, '/products refresh before layout assertion');
+  await clickByText(client, "Refresh", { exact: true }).catch(() => null);
+  await waitUntilIdle(client, "/products refresh before layout assertion");
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    const previewState = await evaluate(client, `(() => {
+    const previewState = await evaluate(
+      client,
+      `(() => {
       const candidates = Array.from(document.querySelectorAll('button'));
       const button = candidates.find((candidate) => (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Preview reconciliation');
       return {
         present: Boolean(button),
         disabled: Boolean(button?.disabled || button?.getAttribute('aria-disabled') === 'true'),
       };
-    })()`);
+    })()`,
+    );
     if (previewState.present && !previewState.disabled) {
-      await clickByText(client, 'Preview reconciliation', { exact: true });
+      await clickByText(client, "Preview reconciliation", { exact: true });
       break;
     }
     await sleep(250);
   }
-  await waitUntilIdle(client, '/products reconciliation preview before layout assertion');
+  await waitUntilIdle(
+    client,
+    "/products reconciliation preview before layout assertion",
+  );
 
   let layout = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    layout = await evaluate(client, `(() => {
+    layout = await evaluate(
+      client,
+      `(() => {
       const productPerformance = document.querySelector('[data-testid="products-product-performance"]');
       const productPerformanceText = productPerformance?.textContent || '';
       const backendCommerceAnalytics = document.querySelector('[data-testid="products-backend-commerce-analytics"]');
@@ -2751,6 +6641,12 @@ const assertProductsLayout = async (client) => {
         scrollWidth: document.documentElement.scrollWidth,
         hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
         hasApiPanel: document.body?.innerText?.includes('Storefront API') || false,
+        hasApiContracts: Boolean(document.querySelector('[data-testid="products-api-contracts"]')) &&
+          document.body?.innerText?.includes('Product API response contracts') &&
+          document.body?.innerText?.includes('backy.commerce-product-sync.v1') &&
+          document.body?.innerText?.includes('backy.product-subscription-lifecycle.v1') &&
+          document.body?.innerText?.includes('backy.product-subscription-action.v1') &&
+          document.body?.innerText?.includes('backy.interaction-event.v1'),
         hasCommerceAnalytics: Boolean(document.querySelector('[data-testid="products-commerce-analytics"]')) &&
           document.body?.innerText?.includes('Commerce analytics and customer profiles') &&
           document.body?.innerText?.includes('Paid revenue') &&
@@ -2793,6 +6689,10 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('Provider catalog sync') &&
           document.body?.innerText?.includes('Paddle') &&
           document.body?.innerText?.includes('Square') &&
+          document.body?.innerText?.includes('Shopify') &&
+          document.body?.innerText?.includes('BigCommerce') &&
+          document.body?.innerText?.includes('WooCommerce') &&
+          document.body?.innerText?.includes('Etsy') &&
           document.body?.innerText?.includes('HTTP') &&
           document.body?.innerText?.includes('configured HTTP product and price metadata'),
         hasProviderReconciliation: Boolean(providerReconciliation) &&
@@ -2818,26 +6718,71 @@ const assertProductsLayout = async (client) => {
         hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
         hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       };
-    })()`);
-    if (layout.hasProductPerformance && layout.hasProductAutomation && layout.hasBackendCommerceAnalytics && layout.hasSubscriptionLifecycle && layout.hasProviderReconciliation) {
+    })()`,
+    );
+    if (
+      layout.hasProductPerformance &&
+      layout.hasProductAutomation &&
+      layout.hasBackendCommerceAnalytics &&
+      layout.hasSubscriptionLifecycle &&
+      layout.hasProviderReconciliation
+    ) {
       break;
     }
     await sleep(250);
   }
 
-  assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasSubscriptionLifecycle && layout.hasProviderSync && layout.hasProviderReconciliation && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(
+    layout.scrollWidth <= layout.width + 8,
+    `Products page has horizontal overflow: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.hasCommandCenter &&
+      layout.hasApiPanel &&
+      layout.hasApiContracts &&
+      layout.hasCommerceAnalytics &&
+      layout.hasBackendCommerceAnalytics &&
+      layout.hasProductPerformance &&
+      layout.hasProductAutomation &&
+      layout.hasCustomerProfileManager &&
+      layout.hasSubscriptionMetadata &&
+      layout.hasSubscriptionLifecycle &&
+      layout.hasProviderSync &&
+      layout.hasProviderReconciliation &&
+      layout.hasPageBindingContract &&
+      layout.hasProductPageTemplates &&
+      layout.hasEditor &&
+      layout.hasImportControls,
+    `Products page missing expected regions: ${JSON.stringify(layout)}`,
+  );
   return layout;
 };
 
-const assertCustomerProfileManagement = async (client, customersCollection, customerRecord) => {
-  assert(customersCollection?.id, 'Customers collection is required for profile management smoke coverage');
-  assert(customerRecord?.id, 'Customer record is required for profile management smoke coverage');
+const assertCustomerProfileManagement = async (
+  client,
+  customersCollection,
+  customerRecord,
+) => {
+  assert(
+    customersCollection?.id,
+    "Customers collection is required for profile management smoke coverage",
+  );
+  assert(
+    customerRecord?.id,
+    "Customer record is required for profile management smoke coverage",
+  );
 
-  await navigateToRoute(client, '/products', 'products-command-center', 'Catalog command center');
+  await navigateToRoute(
+    client,
+    "/products",
+    "products-command-center",
+    "Catalog command center",
+  );
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const state = await evaluate(client, `(() => {
+    const state = await evaluate(
+      client,
+      `(() => {
       const selector = document.querySelector('[aria-label="Customer profile"]');
       const manager = document.querySelector('[data-testid="products-customer-profile-manager"]');
       return {
@@ -2848,49 +6793,82 @@ const assertCustomerProfileManagement = async (client, customersCollection, cust
         hasManager: Boolean(manager),
         body: document.body?.innerText?.slice(0, 900) || '',
       };
-    })()`);
+    })()`,
+    );
     if (state.hasSelector && state.hasCustomerOption && state.hasManager) {
       break;
     }
     if (attempt === 99) {
-      throw new Error(`Customer profile manager did not load checkout customer: ${JSON.stringify(state)}`);
+      throw new Error(
+        `Customer profile manager did not load checkout customer: ${JSON.stringify(state)}`,
+      );
     }
     await sleep(250);
   }
 
-  await setAriaControl(client, 'Customer profile', customerRecord.id);
-  await setLabeledControl(client, 'Customer name', 'Commerce Smoke VIP Buyer', { exact: true });
-  await setLabeledControl(client, 'Customer phone', '+1 555 0199', { exact: true });
-  await setLabeledControl(client, 'Customer status', 'vip');
-  await setLabeledControl(client, 'Customer notes', 'Flagged by commerce smoke profile management.', { exact: true });
-  await clickByText(client, 'Save profile', { exact: true });
-  await waitUntilIdle(client, '/products customer profile');
+  await setAriaControl(client, "Customer profile", customerRecord.id);
+  await setLabeledControl(client, "Customer name", "Commerce Smoke VIP Buyer", {
+    exact: true,
+  });
+  await setLabeledControl(client, "Customer phone", "+1 555 0199", {
+    exact: true,
+  });
+  await setLabeledControl(client, "Customer status", "vip");
+  await setLabeledControl(
+    client,
+    "Customer notes",
+    "Flagged by commerce smoke profile management.",
+    { exact: true },
+  );
+  await clickByText(client, "Save profile", { exact: true });
+  await waitUntilIdle(client, "/products customer profile");
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const updated = await getCollectionRecordBySlug(customersCollection.id, customerRecord.slug);
+    const updated = await getCollectionRecordBySlug(
+      customersCollection.id,
+      customerRecord.slug,
+    );
     if (
-      updated?.values?.name === 'Commerce Smoke VIP Buyer' &&
-      updated.values?.status === 'vip' &&
-      updated.values?.phone === '+1 555 0199' &&
-      String(updated.values?.notes || '').includes('commerce smoke profile management')
+      updated?.values?.name === "Commerce Smoke VIP Buyer" &&
+      updated.values?.status === "vip" &&
+      updated.values?.phone === "+1 555 0199" &&
+      String(updated.values?.notes || "").includes(
+        "commerce smoke profile management",
+      )
     ) {
       return updated;
     }
     await sleep(250);
   }
 
-  const current = await getCollectionRecordBySlug(customersCollection.id, customerRecord.slug);
-  throw new Error(`Customer profile management did not persist changes: ${JSON.stringify(current?.values)}`);
+  const current = await getCollectionRecordBySlug(
+    customersCollection.id,
+    customerRecord.slug,
+  );
+  throw new Error(
+    `Customer profile management did not persist changes: ${JSON.stringify(current?.values)}`,
+  );
 };
 
-const assertProductPageTemplateShortcut = async (client, productCollection, template) => {
+const assertProductPageTemplateShortcut = async (
+  client,
+  productCollection,
+  template,
+) => {
   const mode = template.mode;
   const testId = template.testId || `products-page-template-${mode}`;
-  await navigateToRoute(client, '/products', 'products-command-center', 'Catalog command center');
+  await navigateToRoute(
+    client,
+    "/products",
+    "products-command-center",
+    "Catalog command center",
+  );
 
   let clickState = null;
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    clickState = await evaluate(client, `(() => {
+    clickState = await evaluate(
+      client,
+      `(() => {
       const button = document.querySelector('[data-testid="${testId}"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
         return {
@@ -2903,23 +6881,29 @@ const assertProductPageTemplateShortcut = async (client, productCollection, temp
       }
       button.click();
       return { ok: true, text: button.textContent || '' };
-    })()`);
+    })()`,
+    );
 
     if (clickState.ok) {
       break;
     }
 
-    if (attempt === 99) {
+    if (attempt === 239) {
       break;
     }
 
     await sleep(250);
   }
 
-  assert(clickState.ok, `Unable to click product ${mode} page template shortcut: ${JSON.stringify(clickState)}`);
+  assert(
+    clickState.ok,
+    `Unable to click product ${mode} page template shortcut: ${JSON.stringify(clickState)}`,
+  );
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const state = await evaluate(client, `(() => {
+    const state = await evaluate(
+      client,
+      `(() => {
       const params = new URLSearchParams(window.location.search);
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const importPanel = document.querySelector('[data-testid="page-create-dataset-import"]');
@@ -2940,17 +6924,18 @@ const assertProductPageTemplateShortcut = async (client, productCollection, temp
         createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
         body: document.body?.innerText?.slice(0, 900) || '',
       };
-    })()`);
+    })()`,
+    );
 
     if (
-      state.path === '/pages/new' &&
-      state.template === 'storefront' &&
+      state.path === "/pages/new" &&
+      state.template === "storefront" &&
       state.collectionId === productCollection.id &&
       state.datasetMode === mode &&
       state.title === template.title &&
       state.slug === template.slug &&
       state.nav === template.nav &&
-      state.payloadTemplate === 'storefront' &&
+      state.payloadTemplate === "storefront" &&
       state.payloadDatasetMode === mode &&
       state.payloadCollectionId === productCollection.id &&
       state.importPanel &&
@@ -2962,7 +6947,9 @@ const assertProductPageTemplateShortcut = async (client, productCollection, temp
     }
 
     if (attempt === 99) {
-      throw new Error(`Product ${mode} page template did not open dataset page creation: ${JSON.stringify(state)}`);
+      throw new Error(
+        `Product ${mode} page template did not open dataset page creation: ${JSON.stringify(state)}`,
+      );
     }
 
     await sleep(250);
@@ -2974,42 +6961,51 @@ const assertProductPageTemplateShortcut = async (client, productCollection, temp
 const assertDigitalStockFilters = async (client, productTitle) => {
   const navigateToProductFilter = async (stock) => {
     const url = new URL(`${ADMIN_BASE_URL}/products`);
-    url.searchParams.set('siteId', SITE_ID);
-    url.searchParams.set('type', 'digital');
-    url.searchParams.set('stock', stock);
-    url.searchParams.set('q', productTitle);
-    await client.send('Page.navigate', { url: url.toString() });
+    url.searchParams.set("siteId", SITE_ID);
+    url.searchParams.set("type", "digital");
+    url.searchParams.set("stock", stock);
+    url.searchParams.set("q", productTitle);
+    await client.send("Page.navigate", { url: url.toString() });
 
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const state = await evaluate(client, `(() => {
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      const state = await evaluate(
+        client,
+        `(() => {
         const body = document.body?.innerText || '';
         const stockFilter = document.querySelector('select[aria-label="Product stock filter"]');
         const typeFilter = document.querySelector('select[aria-label="Product type filter"]');
         const search = document.querySelector('input[aria-label="Search products"]');
         return {
           ready: Boolean(document.querySelector('[data-testid="products-command-center"]')),
+          filtersReady: stockFilter instanceof HTMLSelectElement &&
+            typeFilter instanceof HTMLSelectElement &&
+            search instanceof HTMLInputElement,
           stockValue: stockFilter instanceof HTMLSelectElement ? stockFilter.value : null,
           typeValue: typeFilter instanceof HTMLSelectElement ? typeFilter.value : null,
           searchValue: search instanceof HTMLInputElement ? search.value : null,
           hasProduct: body.includes(${JSON.stringify(productTitle)}),
           hasAvailableStock: body.includes('Available') && body.includes('No physical stock limit'),
           hasEmptyState: body.includes('No products match this view') || body.includes('No products found'),
-          body: body.slice(0, 1200),
+          body: body.slice(0, 1600),
         };
-      })()`);
+      })()`,
+      );
 
       if (
         state.ready &&
+        state.filtersReady &&
         state.stockValue === stock &&
-        state.typeValue === 'digital' &&
+        state.typeValue === "digital" &&
         state.searchValue === productTitle &&
         (state.hasProduct || state.hasEmptyState)
       ) {
         return state;
       }
 
-      if (attempt === 99) {
-        throw new Error(`Digital stock filter did not hydrate for ${stock}: ${JSON.stringify(state)}`);
+      if (attempt === 239) {
+        throw new Error(
+          `Digital stock filter did not hydrate for ${stock}: ${JSON.stringify(state)}`,
+        );
       }
       await sleep(250);
     }
@@ -3017,30 +7013,48 @@ const assertDigitalStockFilters = async (client, productTitle) => {
     return null;
   };
 
-  const inStockState = await navigateToProductFilter('in-stock');
-  assert(inStockState.hasProduct && inStockState.hasAvailableStock, `Zero-inventory digital product should appear in stock: ${JSON.stringify(inStockState)}`);
+  const inStockState = await navigateToProductFilter("in-stock");
+  assert(
+    inStockState.hasProduct && inStockState.hasAvailableStock,
+    `Zero-inventory digital product should appear in stock: ${JSON.stringify(inStockState)}`,
+  );
 
-  const outOfStockState = await navigateToProductFilter('out-of-stock');
-  assert(!outOfStockState.hasProduct && outOfStockState.hasEmptyState, `Zero-inventory digital product should not appear out of stock: ${JSON.stringify(outOfStockState)}`);
+  const outOfStockState = await navigateToProductFilter("out-of-stock");
+  assert(
+    !outOfStockState.hasProduct && outOfStockState.hasEmptyState,
+    `Zero-inventory digital product should not appear out of stock: ${JSON.stringify(outOfStockState)}`,
+  );
 
-  await navigateToRoute(client, '/products', 'products-command-center', 'Catalog command center');
+  await navigateToRoute(
+    client,
+    "/products",
+    "products-command-center",
+    "Catalog command center",
+  );
   return { inStockState, outOfStockState };
 };
 
 const launchChrome = () => {
-  assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
+  assert(
+    fs.existsSync(CHROME_BIN),
+    `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`,
+  );
 
   const userDataDir = path.join(os.tmpdir(), `backy-commerce-${Date.now()}`);
-  const childProcess = spawn(CHROME_BIN, [
-    '--headless=new',
-    `--remote-debugging-port=${PORT}`,
-    `--user-data-dir=${userDataDir}`,
-    '--disable-gpu',
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--window-size=1680,1180',
-    'about:blank',
-  ], { stdio: 'ignore' });
+  const childProcess = spawn(
+    CHROME_BIN,
+    [
+      "--headless=new",
+      `--remote-debugging-port=${PORT}`,
+      `--user-data-dir=${userDataDir}`,
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--window-size=1680,1180",
+      "about:blank",
+    ],
+    { stdio: "ignore" },
+  );
 
   return { childProcess, userDataDir };
 };
@@ -3048,7 +7062,7 @@ const launchChrome = () => {
 const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
   if (client) {
     try {
-      await client.send('Browser.close');
+      await client.send("Browser.close");
     } catch {
       // Chrome may already be closing.
     }
@@ -3056,10 +7070,10 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
   }
 
   if (childProcess.exitCode === null && childProcess.signalCode === null) {
-    childProcess.kill('SIGTERM');
+    childProcess.kill("SIGTERM");
     const exited = await waitForExit(childProcess);
     if (!exited) {
-      childProcess.kill('SIGKILL');
+      childProcess.kill("SIGKILL");
       await waitForExit(childProcess, 500);
     }
   }
@@ -3068,15 +7082,22 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  assertProductsApiContractsSource();
   await loginAdminApi();
   const suffix = Date.now().toString(36);
   const originalSettings = await getSettings();
   await enableCommercePricingSettings(originalSettings);
   const originalFrontendDesign = await getFrontendDesign();
   await patchFrontendDesign(smokeFrontendDesignContract());
-  const originalProductCollection = snapshotCollection(await findCollection(PRODUCT_COLLECTION_SLUG));
-  const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
-  const originalCustomerCollection = snapshotCollection(await findCollection(CUSTOMERS_COLLECTION_SLUG));
+  const originalProductCollection = snapshotCollection(
+    await findCollection(PRODUCT_COLLECTION_SLUG),
+  );
+  const originalOrdersCollection = snapshotCollection(
+    await findCollection(ORDERS_COLLECTION_SLUG),
+  );
+  const originalCustomerCollection = snapshotCollection(
+    await findCollection(CUSTOMERS_COLLECTION_SLUG),
+  );
   const apiSchemaSetup = await ensureCommerceSchemasReadyViaApi();
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -3096,27 +7117,31 @@ const main = async () => {
 
   try {
     commerceProviderMock = await startCommerceProviderMock();
-    stripeCheckoutMock = stripeCheckoutExecutionEnabled() ? await startStripeCheckoutMock() : null;
+    stripeCheckoutMock = directCatalogProviderMockEnabled()
+      ? await startStripeCheckoutMock()
+      : null;
     await waitForCdp();
-    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
-    assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
+    const page = (await fetchJson("/json/list")).find(
+      (candidate) => candidate.type === "page",
+    );
+    assert(page?.webSocketDebuggerUrl, "No Chrome page target found");
 
     client = connectCdp(page.webSocketDebuggerUrl);
     await client.opened;
-    await client.send('Runtime.enable');
-    await client.send('Page.enable');
-    await client.send('DOM.enable');
-    await client.send('Log.enable');
-    await client.send('Network.enable');
-    await client.send('Network.setCookie', {
+    await client.send("Runtime.enable");
+    await client.send("Page.enable");
+    await client.send("DOM.enable");
+    await client.send("Log.enable");
+    await client.send("Network.enable");
+    await client.send("Network.setCookie", {
       url: API_BASE_URL,
-      name: 'backy_admin_session',
+      name: "backy_admin_session",
       value: apiAdminSessionToken,
-      path: '/',
+      path: "/",
       httpOnly: true,
-      sameSite: 'Lax',
+      sameSite: "Lax",
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: authStorageScript(apiAdminSessionToken),
     });
 
@@ -3124,28 +7149,45 @@ const main = async () => {
     const productsReady = await ensureProductsReady(client);
 
     finalProductCollection = await findCollection(PRODUCT_COLLECTION_SLUG);
-    assert(finalProductCollection?.id, 'Products collection was not available after UI setup');
+    assert(
+      finalProductCollection?.id,
+      "Products collection was not available after UI setup",
+    );
     await assertProductBillingLimitEnforced(finalProductCollection, suffix);
     await deleteExistingFrontendTemplateProducts(finalProductCollection);
     await clickFrontendTemplateCreateProduct(client);
-    frontendTemplateProduct = await waitForFrontendTemplateProduct(finalProductCollection);
+    frontendTemplateProduct = await waitForFrontendTemplateProduct(
+      finalProductCollection,
+    );
     frontendProductRecordId = frontendTemplateProduct.id;
     frontendCatalogProduct = await assertFrontendTemplateProduct({
       productCollection: finalProductCollection,
       record: frontendTemplateProduct,
     });
-    await deleteCollectionRecord(finalProductCollection.id, frontendProductRecordId);
+    await deleteCollectionRecord(
+      finalProductCollection.id,
+      frontendProductRecordId,
+    );
     frontendProductRecordId = null;
     frontendProductCleaned = true;
-    await clickByText(client, 'New product');
+    await clickByText(client, "New product");
 
     const { slug } = await fillProductEditor(client, suffix);
 
     finalProductCollection = await findCollection(PRODUCT_COLLECTION_SLUG);
     finalOrdersCollection = await findCollection(ORDERS_COLLECTION_SLUG);
-    assert(finalProductCollection?.id, 'Products collection was not available after UI setup');
-    assert(finalOrdersCollection?.id, 'Orders collection was not available after UI setup');
-    finalOrdersCollection = await assertOrderIntakeReadinessRequiresPrivateOrders(finalOrdersCollection);
+    assert(
+      finalProductCollection?.id,
+      "Products collection was not available after UI setup",
+    );
+    assert(
+      finalOrdersCollection?.id,
+      "Orders collection was not available after UI setup",
+    );
+    finalOrdersCollection =
+      await assertOrderIntakeReadinessRequiresPrivateOrders(
+        finalOrdersCollection,
+      );
 
     const importedProduct = await assertProductCsvImport({
       productCollection: finalProductCollection,
@@ -3174,53 +7216,83 @@ const main = async () => {
     orderRecordId = publicCommerce.orderRecord.id;
     finalCustomerCollection = publicCommerce.customersCollection;
     customerRecordId = publicCommerce.customerRecord.id;
-    managedCustomerProfile = await assertCustomerProfileManagement(client, finalCustomerCollection, publicCommerce.customerRecord);
+    managedCustomerProfile = await assertCustomerProfileManagement(
+      client,
+      finalCustomerCollection,
+      publicCommerce.customerRecord,
+    );
 
     const layout = await assertProductsLayout(client);
-    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
-    const productListPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
-      mode: 'list',
-      testId: 'products-page-template-list',
-      title: 'Product catalog',
-      slug: 'products-list',
-      nav: 'primary',
+    const screenshot = await client.send("Page.captureScreenshot", {
+      format: "png",
     });
-    const featuredProductPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
-      mode: 'list',
-      testId: 'products-page-template-featured-collection',
-      title: 'Featured products',
-      slug: 'featured-products',
-      nav: 'primary',
-    });
-    const productDetailPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
-      mode: 'item',
-      testId: 'products-page-template-item',
-      title: 'Product detail',
-      slug: 'product-detail',
-      nav: 'none',
-    });
-    const productLaunchPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
-      mode: 'item',
-      testId: 'products-page-template-product-launch',
-      title: 'Product launch',
-      slug: 'product-launch',
-      nav: 'none',
-    });
+    fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, "base64"));
+    const productListPageTemplate = await assertProductPageTemplateShortcut(
+      client,
+      finalProductCollection,
+      {
+        mode: "list",
+        testId: "products-page-template-list",
+        title: "Product catalog",
+        slug: "products-list",
+        nav: "primary",
+      },
+    );
+    const featuredProductPageTemplate = await assertProductPageTemplateShortcut(
+      client,
+      finalProductCollection,
+      {
+        mode: "list",
+        testId: "products-page-template-featured-collection",
+        title: "Featured products",
+        slug: "featured-products",
+        nav: "primary",
+      },
+    );
+    const productDetailPageTemplate = await assertProductPageTemplateShortcut(
+      client,
+      finalProductCollection,
+      {
+        mode: "item",
+        testId: "products-page-template-item",
+        title: "Product detail",
+        slug: "product-detail",
+        nav: "none",
+      },
+    );
+    const productLaunchPageTemplate = await assertProductPageTemplateShortcut(
+      client,
+      finalProductCollection,
+      {
+        mode: "item",
+        testId: "products-page-template-product-launch",
+        title: "Product launch",
+        slug: "product-launch",
+        nav: "none",
+      },
+    );
 
     const browserErrors = client.events
-      .filter((event) => (
-        event.method === 'Runtime.exceptionThrown'
-        || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
-      ))
+      .filter(
+        (event) =>
+          event.method === "Runtime.exceptionThrown" ||
+          (event.method === "Log.entryAdded" &&
+            event.params?.entry?.level === "error"),
+      )
       .map((event) => event.params);
 
-    assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
+    assert(
+      browserErrors.length === 0,
+      `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`,
+    );
 
     await deleteCollectionRecord(finalOrdersCollection.id, orderRecordId);
     await deleteCollectionRecord(finalCustomerCollection.id, customerRecordId);
     await deleteCollectionRecord(finalProductCollection.id, productRecordId);
-    await deleteCollectionRecord(finalProductCollection.id, importedProductRecordId);
+    await deleteCollectionRecord(
+      finalProductCollection.id,
+      importedProductRecordId,
+    );
     productRecordId = null;
     importedProductRecordId = null;
     orderRecordId = null;
@@ -3228,121 +7300,190 @@ const main = async () => {
 
     await restoreCollection(originalProductCollection, finalProductCollection);
     await restoreCollection(originalOrdersCollection, finalOrdersCollection);
-    await restoreCollection(originalCustomerCollection, finalCustomerCollection);
+    await restoreCollection(
+      originalCustomerCollection,
+      finalCustomerCollection,
+    );
     restored = true;
 
-    console.log(JSON.stringify({
-      ok: true,
-      siteId: SITE_ID,
-      routes: {
-      products: `${ADMIN_BASE_URL}/products?siteId=${SITE_ID}`,
-        orders: `${ADMIN_BASE_URL}/orders?siteId=${SITE_ID}`,
-        catalog: `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/catalog?slug=${slug}`,
-        orderIntake: `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`,
-      },
-      apiSchemaSetup,
-      ordersReady,
-      productsReady,
-      product: {
-        slug,
-        recordId: publicCommerce.productRecord.id,
-        startingInventory: publicCommerce.productRecord.values?.inventory,
-        endingInventory: publicCommerce.updatedProduct.values?.inventory,
-      },
-      frontendTemplateProduct: {
-        slug: frontendTemplateProduct.slug,
-        recordId: frontendTemplateProduct.id,
-        templateId: frontendTemplateProduct.values?.frontendDesignTemplateId,
-        publicTemplateId: frontendCatalogProduct.design?.frontendDesignTemplateId,
-        bindingHints: frontendCatalogProduct.design?.frontendDesignBindingHints?.length || 0,
-      },
-      importedProduct: {
-        slug: importedProduct.slug,
-        recordId: importedProduct.id,
-      },
-      order: {
-        id: publicCommerce.order.id,
-        slug: publicCommerce.order.slug,
-        total: publicCommerce.order.total,
-        itemCount: publicCommerce.order.itemCount,
-      },
-      stripeCheckoutExecution: publicCommerce.stripeCheckoutExecution,
-      customer: {
-        id: publicCommerce.customerRecord.id,
-        slug: publicCommerce.customerRecord.slug,
-        orderCount: publicCommerce.customerRecord.values?.ordercount,
-        totalSpent: publicCommerce.customerRecord.values?.totalspent,
-        managedStatus: managedCustomerProfile?.values?.status,
-      },
-      layout,
-      productPageTemplates: {
-        list: {
-          collectionId: productListPageTemplate.collectionId,
-          datasetMode: productListPageTemplate.datasetMode,
-          slug: productListPageTemplate.slug,
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          siteId: SITE_ID,
+          routes: {
+            products: `${ADMIN_BASE_URL}/products?siteId=${SITE_ID}`,
+            orders: `${ADMIN_BASE_URL}/orders?siteId=${SITE_ID}`,
+            catalog: `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/catalog?slug=${slug}`,
+            orderIntake: `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`,
+          },
+          apiSchemaSetup,
+          ordersReady,
+          productsReady,
+          product: {
+            slug,
+            recordId: publicCommerce.productRecord.id,
+            startingInventory: publicCommerce.productRecord.values?.inventory,
+            endingInventory: publicCommerce.updatedProduct.values?.inventory,
+          },
+          frontendTemplateProduct: {
+            slug: frontendTemplateProduct.slug,
+            recordId: frontendTemplateProduct.id,
+            templateId:
+              frontendTemplateProduct.values?.frontendDesignTemplateId,
+            publicTemplateId:
+              frontendCatalogProduct.design?.frontendDesignTemplateId,
+            bindingHints:
+              frontendCatalogProduct.design?.frontendDesignBindingHints
+                ?.length || 0,
+          },
+          importedProduct: {
+            slug: importedProduct.slug,
+            recordId: importedProduct.id,
+          },
+          order: {
+            id: publicCommerce.order.id,
+            slug: publicCommerce.order.slug,
+            total: publicCommerce.order.total,
+            itemCount: publicCommerce.order.itemCount,
+          },
+          stripeCheckoutExecution: publicCommerce.stripeCheckoutExecution,
+          customer: {
+            id: publicCommerce.customerRecord.id,
+            slug: publicCommerce.customerRecord.slug,
+            orderCount: publicCommerce.customerRecord.values?.ordercount,
+            totalSpent: publicCommerce.customerRecord.values?.totalspent,
+            managedStatus: managedCustomerProfile?.values?.status,
+          },
+          layout,
+          productPageTemplates: {
+            list: {
+              collectionId: productListPageTemplate.collectionId,
+              datasetMode: productListPageTemplate.datasetMode,
+              slug: productListPageTemplate.slug,
+            },
+            detail: {
+              collectionId: productDetailPageTemplate.collectionId,
+              datasetMode: productDetailPageTemplate.datasetMode,
+              slug: productDetailPageTemplate.slug,
+            },
+            featured: {
+              collectionId: featuredProductPageTemplate.collectionId,
+              datasetMode: featuredProductPageTemplate.datasetMode,
+              slug: featuredProductPageTemplate.slug,
+            },
+            launch: {
+              collectionId: productLaunchPageTemplate.collectionId,
+              datasetMode: productLaunchPageTemplate.datasetMode,
+              slug: productLaunchPageTemplate.slug,
+            },
+          },
+          frontendProductCleaned,
+          restored,
+          screenshotPath: SCREENSHOT_PATH,
         },
-        detail: {
-          collectionId: productDetailPageTemplate.collectionId,
-          datasetMode: productDetailPageTemplate.datasetMode,
-          slug: productDetailPageTemplate.slug,
-        },
-        featured: {
-          collectionId: featuredProductPageTemplate.collectionId,
-          datasetMode: featuredProductPageTemplate.datasetMode,
-          slug: featuredProductPageTemplate.slug,
-        },
-        launch: {
-          collectionId: productLaunchPageTemplate.collectionId,
-          datasetMode: productLaunchPageTemplate.datasetMode,
-          slug: productLaunchPageTemplate.slug,
-        },
-      },
-      frontendProductCleaned,
-      restored,
-      screenshotPath: SCREENSHOT_PATH,
-    }, null, 2));
+        null,
+        2,
+      ),
+    );
   } finally {
     if (!restored) {
       if (finalProductCollection?.id && frontendProductRecordId) {
-        await deleteCollectionRecord(finalProductCollection.id, frontendProductRecordId).catch((error) => {
-          console.warn('Unable to delete frontend template smoke product:', error instanceof Error ? error.message : error);
+        await deleteCollectionRecord(
+          finalProductCollection.id,
+          frontendProductRecordId,
+        ).catch((error) => {
+          console.warn(
+            "Unable to delete frontend template smoke product:",
+            error instanceof Error ? error.message : error,
+          );
         });
       }
       if (finalOrdersCollection?.id && orderRecordId) {
-        await deleteCollectionRecord(finalOrdersCollection.id, orderRecordId).catch((error) => {
-          console.warn('Unable to delete smoke order:', error instanceof Error ? error.message : error);
+        await deleteCollectionRecord(
+          finalOrdersCollection.id,
+          orderRecordId,
+        ).catch((error) => {
+          console.warn(
+            "Unable to delete smoke order:",
+            error instanceof Error ? error.message : error,
+          );
         });
       }
       if (finalCustomerCollection?.id && customerRecordId) {
-        await deleteCollectionRecord(finalCustomerCollection.id, customerRecordId).catch((error) => {
-          console.warn('Unable to delete smoke customer:', error instanceof Error ? error.message : error);
+        await deleteCollectionRecord(
+          finalCustomerCollection.id,
+          customerRecordId,
+        ).catch((error) => {
+          console.warn(
+            "Unable to delete smoke customer:",
+            error instanceof Error ? error.message : error,
+          );
         });
       }
       if (finalProductCollection?.id && productRecordId) {
-        await deleteCollectionRecord(finalProductCollection.id, productRecordId).catch((error) => {
-          console.warn('Unable to delete smoke product:', error instanceof Error ? error.message : error);
+        await deleteCollectionRecord(
+          finalProductCollection.id,
+          productRecordId,
+        ).catch((error) => {
+          console.warn(
+            "Unable to delete smoke product:",
+            error instanceof Error ? error.message : error,
+          );
         });
       }
       if (finalProductCollection?.id && importedProductRecordId) {
-        await deleteCollectionRecord(finalProductCollection.id, importedProductRecordId).catch((error) => {
-          console.warn('Unable to delete imported smoke product:', error instanceof Error ? error.message : error);
+        await deleteCollectionRecord(
+          finalProductCollection.id,
+          importedProductRecordId,
+        ).catch((error) => {
+          console.warn(
+            "Unable to delete imported smoke product:",
+            error instanceof Error ? error.message : error,
+          );
         });
       }
-      await restoreCollection(originalProductCollection, finalProductCollection || await findCollection(PRODUCT_COLLECTION_SLUG)).catch((error) => {
-        console.warn('Unable to restore product collection:', error instanceof Error ? error.message : error);
+      await restoreCollection(
+        originalProductCollection,
+        finalProductCollection ||
+          (await findCollection(PRODUCT_COLLECTION_SLUG)),
+      ).catch((error) => {
+        console.warn(
+          "Unable to restore product collection:",
+          error instanceof Error ? error.message : error,
+        );
       });
-      await restoreCollection(originalOrdersCollection, finalOrdersCollection || await findCollection(ORDERS_COLLECTION_SLUG)).catch((error) => {
-        console.warn('Unable to restore orders collection:', error instanceof Error ? error.message : error);
+      await restoreCollection(
+        originalOrdersCollection,
+        finalOrdersCollection || (await findCollection(ORDERS_COLLECTION_SLUG)),
+      ).catch((error) => {
+        console.warn(
+          "Unable to restore orders collection:",
+          error instanceof Error ? error.message : error,
+        );
       });
-      await restoreCollection(originalCustomerCollection, finalCustomerCollection || await findCollection(CUSTOMERS_COLLECTION_SLUG)).catch((error) => {
-        console.warn('Unable to restore customers collection:', error instanceof Error ? error.message : error);
+      await restoreCollection(
+        originalCustomerCollection,
+        finalCustomerCollection ||
+          (await findCollection(CUSTOMERS_COLLECTION_SLUG)),
+      ).catch((error) => {
+        console.warn(
+          "Unable to restore customers collection:",
+          error instanceof Error ? error.message : error,
+        );
       });
     }
     await patchFrontendDesign(originalFrontendDesign).catch((error) => {
-      console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
+      console.warn(
+        "Unable to restore original frontend design contract:",
+        error instanceof Error ? error.message : error,
+      );
     });
     await patchSettingsFromSnapshot(originalSettings).catch((error) => {
-      console.warn('Unable to restore original settings:', error instanceof Error ? error.message : error);
+      console.warn(
+        "Unable to restore original settings:",
+        error instanceof Error ? error.message : error,
+      );
     });
 
     await cleanupBrowser({ client, childProcess, userDataDir });

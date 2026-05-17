@@ -1,0 +1,30 @@
+name: Commerce Provider Smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  commerce-provider-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run commerce provider smoke
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: npm run ci:commerce-provider-smoke

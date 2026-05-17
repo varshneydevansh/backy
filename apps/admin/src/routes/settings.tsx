@@ -43,25 +43,33 @@ import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedT
 import { useAuthStore } from '@/stores/authStore';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import type { AdminSession } from '@/lib/adminAuthApi';
-import { useStore, type DeliveryMode } from '@/stores/mockStore';
+import { useStore, type DeliveryMode, type Site } from '@/stores/mockStore';
 import {
+  getAdminSiteSettingsScope,
   getSettings,
   getUserPermissions,
   issueSettingsAdminApiKey,
+  listSites,
   listAdminAuditLogs,
   regenerateSettingsApiKeys,
   revokeSettingsAdminApiKey,
+  runSettingsStorageCredentialRotationProbe,
   runSettingsStorageProvisioningProbe,
+  runSettingsStorageSecretManager,
   testSettingsNotificationWebhook,
+  updateAdminSiteSettingsScope,
   validateSettingsInfrastructure,
   type AdminAuditLog,
+  type AdminSiteSettingsScope,
   type AdminUserPermissionMatrix,
   type IssuedAdminApiKey,
   type SettingsDeploymentHistoryEntry,
   type SettingsNotificationWebhookDeliveryResult,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
+  type SettingsStorageCredentialRotationProbeResult,
   type SettingsStorageProvisioningResult,
+  type SettingsStorageSecretManagerResult,
   updateSettings as updateBackendSettings,
 } from '@/lib/adminContentApi';
 
@@ -70,7 +78,7 @@ import {
 // ============================================
 
 type SettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'commerce' | 'notifications' | 'security';
-type SettingsPermissionKey = 'settings.view' | 'settings.configure' | 'settings.manageKeys' | 'media.configure' | 'activity.export';
+type SettingsPermissionKey = 'settings.view' | 'settings.configure' | 'settings.manageKeys' | 'media.configure' | 'activity.export' | 'sites.view' | 'sites.configure';
 
 const SETTINGS_PERMISSION_ROLE_DEFAULTS: Record<SettingsPermissionKey, Array<'owner' | 'admin' | 'editor' | 'viewer'>> = {
   'settings.view': ['owner', 'admin'],
@@ -78,6 +86,8 @@ const SETTINGS_PERMISSION_ROLE_DEFAULTS: Record<SettingsPermissionKey, Array<'ow
   'settings.manageKeys': ['owner'],
   'media.configure': ['owner', 'admin'],
   'activity.export': ['owner', 'admin'],
+  'sites.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.configure': ['owner', 'admin'],
 };
 
 interface SettingsSearch {
@@ -138,6 +148,21 @@ type SettingsDraftSnapshot = {
   deliveryMode: DeliveryMode;
   auth?: SiteSettingsInput['auth'];
   integrations: NonNullable<SiteSettingsInput['integrations']>;
+};
+
+type SiteScopedSettingsDraft = {
+  titleTemplate: string;
+  defaultDescription: string;
+  googleAnalyticsId: string;
+  plausibleDomain: string;
+  twitter: string;
+  github: string;
+  linkedin: string;
+  defaultLocale: string;
+  localeStrategy: 'none' | 'path-prefix' | 'domain';
+  locales: string;
+  moderationMode: 'manual' | 'auto-approve';
+  blockedTerms: string;
 };
 
 type SettingsValidationIssue = {
@@ -329,6 +354,16 @@ const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
     method: 'GET',
     path: '/sites',
     description: 'List sites for the authenticated admin workspace.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/settings',
+    description: 'Read the site-scoped Settings envelope for site-owned SEO, analytics, social, comment, navigation, domain, deployment, billing, webhook, and frontend-design controls.',
+  },
+  {
+    method: 'PATCH',
+    path: '/sites/:siteId/settings',
+    description: 'Patch allowlisted site-owned Settings sections without mutating global workspace defaults.',
   },
   {
     method: 'GET',
@@ -654,6 +689,112 @@ function settingsDraftFingerprint(snapshot: SettingsDraftSnapshot): string {
   return JSON.stringify(snapshot);
 }
 
+function formatSiteScopedLocaleRows(localization?: AdminSiteSettingsScope['siteSettings']['localization']): string {
+  const defaultLocale = localization?.defaultLocale || 'en';
+  const locales = localization?.locales?.length
+    ? localization.locales
+    : [{ code: defaultLocale, label: defaultLocale.toUpperCase(), direction: 'ltr' as const }];
+
+  return locales
+    .map((locale) => [
+      locale.code,
+      locale.label || locale.code.toUpperCase(),
+      locale.direction === 'rtl' ? 'rtl' : 'ltr',
+      locale.pathPrefix || '',
+      locale.domain || '',
+    ].join(' | '))
+    .join('\n');
+}
+
+function parseSiteScopedLocaleRows(value: string, defaultLocale: string) {
+  const normalizedDefaultLocale = defaultLocale.trim() || 'en';
+  const locales = value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [code = '', label = '', direction = '', pathPrefix = '', domain = ''] = line
+        .split('|')
+        .map((part) => part.trim());
+      if (!code) return null;
+
+      return {
+        code,
+        label: label || code.toUpperCase(),
+        default: code.toLowerCase() === normalizedDefaultLocale.toLowerCase(),
+        direction: direction.toLowerCase() === 'rtl' ? 'rtl' as const : 'ltr' as const,
+        pathPrefix,
+        domain,
+      };
+    })
+    .filter((locale): locale is NonNullable<typeof locale> => Boolean(locale));
+
+  if (locales.some((locale) => locale.default)) {
+    return locales;
+  }
+
+  return [
+    {
+      code: normalizedDefaultLocale,
+      label: normalizedDefaultLocale.toUpperCase(),
+      default: true,
+      direction: 'ltr' as const,
+      pathPrefix: '',
+      domain: '',
+    },
+    ...locales,
+  ];
+}
+
+function createSiteScopedSettingsDraft(settings?: AdminSiteSettingsScope['siteSettings']): SiteScopedSettingsDraft {
+  return {
+    titleTemplate: settings?.seo?.titleTemplate || '%s | {siteName}',
+    defaultDescription: settings?.seo?.defaultDescription || '',
+    googleAnalyticsId: settings?.analytics?.googleAnalyticsId || '',
+    plausibleDomain: settings?.analytics?.plausibleDomain || '',
+    twitter: settings?.social?.twitter || '',
+    github: settings?.social?.github || '',
+    linkedin: settings?.social?.linkedin || '',
+    defaultLocale: settings?.localization?.defaultLocale || 'en',
+    localeStrategy: settings?.localization?.localeStrategy || 'none',
+    locales: formatSiteScopedLocaleRows(settings?.localization),
+    moderationMode: settings?.commentPolicy?.moderationMode === 'auto-approve' ? 'auto-approve' : 'manual',
+    blockedTerms: (settings?.commentPolicy?.blockedTerms || []).join('\n'),
+  };
+}
+
+function siteScopedSettingsPatchFromDraft(draft: SiteScopedSettingsDraft) {
+  const defaultLocale = draft.defaultLocale.trim() || 'en';
+
+  return {
+    seo: {
+      titleTemplate: draft.titleTemplate.trim() || '%s | {siteName}',
+      defaultDescription: draft.defaultDescription.trim(),
+    },
+    analytics: {
+      googleAnalyticsId: draft.googleAnalyticsId.trim(),
+      plausibleDomain: draft.plausibleDomain.trim(),
+    },
+    social: {
+      twitter: draft.twitter.trim(),
+      github: draft.github.trim(),
+      linkedin: draft.linkedin.trim(),
+    },
+    localization: {
+      defaultLocale,
+      localeStrategy: draft.localeStrategy,
+      locales: parseSiteScopedLocaleRows(draft.locales, defaultLocale),
+    },
+    commentPolicy: {
+      moderationMode: draft.moderationMode,
+      blockedTerms: draft.blockedTerms
+        .split('\n')
+        .map((term) => term.trim())
+        .filter(Boolean),
+    },
+  };
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -675,6 +816,7 @@ function SettingsPage() {
   const [runtimeVercel, setRuntimeVercel] = useState<SiteSettingsInput['runtimeVercel']>();
   const [runtimeNotifications, setRuntimeNotifications] = useState<SiteSettingsInput['runtimeNotifications']>();
   const [runtimeCommerce, setRuntimeCommerce] = useState<SiteSettingsInput['runtimeCommerce']>();
+  const [runtimeInteractiveComponents, setRuntimeInteractiveComponents] = useState<SiteSettingsInput['runtimeInteractiveComponents']>();
   const [settingsAuditLogs, setSettingsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditNotice, setAuditNotice] = useState<string | null>(null);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
@@ -689,6 +831,17 @@ function SettingsPage() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentUser?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [siteSettingsSites, setSiteSettingsSites] = useState<Site[]>([]);
+  const [selectedSiteSettingsSiteId, setSelectedSiteSettingsSiteId] = useState('');
+  const [siteSettingsScope, setSiteSettingsScope] = useState<AdminSiteSettingsScope | null>(null);
+  const [siteScopedSettingsDraft, setSiteScopedSettingsDraft] = useState<SiteScopedSettingsDraft>(() => createSiteScopedSettingsDraft());
+  const [lastSavedSiteScopedSettingsDraft, setLastSavedSiteScopedSettingsDraft] = useState<SiteScopedSettingsDraft | null>(null);
+  const [isSiteSettingsLoading, setIsSiteSettingsLoading] = useState(false);
+  const [isSiteSettingsSaving, setIsSiteSettingsSaving] = useState(false);
+  const [siteSettingsNotice, setSiteSettingsNotice] = useState<string | null>(null);
+  const [siteSettingsAuditLogs, setSiteSettingsAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isSiteSettingsAuditLoading, setIsSiteSettingsAuditLoading] = useState(false);
+  const [siteSettingsAuditNotice, setSiteSettingsAuditNotice] = useState<string | null>(null);
   const persistedDeliveryMode = useStore((state) => state.settings.deliveryMode);
   const updateSettings = useStore((state) => state.updateSettings);
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
@@ -699,11 +852,14 @@ function SettingsPage() {
   const canManageApiKeys = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'settings.manageKeys', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const canConfigureMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'media.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'activity.export', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canViewSiteSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'sites.view', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canConfigureSiteSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'sites.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const viewPermissionTitle = canViewSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.view', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const configurePermissionTitle = canConfigureSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const manageKeysPermissionTitle = canManageApiKeys ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.manageKeys', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const mediaConfigurePermissionTitle = canConfigureMedia ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'media.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const activityExportPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'activity.export', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const siteSettingsConfigurePermissionTitle = canConfigureSiteSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'sites.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const canConfigureInfrastructure = canConfigureSettings || canConfigureMedia;
   const isMediaOnlyInfrastructureEditor = !canConfigureSettings && canConfigureMedia;
   const infrastructurePermissionTitle = canConfigureInfrastructure
@@ -727,6 +883,7 @@ function SettingsPage() {
     setRuntimeVercel(backendSettings.runtimeVercel);
     setRuntimeNotifications(backendSettings.runtimeNotifications);
     setRuntimeCommerce(backendSettings.runtimeCommerce);
+    setRuntimeInteractiveComponents(backendSettings.runtimeInteractiveComponents);
     setLastSavedSnapshot(cloneSettingsDraftSnapshot(snapshot));
   }, [updateSettings]);
 
@@ -802,6 +959,33 @@ function SettingsPage() {
     }
   }, [canExportActivity, isPermissionMatrixPending]);
 
+  const loadSiteSettingsAuditLogs = useCallback(async (siteId = selectedSiteSettingsSiteId) => {
+    if (isPermissionMatrixPending) return;
+    if (!siteId || !canExportActivity) {
+      setSiteSettingsAuditLogs([]);
+      setSiteSettingsAuditNotice(null);
+      return;
+    }
+
+    setIsSiteSettingsAuditLoading(true);
+    setSiteSettingsAuditNotice(null);
+
+    try {
+      const result = await listAdminAuditLogs({
+        siteId,
+        entity: 'site',
+        entityId: siteId,
+        action: 'site.settings.updated',
+        limit: 5,
+      });
+      setSiteSettingsAuditLogs(result.logs);
+    } catch {
+      setSiteSettingsAuditNotice('Unable to load site settings audit trail.');
+    } finally {
+      setIsSiteSettingsAuditLoading(false);
+    }
+  }, [canExportActivity, isPermissionMatrixPending, selectedSiteSettingsSiteId]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -833,10 +1017,88 @@ function SettingsPage() {
   }, [applyBackendSettings, canViewSettings, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadSitesForSiteSettings = async () => {
+      if (isPermissionMatrixPending) return;
+      if (!canViewSettings || !canViewSiteSettings) {
+        setSiteSettingsSites([]);
+        setSelectedSiteSettingsSiteId('');
+        setSiteSettingsScope(null);
+        return;
+      }
+
+      try {
+        const backendSites = await listSites();
+        if (cancelled) return;
+        setSiteSettingsSites(backendSites);
+        setSelectedSiteSettingsSiteId((current) => current || backendSites[0]?.id || '');
+      } catch {
+        if (!cancelled) {
+          setSiteSettingsNotice('Unable to load sites for site-scoped settings.');
+        }
+      }
+    };
+
+    void loadSitesForSiteSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewSettings, canViewSiteSettings, isPermissionMatrixPending]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSiteSettingsScope = async () => {
+      if (!selectedSiteSettingsSiteId || !canViewSiteSettings) {
+        setSiteSettingsScope(null);
+        const emptyDraft = createSiteScopedSettingsDraft();
+        setSiteScopedSettingsDraft(emptyDraft);
+        setLastSavedSiteScopedSettingsDraft(emptyDraft);
+        return;
+      }
+
+      setIsSiteSettingsLoading(true);
+      setSiteSettingsNotice(null);
+
+      try {
+        const scope = await getAdminSiteSettingsScope(selectedSiteSettingsSiteId);
+        if (cancelled) return;
+        const draft = createSiteScopedSettingsDraft(scope.siteSettings);
+        setSiteSettingsScope(scope);
+        setSiteScopedSettingsDraft(draft);
+        setLastSavedSiteScopedSettingsDraft(draft);
+      } catch {
+        if (!cancelled) {
+          setSiteSettingsScope(null);
+          setSiteSettingsNotice('Unable to load site-scoped settings for the selected site.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSiteSettingsLoading(false);
+        }
+      }
+    };
+
+    void loadSiteSettingsScope();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewSiteSettings, selectedSiteSettingsSiteId]);
+
+  useEffect(() => {
     if (!isPermissionMatrixPending) {
       void loadSettingsAuditLogs();
     }
   }, [isPermissionMatrixPending, loadSettingsAuditLogs]);
+
+  useEffect(() => {
+    if (!isPermissionMatrixPending) {
+      void loadSiteSettingsAuditLogs();
+    }
+  }, [isPermissionMatrixPending, loadSiteSettingsAuditLogs]);
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -988,6 +1250,45 @@ function SettingsPage() {
     }
   };
 
+  const handleSaveSiteScopedSettings = async () => {
+    if (!selectedSiteSettingsSiteId || isSiteSettingsSaving) return;
+    if (!canConfigureSiteSettings) {
+      setSiteSettingsNotice(siteSettingsConfigurePermissionTitle || 'Your account cannot configure site settings.');
+      return;
+    }
+    if (!hasSiteScopedSettingsUnsavedChanges) {
+      setSiteSettingsNotice('No site-scoped settings changes to save.');
+      return;
+    }
+
+    setIsSiteSettingsSaving(true);
+    setSiteSettingsNotice(null);
+
+    try {
+      const scope = await updateAdminSiteSettingsScope(
+        selectedSiteSettingsSiteId,
+        siteScopedSettingsPatchFromDraft(siteScopedSettingsDraft),
+      );
+      const draft = createSiteScopedSettingsDraft(scope.siteSettings);
+      setSiteSettingsScope(scope);
+      setSiteScopedSettingsDraft(draft);
+      setLastSavedSiteScopedSettingsDraft(draft);
+      setSiteSettingsNotice('Site-scoped settings saved.');
+      await loadSiteSettingsAuditLogs(selectedSiteSettingsSiteId);
+      await loadSettingsAuditLogs();
+    } catch {
+      setSiteSettingsNotice('Unable to save site-scoped settings.');
+    } finally {
+      setIsSiteSettingsSaving(false);
+    }
+  };
+
+  const handleDiscardSiteScopedSettings = () => {
+    if (!lastSavedSiteScopedSettingsDraft || isSiteSettingsSaving) return;
+    setSiteScopedSettingsDraft(lastSavedSiteScopedSettingsDraft);
+    setSiteSettingsNotice('Site-scoped settings changes discarded.');
+  };
+
   const discardUnsavedChanges = () => {
     if (isSaving) return;
 
@@ -1037,6 +1338,9 @@ function SettingsPage() {
   }), [authSettings, deliveryMode, integrations]);
   const hasUnsavedChanges = lastSavedSnapshot
     ? settingsDraftFingerprint(currentSettingsSnapshot) !== settingsDraftFingerprint(lastSavedSnapshot)
+    : false;
+  const hasSiteScopedSettingsUnsavedChanges = lastSavedSiteScopedSettingsDraft
+    ? JSON.stringify(siteScopedSettingsDraft) !== JSON.stringify(lastSavedSiteScopedSettingsDraft)
     : false;
   const validationIssues = useMemo(() => validateSettingsDraft({
     deliveryMode,
@@ -1163,6 +1467,13 @@ function SettingsPage() {
           : 'Review catalog, checkout, tax, shipping, discount, reservation, and webhook secret controls.',
         ready: Boolean(commerce) && commerceRuntimeConfigured,
       },
+      {
+        label: 'Interactive component contract',
+        detail: runtimeInteractiveComponents?.configured
+          ? 'Manifest, registry, sandbox, fallback, and data-binding contract metadata is ready for custom frontends.'
+          : 'Review component registry and sandbox environment before enabling custom code components.',
+        ready: runtimeInteractiveComponents?.configured !== false,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -1191,6 +1502,7 @@ function SettingsPage() {
     publicApiKey,
     runtimeDatabase,
     runtimeCommerce,
+    runtimeInteractiveComponents,
     runtimeMediaScanner,
     runtimeNotifications,
     runtimeStorage,
@@ -1207,6 +1519,7 @@ function SettingsPage() {
     runtimeVercel,
     runtimeNotifications,
     runtimeCommerce,
+    runtimeInteractiveComponents,
     storage: integrations.storage,
     supabase: integrations.supabase,
     vercel: integrations.vercel,
@@ -1220,6 +1533,7 @@ function SettingsPage() {
     integrations.vercel,
     runtimeDatabase,
     runtimeCommerce,
+    runtimeInteractiveComponents,
     runtimeMediaScanner,
     runtimeNotifications,
     runtimeStorage,
@@ -1272,7 +1586,52 @@ function SettingsPage() {
         metadata: integrations.commerce || null,
         note: 'Commerce behavior lives in Backy; payment-provider API keys and webhook signing secrets stay in deployment environment variables.',
       },
+      interactiveComponents: {
+        runtime: runtimeInteractiveComponents || null,
+        publicManifestPointer: '/api/sites/{siteId}/manifest#data.modules.interactiveComponents',
+        elementTypes: ['interactiveFigure', 'codeComponent'],
+        renderContract: {
+          fields: ['componentKey', 'version', 'props', 'controls', 'dataBindings', 'fallback', 'accessibility', 'renderCapabilities'],
+          hydrationModes: ['trusted-component', 'sandbox-iframe', 'static-fallback'],
+          postMessageProtocol: 'backy.interactive-component.v1',
+          fallbackRequired: true,
+        },
+        dataBindingScopes: ['collections', 'media', 'forms', 'commerce', 'page', 'blog'],
+        safety: {
+          customCodeRunsFrontendSide: true,
+          parentDomAccess: false,
+          parentCookieAccess: false,
+          adminApiAccess: false,
+          secretsInPayload: false,
+          communication: 'postMessage-only',
+        },
+        note: 'Interactive animations execute in the frontend, while Backy owns the content model, registry metadata, allowed bindings, fallback content, publishing contract, and sandbox policy.',
+      },
       envContract: infrastructureEnvContract,
+      releaseCertification: {
+        workflow: '.github/workflows/backy-release-certification.yml',
+        localPreflight: 'npm run test:release-certification-preflight-contract',
+        databaseGate: {
+          input: 'certify_database',
+          requiredSecret: 'BACKY_DATABASE_URL',
+          commands: ['npm run ci:forms-postgres', 'npm run ci:sdk-postgres-smoke'],
+        },
+        providerGates: [
+          { input: 'certify_settings_providers', command: 'npm run ci:settings-provider-certification' },
+          { input: 'certify_commerce_providers', command: 'npm run ci:commerce-provider-certification' },
+          { input: 'certify_storage', scope: 'live storage provisioning diagnostics' },
+          { input: 'certify_rotation', scope: 'replacement storage credential validation' },
+          { input: 'certify_vercel_secrets', scope: 'Vercel env secret-manager dry-run planning' },
+          { input: 'certify_notification', scope: 'configured notification delivery diagnostics' },
+        ],
+        secretFamilies: [
+          'BACKY_DATABASE_URL',
+          'storage/Supabase/S3 provider secrets',
+          'VERCEL_TOKEN and project metadata',
+          'notification provider credentials',
+          'commerce provider credentials',
+        ],
+      },
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
     frontendApiCapabilities: FRONTEND_API_CAPABILITIES,
@@ -1285,6 +1644,24 @@ function SettingsPage() {
       notifications: notificationSettings,
       commerce: commerceSettings,
     },
+    siteScopedSettings: siteSettingsScope
+      ? {
+          schemaVersion: siteSettingsScope.schemaVersion,
+          scope: siteSettingsScope.scope,
+          endpoints: siteSettingsScope.endpoints,
+          editableSections: ['seo', 'analytics', 'social', 'localization', 'commentPolicy'],
+          savedSiteSettings: {
+            seo: siteSettingsScope.siteSettings.seo,
+            analytics: siteSettingsScope.siteSettings.analytics,
+            social: siteSettingsScope.siteSettings.social,
+            localization: siteSettingsScope.siteSettings.localization,
+            commentPolicy: siteSettingsScope.siteSettings.commentPolicy,
+          },
+          draft: siteScopedSettingsPatchFromDraft(siteScopedSettingsDraft),
+          dirty: hasSiteScopedSettingsUnsavedChanges,
+          note: 'Site-scoped settings override workspace defaults for the selected site while keeping global Settings unchanged.',
+        }
+      : null,
     commerce: {
       settings: commerceSettings,
       note: 'Commerce settings control catalog/checkout intent for custom frontends; payment tokens and provider secrets stay outside Backy settings.',
@@ -1322,12 +1699,16 @@ function SettingsPage() {
     publicApiKey,
     runtimeDatabase,
     runtimeCommerce,
+    runtimeInteractiveComponents,
     runtimeMediaScanner,
     runtimeNotifications,
     runtimeStorage,
     runtimeSupabase,
     runtimeVercel,
     seoSettings,
+    siteScopedSettingsDraft,
+    hasSiteScopedSettingsUnsavedChanges,
+    siteSettingsScope,
   ]);
   const settingsHandoffText = useMemo(() => JSON.stringify(settingsHandoff, null, 2), [settingsHandoff]);
 
@@ -1705,6 +2086,7 @@ function SettingsPage() {
             runtimeVercel={runtimeVercel}
             runtimeNotifications={runtimeNotifications}
             runtimeCommerce={runtimeCommerce}
+            runtimeInteractiveComponents={runtimeInteractiveComponents}
             envContract={infrastructureEnvContract}
             disabled={infrastructureFormDisabled}
             mediaOnly={isMediaOnlyInfrastructureEditor}
@@ -1754,6 +2136,30 @@ function SettingsPage() {
           />
         )}
         </fieldset>
+        {activeTab === 'general' && (
+          <SiteScopedSettingsPanel
+            sites={siteSettingsSites}
+            selectedSiteId={selectedSiteSettingsSiteId}
+            scope={siteSettingsScope}
+            value={siteScopedSettingsDraft}
+            loading={isSiteSettingsLoading}
+            saving={isSiteSettingsSaving}
+            notice={siteSettingsNotice}
+            hasUnsavedChanges={hasSiteScopedSettingsUnsavedChanges}
+            auditLogs={siteSettingsAuditLogs}
+            auditLoading={isSiteSettingsAuditLoading}
+            auditNotice={siteSettingsAuditNotice}
+            canViewAudit={canExportActivity}
+            auditPermissionTitle={activityExportPermissionTitle}
+            disabled={isSiteSettingsLoading || isSiteSettingsSaving || isPermissionMatrixPending || !canConfigureSiteSettings}
+            canView={canViewSiteSettings}
+            permissionTitle={siteSettingsConfigurePermissionTitle}
+            onSelectSite={setSelectedSiteSettingsSiteId}
+            onChange={setSiteScopedSettingsDraft}
+            onDiscard={handleDiscardSiteScopedSettings}
+            onSave={() => void handleSaveSiteScopedSettings()}
+          />
+        )}
         </PanelContent>
       </Panel>
     </div>
@@ -1979,6 +2385,457 @@ function GeneralSettings({
             </select>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SiteScopedSettingsPanel({
+  sites,
+  selectedSiteId,
+  scope,
+  value,
+  loading,
+  saving,
+  notice,
+  hasUnsavedChanges,
+  auditLogs,
+  auditLoading,
+  auditNotice,
+  canViewAudit,
+  auditPermissionTitle,
+  disabled,
+  canView,
+  permissionTitle,
+  onSelectSite,
+  onChange,
+  onDiscard,
+  onSave,
+}: {
+  sites: Site[];
+  selectedSiteId: string;
+  scope: AdminSiteSettingsScope | null;
+  value: SiteScopedSettingsDraft;
+  loading: boolean;
+  saving: boolean;
+  notice: string | null;
+  hasUnsavedChanges: boolean;
+  auditLogs: AdminAuditLog[];
+  auditLoading: boolean;
+  auditNotice: string | null;
+  canViewAudit: boolean;
+  auditPermissionTitle?: string;
+  disabled: boolean;
+  canView: boolean;
+  permissionTitle?: string;
+  onSelectSite: (siteId: string) => void;
+  onChange: Dispatch<SetStateAction<SiteScopedSettingsDraft>>;
+  onDiscard: () => void;
+  onSave: () => void;
+}) {
+  const selectedSite = sites.find((site) => site.id === selectedSiteId);
+  const blockedTerms = value.blockedTerms
+    .split('\n')
+    .map((term) => term.trim())
+    .filter(Boolean);
+
+  if (!canView) {
+    return (
+      <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4" data-testid="settings-site-scope-panel">
+        <h3 className="text-sm font-semibold">Site-scoped settings</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Site settings are hidden until your account can view sites.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded-lg border border-border bg-background p-4" data-testid="settings-site-scope-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Site-scoped settings</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Workspace defaults stay global. These controls save only to the selected site's scoped settings contract.
+          </p>
+        </div>
+        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          {scope?.schemaVersion || 'backy.site-settings-scope.v1'}
+        </span>
+      </div>
+
+      {notice && (
+        <div className="mt-3">
+          <Notice tone={notice.includes('saved') ? 'success' : 'warning'}>{notice}</Notice>
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.3fr)]">
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="settings-site-scope-site" className="block text-sm font-medium">
+              Site
+            </label>
+            <select
+              id="settings-site-scope-site"
+              data-testid="settings-site-scope-site"
+              value={selectedSiteId}
+              onChange={(event) => onSelectSite(event.target.value)}
+              disabled={loading || saving || sites.length === 0}
+              className={cn(
+                'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                'focus:outline-none focus:ring-2 focus:ring-ring',
+              )}
+            >
+              {sites.length === 0 && <option value="">No sites available</option>}
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name || site.slug}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <dl className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs leading-5">
+            <div>
+              <dt className="font-semibold text-foreground">Selected site</dt>
+              <dd className="text-muted-foreground">{selectedSite?.slug || scope?.scope.siteSlug || 'None'}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-foreground">Scope</dt>
+              <dd className="text-muted-foreground">
+                workspace: {scope?.scope.workspaceSettingsScope || 'global'} / site: {scope?.scope.siteSettingsScope || 'site'}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-foreground">Endpoint</dt>
+              <dd className="break-all text-muted-foreground">{scope?.endpoints.siteSettings || '/api/admin/sites/:siteId/settings'}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-4">
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="settings-site-scope-title-template" className="block text-sm font-medium">
+                Site SEO title template
+              </label>
+              <input
+                id="settings-site-scope-title-template"
+                data-testid="settings-site-scope-title-template"
+                type="text"
+                value={value.titleTemplate}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({ ...current, titleTemplate: event.target.value }))}
+                className={cn(
+                  'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="settings-site-scope-description" className="block text-sm font-medium">
+                Site default description
+              </label>
+              <textarea
+                id="settings-site-scope-description"
+                data-testid="settings-site-scope-description"
+                rows={4}
+                value={value.defaultDescription}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({ ...current, defaultDescription: event.target.value }))}
+                className={cn(
+                  'mt-1 w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="settings-site-scope-ga" className="block text-sm font-medium">
+                Google Analytics ID
+              </label>
+              <input
+                id="settings-site-scope-ga"
+                data-testid="settings-site-scope-ga"
+                type="text"
+                value={value.googleAnalyticsId}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({ ...current, googleAnalyticsId: event.target.value }))}
+                className={cn(
+                  'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="settings-site-scope-plausible" className="block text-sm font-medium">
+                Plausible domain
+              </label>
+              <input
+                id="settings-site-scope-plausible"
+                data-testid="settings-site-scope-plausible"
+                type="text"
+                value={value.plausibleDomain}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({ ...current, plausibleDomain: event.target.value }))}
+                className={cn(
+                  'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <div>
+                <label htmlFor="settings-site-scope-twitter" className="block text-sm font-medium">
+                  Twitter
+                </label>
+                <input
+                  id="settings-site-scope-twitter"
+                  data-testid="settings-site-scope-twitter"
+                  type="url"
+                  value={value.twitter}
+                  disabled={disabled || !selectedSiteId}
+                  onChange={(event) => onChange((current) => ({ ...current, twitter: event.target.value }))}
+                  className={cn(
+                    'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                    'focus:outline-none focus:ring-2 focus:ring-ring',
+                  )}
+                />
+              </div>
+              <div>
+                <label htmlFor="settings-site-scope-github" className="block text-sm font-medium">
+                  GitHub
+                </label>
+                <input
+                  id="settings-site-scope-github"
+                  data-testid="settings-site-scope-github"
+                  type="url"
+                  value={value.github}
+                  disabled={disabled || !selectedSiteId}
+                  onChange={(event) => onChange((current) => ({ ...current, github: event.target.value }))}
+                  className={cn(
+                    'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                    'focus:outline-none focus:ring-2 focus:ring-ring',
+                  )}
+                />
+              </div>
+              <div>
+                <label htmlFor="settings-site-scope-linkedin" className="block text-sm font-medium">
+                  LinkedIn
+                </label>
+                <input
+                  id="settings-site-scope-linkedin"
+                  data-testid="settings-site-scope-linkedin"
+                  type="url"
+                  value={value.linkedin}
+                  disabled={disabled || !selectedSiteId}
+                  onChange={(event) => onChange((current) => ({ ...current, linkedin: event.target.value }))}
+                  className={cn(
+                    'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                    'focus:outline-none focus:ring-2 focus:ring-ring',
+                  )}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="settings-site-scope-default-locale" className="block text-sm font-medium">
+                Default locale
+              </label>
+              <input
+                id="settings-site-scope-default-locale"
+                data-testid="settings-site-scope-default-locale"
+                type="text"
+                value={value.defaultLocale}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({ ...current, defaultLocale: event.target.value }))}
+                className={cn(
+                  'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="settings-site-scope-locale-strategy" className="block text-sm font-medium">
+                Locale routing
+              </label>
+              <select
+                id="settings-site-scope-locale-strategy"
+                data-testid="settings-site-scope-locale-strategy"
+                value={value.localeStrategy}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({
+                  ...current,
+                  localeStrategy: event.target.value === 'domain'
+                    ? 'domain'
+                    : event.target.value === 'path-prefix'
+                      ? 'path-prefix'
+                      : 'none',
+                }))}
+                className={cn(
+                  'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              >
+                <option value="none">None</option>
+                <option value="path-prefix">Path prefix</option>
+                <option value="domain">Domain</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="settings-site-scope-locales" className="block text-sm font-medium">
+                Locale entries
+              </label>
+              <textarea
+                id="settings-site-scope-locales"
+                data-testid="settings-site-scope-locales"
+                rows={4}
+                value={value.locales}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({ ...current, locales: event.target.value }))}
+                className={cn(
+                  'mt-1 w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                One locale per line: code | label | direction | pathPrefix | domain
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="settings-site-scope-moderation" className="block text-sm font-medium">
+                Comment moderation
+              </label>
+              <select
+                id="settings-site-scope-moderation"
+                data-testid="settings-site-scope-moderation"
+                value={value.moderationMode}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({
+                  ...current,
+                  moderationMode: event.target.value === 'auto-approve' ? 'auto-approve' : 'manual',
+                }))}
+                className={cn(
+                  'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              >
+                <option value="manual">Manual review</option>
+                <option value="auto-approve">Auto approve</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="settings-site-scope-blocked-terms" className="block text-sm font-medium">
+                Blocked comment terms
+              </label>
+              <textarea
+                id="settings-site-scope-blocked-terms"
+                data-testid="settings-site-scope-blocked-terms"
+                rows={4}
+                value={value.blockedTerms}
+                disabled={disabled || !selectedSiteId}
+                onChange={(event) => onChange((current) => ({ ...current, blockedTerms: event.target.value }))}
+                className={cn(
+                  'mt-1 w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {blockedTerms.length} normalized term{blockedTerms.length === 1 ? '' : 's'} will be saved.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <p className="text-xs leading-5 text-muted-foreground">
+          The save request patches only allowlisted site sections and records a site-scoped audit event.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || !selectedSiteId || !hasUnsavedChanges}
+            title={permissionTitle}
+            onClick={onDiscard}
+          >
+            Discard site changes
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={disabled || !selectedSiteId || !hasUnsavedChanges}
+            title={permissionTitle}
+            onClick={onSave}
+            iconStart={saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+          >
+            {saving ? 'Saving...' : hasUnsavedChanges ? 'Save site settings' : 'No site changes'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3" data-testid="settings-site-scope-audit">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold">Site settings audit</h4>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Recent request-id events for this selected site's scoped settings.
+            </p>
+          </div>
+          <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {canViewAudit ? `${auditLogs.length} event${auditLogs.length === 1 ? '' : 's'}` : 'Hidden'}
+          </span>
+        </div>
+
+        {!canViewAudit ? (
+          <p className="mt-3 text-xs leading-5 text-muted-foreground" title={auditPermissionTitle}>
+            Audit activity requires activity export permission.
+          </p>
+        ) : auditLoading ? (
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">Loading site settings audit...</p>
+        ) : auditNotice ? (
+          <Notice tone="warning" className="mt-3">{auditNotice}</Notice>
+        ) : auditLogs.length === 0 ? (
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">No site settings updates recorded yet.</p>
+        ) : (
+          <div className="mt-3 divide-y divide-border rounded-lg border border-border bg-background">
+            {auditLogs.map((log) => {
+              const changedKeys = Array.isArray(log.metadata?.changedKeys)
+                ? log.metadata.changedKeys.filter((key): key is string => typeof key === 'string')
+                : [];
+              return (
+                <div key={log.id} className="grid gap-2 px-3 py-2 text-xs md:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{auditTitle(log)}</p>
+                    <p className="mt-1 text-muted-foreground">{changedKeys.length ? `Changed ${changedKeys.join(', ')}` : auditDescription(log)}</p>
+                    {log.requestId && (
+                      <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{log.requestId}</p>
+                    )}
+                  </div>
+                  <div className="text-left text-muted-foreground md:text-right">
+                    <p>{formatAuditTime(log.createdAt)}</p>
+                    <p className="mt-1">{log.actorId || 'admin'}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2564,7 +3421,7 @@ type StorageSettings = NonNullable<IntegrationSettings['storage']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
 type CommerceSettingsConfig = NonNullable<IntegrationSettings['commerce']>;
 type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
-type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce';
+type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce' | 'interactiveComponents';
 type InfrastructureEnvContract = {
   provider: InfrastructureEnvProvider;
   key: string;
@@ -2657,6 +3514,8 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   discountProviderUrl: '',
   catalogSyncProvider: 'manual',
   catalogSyncProviderUrl: '',
+  subscriptionActionProvider: 'manual',
+  subscriptionActionProviderUrl: '',
   shippingLabelProvider: 'manual',
   shippingOriginAddress: '',
   shippingDefaultParcel: '',
@@ -3117,7 +3976,7 @@ function validateSettingsDraft({
       provider: commerce.catalogSyncProvider,
       url: commerce.catalogSyncProviderUrl,
       label: 'Product catalog sync endpoint URL',
-      detail: 'Use an http or https catalog-sync endpoint, or switch product provider sync back to manual/Stripe handoff.',
+      detail: 'Use an http or https catalog-sync endpoint, or switch product provider sync back to manual/direct provider handoff.',
     },
     {
       provider: commerce.fulfillmentProvider,
@@ -3371,6 +4230,7 @@ const buildInfrastructureEnvContract = ({
   runtimeVercel,
   runtimeNotifications,
   runtimeCommerce,
+  runtimeInteractiveComponents,
   storage,
   supabase,
   vercel,
@@ -3384,6 +4244,7 @@ const buildInfrastructureEnvContract = ({
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
+  runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
   storage?: StorageSettings;
   supabase?: SupabaseSettings;
   vercel?: VercelSettings;
@@ -3573,9 +4434,9 @@ const buildInfrastructureEnvContract = ({
     key: 'STRIPE_SECRET_KEY',
     aliases: ['BACKY_STRIPE_SECRET_KEY'],
     label: 'Payment provider API key',
-    description: 'Server-only Stripe key used by checkout sessions, Stripe Tax calculations, and provider refund execution.',
+    description: 'Server-only Stripe key used by checkout sessions, Stripe Tax calculations, promotion-code discounts, and provider refund execution.',
     configured: Boolean(runtimeCommerce?.stripeSecretConfigured),
-    required: commerce?.paymentProvider === 'stripe' || commerce?.taxProvider === 'stripe',
+    required: commerce?.paymentProvider === 'stripe' || commerce?.taxProvider === 'stripe' || commerce?.discountProvider === 'stripe',
     secret: true,
     example: '<stripe-secret-key>',
   },
@@ -3592,6 +4453,17 @@ const buildInfrastructureEnvContract = ({
   },
   {
     provider: 'commerce',
+    key: 'BACKY_STRIPE_API_VERSION',
+    aliases: ['STRIPE_API_VERSION'],
+    label: 'Stripe API version',
+    description: 'Optional Stripe API version override sent with Stripe Tax and promotion-code quote requests.',
+    configured: Boolean(runtimeCommerce?.stripeApiVersion),
+    required: false,
+    valueHint: runtimeCommerce?.stripeApiVersion,
+    example: '2025-10-29.clover',
+  },
+  {
+    provider: 'commerce',
     key: 'BACKY_STRIPE_TAX_API_BASE_URL',
     label: 'Stripe Tax API base URL',
     description: 'Optional Stripe Tax base URL override used by Orders quote refresh when Stripe Tax is selected.',
@@ -3599,6 +4471,82 @@ const buildInfrastructureEnvContract = ({
     required: false,
     valueHint: runtimeCommerce?.stripeTaxApiBaseUrl,
     example: 'https://api.stripe.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_STRIPE_DISCOUNT_API_BASE_URL',
+    label: 'Stripe discount API base URL',
+    description: 'Optional Stripe promotion-code base URL override used by Orders quote refresh when Stripe discounts are selected.',
+    configured: Boolean(runtimeCommerce?.stripeDiscountApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.stripeDiscountApiBaseUrl,
+    example: 'https://api.stripe.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_TAXJAR_API_KEY',
+    aliases: ['TAXJAR_API_KEY'],
+    label: 'TaxJar API key',
+    description: 'Server-only TaxJar key used by Orders quote refresh when TaxJar is selected.',
+    configured: Boolean(runtimeCommerce?.taxJarApiKeyConfigured),
+    required: commerce?.taxProvider === 'taxjar',
+    secret: true,
+    example: '<taxjar-api-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_TAXJAR_API_BASE_URL',
+    aliases: ['TAXJAR_API_BASE_URL'],
+    label: 'TaxJar API base URL',
+    description: 'Optional TaxJar API base URL override used by Orders quote refresh.',
+    configured: Boolean(runtimeCommerce?.taxJarApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.taxJarApiBaseUrl,
+    example: 'https://api.taxjar.com/v2',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_AVALARA_ACCOUNT_ID',
+    aliases: ['AVALARA_ACCOUNT_ID'],
+    label: 'Avalara account ID',
+    description: 'Server-only Avalara account id used by Orders quote refresh when Avalara is selected.',
+    configured: Boolean(runtimeCommerce?.avalaraAccountConfigured),
+    required: commerce?.taxProvider === 'avalara',
+    secret: true,
+    example: '<avalara-account-id>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_AVALARA_LICENSE_KEY',
+    aliases: ['AVALARA_LICENSE_KEY'],
+    label: 'Avalara license key',
+    description: 'Server-only Avalara license key used by Orders quote refresh when Avalara is selected.',
+    configured: Boolean(runtimeCommerce?.avalaraLicenseKeyConfigured),
+    required: commerce?.taxProvider === 'avalara',
+    secret: true,
+    example: '<avalara-license-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_AVALARA_COMPANY_CODE',
+    aliases: ['AVALARA_COMPANY_CODE'],
+    label: 'Avalara company code',
+    description: 'Server-only Avalara company code used by Orders quote refresh when Avalara is selected.',
+    configured: Boolean(runtimeCommerce?.avalaraCompanyCodeConfigured),
+    required: commerce?.taxProvider === 'avalara',
+    secret: true,
+    example: '<avalara-company-code>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_AVALARA_API_BASE_URL',
+    aliases: ['AVALARA_API_BASE_URL'],
+    label: 'Avalara API base URL',
+    description: 'Optional Avalara AvaTax base URL override used by Orders quote refresh.',
+    configured: Boolean(runtimeCommerce?.avalaraApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.avalaraApiBaseUrl,
+    example: 'https://sandbox-rest.avatax.com',
   },
   {
     provider: 'commerce',
@@ -3614,8 +4562,8 @@ const buildInfrastructureEnvContract = ({
     provider: 'commerce',
     key: 'BACKY_PAYPAL_ACCESS_TOKEN',
     aliases: ['PAYPAL_ACCESS_TOKEN'],
-    label: 'PayPal refund access token',
-    description: 'Server-only PayPal access token used by Orders provider-refund execution for capture refunds.',
+    label: 'PayPal commerce access token',
+    description: 'Server-only PayPal access token used by Orders provider-refund execution and Products subscription lifecycle actions.',
     configured: Boolean(runtimeCommerce?.paypalAccessTokenConfigured),
     required: false,
     secret: true,
@@ -3634,10 +4582,32 @@ const buildInfrastructureEnvContract = ({
   },
   {
     provider: 'commerce',
+    key: 'BACKY_PADDLE_API_KEY',
+    aliases: ['PADDLE_API_KEY'],
+    label: 'Paddle subscription API key',
+    description: 'Server-only Paddle API key used by Products subscription lifecycle actions.',
+    configured: Boolean(runtimeCommerce?.paddleApiKeyConfigured),
+    required: false,
+    secret: true,
+    example: '<paddle-api-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_PADDLE_API_BASE_URL',
+    aliases: ['PADDLE_API_BASE_URL'],
+    label: 'Paddle API base URL',
+    description: 'Optional Paddle API base URL override for sandbox adapters, smoke tests, and private network routing.',
+    configured: Boolean(runtimeCommerce?.paddleApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.paddleApiBaseUrl,
+    example: 'https://api.paddle.com',
+  },
+  {
+    provider: 'commerce',
     key: 'BACKY_SQUARE_ACCESS_TOKEN',
     aliases: ['SQUARE_ACCESS_TOKEN'],
-    label: 'Square refund access token',
-    description: 'Server-only Square access token used by Orders provider-refund execution for payment refunds.',
+    label: 'Square commerce access token',
+    description: 'Server-only Square access token used by Products catalog sync, Products subscription lifecycle actions, and Orders provider-refund execution.',
     configured: Boolean(runtimeCommerce?.squareAccessTokenConfigured),
     required: false,
     secret: true,
@@ -3653,6 +4623,160 @@ const buildInfrastructureEnvContract = ({
     required: false,
     valueHint: runtimeCommerce?.squareApiBaseUrl,
     example: 'https://connect.squareup.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN',
+    aliases: ['SHOPIFY_ADMIN_ACCESS_TOKEN'],
+    label: 'Shopify catalog access token',
+    description: 'Server-only Shopify Admin token used by Products catalog sync to create products, variants, and Backy metafields.',
+    configured: Boolean(runtimeCommerce?.shopifyAdminAccessTokenConfigured),
+    required: false,
+    secret: true,
+    example: '<shopify-admin-access-token>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_SHOPIFY_STORE_DOMAIN',
+    aliases: ['SHOPIFY_STORE_DOMAIN'],
+    label: 'Shopify store domain',
+    description: 'Shopify store domain used to resolve the Admin API base URL when no explicit base URL override is configured.',
+    configured: Boolean(runtimeCommerce?.shopifyStoreConfigured),
+    required: false,
+    valueHint: runtimeCommerce?.shopifyStoreDomain || runtimeCommerce?.shopifyAdminApiBaseUrl,
+    example: 'store.myshopify.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_BIGCOMMERCE_ACCESS_TOKEN',
+    aliases: ['BIGCOMMERCE_ACCESS_TOKEN'],
+    label: 'BigCommerce catalog access token',
+    description: 'Server-only BigCommerce token used by Products catalog sync to create catalog products, variants, and custom fields.',
+    configured: Boolean(runtimeCommerce?.bigCommerceAccessTokenConfigured),
+    required: false,
+    secret: true,
+    example: '<bigcommerce-access-token>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_BIGCOMMERCE_STORE_HASH',
+    aliases: ['BIGCOMMERCE_STORE_HASH'],
+    label: 'BigCommerce store hash',
+    description: 'BigCommerce store hash used to resolve the Catalog API base URL when no explicit base URL override is configured.',
+    configured: Boolean(runtimeCommerce?.bigCommerceStoreConfigured),
+    required: false,
+    valueHint: runtimeCommerce?.bigCommerceStoreHash || runtimeCommerce?.bigCommerceApiBaseUrl,
+    example: 'abc123',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_WOOCOMMERCE_CONSUMER_KEY',
+    aliases: ['WOOCOMMERCE_CONSUMER_KEY'],
+    label: 'WooCommerce consumer key',
+    description: 'Server-only WooCommerce consumer key used by Products catalog sync.',
+    configured: Boolean(runtimeCommerce?.wooCommerceConsumerKeyConfigured),
+    required: false,
+    secret: true,
+    example: '<woocommerce-consumer-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_WOOCOMMERCE_CONSUMER_SECRET',
+    aliases: ['WOOCOMMERCE_CONSUMER_SECRET'],
+    label: 'WooCommerce consumer secret',
+    description: 'Server-only WooCommerce consumer secret used by Products catalog sync.',
+    configured: Boolean(runtimeCommerce?.wooCommerceConsumerSecretConfigured),
+    required: false,
+    secret: true,
+    example: '<woocommerce-consumer-secret>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_WOOCOMMERCE_STORE_URL',
+    aliases: ['WOOCOMMERCE_STORE_URL'],
+    label: 'WooCommerce store URL',
+    description: 'WooCommerce store URL used to resolve the REST API base URL when no explicit base URL override is configured.',
+    configured: Boolean(runtimeCommerce?.wooCommerceStoreConfigured),
+    required: false,
+    valueHint: runtimeCommerce?.wooCommerceStoreUrl || runtimeCommerce?.wooCommerceApiBaseUrl,
+    example: 'https://store.example.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_ETSY_ACCESS_TOKEN',
+    aliases: ['ETSY_ACCESS_TOKEN'],
+    label: 'Etsy access token',
+    description: 'Server-only Etsy OAuth token used by Products catalog sync to create draft listings.',
+    configured: Boolean(runtimeCommerce?.etsyAccessTokenConfigured),
+    required: false,
+    secret: true,
+    example: '<etsy-access-token>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_ETSY_API_KEY',
+    aliases: ['ETSY_API_KEY'],
+    label: 'Etsy API key',
+    description: 'Server-only Etsy application API key sent with draft-listing catalog sync requests.',
+    configured: Boolean(runtimeCommerce?.etsyApiKeyConfigured),
+    required: false,
+    secret: true,
+    example: '<etsy-api-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_ETSY_SHOP_ID',
+    aliases: ['ETSY_SHOP_ID'],
+    label: 'Etsy shop id',
+    description: 'Etsy shop id used to resolve the draft-listing endpoint for Products catalog sync.',
+    configured: Boolean(runtimeCommerce?.etsyShopConfigured),
+    required: false,
+    valueHint: runtimeCommerce?.etsyShopId || runtimeCommerce?.etsyApiBaseUrl,
+    example: '12345678',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_ETSY_API_BASE_URL',
+    aliases: ['ETSY_API_BASE_URL'],
+    label: 'Etsy API base URL',
+    description: 'Optional Etsy API base URL override for smoke tests, sandbox adapters, and private network routing.',
+    configured: Boolean(runtimeCommerce?.etsyApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.etsyApiBaseUrl,
+    example: 'https://api.etsy.com/v3/application',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_MAGENTO_ACCESS_TOKEN',
+    aliases: ['MAGENTO_ACCESS_TOKEN'],
+    label: 'Magento catalog access token',
+    description: 'Server-only Magento/Adobe Commerce bearer token used by Products catalog sync to create catalog products.',
+    configured: Boolean(runtimeCommerce?.magentoAccessTokenConfigured),
+    required: false,
+    secret: true,
+    example: '<magento-access-token>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_MAGENTO_STORE_URL',
+    aliases: ['MAGENTO_STORE_URL'],
+    label: 'Magento store URL',
+    description: 'Magento/Adobe Commerce store URL used to resolve the REST catalog API when no explicit base URL override is configured.',
+    configured: Boolean(runtimeCommerce?.magentoStoreConfigured),
+    required: false,
+    valueHint: runtimeCommerce?.magentoStoreUrl || runtimeCommerce?.magentoApiBaseUrl,
+    example: 'https://store.example.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_MAGENTO_API_BASE_URL',
+    aliases: ['MAGENTO_API_BASE_URL'],
+    label: 'Magento API base URL',
+    description: 'Optional Magento/Adobe Commerce REST API base URL override for smoke tests, sandbox adapters, and private network routing.',
+    configured: Boolean(runtimeCommerce?.magentoApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.magentoApiBaseUrl,
+    example: 'https://store.example.com/rest/default/V1',
   },
   {
     provider: 'commerce',
@@ -3681,11 +4805,22 @@ const buildInfrastructureEnvContract = ({
     key: 'BACKY_ADYEN_API_BASE_URL',
     aliases: ['ADYEN_API_BASE_URL'],
     label: 'Adyen API base URL',
-    description: 'Optional Adyen API base URL override for sandbox adapters, smoke tests, and private network routing.',
+    description: 'Optional Adyen Checkout API base URL override used by Orders provider-refund execution, sandbox adapters, smoke tests, and private network routing.',
     configured: Boolean(runtimeCommerce?.adyenApiBaseUrl),
     required: false,
     valueHint: runtimeCommerce?.adyenApiBaseUrl,
     example: 'https://checkout-test.adyen.com/v71',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_ADYEN_RECURRING_API_BASE_URL',
+    aliases: ['ADYEN_RECURRING_API_BASE_URL'],
+    label: 'Adyen Recurring API base URL',
+    description: 'Optional Adyen PAL Recurring API base URL override used by Products subscription cancellation actions.',
+    configured: Boolean(runtimeCommerce?.adyenRecurringApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.adyenRecurringApiBaseUrl,
+    example: 'https://pal-test.adyen.com/pal/servlet/Recurring/v68',
   },
   {
     provider: 'commerce',
@@ -3711,12 +4846,45 @@ const buildInfrastructureEnvContract = ({
   },
   {
     provider: 'commerce',
+    key: 'BACKY_RAZORPAY_KEY_ID',
+    aliases: ['RAZORPAY_KEY_ID'],
+    label: 'Razorpay key ID',
+    description: 'Server-only Razorpay key ID used with the key secret for Orders provider-refund execution and Products subscription lifecycle actions.',
+    configured: Boolean(runtimeCommerce?.razorpayKeyIdConfigured),
+    required: false,
+    secret: true,
+    example: '<razorpay-key-id>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_RAZORPAY_KEY_SECRET',
+    aliases: ['RAZORPAY_KEY_SECRET'],
+    label: 'Razorpay key secret',
+    description: 'Server-only Razorpay key secret used by Orders provider-refund execution and Products subscription lifecycle actions.',
+    configured: Boolean(runtimeCommerce?.razorpayKeySecretConfigured),
+    required: false,
+    secret: true,
+    example: '<razorpay-key-secret>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_RAZORPAY_API_BASE_URL',
+    aliases: ['RAZORPAY_API_BASE_URL'],
+    label: 'Razorpay API base URL',
+    description: 'Optional Razorpay API base URL override for sandbox adapters, smoke tests, and private network routing.',
+    configured: Boolean(runtimeCommerce?.razorpayApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.razorpayApiBaseUrl,
+    example: 'https://api.razorpay.com',
+  },
+  {
+    provider: 'commerce',
     key: 'BACKY_EASYPOST_API_KEY',
     aliases: ['EASYPOST_API_KEY'],
     label: 'EasyPost label API key',
-    description: 'Server-only EasyPost key used by Orders to purchase labels, void shipments, and refresh tracking.',
+    description: 'Server-only EasyPost key used by Orders to calculate shipping quotes, purchase labels, void shipments, and refresh tracking.',
     configured: Boolean(runtimeCommerce?.easyPostApiKeyConfigured),
-    required: commerce?.shippingLabelProvider === 'easypost',
+    required: commerce?.shippingLabelProvider === 'easypost' || commerce?.shippingProvider === 'easypost',
     secret: true,
     example: '<easypost-api-key>',
   },
@@ -3736,9 +4904,9 @@ const buildInfrastructureEnvContract = ({
     key: 'BACKY_SHIPPO_API_KEY',
     aliases: ['SHIPPO_API_KEY'],
     label: 'Shippo label API key',
-    description: 'Server-only Shippo key used by Orders to purchase labels and request label refunds.',
+    description: 'Server-only Shippo key used by Orders to calculate shipping quotes, purchase labels, track shipments, and request label refunds.',
     configured: Boolean(runtimeCommerce?.shippoApiKeyConfigured),
-    required: commerce?.shippingLabelProvider === 'shippo',
+    required: commerce?.shippingLabelProvider === 'shippo' || commerce?.shippingProvider === 'shippo',
     secret: true,
     example: '<shippo-api-key>',
   },
@@ -3752,6 +4920,50 @@ const buildInfrastructureEnvContract = ({
     required: false,
     valueHint: runtimeCommerce?.shippoApiBaseUrl,
     example: 'https://api.goshippo.com',
+  },
+  {
+    provider: 'interactiveComponents',
+    key: 'BACKY_COMPONENT_REGISTRY_PROVIDER',
+    aliases: ['BACKY_INTERACTIVE_COMPONENT_REGISTRY_PROVIDER'],
+    label: 'Interactive component registry',
+    description: 'Selects where trusted interactive figures and code component bundle metadata are resolved.',
+    configured: Boolean(runtimeInteractiveComponents?.registryConfigured),
+    required: true,
+    valueHint: runtimeInteractiveComponents?.registryProvider,
+    example: 'local',
+  },
+  {
+    provider: 'interactiveComponents',
+    key: 'BACKY_COMPONENT_REGISTRY_SIGNING_KEY',
+    aliases: ['BACKY_INTERACTIVE_COMPONENT_SIGNING_KEY'],
+    label: 'Component registry signing key',
+    description: 'Server-only signing key used to verify and publish versioned interactive component bundles.',
+    configured: Boolean(runtimeInteractiveComponents?.signingKeyConfigured),
+    required: Boolean(runtimeInteractiveComponents?.customCodeEnabled),
+    secret: true,
+    example: '<component-registry-signing-key>',
+  },
+  {
+    provider: 'interactiveComponents',
+    key: 'BACKY_COMPONENT_SANDBOX_ORIGIN',
+    aliases: ['BACKY_INTERACTIVE_SANDBOX_ORIGIN'],
+    label: 'Code component sandbox origin',
+    description: 'Dedicated origin used for sandboxed iframe execution of fully custom interactive code.',
+    configured: Boolean(runtimeInteractiveComponents?.sandboxOrigin),
+    required: Boolean(runtimeInteractiveComponents?.customCodeEnabled),
+    valueHint: runtimeInteractiveComponents?.sandboxOrigin,
+    example: 'https://components.example.com',
+  },
+  {
+    provider: 'interactiveComponents',
+    key: 'BACKY_COMPONENT_SANDBOX_CSP',
+    aliases: ['BACKY_INTERACTIVE_SANDBOX_CSP'],
+    label: 'Code component sandbox CSP',
+    description: 'Content Security Policy applied to custom component iframe documents.',
+    configured: Boolean(runtimeInteractiveComponents?.cspConfigured),
+    required: Boolean(runtimeInteractiveComponents?.customCodeEnabled),
+    valueHint: runtimeInteractiveComponents?.cspConfigured ? 'configured' : undefined,
+    example: "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
   },
   {
     provider: 'vercel',
@@ -4005,6 +5217,7 @@ function InfrastructureSettings({
   runtimeVercel,
   runtimeNotifications,
   runtimeCommerce,
+  runtimeInteractiveComponents,
   envContract,
   disabled = false,
   mediaOnly = false,
@@ -4019,6 +5232,7 @@ function InfrastructureSettings({
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
+  runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
   envContract: InfrastructureEnvContract[];
   disabled?: boolean;
   mediaOnly?: boolean;
@@ -4038,6 +5252,12 @@ function InfrastructureSettings({
   const [isRunningStorageProbe, setIsRunningStorageProbe] = useState(false);
   const [storageProbeError, setStorageProbeError] = useState('');
   const [storageProvisioningResult, setStorageProvisioningResult] = useState<SettingsStorageProvisioningResult | null>(null);
+  const [isRunningStorageRotationProbe, setIsRunningStorageRotationProbe] = useState(false);
+  const [storageRotationProbeError, setStorageRotationProbeError] = useState('');
+  const [storageRotationProbeResult, setStorageRotationProbeResult] = useState<SettingsStorageCredentialRotationProbeResult | null>(null);
+  const [isRunningStorageSecretManager, setIsRunningStorageSecretManager] = useState(false);
+  const [storageSecretManagerError, setStorageSecretManagerError] = useState('');
+  const [storageSecretManagerResult, setStorageSecretManagerResult] = useState<SettingsStorageSecretManagerResult | null>(null);
 
   const updateStorage = (next: Partial<StorageSettings>) => {
     if (storageDisabled) return;
@@ -4186,6 +5406,42 @@ function InfrastructureSettings({
     }
   };
 
+  const runStorageRotationProbe = async () => {
+    if (storageDisabled || isRunningStorageRotationProbe) return;
+
+    setIsRunningStorageRotationProbe(true);
+    setStorageRotationProbeError('');
+    setStorageRotationProbeResult(null);
+    try {
+      const result = await runSettingsStorageCredentialRotationProbe();
+      setStorageRotationProbeResult(result);
+    } catch (error) {
+      setStorageRotationProbeError(error instanceof Error ? error.message : 'Unable to run media storage credential rotation probe.');
+    } finally {
+      setIsRunningStorageRotationProbe(false);
+    }
+  };
+
+  const runStorageSecretManager = async (mode: SettingsStorageSecretManagerResult['mode'], dryRun = true) => {
+    if (storageDisabled || isRunningStorageSecretManager) return;
+
+    setIsRunningStorageSecretManager(true);
+    setStorageSecretManagerError('');
+    setStorageSecretManagerResult(null);
+    try {
+      const result = await runSettingsStorageSecretManager({
+        mode,
+        dryRun,
+        targetEnvironments: ['production', 'preview'],
+      });
+      setStorageSecretManagerResult(result);
+    } catch (error) {
+      setStorageSecretManagerError(error instanceof Error ? error.message : 'Unable to run media storage secret manager.');
+    } finally {
+      setIsRunningStorageSecretManager(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -4281,34 +5537,129 @@ function InfrastructureSettings({
         />
         <RuntimeCard
           title="Commerce runtime"
-          description="Detected payment-provider webhook, refund, and shipping-label execution capability."
-          status={runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.paypalAccessTokenConfigured || runtimeCommerce?.squareAccessTokenConfigured || runtimeCommerce?.adyenApiKeyConfigured || runtimeCommerce?.mollieApiKeyConfigured || runtimeCommerce?.easyPostApiKeyConfigured || runtimeCommerce?.shippoApiKeyConfigured ? 'Provider env ready' : 'Needs env'}
-          configured={Boolean(runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.paypalAccessTokenConfigured || runtimeCommerce?.squareAccessTokenConfigured || runtimeCommerce?.adyenApiKeyConfigured || runtimeCommerce?.mollieApiKeyConfigured || runtimeCommerce?.easyPostApiKeyConfigured || runtimeCommerce?.shippoApiKeyConfigured) || !runtimeCommerce?.webhookSecretReference}
+          description="Detected payment-provider webhook, catalog sync, subscription lifecycle, refund, and shipping-label execution capability."
+          status={runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.paypalAccessTokenConfigured || runtimeCommerce?.squareAccessTokenConfigured || runtimeCommerce?.adyenApiKeyConfigured || runtimeCommerce?.mollieApiKeyConfigured || (runtimeCommerce?.razorpayKeyIdConfigured && runtimeCommerce?.razorpayKeySecretConfigured) || runtimeCommerce?.easyPostApiKeyConfigured || runtimeCommerce?.shippoApiKeyConfigured || runtimeCommerce?.shopifyAdminAccessTokenConfigured || runtimeCommerce?.bigCommerceAccessTokenConfigured || runtimeCommerce?.wooCommerceConsumerKeyConfigured || (runtimeCommerce?.etsyAccessTokenConfigured && runtimeCommerce?.etsyApiKeyConfigured && runtimeCommerce?.etsyShopConfigured) || (runtimeCommerce?.magentoAccessTokenConfigured && runtimeCommerce?.magentoStoreConfigured) ? 'Provider env ready' : 'Needs env'}
+          configured={Boolean(runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.paypalAccessTokenConfigured || runtimeCommerce?.squareAccessTokenConfigured || runtimeCommerce?.adyenApiKeyConfigured || runtimeCommerce?.mollieApiKeyConfigured || (runtimeCommerce?.razorpayKeyIdConfigured && runtimeCommerce?.razorpayKeySecretConfigured) || runtimeCommerce?.easyPostApiKeyConfigured || runtimeCommerce?.shippoApiKeyConfigured || runtimeCommerce?.shopifyAdminAccessTokenConfigured || runtimeCommerce?.bigCommerceAccessTokenConfigured || runtimeCommerce?.wooCommerceConsumerKeyConfigured || (runtimeCommerce?.etsyAccessTokenConfigured && runtimeCommerce?.etsyApiKeyConfigured && runtimeCommerce?.etsyShopConfigured) || (runtimeCommerce?.magentoAccessTokenConfigured && runtimeCommerce?.magentoStoreConfigured)) || !runtimeCommerce?.webhookSecretReference}
           details={[
             { label: 'Secret ref', value: runtimeCommerce?.webhookSecretReference },
             { label: 'Secret source', value: runtimeCommerce?.webhookSecretSource },
             { label: 'Env keys', value: runtimeCommerce?.webhookSecretEnvKeys?.join(', ') },
             { label: 'Payment provider', value: runtimeCommerce?.paymentProvider },
             { label: 'Tax provider', value: runtimeCommerce?.taxProvider },
+            { label: 'Shipping quote provider', value: runtimeCommerce?.shippingProvider },
+            { label: 'Discount provider', value: runtimeCommerce?.discountProvider },
             { label: 'Stripe API key', value: runtimeCommerce?.stripeSecretConfigured },
             { label: 'Stripe API base URL', value: runtimeCommerce?.stripeApiBaseUrl },
-            { label: 'PayPal refund token', value: runtimeCommerce?.paypalAccessTokenConfigured },
+            { label: 'Stripe API version', value: runtimeCommerce?.stripeApiVersion },
+            { label: 'Stripe discount API base URL', value: runtimeCommerce?.stripeDiscountApiBaseUrl },
+            { label: 'TaxJar API key', value: runtimeCommerce?.taxJarApiKeyConfigured },
+            { label: 'TaxJar base URL', value: runtimeCommerce?.taxJarApiBaseUrl },
+            { label: 'Avalara account', value: runtimeCommerce?.avalaraAccountConfigured },
+            { label: 'Avalara license key', value: runtimeCommerce?.avalaraLicenseKeyConfigured },
+            { label: 'Avalara company', value: runtimeCommerce?.avalaraCompanyCodeConfigured },
+            { label: 'Avalara base URL', value: runtimeCommerce?.avalaraApiBaseUrl },
+            { label: 'PayPal commerce token', value: runtimeCommerce?.paypalAccessTokenConfigured },
             { label: 'PayPal base URL', value: runtimeCommerce?.paypalApiBaseUrl },
-            { label: 'Square refund token', value: runtimeCommerce?.squareAccessTokenConfigured },
+            { label: 'Paddle API key', value: runtimeCommerce?.paddleApiKeyConfigured },
+            { label: 'Paddle base URL', value: runtimeCommerce?.paddleApiBaseUrl },
+            { label: 'Square commerce token', value: runtimeCommerce?.squareAccessTokenConfigured },
             { label: 'Square base URL', value: runtimeCommerce?.squareApiBaseUrl },
             { label: 'Adyen API key', value: runtimeCommerce?.adyenApiKeyConfigured },
             { label: 'Adyen merchant', value: runtimeCommerce?.adyenMerchantAccountConfigured },
             { label: 'Adyen base URL', value: runtimeCommerce?.adyenApiBaseUrl },
+            { label: 'Adyen Recurring base URL', value: runtimeCommerce?.adyenRecurringApiBaseUrl },
             { label: 'Mollie API key', value: runtimeCommerce?.mollieApiKeyConfigured },
             { label: 'Mollie base URL', value: runtimeCommerce?.mollieApiBaseUrl },
+            { label: 'Razorpay key ID', value: runtimeCommerce?.razorpayKeyIdConfigured },
+            { label: 'Razorpay key secret', value: runtimeCommerce?.razorpayKeySecretConfigured },
+            { label: 'Razorpay base URL', value: runtimeCommerce?.razorpayApiBaseUrl },
             { label: 'Label provider', value: runtimeCommerce?.shippingLabelProvider },
             { label: 'EasyPost API key', value: runtimeCommerce?.easyPostApiKeyConfigured },
             { label: 'EasyPost base URL', value: runtimeCommerce?.easyPostApiBaseUrl },
             { label: 'Shippo API key', value: runtimeCommerce?.shippoApiKeyConfigured },
             { label: 'Shippo base URL', value: runtimeCommerce?.shippoApiBaseUrl },
+            { label: 'Shopify catalog token', value: runtimeCommerce?.shopifyAdminAccessTokenConfigured },
+            { label: 'Shopify store', value: runtimeCommerce?.shopifyStoreDomain || runtimeCommerce?.shopifyStoreConfigured },
+            { label: 'Shopify Admin API base URL', value: runtimeCommerce?.shopifyAdminApiBaseUrl },
+            { label: 'BigCommerce catalog token', value: runtimeCommerce?.bigCommerceAccessTokenConfigured },
+            { label: 'BigCommerce store', value: runtimeCommerce?.bigCommerceStoreHash || runtimeCommerce?.bigCommerceStoreConfigured },
+            { label: 'BigCommerce API base URL', value: runtimeCommerce?.bigCommerceApiBaseUrl },
+            { label: 'WooCommerce consumer key', value: runtimeCommerce?.wooCommerceConsumerKeyConfigured },
+            { label: 'WooCommerce consumer secret', value: runtimeCommerce?.wooCommerceConsumerSecretConfigured },
+            { label: 'WooCommerce store', value: runtimeCommerce?.wooCommerceStoreUrl || runtimeCommerce?.wooCommerceStoreConfigured },
+            { label: 'WooCommerce API base URL', value: runtimeCommerce?.wooCommerceApiBaseUrl },
+            { label: 'Etsy access token', value: runtimeCommerce?.etsyAccessTokenConfigured },
+            { label: 'Etsy API key', value: runtimeCommerce?.etsyApiKeyConfigured },
+            { label: 'Etsy shop', value: runtimeCommerce?.etsyShopId || runtimeCommerce?.etsyShopConfigured },
+            { label: 'Etsy API base URL', value: runtimeCommerce?.etsyApiBaseUrl },
+            { label: 'Magento catalog token', value: runtimeCommerce?.magentoAccessTokenConfigured },
+            { label: 'Magento store', value: runtimeCommerce?.magentoStoreUrl || runtimeCommerce?.magentoStoreConfigured },
+            { label: 'Magento API base URL', value: runtimeCommerce?.magentoApiBaseUrl },
+          ]}
+        />
+        <RuntimeCard
+          title="Interactive component runtime"
+          description="Detected registry and sandbox capability for page/blog animations, simulations, and custom code components."
+          status={runtimeInteractiveComponents?.configured ? 'Platform ready' : runtimeInteractiveComponents?.customCodeEnabled ? 'Needs sandbox env' : 'Trusted blocks ready'}
+          configured={runtimeInteractiveComponents?.configured !== false}
+          details={[
+            { label: 'Registry provider', value: runtimeInteractiveComponents?.registryProvider },
+            { label: 'Registry configured', value: runtimeInteractiveComponents?.registryConfigured },
+            { label: 'Bundle base URL', value: runtimeInteractiveComponents?.bundleBaseUrl },
+            { label: 'Signing key', value: runtimeInteractiveComponents?.signingKeyConfigured },
+            { label: 'Review required', value: runtimeInteractiveComponents?.reviewRequired },
+            { label: 'Custom code enabled', value: runtimeInteractiveComponents?.customCodeEnabled },
+            { label: 'Sandbox origin', value: runtimeInteractiveComponents?.sandboxOrigin },
+            { label: 'Sandbox CSP', value: runtimeInteractiveComponents?.cspConfigured },
+            { label: 'Iframe sandbox', value: runtimeInteractiveComponents?.iframeSandbox },
+            { label: 'Allowed connect-src', value: runtimeInteractiveComponents?.allowedConnectSrc },
           ]}
         />
       </div>
+
+      <Panel data-testid="settings-release-certification-runbook">
+        <PanelHeader
+          title="Release certification runbook"
+          description="Use this gate before treating Backy as production-ready for a real Supabase/Postgres database and live providers."
+          icon={<CheckCircle2 className="size-4" />}
+        />
+        <PanelContent>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-lg border border-border bg-muted/20 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workflow</div>
+              <div className="mt-2 font-mono text-sm text-foreground">.github/workflows/backy-release-certification.yml</div>
+              <div className="mt-2 text-xs text-muted-foreground">Run local preflight first: <span className="font-mono">npm run test:release-certification-preflight-contract</span></div>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/20 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Database gate</div>
+              <div className="mt-2 text-sm text-foreground">Enable <span className="font-mono">certify_database</span> only with a disposable migrated Supabase/Postgres database.</div>
+              <div className="mt-2 text-xs text-muted-foreground">Requires <span className="font-mono">BACKY_DATABASE_URL</span>, then runs <span className="font-mono">ci:forms-postgres</span> and <span className="font-mono">ci:sdk-postgres-smoke</span>.</div>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/20 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Provider gates</div>
+              <div className="mt-2 text-sm text-foreground">Enable Settings and Commerce provider certification only after live credentials are configured.</div>
+              <div className="mt-2 text-xs text-muted-foreground">Covers storage, credential rotation, Vercel secret planning, notification delivery, and commerce providers.</div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {[
+              'certify_settings_providers -> npm run ci:settings-provider-certification',
+              'certify_commerce_providers -> npm run ci:commerce-provider-certification',
+              'certify_storage -> live storage provisioning diagnostics',
+              'certify_rotation -> replacement storage credential validation',
+              'certify_vercel_secrets -> Vercel env secret-manager dry-run planning',
+              'certify_notification -> configured notification delivery diagnostics',
+            ].map((item) => (
+              <div key={item} className="rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+                {item}
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>, storage/Supabase/S3 credentials, <span className="font-mono">VERCEL_TOKEN</span>, notification provider credentials, and commerce provider credentials for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento.
+          </p>
+        </PanelContent>
+      </Panel>
 
       <Panel>
         <PanelHeader
@@ -4492,6 +5843,114 @@ function InfrastructureSettings({
                       <li key={step}>{step}</li>
                     ))}
                   </ul>
+                )}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={storageDisabled || isRunningStorageRotationProbe}
+                    onClick={() => void runStorageRotationProbe()}
+                  >
+                    {isRunningStorageRotationProbe ? 'Checking...' : 'Run rotation probe'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={storageDisabled || isRunningStorageSecretManager}
+                    onClick={() => void runStorageSecretManager('plan', true)}
+                  >
+                    Plan env sync
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={storageDisabled || isRunningStorageSecretManager}
+                    onClick={() => void runStorageSecretManager('promote', false)}
+                  >
+                    Promote env
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={storageDisabled || isRunningStorageSecretManager}
+                    onClick={() => void runStorageSecretManager('revoke-replacement', false)}
+                  >
+                    Revoke next env
+                  </Button>
+                </div>
+                {storageRotationProbeError && (
+                  <Notice tone="warning" className="mt-3" title="Rotation probe failed">
+                    {storageRotationProbeError}
+                  </Notice>
+                )}
+                {storageRotationProbeResult && (
+                  <div className="mt-4 rounded-lg border border-border bg-background p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h5 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Rotation probe</h5>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{storageRotationProbeResult.summary}</p>
+                      </div>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                        storageRotationProbeResult.status === 'ready'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-red-50 text-red-700',
+                      )}
+                      >
+                        {storageRotationProbeResult.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {storageRotationProbeResult.checks.map((check) => (
+                        <div key={check.label} className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-foreground">{check.label}</span>
+                            <span className={check.ready ? 'text-xs font-semibold text-emerald-700' : 'text-xs font-semibold text-red-700'}>
+                              {check.ready ? 'Ready' : 'Blocked'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {storageSecretManagerError && (
+                  <Notice tone="warning" className="mt-3" title="Secret manager failed">
+                    {storageSecretManagerError}
+                  </Notice>
+                )}
+                {storageSecretManagerResult && (
+                  <div className="mt-4 rounded-lg border border-border bg-background p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h5 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Vercel env sync</h5>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{storageSecretManagerResult.summary}</p>
+                      </div>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                        storageSecretManagerResult.status === 'ready'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-red-50 text-red-700',
+                      )}
+                      >
+                        {storageSecretManagerResult.executed ? 'executed' : storageSecretManagerResult.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {storageSecretManagerResult.operations.map((operation) => (
+                        <div key={`${operation.action}-${operation.name}`} className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-mono text-xs text-foreground">{operation.name}</span>
+                            <span className={operation.ready ? 'text-xs font-semibold text-emerald-700' : 'text-xs font-semibold text-red-700'}>
+                              {operation.executed ? 'Executed' : operation.ready ? operation.action : 'Blocked'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{operation.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -5023,7 +6482,7 @@ function CommerceSettings({
                 className={inputClassName}
               />
               <span className="text-xs text-muted-foreground">
-                Store an env variable reference only; raw provider signing secrets are rejected by Settings.
+                Store the provider signing secret in the runtime environment and save only an env variable reference here; raw provider signing secrets are rejected by Settings.
               </span>
             </label>
             <label className="flex flex-col gap-1 text-sm">
@@ -5228,12 +6687,17 @@ function CommerceSettings({
                       <span className="font-medium">{label}</span>
                       <select
                         value={providerValue}
-                        onChange={(event) => update({ [providerKey]: event.target.value as 'manual' | 'http' | 'stripe' } as Partial<CommerceSettingsConfig>)}
+                        onChange={(event) => update({ [providerKey]: event.target.value as 'manual' | 'http' | 'stripe' | 'taxjar' | 'avalara' | 'easypost' | 'shippo' } as Partial<CommerceSettingsConfig>)}
                         className={inputClassName}
                       >
                         <option value="manual">Built-in rules</option>
                         <option value="http">HTTP calculator</option>
                         {key === 'tax' ? <option value="stripe">Stripe Tax</option> : null}
+                        {key === 'tax' ? <option value="taxjar">TaxJar</option> : null}
+                        {key === 'tax' ? <option value="avalara">Avalara AvaTax</option> : null}
+                        {key === 'shipping' ? <option value="easypost">EasyPost rates</option> : null}
+                        {key === 'shipping' ? <option value="shippo">Shippo rates</option> : null}
+                        {key === 'discount' ? <option value="stripe">Stripe promotion codes</option> : null}
                       </select>
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
@@ -5241,14 +6705,58 @@ function CommerceSettings({
                       <input
                         value={String(resolved[urlKey] || '')}
                         onChange={(event) => update({ [urlKey]: event.target.value } as Partial<CommerceSettingsConfig>)}
-                        placeholder={providerValue === 'stripe' ? 'Uses Stripe env configuration' : `https://api.example.com/${key}-quote`}
-                        disabled={providerValue === 'stripe'}
+                        placeholder={['stripe', 'taxjar', 'avalara', 'easypost', 'shippo'].includes(providerValue) ? 'Uses server env configuration' : `https://api.example.com/${key}-quote`}
+                        disabled={['stripe', 'taxjar', 'avalara', 'easypost', 'shippo'].includes(providerValue)}
                         className={inputClassName}
                       />
                     </label>
                   </div>
                 );
               })}
+            </div>
+            <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Product catalog sync provider</span>
+                <select
+                  value={resolved.catalogSyncProvider || 'manual'}
+                  onChange={(event) => update({ catalogSyncProvider: event.target.value as 'manual' | 'http' | 'generic-http' | 'custom-http' })}
+                  className={inputClassName}
+                >
+                  <option value="manual">Manual / direct provider buttons</option>
+                  <option value="http">HTTP catalog sync</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Catalog sync endpoint URL</span>
+                <input
+                  value={resolved.catalogSyncProviderUrl || ''}
+                  onChange={(event) => update({ catalogSyncProviderUrl: event.target.value })}
+                  placeholder="https://api.example.com/catalog/products"
+                  className={inputClassName}
+                />
+              </label>
+            </div>
+            <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Subscription lifecycle provider</span>
+                <select
+                  value={resolved.subscriptionActionProvider || 'manual'}
+                  onChange={(event) => update({ subscriptionActionProvider: event.target.value as 'manual' | 'http' | 'generic-http' | 'custom-http' })}
+                  className={inputClassName}
+                >
+                  <option value="manual">Native provider or manual handoff</option>
+                  <option value="http">HTTP lifecycle adapter</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Subscription lifecycle endpoint URL</span>
+                <input
+                  value={resolved.subscriptionActionProviderUrl || ''}
+                  onChange={(event) => update({ subscriptionActionProviderUrl: event.target.value })}
+                  placeholder="https://api.example.com/subscription-actions"
+                  className={inputClassName}
+                />
+              </label>
             </div>
             <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm">
@@ -6418,6 +7926,9 @@ function auditTitle(log: AdminAuditLog): string {
   }
   if (log.action === 'settings.update') {
     return 'Settings updated';
+  }
+  if (log.action === 'site.settings.updated') {
+    return 'Site settings updated';
   }
   if (log.action === 'settings.api_keys.regenerate') {
     return 'API keys regenerated';

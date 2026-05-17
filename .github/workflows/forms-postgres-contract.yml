@@ -1,0 +1,71 @@
+name: Forms Postgres Contract
+
+on:
+  workflow_dispatch:
+    inputs:
+      disposable_database_confirmed:
+        description: I confirm BACKY_DATABASE_URL points to a disposable migrated Supabase/Postgres database.
+        required: true
+        type: boolean
+        default: false
+      database_expected_host:
+        description: Optional expected Postgres/Supabase hostname before the smoke connects.
+        required: false
+        type: string
+      database_expected_name:
+        description: Optional expected Postgres database name before the smoke connects.
+        required: false
+        type: string
+
+jobs:
+  forms-postgres-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BACKY_DATABASE_URL: ${{ secrets.BACKY_DATABASE_URL }}
+      BACKY_RELEASE_CERTIFY_DATABASE: '1'
+      BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST: ${{ inputs.database_expected_host }}
+      BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE: ${{ inputs.database_expected_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run forms migration preflight contract
+        run: npm run test:forms-postgres-preflight-contract
+
+      - name: Run non-secret database certification doctor
+        run: npm run doctor:release-certification
+
+      - name: Write non-secret Forms database summary
+        run: |
+          {
+            echo "## Backy Forms Postgres Certification"
+            echo ""
+            echo "| Gate | Requested | Non-secret target evidence |"
+            echo "| --- | --- | --- |"
+            echo "| Forms database | true | disposable confirmed: ${{ inputs.disposable_database_confirmed }}; expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require disposable Postgres or Supabase database URL
+        run: |
+          if [ -z "$BACKY_DATABASE_URL" ]; then
+            echo "::error::Set the BACKY_DATABASE_URL repository secret to a disposable Supabase/Postgres database before running this workflow."
+            exit 1
+          fi
+          if [ "${{ inputs.disposable_database_confirmed }}" != "true" ]; then
+            echo "::error::Confirm disposable_database_confirmed=true before running this destructive-safe database smoke."
+            exit 1
+          fi
+
+      - name: Run forms Postgres/Supabase contract smoke
+        run: npm run ci:forms-postgres

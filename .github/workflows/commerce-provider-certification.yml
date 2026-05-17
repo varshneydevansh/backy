@@ -1,0 +1,223 @@
+name: Commerce Provider Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      certify_payment:
+        description: Verify at least one live payment provider credential is exposed through Backy runtime diagnostics.
+        required: true
+        type: boolean
+        default: true
+      payment_provider:
+        description: Expected payment/refund provider credential to certify.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - paypal
+          - paddle
+          - square
+          - adyen
+          - mollie
+          - razorpay
+      certify_tax:
+        description: Verify selected/native live tax quote credentials are exposed through Backy runtime diagnostics.
+        required: true
+        type: boolean
+        default: true
+      tax_provider:
+        description: Expected tax provider for local demo certification. External certification remains read-only and checks deployed Settings.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - taxjar
+          - avalara
+          - http
+      certify_shipping:
+        description: Verify selected/native live shipping quote or label credentials are exposed through Backy runtime diagnostics.
+        required: true
+        type: boolean
+        default: true
+      shipping_provider:
+        description: Expected shipping provider for local demo certification. External certification remains read-only and checks deployed Settings.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - easypost
+          - shippo
+          - http
+      certify_catalog:
+        description: Verify at least one live catalog sync provider credential is exposed through Backy runtime diagnostics.
+        required: true
+        type: boolean
+        default: true
+      catalog_provider:
+        description: Expected product catalog provider credential to certify.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - shopify
+          - bigcommerce
+          - woocommerce
+          - etsy
+          - magento
+          - http
+      certify_subscriptions:
+        description: Verify at least one live subscription lifecycle provider credential is exposed through Backy runtime diagnostics.
+        required: true
+        type: boolean
+        default: true
+      subscription_provider:
+        description: Expected subscription lifecycle provider credential to certify.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - paypal
+          - paddle
+          - square
+          - adyen
+          - mollie
+          - http
+      certify_webhooks:
+        description: Verify commerce webhook secret resolution is ready.
+        required: true
+        type: boolean
+        default: true
+      webhook_provider:
+        description: Expected provider-managed webhook family to certify.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - paypal
+          - paddle
+          - square
+          - adyen
+          - mollie
+          - generic
+
+jobs:
+  commerce-provider-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1'
+      BACKY_COMMERCE_CERTIFY_PAYMENT: ${{ inputs.certify_payment && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: ${{ inputs.payment_provider }}
+      BACKY_COMMERCE_CERTIFY_TAX: ${{ inputs.certify_tax && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: ${{ inputs.tax_provider }}
+      BACKY_COMMERCE_CERTIFY_SHIPPING: ${{ inputs.certify_shipping && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: ${{ inputs.shipping_provider }}
+      BACKY_COMMERCE_CERTIFY_CATALOG: ${{ inputs.certify_catalog && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: ${{ inputs.catalog_provider }}
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: ${{ inputs.certify_subscriptions && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: ${{ inputs.subscription_provider }}
+      BACKY_COMMERCE_CERTIFY_WEBHOOKS: ${{ inputs.certify_webhooks && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER: ${{ inputs.webhook_provider }}
+      BACKY_ADMIN_API_KEY: ${{ secrets.BACKY_ADMIN_API_KEY }}
+      BACKY_COMMERCE_CERTIFICATION_BASE_URL: ${{ vars.BACKY_COMMERCE_CERTIFICATION_BASE_URL }}
+      BACKY_COMMERCE_WEBHOOK_SECRET: ${{ secrets.BACKY_COMMERCE_WEBHOOK_SECRET }}
+      BACKY_STRIPE_SECRET_KEY: ${{ secrets.BACKY_STRIPE_SECRET_KEY }}
+      BACKY_STRIPE_API_BASE_URL: ${{ vars.BACKY_STRIPE_API_BASE_URL }}
+      BACKY_STRIPE_TAX_API_BASE_URL: ${{ vars.BACKY_STRIPE_TAX_API_BASE_URL }}
+      BACKY_STRIPE_DISCOUNT_API_BASE_URL: ${{ vars.BACKY_STRIPE_DISCOUNT_API_BASE_URL }}
+      BACKY_STRIPE_REFUND_API_BASE_URL: ${{ vars.BACKY_STRIPE_REFUND_API_BASE_URL }}
+      BACKY_TAXJAR_API_KEY: ${{ secrets.BACKY_TAXJAR_API_KEY }}
+      BACKY_TAXJAR_API_BASE_URL: ${{ vars.BACKY_TAXJAR_API_BASE_URL }}
+      BACKY_AVALARA_ACCOUNT_ID: ${{ secrets.BACKY_AVALARA_ACCOUNT_ID }}
+      BACKY_AVALARA_LICENSE_KEY: ${{ secrets.BACKY_AVALARA_LICENSE_KEY }}
+      BACKY_AVALARA_COMPANY_CODE: ${{ vars.BACKY_AVALARA_COMPANY_CODE }}
+      BACKY_AVALARA_API_BASE_URL: ${{ vars.BACKY_AVALARA_API_BASE_URL }}
+      BACKY_EASYPOST_API_KEY: ${{ secrets.BACKY_EASYPOST_API_KEY }}
+      BACKY_EASYPOST_API_BASE_URL: ${{ vars.BACKY_EASYPOST_API_BASE_URL }}
+      BACKY_SHIPPO_API_KEY: ${{ secrets.BACKY_SHIPPO_API_KEY }}
+      BACKY_SHIPPO_API_BASE_URL: ${{ vars.BACKY_SHIPPO_API_BASE_URL }}
+      BACKY_PAYPAL_ACCESS_TOKEN: ${{ secrets.BACKY_PAYPAL_ACCESS_TOKEN }}
+      BACKY_PAYPAL_API_BASE_URL: ${{ vars.BACKY_PAYPAL_API_BASE_URL }}
+      BACKY_PADDLE_API_KEY: ${{ secrets.BACKY_PADDLE_API_KEY }}
+      BACKY_PADDLE_API_BASE_URL: ${{ vars.BACKY_PADDLE_API_BASE_URL }}
+      BACKY_SQUARE_ACCESS_TOKEN: ${{ secrets.BACKY_SQUARE_ACCESS_TOKEN }}
+      BACKY_SQUARE_API_BASE_URL: ${{ vars.BACKY_SQUARE_API_BASE_URL }}
+      BACKY_ADYEN_API_KEY: ${{ secrets.BACKY_ADYEN_API_KEY }}
+      BACKY_ADYEN_MERCHANT_ACCOUNT: ${{ vars.BACKY_ADYEN_MERCHANT_ACCOUNT }}
+      BACKY_ADYEN_API_BASE_URL: ${{ vars.BACKY_ADYEN_API_BASE_URL }}
+      BACKY_ADYEN_RECURRING_API_BASE_URL: ${{ vars.BACKY_ADYEN_RECURRING_API_BASE_URL }}
+      BACKY_MOLLIE_API_KEY: ${{ secrets.BACKY_MOLLIE_API_KEY }}
+      BACKY_MOLLIE_API_BASE_URL: ${{ vars.BACKY_MOLLIE_API_BASE_URL }}
+      BACKY_RAZORPAY_KEY_ID: ${{ secrets.BACKY_RAZORPAY_KEY_ID }}
+      BACKY_RAZORPAY_KEY_SECRET: ${{ secrets.BACKY_RAZORPAY_KEY_SECRET }}
+      BACKY_RAZORPAY_API_BASE_URL: ${{ vars.BACKY_RAZORPAY_API_BASE_URL }}
+      BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN }}
+      BACKY_SHOPIFY_STORE_DOMAIN: ${{ vars.BACKY_SHOPIFY_STORE_DOMAIN }}
+      BACKY_SHOPIFY_ADMIN_API_BASE_URL: ${{ vars.BACKY_SHOPIFY_ADMIN_API_BASE_URL }}
+      BACKY_BIGCOMMERCE_ACCESS_TOKEN: ${{ secrets.BACKY_BIGCOMMERCE_ACCESS_TOKEN }}
+      BACKY_BIGCOMMERCE_STORE_HASH: ${{ vars.BACKY_BIGCOMMERCE_STORE_HASH }}
+      BACKY_BIGCOMMERCE_API_BASE_URL: ${{ vars.BACKY_BIGCOMMERCE_API_BASE_URL }}
+      BACKY_WOOCOMMERCE_CONSUMER_KEY: ${{ secrets.BACKY_WOOCOMMERCE_CONSUMER_KEY }}
+      BACKY_WOOCOMMERCE_CONSUMER_SECRET: ${{ secrets.BACKY_WOOCOMMERCE_CONSUMER_SECRET }}
+      BACKY_WOOCOMMERCE_STORE_URL: ${{ vars.BACKY_WOOCOMMERCE_STORE_URL }}
+      BACKY_WOOCOMMERCE_API_BASE_URL: ${{ vars.BACKY_WOOCOMMERCE_API_BASE_URL }}
+      BACKY_ETSY_ACCESS_TOKEN: ${{ secrets.BACKY_ETSY_ACCESS_TOKEN }}
+      BACKY_ETSY_API_KEY: ${{ secrets.BACKY_ETSY_API_KEY }}
+      BACKY_ETSY_SHOP_ID: ${{ vars.BACKY_ETSY_SHOP_ID }}
+      BACKY_ETSY_API_BASE_URL: ${{ vars.BACKY_ETSY_API_BASE_URL }}
+      BACKY_MAGENTO_ACCESS_TOKEN: ${{ secrets.BACKY_MAGENTO_ACCESS_TOKEN }}
+      BACKY_MAGENTO_STORE_URL: ${{ vars.BACKY_MAGENTO_STORE_URL }}
+      BACKY_MAGENTO_API_BASE_URL: ${{ vars.BACKY_MAGENTO_API_BASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Commerce provider certification preflight
+        run: npm run test:commerce-provider-certification-preflight-contract
+
+      - name: Run non-secret certification doctor
+        run: npm run doctor:release-certification
+
+      - name: Write non-secret Commerce certification summary
+        run: |
+          commerce_external=false
+          if [ -n "$BACKY_COMMERCE_CERTIFICATION_BASE_URL" ]; then commerce_external=true; fi
+          {
+            echo "## Backy Commerce Provider Certification"
+            echo ""
+            echo "| Gate | Requested | Non-secret target evidence |"
+            echo "| --- | --- | --- |"
+            echo "| Commerce providers | true | external target configured: $commerce_external |"
+            echo ""
+            echo "| Selector | Value |"
+            echo "| --- | --- |"
+            echo "| payment_provider | ${{ inputs.payment_provider }} |"
+            echo "| tax_provider | ${{ inputs.tax_provider }} |"
+            echo "| shipping_provider | ${{ inputs.shipping_provider }} |"
+            echo "| catalog_provider | ${{ inputs.catalog_provider }} |"
+            echo "| subscription_provider | ${{ inputs.subscription_provider }} |"
+            echo "| webhook_provider | ${{ inputs.webhook_provider }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run Commerce provider certification
+        run: npm run ci:commerce-provider-certification

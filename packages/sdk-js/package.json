@@ -12,9 +12,15 @@
     }
   },
   "scripts": {
+    "generate:types": "node scripts/generate-contract-types.mjs",
+    "prebuild": "npm run generate:types",
     "build": "tsup src/index.ts --format esm --dts",
+    "pretypecheck": "npm run generate:types",
     "typecheck": "tsc --noEmit",
+    "pretest:blog-types": "npm run generate:types",
     "test:blog-types": "tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM --skipLibCheck scripts/blog-contract-types.ts",
+    "pretest:generated-types": "npm run generate:types",
+    "test:generated-types": "tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM --skipLibCheck scripts/generated-contract-types.ts",
     "test:smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {

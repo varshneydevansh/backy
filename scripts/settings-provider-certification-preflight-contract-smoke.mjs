@@ -1,0 +1,246 @@
+#!/usr/bin/env node
+
+import fs from 'node:fs';
+
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+
+const assert = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+
+const includesAll = (source, snippets, label) => {
+  const missing = snippets.filter((snippet) => !source.includes(snippet));
+  assert(missing.length === 0, `${label} missing snippets: ${missing.join(', ')}`);
+};
+
+const ci = read('./settings-provider-certification-ci.mjs');
+const workflow = read('../.github/workflows/settings-provider-certification.yml');
+const rootPackage = read('../package.json');
+const publicPackage = read('../apps/public/package.json');
+const settingsRoute = read('../apps/public/src/app/api/admin/settings/route.ts');
+const settingsUi = read('../apps/admin/src/routes/settings.tsx');
+const settingsSmoke = read('../apps/admin/scripts/settings-smoke.mjs');
+const settingsContract = read('../apps/public/scripts/settings-admin-contract-smoke.mjs');
+const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
+
+includesAll(
+  ci,
+  [
+    'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED',
+    'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+    'BACKY_SETTINGS_CERTIFY_STORAGE',
+    'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
+    'BACKY_SETTINGS_CERTIFY_ROTATION',
+    'BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS',
+    'BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID',
+    'BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID',
+    'BACKY_SETTINGS_CERTIFY_NOTIFICATION',
+    'BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER',
+    'validate-infrastructure',
+    'media-storage-provisioning-probe',
+    'media-storage-credential-rotation-probe',
+    'media-storage-secret-manager',
+    'test-notification-webhook',
+    'requiredDiagnosticAreas',
+    'requestedDiagnosticAreas',
+    'requestedStorageProvider',
+    'selectedStorageCertificationProvider',
+    'shouldRequireDiagnosticCheck',
+    'inferStorageCertificationProvider',
+    'assertStorageProviderMatches',
+    'requestedVercelProjectId',
+    'requestedVercelTeamId',
+    'assertVercelTargetMatches',
+    'inferNotificationCertificationProvider',
+    'assertNotificationRuntimeReady',
+    'runtime.emailProvider === provider',
+    'runtime.productionReady === true',
+    'assertDiagnosticAreasPresent',
+    'Settings provider certification diagnostics are missing areas',
+    'assertRequiredDiagnosticsReady',
+    'requestedAreas.has(group.area)',
+    'const delivery = notification.delivery',
+    'Notification webhook certification response is missing delivery',
+    'backy.settings-provider-certification.v1',
+    'target:',
+    "mode: externalBaseUrl ? 'external' : 'local'",
+    'externalBaseUrlConfigured: Boolean(externalBaseUrl)',
+  ],
+  'Settings provider certification CI harness',
+);
+
+includesAll(
+  workflow,
+  [
+    'name: Settings Provider Certification',
+    'workflow_dispatch:',
+    'certify_storage:',
+    'storage_provider:',
+    'certify_rotation:',
+    'certify_vercel_secrets:',
+    'vercel_project_id:',
+    'vercel_team_id:',
+    'certify_notification:',
+    'notification_provider:',
+    'certify_commerce:',
+    'payment_provider:',
+    'tax_provider:',
+    'shipping_provider:',
+    'catalog_provider:',
+    'subscription_provider:',
+    'webhook_provider:',
+    'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: \'1\'',
+    "BACKY_SETTINGS_CERTIFY_STORAGE: ${{ inputs.certify_storage && '1' || '0' }}",
+    'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
+    "BACKY_SETTINGS_CERTIFY_ROTATION: ${{ inputs.certify_rotation && '1' || '0' }}",
+    "BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS: ${{ inputs.certify_vercel_secrets && '1' || '0' }}",
+    'BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID',
+    'BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID',
+    "BACKY_SETTINGS_CERTIFY_NOTIFICATION: ${{ inputs.certify_notification && '1' || '0' }}",
+    'BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER',
+    'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+    'BACKY_ADMIN_API_KEY',
+    'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED',
+    'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
+    'BACKY_MAGENTO_ACCESS_TOKEN',
+    'BACKY_RAZORPAY_KEY_ID',
+    'razorpay',
+    'magento',
+    'BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
+    'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'Run Settings provider certification preflight',
+    'Run non-secret certification doctor',
+    'npm run doctor:release-certification',
+    'Write non-secret Settings certification summary',
+    'GITHUB_STEP_SUMMARY',
+    'settings_external=false',
+    'commerce_external=false',
+    'external target configured:',
+    'storage_provider',
+    'webhook_provider',
+    'Run Settings provider certification',
+    'npm run ci:settings-provider-certification',
+    'Run Commerce provider certification from Settings provider gate',
+    'npm run ci:commerce-provider-certification',
+  ],
+  'Settings provider certification workflow',
+);
+
+assert(
+  workflow.indexOf('- name: Run Settings provider certification preflight') < workflow.indexOf('- name: Run Settings provider certification\n') &&
+    workflow.indexOf('- name: Run Settings provider certification preflight') < workflow.indexOf('- name: Run non-secret certification doctor') &&
+    workflow.indexOf('- name: Run non-secret certification doctor') < workflow.indexOf('- name: Write non-secret Settings certification summary') &&
+    workflow.indexOf('- name: Run Settings provider certification preflight') < workflow.indexOf('- name: Write non-secret Settings certification summary') &&
+    workflow.indexOf('- name: Write non-secret Settings certification summary') < workflow.indexOf('- name: Run Settings provider certification\n') &&
+    workflow.indexOf('- name: Run Settings provider certification\n') < workflow.indexOf('- name: Run Commerce provider certification from Settings provider gate'),
+  'Settings provider certification workflow must run preflight before Settings certification and commerce certification last.',
+);
+
+includesAll(
+  rootPackage,
+  [
+    '"test:settings-provider-certification-preflight-contract"',
+    '"ci:settings-provider-certification"',
+    '"ci:commerce-provider-certification"',
+  ],
+  'Root package Settings provider certification scripts',
+);
+
+includesAll(
+  publicPackage,
+  ['"test:settings-admin-contract"'],
+  'Public package Settings contract script',
+);
+
+includesAll(
+  settingsRoute,
+  [
+    "body.action === 'validate-infrastructure'",
+    "body.action === 'media-storage-provisioning-probe'",
+    "body.action === 'media-storage-credential-rotation-probe'",
+    "body.action === 'media-storage-secret-manager'",
+    "body.action === 'test-notification-webhook'",
+    'runStorageContainerAutomation',
+    'runStorageOperationChecks',
+    'runMediaStorageCredentialRotationProbe',
+    'runMediaStorageSecretManager',
+    'vercelEnvRequest',
+    'settings.media_storage.provisioning_probe',
+    'settings.media_storage.credential_rotation_probe',
+    'settings.media_storage.secret_manager',
+    'settings.notification_webhook.test',
+  ],
+  'Settings provider operation API routes',
+);
+
+includesAll(
+  settingsUi,
+  [
+    'runSettingsStorageProvisioningProbe',
+    'runSettingsStorageCredentialRotationProbe',
+    'runSettingsStorageSecretManager',
+    'Run storage probe',
+    'Run rotation probe',
+    'Plan env sync',
+    'Promote env',
+    'Revoke next env',
+  ],
+  'Settings provider operation UI controls',
+);
+
+includesAll(
+  settingsSmoke,
+  [
+    'hasStorageProbe',
+    'hasRotationProbe',
+    'hasSecretManagerPlan',
+    'hasSecretManagerPromote',
+    'hasSecretManagerRevoke',
+  ],
+  'Settings UI smoke provider operation coverage',
+);
+
+includesAll(
+  settingsContract,
+  [
+    'Admin settings executable provider operation contract',
+    'settings.media_storage.provisioning_probe',
+    'settings.media_storage.credential_rotation_probe',
+    'settings.media_storage.secret_manager',
+    'settings.notification_webhook.test',
+    'executable provider-operation actions for storage provisioning',
+  ],
+  'Settings admin contract provider operation coverage',
+);
+
+includesAll(
+  audit,
+  [
+    'Settings provider certification workflow',
+    'settings-provider-certification-preflight-contract',
+    'ci:settings-provider-certification',
+    'ci:commerce-provider-certification',
+    'include the full provider-readiness area set',
+    'Required-check blocking is scoped to the requested provider families',
+    'local Settings certification path now also proves `test-notification-webhook` delivery end-to-end',
+    'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
+    'Supabase or S3 storage certification cannot accidentally pass against local storage',
+    'Vercel target selector update',
+    'BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID',
+    'target.mode',
+    'externalBaseUrlConfigured',
+    'Settings certification summary update',
+    'GITHUB_STEP_SUMMARY',
+    'Real-provider certification for Supabase, Vercel, storage, notification, and commerce providers.',
+  ],
+  'Settings provider certification audit evidence',
+);
+
+console.log(JSON.stringify({
+  ok: true,
+  contract: 'backy.settings-provider-certification-preflight.v1',
+}));
