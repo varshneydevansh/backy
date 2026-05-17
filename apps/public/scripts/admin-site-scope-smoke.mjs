@@ -236,6 +236,20 @@ try {
       },
     },
     {
+      label: 'non-member admin nested site settings read denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/settings`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested site settings update denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/settings`,
+      init: {
+        method: 'PATCH',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ seo: { titleTemplate: `Denied settings ${suffix}` } }),
+      },
+    },
+    {
       label: 'non-member admin nested commerce analytics denied',
       path: `/api/admin/sites/${encodeURIComponent(site.id)}/commerce/orders/analytics`,
       init: { headers: scopedHeaders },
