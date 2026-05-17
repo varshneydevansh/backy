@@ -1,8 +1,41 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 const adminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
 const adminDevOrigin = 'http://localhost:5173';
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const siteRouteRoot = path.resolve(scriptDir, '../src/app/api/admin/sites/[siteId]');
+
+const coveredSiteRoutePrefixes = [
+  '',
+  'blog',
+  'collections',
+  'collections/export',
+  'collections/import',
+  'commerce',
+  'duplicate',
+  'editor/collection-binding-presets',
+  'forms',
+  'forms/analytics',
+  'forms/contact-lists',
+  'frontend-design',
+  'interactive-components',
+  'media',
+  'media/provider-analytics',
+  'navigation',
+  'pages',
+  'readiness',
+  'redirects',
+  'reusable-sections',
+  'reusable-sections/export',
+  'reusable-sections/import',
+  'seo',
+  'settings',
+];
 
 function assert(condition, message) {
   if (!condition) {
@@ -10,6 +43,31 @@ function assert(condition, message) {
   }
 }
 
+function listRouteKeys(directory, prefix = '') {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return listRouteKeys(fullPath, nextPrefix);
+    }
+    return entry.isFile() && entry.name === 'route.ts'
+      ? [prefix]
+      : [];
+  });
+}
+
+function assertSiteScopeRouteInventoryCovered() {
+  const uncovered = listRouteKeys(siteRouteRoot)
+    .filter((routeKey) => !coveredSiteRoutePrefixes.some((prefix) => (
+      routeKey === prefix || (prefix && routeKey.startsWith(`${prefix}/`))
+    )));
+  assert(
+    uncovered.length === 0,
+    `Site-scope smoke is missing coverage prefixes for route families: ${uncovered.join(', ')}`,
+  );
+}
+
+assertSiteScopeRouteInventoryCovered();
 assert(adminApiKey, 'BACKY_ADMIN_API_KEY or BACKY_ADMIN_SECRET_KEY is required for admin site-scope smoke');
 
 async function request(path, init = {}) {

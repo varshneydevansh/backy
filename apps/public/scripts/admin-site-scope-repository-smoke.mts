@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { NextResponse, type NextRequest } from 'next/server';
 import * as sessionStore from '../src/lib/admin-auth/sessionStore.ts';
 import * as adminAccess from '../src/lib/adminAccess.ts';
@@ -9,6 +12,60 @@ process.env.BACKY_DATA_MODE = 'database';
 const sessions = (sessionStore.default || sessionStore) as typeof sessionStore;
 const access = (adminAccess.default || adminAccess) as typeof adminAccess;
 const repositoriesRuntime = (repositoryRuntime.default || repositoryRuntime) as typeof repositoryRuntime;
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const siteRouteRoot = path.resolve(scriptDir, '../src/app/api/admin/sites/[siteId]');
+
+const coveredSiteRoutePrefixes = [
+  '',
+  'blog',
+  'collections',
+  'collections/export',
+  'collections/import',
+  'commerce',
+  'duplicate',
+  'editor/collection-binding-presets',
+  'forms',
+  'forms/analytics',
+  'forms/contact-lists',
+  'frontend-design',
+  'interactive-components',
+  'media',
+  'media/provider-analytics',
+  'navigation',
+  'pages',
+  'readiness',
+  'redirects',
+  'reusable-sections',
+  'reusable-sections/export',
+  'reusable-sections/import',
+  'seo',
+  'settings',
+];
+
+const listRouteKeys = (directory: string, prefix = ''): string[] => (
+  fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return listRouteKeys(fullPath, nextPrefix);
+    }
+    return entry.isFile() && entry.name === 'route.ts'
+      ? [prefix]
+      : [];
+  })
+);
+
+const assertSiteScopeRouteInventoryCovered = () => {
+  const uncovered = listRouteKeys(siteRouteRoot)
+    .filter((routeKey) => !coveredSiteRoutePrefixes.some((prefix) => (
+      routeKey === prefix || (prefix && routeKey.startsWith(`${prefix}/`))
+    )));
+  assert.equal(
+    uncovered.length,
+    0,
+    `Site-scope repository smoke is missing coverage prefixes for route families: ${uncovered.join(', ')}`,
+  );
+};
 
 type AdminAuthUser = {
   id: string;
@@ -52,6 +109,8 @@ const memberRoles = new Map<string, AdminAuthUser['role']>([
   ['repo-viewer', 'viewer'],
   ['repo-editor', 'editor'],
 ]);
+
+assertSiteScopeRouteInventoryCovered();
 
 repositoriesRuntime.setPublicRepositoryRuntimeForTests({
   mode: 'database',
