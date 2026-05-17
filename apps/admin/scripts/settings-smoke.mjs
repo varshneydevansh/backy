@@ -1690,6 +1690,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationDatabaseGate: document.body?.innerText?.includes('certify_database') && document.body?.innerText?.includes('BACKY_DATABASE_URL') && document.body?.innerText?.includes('DATABASE_URL'),
     hasReleaseCertificationSettingsGate: document.body?.innerText?.includes('certify_settings_providers') && document.body?.innerText?.includes('ci:settings-provider-certification'),
     hasReleaseCertificationCommerceGate: document.body?.innerText?.includes('certify_commerce_providers') && document.body?.innerText?.includes('ci:commerce-provider-certification'),
+    hasReleaseCertificationStorageAliases: document.body?.innerText?.includes('BACKY_MEDIA_STORAGE_PROVIDER') && document.body?.innerText?.includes('SUPABASE_SERVICE_ROLE_KEY') && document.body?.innerText?.includes('AWS_ACCESS_KEY_ID'),
+    hasReleaseCertificationCommerceAliases: document.body?.innerText?.includes('STRIPE_SECRET_KEY') && document.body?.innerText?.includes('PAYPAL_ACCESS_TOKEN') && document.body?.innerText?.includes('SHOPIFY_ADMIN_ACCESS_TOKEN') && document.body?.innerText?.includes('COMMERCE_WEBHOOK_SECRET'),
   }))()`);
   assert(infrastructureState.search.includes('tab=infrastructure'), `Infrastructure tab search state was not persisted: ${JSON.stringify(infrastructureState)}`);
   assert(infrastructureState.hasEnvContract, `Infrastructure env contract was not visible: ${JSON.stringify(infrastructureState)}`);
@@ -1743,6 +1745,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationDatabaseGate &&
       infrastructureState.hasReleaseCertificationSettingsGate &&
       infrastructureState.hasReleaseCertificationCommerceGate &&
+      infrastructureState.hasReleaseCertificationStorageAliases &&
+      infrastructureState.hasReleaseCertificationCommerceAliases &&
       infrastructureState.hasVercelAliasEnv,
     `Settings release certification runbook was not visible: ${JSON.stringify(infrastructureState)}`,
   );
