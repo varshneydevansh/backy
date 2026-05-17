@@ -8522,6 +8522,46 @@ const testLayerGrouping = async (client, elementIds) => {
   assert(grouped.hasSelection, `Grouped selection was not shown in inspector: ${JSON.stringify(grouped)}`);
   assert(grouped.ungroupDisabled === false, `Ungroup button did not enable after grouping: ${JSON.stringify(grouped)}`);
 
+  const groupedState = await readEditorElementState(client, [firstId, secondId]);
+  assertElementState(groupedState, before, 'grouping preserved child geometry');
+
+  await pressKey(client, 'z', { ctrlKey: true });
+  await sleep(250);
+  const undoGroupingState = await readEditorElementState(client, [firstId, secondId]);
+  const undoGroupingSelection = await evaluate(client, `(() => {
+    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean);
+    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+    return {
+      selectedLayers,
+      hasMultiSelection: Boolean(multiSelection),
+      inspectorText: multiSelection?.textContent || '',
+    };
+  })()`);
+  assertElementState(undoGroupingState, before, 'Ctrl+Z after grouping');
+  assert(
+    undoGroupingSelection.hasMultiSelection &&
+      [firstId, secondId].every((id) => undoGroupingSelection.selectedLayers.includes(id)),
+    `Ctrl+Z after grouping did not restore sibling multi-selection: ${JSON.stringify(undoGroupingSelection)}`,
+  );
+
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  await sleep(250);
+  const redoGroupingState = await readEditorElementState(client, [firstId, secondId]);
+  const redoGroupingSelection = await evaluate(client, `(() => {
+    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+    return {
+      hasSelection: Boolean(selected),
+      selectedText: selected?.textContent || '',
+      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+    };
+  })()`);
+  assertElementState(redoGroupingState, before, 'Ctrl+Shift+Z after grouping');
+  assert(redoGroupingSelection.hasSelection, `Ctrl+Shift+Z after grouping did not restore group selection: ${JSON.stringify(redoGroupingSelection)}`);
+  assert(redoGroupingSelection.ungroupDisabled === false, `Ctrl+Shift+Z after grouping did not restore Ungroup readiness: ${JSON.stringify(redoGroupingSelection)}`);
+
   await pressKey(client, 'g', { ctrlKey: true, shiftKey: true });
   await sleep(250);
   const after = await readEditorElementState(client, [firstId, secondId]);
@@ -8584,6 +8624,11 @@ const testLayerGrouping = async (client, elementIds) => {
     metaSelected,
     grouped,
     ungroupedSelection,
+    groupedState,
+    undoGroupingState,
+    undoGroupingSelection,
+    redoGroupingState,
+    redoGroupingSelection,
     metaGrouped,
     metaUngroupedSelection,
     before,

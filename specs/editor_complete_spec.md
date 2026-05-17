@@ -349,6 +349,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | Ctrl/Cmd+Shift+G | Ungroup selected group |
 
 - Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, selection cycling, or save actions.
+- Grouping shortcut coverage now verifies Ctrl/Cmd+G preserves child geometry, Ctrl/Cmd+Z restores the sibling multi-selection, Ctrl/Cmd+Shift+Z restores the grouped selection, and Ctrl/Cmd+Shift+G expands children back into the original sibling geometry.
 - Focused smoke coverage: `BACKY_EDITOR_SHORTCUTS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 
 ### 22. Markdown-like Text Shortcuts
