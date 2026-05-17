@@ -1633,7 +1633,7 @@ function SettingsPage() {
         secretFamilies: [
           'BACKY_DATABASE_URL',
           'storage/Supabase/S3 provider secrets',
-          'VERCEL_TOKEN and project metadata',
+          'VERCEL_TOKEN/BACKY_VERCEL_TOKEN and project metadata',
           'notification provider credentials',
           'commerce provider credentials',
         ],
@@ -5695,7 +5695,7 @@ function InfrastructureSettings({
             ))}
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>, storage/Supabase/S3 credentials, <span className="font-mono">VERCEL_TOKEN</span>, notification provider credentials, and commerce provider credentials for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento.
+            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>, storage/Supabase/S3 credentials, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification provider credentials, and commerce provider credentials for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento.
           </p>
         </PanelContent>
       </Panel>

@@ -1664,6 +1664,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
     hasNotificationHttpEndpointEnv: document.body?.innerText?.includes('HTTP delivery endpoint') && document.body?.innerText?.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
     hasNotificationSmtpAuthEnv: document.body?.innerText?.includes('SMTP username') && document.body?.innerText?.includes('SMTP_PASSWORD'),
+    hasVercelAliasEnv: document.body?.innerText?.includes('BACKY_VERCEL_TOKEN') && document.body?.innerText?.includes('BACKY_VERCEL_PROJECT_ID'),
     hasComponentRegistryEnv: document.body?.innerText?.includes('Interactive component registry') || false,
     hasComponentSandboxEnv: document.body?.innerText?.includes('Code component sandbox origin') || false,
     hasStripeApiEnv: document.body?.innerText?.includes('Payment provider API key') || false,
@@ -1701,6 +1702,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasCommerceWebhookSecretEnv &&
     infrastructureState.hasNotificationHttpEndpointEnv &&
     infrastructureState.hasNotificationSmtpAuthEnv &&
+    infrastructureState.hasVercelAliasEnv &&
     infrastructureState.hasComponentRegistryEnv &&
     infrastructureState.hasComponentSandboxEnv &&
     infrastructureState.hasStripeApiEnv &&
@@ -1740,7 +1742,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationPreflight &&
       infrastructureState.hasReleaseCertificationDatabaseGate &&
       infrastructureState.hasReleaseCertificationSettingsGate &&
-      infrastructureState.hasReleaseCertificationCommerceGate,
+      infrastructureState.hasReleaseCertificationCommerceGate &&
+      infrastructureState.hasVercelAliasEnv,
     `Settings release certification runbook was not visible: ${JSON.stringify(infrastructureState)}`,
   );
   await clickByText(client, 'Run infrastructure check');

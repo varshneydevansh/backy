@@ -273,6 +273,9 @@ includesAll(
     'SMTP_USER',
     'BACKY_SMTP_PASSWORD',
     'SMTP_PASSWORD',
+    'VERCEL_TOKEN/BACKY_VERCEL_TOKEN',
+    'BACKY_VERCEL_TOKEN',
+    'BACKY_VERCEL_PROJECT_ID',
   ],
   'Settings provider operation UI controls',
 );
@@ -287,6 +290,7 @@ includesAll(
     'hasSecretManagerRevoke',
     'hasNotificationHttpEndpointEnv',
     'hasNotificationSmtpAuthEnv',
+    'hasVercelAliasEnv',
   ],
   'Settings UI smoke provider operation coverage',
 );
@@ -319,6 +323,7 @@ includesAll(
     'Vercel target selector update',
     'BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID',
     'Settings Vercel alias certification update',
+    'Settings Vercel alias UI contract update',
     'target.mode',
     'externalBaseUrlConfigured',
     'Settings certification summary update',
