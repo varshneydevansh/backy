@@ -1619,7 +1619,7 @@ function SettingsPage() {
         localPreflight: 'npm run test:release-certification-preflight-contract',
         databaseGate: {
           input: 'certify_database',
-          requiredSecret: 'BACKY_DATABASE_URL',
+          requiredSecret: 'BACKY_DATABASE_URL or DATABASE_URL',
           commands: ['npm run ci:forms-postgres', 'npm run ci:sdk-postgres-smoke'],
         },
         providerGates: [
@@ -1631,7 +1631,7 @@ function SettingsPage() {
           { input: 'certify_notification', scope: 'configured notification delivery diagnostics' },
         ],
         secretFamilies: [
-          'BACKY_DATABASE_URL',
+          'BACKY_DATABASE_URL/DATABASE_URL',
           'storage/Supabase/S3 provider secrets',
           'VERCEL_TOKEN/BACKY_VERCEL_TOKEN and project metadata',
           'notification provider credentials',
@@ -5672,7 +5672,7 @@ function InfrastructureSettings({
             <div className="rounded-lg border border-border bg-muted/20 p-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Database gate</div>
               <div className="mt-2 text-sm text-foreground">Enable <span className="font-mono">certify_database</span> only with a disposable migrated Supabase/Postgres database.</div>
-              <div className="mt-2 text-xs text-muted-foreground">Requires <span className="font-mono">BACKY_DATABASE_URL</span>, then runs <span className="font-mono">ci:forms-postgres</span> and <span className="font-mono">ci:sdk-postgres-smoke</span>.</div>
+              <div className="mt-2 text-xs text-muted-foreground">Requires <span className="font-mono">BACKY_DATABASE_URL</span> or <span className="font-mono">DATABASE_URL</span>, then runs <span className="font-mono">ci:forms-postgres</span> and <span className="font-mono">ci:sdk-postgres-smoke</span>.</div>
             </div>
             <div className="rounded-lg border border-border bg-muted/20 p-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Provider gates</div>
@@ -5695,7 +5695,7 @@ function InfrastructureSettings({
             ))}
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>, storage/Supabase/S3 credentials, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification provider credentials, and commerce provider credentials for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento.
+            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, storage/Supabase/S3 credentials, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification provider credentials, and commerce provider credentials for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento.
           </p>
         </PanelContent>
       </Panel>

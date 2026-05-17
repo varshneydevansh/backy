@@ -1687,7 +1687,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationRunbook: Boolean(document.querySelector('[data-testid="settings-release-certification-runbook"]')),
     hasReleaseCertificationWorkflow: document.body?.innerText?.includes('.github/workflows/backy-release-certification.yml') || false,
     hasReleaseCertificationPreflight: document.body?.innerText?.includes('npm run test:release-certification-preflight-contract') || false,
-    hasReleaseCertificationDatabaseGate: document.body?.innerText?.includes('certify_database') && document.body?.innerText?.includes('BACKY_DATABASE_URL'),
+    hasReleaseCertificationDatabaseGate: document.body?.innerText?.includes('certify_database') && document.body?.innerText?.includes('BACKY_DATABASE_URL') && document.body?.innerText?.includes('DATABASE_URL'),
     hasReleaseCertificationSettingsGate: document.body?.innerText?.includes('certify_settings_providers') && document.body?.innerText?.includes('ci:settings-provider-certification'),
     hasReleaseCertificationCommerceGate: document.body?.innerText?.includes('certify_commerce_providers') && document.body?.innerText?.includes('ci:commerce-provider-certification'),
   }))()`);
