@@ -21,7 +21,7 @@ const FRONTEND_DESIGN_TEMPLATE_NAME = 'Smoke Contract Landing';
 let apiAdminSessionToken = '';
 
 const EDITOR_SCREENSHOT_THRESHOLDS = {
-  minClipWidth: 600,
+  minClipWidth: 500,
   minClipHeight: 460,
   minSampledPixels: 60000,
   minLumaRange: 120,
@@ -263,7 +263,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -271,9 +271,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_PAGE_CREATE_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -506,6 +516,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const seedBrowserSessionCookie = async (client) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: apiAdminSessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -1537,18 +1559,35 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
   let renderState = null;
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    renderState = await evaluate(client, `(() => {
+    await evaluate(client, `(() => {
       const canvas = document.querySelector('[data-testid="editor-canvas"]');
       if (canvas) {
-        const currentRect = canvas.getBoundingClientRect();
+        canvas.scrollIntoView({ block: 'start', inline: 'nearest' });
+        let scroller = canvas.parentElement;
+        while (scroller) {
+          const style = window.getComputedStyle(scroller);
+          const canScrollY = scroller.scrollHeight > scroller.clientHeight && /(auto|scroll)/.test(style.overflowY);
+          if (canScrollY) {
+            const canvasRect = canvas.getBoundingClientRect();
+            const scrollerRect = scroller.getBoundingClientRect();
+            scroller.scrollTop += canvasRect.top - scrollerRect.top - 120;
+          }
+          scroller = scroller.parentElement;
+        }
+        const rect = canvas.getBoundingClientRect();
         window.scrollTo({
-          top: Math.max(0, currentRect.top + window.scrollY - 120),
+          top: Math.max(0, rect.top + window.scrollY - 120),
           left: 0,
           behavior: 'auto',
         });
       } else {
         document.querySelector('#page-editor-canvas')?.scrollIntoView({ block: 'start' });
       }
+    })()`);
+    await sleep(120);
+
+    renderState = await evaluate(client, `(() => {
+      const canvas = document.querySelector('[data-testid="editor-canvas"]');
       const elements = Array.from(canvas?.querySelectorAll('[data-element-id]') || []);
       const bodyText = document.body?.innerText || '';
       const requiredElementIds = ${JSON.stringify(requiredElementIds)};
@@ -1603,6 +1642,8 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
       && renderState.renderedElementCount >= testCase.minTotalElementCount
       && renderState.missingElementIds.length === 0
       && renderState.collapsedElementIds.length === 0
+      && renderState.canvasScreenshotClip.width >= getEditorScreenshotThresholds(testCase.template).minClipWidth
+      && renderState.canvasScreenshotClip.height >= getEditorScreenshotThresholds(testCase.template).minClipHeight
       && !renderState.backendFallbackVisible
       && !renderState.emptyStateVisible
     ) {
@@ -2009,6 +2050,7 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await seedBrowserSessionCookie(client);
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(apiAdminSessionToken),
     });
@@ -2041,7 +2083,8 @@ const main = async () => {
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel, parentPage.id);
     const pageMeta = await assertCreatedPageSeo(pageId, seo, parentPage);
     const frontendDesignTemplateBackend = await createFrontendDesignTemplateBackend(client, createdPageIds);
-    const datasetPageBackend = await createDatasetPageBackend(client, createdPageIds, datasetCollection, 'list');
+    const datasetListPageBackend = await createDatasetPageBackend(client, createdPageIds, datasetCollection, 'list');
+    const datasetItemPageBackend = await createDatasetPageBackend(client, createdPageIds, datasetCollection, 'item');
     const starterTemplateBackends = await createStarterTemplateBackends(client, createdPageIds);
 
     await captureScreenshot(client, SCREENSHOT_PATH);
@@ -2074,7 +2117,11 @@ const main = async () => {
       navigationItem,
       pageMeta,
       frontendDesignTemplateBackend,
-      datasetPageBackend,
+      datasetPageBackend: datasetListPageBackend,
+      datasetPageBackends: {
+        list: datasetListPageBackend,
+        item: datasetItemPageBackend,
+      },
       starterTemplateBackends,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
