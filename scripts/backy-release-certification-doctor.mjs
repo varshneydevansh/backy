@@ -113,9 +113,9 @@ const storageChecks = [
 ];
 
 const notificationChecks = [
-  check('Resend notification credentials', ['BACKY_RESEND_API_KEY'], notificationProvider === 'resend'),
-  check('SMTP notification credentials', ['BACKY_SMTP_HOST', 'BACKY_SMTP_USER', 'BACKY_SMTP_PASSWORD'], notificationProvider === 'smtp'),
-  check('HTTP notification endpoint', ['BACKY_EMAIL_DELIVERY_ENDPOINT'], notificationProvider === 'http-endpoint'),
+  checkAny('Resend notification credentials', ['BACKY_RESEND_API_KEY', 'RESEND_API_KEY'], notificationProvider === 'resend'),
+  checkAny('SMTP notification credentials', ['BACKY_SMTP_HOST', 'SMTP_HOST'], notificationProvider === 'smtp'),
+  checkAny('HTTP notification endpoint', ['BACKY_EMAIL_DELIVERY_ENDPOINT', 'BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'], notificationProvider === 'http-endpoint'),
 ];
 
 const settings = {

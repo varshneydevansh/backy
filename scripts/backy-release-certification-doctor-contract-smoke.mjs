@@ -193,6 +193,74 @@ assert(
   'Doctor Resend notification mode should report Resend credential failure.',
 );
 
+const missingSmtpNotification = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER: 'smtp',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  missingSmtpNotification.code === 1,
+  `Doctor SMTP notification mode should exit 1 without SMTP host, got ${missingSmtpNotification.code}.`,
+);
+const missingSmtpNotificationJson = parseJson(missingSmtpNotification, 'missing SMTP notification doctor');
+assert(
+  missingSmtpNotificationJson.failures.includes('SMTP notification credentials'),
+  'Doctor SMTP notification mode should report SMTP credential failure.',
+);
+
+const missingHttpNotification = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER: 'http-endpoint',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  missingHttpNotification.code === 1,
+  `Doctor HTTP notification mode should exit 1 without endpoint, got ${missingHttpNotification.code}.`,
+);
+const missingHttpNotificationJson = parseJson(missingHttpNotification, 'missing HTTP notification doctor');
+assert(
+  missingHttpNotificationJson.failures.includes('HTTP notification endpoint'),
+  'Doctor HTTP notification mode should report HTTP endpoint failure.',
+);
+
+const resendAliasNotification = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER: 'resend',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  RESEND_API_KEY: 'resend_alias_key',
+});
+assert(
+  resendAliasNotification.code === 0,
+  `Doctor Resend notification mode should accept RESEND_API_KEY alias, got ${resendAliasNotification.code}.`,
+);
+
+const smtpHostOnlyNotification = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER: 'smtp',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  SMTP_HOST: 'smtp.example.test',
+});
+assert(
+  smtpHostOnlyNotification.code === 0,
+  `Doctor SMTP notification mode should accept host-only SMTP runtime, got ${smtpHostOnlyNotification.code}.`,
+);
+
+const httpAliasNotification = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER: 'http-endpoint',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL: 'https://notify.example.test/backy',
+});
+assert(
+  httpAliasNotification.code === 0,
+  `Doctor HTTP notification mode should accept transactional webhook URL alias, got ${httpAliasNotification.code}.`,
+);
+
 const missingVercelSecrets = await runDoctor({
   BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS: '1',
