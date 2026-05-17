@@ -67,6 +67,7 @@ The Forms/Contacts database-mode gate runs against a real Postgres-compatible da
 
 ```bash
 BACKY_DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms-postgres
+# or DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms-postgres
 ```
 
 The smoke first checks the required Backy Forms/Contacts tables and columns, then creates a temporary site, page, form, submission, and contact, verifies read/update/filter/merge behavior through the database repositories, and deletes the temporary site afterward. GitHub Actions also exposes a manual **Forms Postgres Contract** workflow; configure the repository secret `BACKY_DATABASE_URL` or `DATABASE_URL` with a disposable migrated Supabase/Postgres database and set `disposable_database_confirmed=true` before running it.
@@ -75,6 +76,7 @@ The SDK database-mode gate starts the public app in database mode and runs the g
 
 ```bash
 BACKY_DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:sdk-postgres-smoke
+# or DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:sdk-postgres-smoke
 ```
 
 It preflights the required public contract tables, including content collections, reusable sections, forms, comments, media, events, settings, and interactive component registry tables, before booting the public app. GitHub Actions exposes this as the manual **SDK Postgres Smoke** workflow using the same `BACKY_DATABASE_URL`/`DATABASE_URL` secret alias and the same `disposable_database_confirmed=true` confirmation.
@@ -116,7 +118,7 @@ npm run ci:forms-postgres
 npm run ci:sdk-postgres-smoke
 ```
 
-When `certify_database=false`, the release workflow keeps local provider certification in demo data mode unless you supply an external `BACKY_SETTINGS_CERTIFICATION_BASE_URL` or `BACKY_COMMERCE_CERTIFICATION_BASE_URL`. That lets Settings/Commerce provider gates run without accidentally forcing database mode in repositories that have not configured `BACKY_DATABASE_URL`.
+When `certify_database=false`, the release workflow keeps local provider certification in demo data mode unless you supply an external `BACKY_SETTINGS_CERTIFICATION_BASE_URL` or `BACKY_COMMERCE_CERTIFICATION_BASE_URL`. That lets Settings/Commerce provider gates run without accidentally forcing database mode in repositories that have not configured `BACKY_DATABASE_URL` or `DATABASE_URL`.
 
 Use the workflow inputs to choose the external provider depth:
 

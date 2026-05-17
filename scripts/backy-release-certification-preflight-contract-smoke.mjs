@@ -65,6 +65,8 @@ includesAll(
     'BACKY_DATABASE_URL',
     'DATABASE_URL',
     'BACKY_DATABASE_URL or DATABASE_URL',
+    'Run Forms and SDK Supabase/Postgres certification with BACKY_DATABASE_URL or DATABASE_URL.',
+    'confirms BACKY_DATABASE_URL or DATABASE_URL is disposable and migrated.',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
     "BACKY_DATA_MODE: ${{ inputs.certify_database && 'database' || 'demo' }}",

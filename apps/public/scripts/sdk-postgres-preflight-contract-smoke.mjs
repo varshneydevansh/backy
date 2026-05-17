@@ -102,6 +102,8 @@ assert(
     sdkPostgresWorkflow.includes('npm run test:sdk-postgres-preflight-contract') &&
     sdkPostgresWorkflow.includes('DATABASE_URL') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_URL or DATABASE_URL') &&
+    sdkPostgresWorkflow.includes('I confirm BACKY_DATABASE_URL or DATABASE_URL points to a disposable migrated Supabase/Postgres database.') &&
+    sdkSmokeCi.includes('configured database URL points at') &&
     sdkPostgresWorkflow.includes('database_expected_host:') &&
     sdkPostgresWorkflow.includes('database_expected_name:') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&

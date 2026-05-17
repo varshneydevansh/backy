@@ -136,6 +136,7 @@ const destructiveSafeWorkflowEvidence = [
   'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   'Forms Postgres certification expected database host',
   'Forms Postgres certification expected database name',
+  'configured database URL points at',
   'targetGuard',
   'expectedHostConfigured',
   'expectedDatabaseConfigured',
@@ -199,6 +200,7 @@ if (workflow) {
     'npm run test:forms-postgres-preflight-contract',
     'Require disposable Postgres or Supabase database URL',
     'BACKY_DATABASE_URL or DATABASE_URL',
+    'I confirm BACKY_DATABASE_URL or DATABASE_URL points to a disposable migrated Supabase/Postgres database.',
     'inputs.disposable_database_confirmed',
     'Confirm disposable_database_confirmed=true',
     'npm run ci:forms-postgres',
@@ -211,7 +213,7 @@ if (workflow) {
       workflow.indexOf('Run forms migration preflight contract') < workflow.indexOf('Write non-secret Forms database summary') &&
       workflow.indexOf('Write non-secret Forms database summary') < workflow.indexOf('Require disposable Postgres or Supabase database URL') &&
       workflow.indexOf('Run forms migration preflight contract') < workflow.indexOf('Run forms Postgres/Supabase contract smoke'),
-    'Forms Postgres workflow must run the migration preflight before requiring BACKY_DATABASE_URL and before the DB-backed smoke.',
+    'Forms Postgres workflow must run the migration preflight before requiring BACKY_DATABASE_URL or DATABASE_URL and before the DB-backed smoke.',
   );
 
   assert(

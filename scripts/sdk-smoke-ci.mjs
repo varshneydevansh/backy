@@ -38,10 +38,10 @@ const assertExpectedDatabaseTarget = () => {
   const actualHost = parsed.hostname;
   const actualDatabase = decodeURIComponent(parsed.pathname.replace(/^\/+/, '').split('/')[0] || '');
   if (expectedHost && actualHost !== expectedHost) {
-    throw new Error(`SDK Postgres certification expected database host ${expectedHost}, but BACKY_DATABASE_URL points at ${actualHost || 'unknown'}.`);
+    throw new Error(`SDK Postgres certification expected database host ${expectedHost}, but the configured database URL points at ${actualHost || 'unknown'}.`);
   }
   if (expectedDatabase && actualDatabase !== expectedDatabase) {
-    throw new Error(`SDK Postgres certification expected database name ${expectedDatabase}, but BACKY_DATABASE_URL points at ${actualDatabase || 'unknown'}.`);
+    throw new Error(`SDK Postgres certification expected database name ${expectedDatabase}, but the configured database URL points at ${actualDatabase || 'unknown'}.`);
   }
 };
 

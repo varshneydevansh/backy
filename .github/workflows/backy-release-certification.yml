@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       certify_database:
-        description: Run Forms and SDK Supabase/Postgres certification with BACKY_DATABASE_URL.
+        description: Run Forms and SDK Supabase/Postgres certification with BACKY_DATABASE_URL or DATABASE_URL.
         required: true
         type: boolean
         default: true
       disposable_database_confirmed:
-        description: Required with certify_database=true; confirms BACKY_DATABASE_URL is disposable and migrated.
+        description: Required with certify_database=true; confirms BACKY_DATABASE_URL or DATABASE_URL is disposable and migrated.
         required: true
         type: boolean
         default: false

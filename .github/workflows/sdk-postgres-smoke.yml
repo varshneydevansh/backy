@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       disposable_database_confirmed:
-        description: I confirm BACKY_DATABASE_URL points to a disposable migrated Supabase/Postgres database.
+        description: I confirm BACKY_DATABASE_URL or DATABASE_URL points to a disposable migrated Supabase/Postgres database.
         required: true
         type: boolean
         default: false
