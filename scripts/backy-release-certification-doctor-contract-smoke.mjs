@@ -36,6 +36,21 @@ const parseJson = (result, label) => {
   }
 };
 
+const assertMissingProvider = async ({ label, env, failure }) => {
+  const result = await runDoctor({
+    BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+    ...env,
+  });
+  assert(result.code === 1, `Doctor ${label} mode should exit 1 without required credentials, got ${result.code}.`);
+  const json = parseJson(result, `missing ${label} doctor`);
+  assert(json.ok === false, `Doctor ${label} mode should report ok=false.`);
+  assert(
+    json.failures.includes(failure),
+    `Doctor ${label} mode should report ${failure} failure. Actual failures: ${JSON.stringify(json.failures)}`,
+  );
+  return json;
+};
+
 const normal = await runDoctor({});
 assert(normal.code === 0, `Doctor default mode should exit 0, got ${normal.code}: ${normal.stderr}`);
 const normalJson = parseJson(normal, 'default doctor');
@@ -167,6 +182,25 @@ assert(
   'Doctor Razorpay subscription mode should report Razorpay credential failure.',
 );
 
+for (const { provider, failure } of [
+  { provider: 'stripe', failure: 'Stripe payment/refund credentials' },
+  { provider: 'paypal', failure: 'PayPal payment/subscription credentials' },
+  { provider: 'paddle', failure: 'Paddle payment/subscription credentials' },
+  { provider: 'square', failure: 'Square payment/subscription credentials' },
+  { provider: 'adyen', failure: 'Adyen credentials' },
+  { provider: 'mollie', failure: 'Mollie payment/subscription credentials' },
+]) {
+  await assertMissingProvider({
+    label: `${provider} subscription`,
+    env: {
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: provider,
+    },
+    failure,
+  });
+}
+
 const taxJarTax = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_COMMERCE_CERTIFY_TAX: '1',
@@ -179,6 +213,16 @@ assert(
   taxJarTaxJson.failures.includes('TaxJar credentials'),
   'Doctor TaxJar tax mode should report TaxJar credential failure.',
 );
+
+await assertMissingProvider({
+  label: 'Avalara tax',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_TAX: '1',
+    BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'avalara',
+  },
+  failure: 'Avalara credentials',
+});
 
 const easyPostShipping = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
@@ -195,6 +239,16 @@ assert(
   easyPostShippingJson.failures.includes('EasyPost credentials'),
   'Doctor EasyPost shipping mode should report EasyPost credential failure.',
 );
+
+await assertMissingProvider({
+  label: 'Shippo shipping',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_SHIPPING: '1',
+    BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: 'shippo',
+  },
+  failure: 'Shippo credentials',
+});
 
 const shopifyCatalog = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
@@ -227,6 +281,22 @@ assert(
   magentoCatalogJson.failures.includes('Magento catalog credentials'),
   'Doctor Magento catalog mode should report Magento credential failure.',
 );
+
+for (const { provider, failure } of [
+  { provider: 'bigcommerce', failure: 'BigCommerce catalog credentials' },
+  { provider: 'woocommerce', failure: 'WooCommerce catalog credentials' },
+  { provider: 'etsy', failure: 'Etsy catalog credentials' },
+]) {
+  await assertMissingProvider({
+    label: `${provider} catalog`,
+    env: {
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: provider,
+    },
+    failure,
+  });
+}
 
 const commerceWebhook = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
