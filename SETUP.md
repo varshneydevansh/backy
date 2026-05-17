@@ -83,7 +83,7 @@ It preflights the required public contract tables, including content collections
 
 ## Commerce provider mock smoke
 
-The commerce provider CI gate starts the public and admin apps, configures the existing commerce/order smoke tests to use their local mock provider servers, and runs product catalog sync, checkout/subscription actions, quote providers, shipping labels/tracking, refunds, and webhook/reconciliation coverage without live provider credentials:
+The commerce provider CI gate starts the public and admin apps, configures the existing commerce/order smoke tests to use their local mock provider servers, and runs provider catalog sync for Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, and HTTP; public checkout/subscription actions; public checkout and admin-order TaxJar/Avalara tax quotes; EasyPost/Shippo shipping rates, labels, and tracking; Stripe Tax and Stripe promotion-code discount quotes; Stripe/PayPal/Square/Adyen/Mollie/Razorpay refunds; plus webhook/reconciliation coverage without live provider credentials:
 
 ```bash
 npm run ci:commerce-provider-smoke

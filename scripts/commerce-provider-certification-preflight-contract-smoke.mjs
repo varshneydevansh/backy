@@ -42,6 +42,7 @@ const commerceSmoke = read('../apps/admin/scripts/commerce-smoke.mjs');
 const ordersSmoke = read('../apps/admin/scripts/orders-smoke.mjs');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const apiContracts = read('../specs/backy-api-contracts.md');
+const setup = read('../SETUP.md');
 
 includesAll(
   certificationCi,
@@ -255,6 +256,20 @@ includesAll(
     '.github/workflows/commerce-provider-smoke.yml',
   ],
   'API contracts commerce mock provider coverage summary',
+);
+
+includesAll(
+  setup,
+  [
+    'Commerce provider mock smoke',
+    'provider catalog sync for Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, and HTTP',
+    'public checkout and admin-order TaxJar/Avalara tax quotes',
+    'EasyPost/Shippo shipping rates, labels, and tracking',
+    'Stripe Tax and Stripe promotion-code discount quotes',
+    'Stripe/PayPal/Square/Adyen/Mollie/Razorpay refunds',
+    'npm run ci:commerce-provider-smoke',
+  ],
+  'SETUP commerce mock provider coverage runbook',
 );
 
 includesAll(
