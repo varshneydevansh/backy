@@ -16,6 +16,27 @@ const assert = (condition, message) => {
   }
 };
 
+function endpointPath(endpoint) {
+  if (typeof endpoint !== 'string' || endpoint.includes('#')) {
+    return null;
+  }
+  return endpoint.split('?')[0];
+}
+
+function assertManifestEndpointsDocumented(manifestData, openapiDocument) {
+  const endpoints = manifestData?.endpoints || {};
+  const paths = openapiDocument?.paths || {};
+  const missing = Object.entries(endpoints)
+    .map(([key, value]) => [key, endpointPath(value)])
+    .filter(([, path]) => path && !paths[path])
+    .map(([key, path]) => `${key}:${path}`);
+
+  assert(
+    missing.length === 0,
+    `openapi() is missing manifest-advertised endpoint paths: ${missing.join(', ')}`,
+  );
+}
+
 async function request(path, init) {
   const headers = new Headers(init?.headers || {});
 
@@ -519,6 +540,8 @@ assert(revalidatedFrontendDesign.notModified === true, 'frontendDesignCached() d
 
 const openapi = await client.openapi();
 assert(openapi.openapi === '3.1.0', 'openapi() did not return an OpenAPI 3.1 document');
+assert(openapi.paths?.['/api/sites']?.get?.operationId === 'discoverBackySite', 'openapi() missing global site discovery path');
+assertManifestEndpointsDocumented(manifest.data, openapi);
 assert(openapi.paths?.[manifest.data.endpoints.openapi]?.get, 'openapi() missing manifest-advertised OpenAPI path');
 assert(openapi.paths?.[manifest.data.endpoints.blogCategories]?.get, 'openapi() missing manifest-advertised blog categories path');
 assert(openapi.paths?.[manifest.data.endpoints.blogTags]?.get, 'openapi() missing manifest-advertised blog tags path');

@@ -329,6 +329,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         ],
         tags: [
           { name: "Discovery" },
+          { name: "Sites" },
           { name: "Routing" },
           { name: "Rendering" },
           { name: "Content" },
@@ -336,6 +337,66 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           { name: "Media" },
         ],
         paths: {
+          "/api/sites": {
+            get: {
+              tags: ["Sites"],
+              summary: "List published sites or discover one site by identifier",
+              operationId: "discoverBackySite",
+              parameters: [
+                queryParameter(
+                  "identifier",
+                  { type: "string" },
+                  "Published site id, slug, or custom domain. Returns a single site envelope when present.",
+                ),
+                queryParameter(
+                  "slug",
+                  { type: "string" },
+                  "Alias for identifier.",
+                ),
+                queryParameter(
+                  "limit",
+                  { type: "integer", minimum: 1, maximum: 100 },
+                  "Page size when listing published sites.",
+                ),
+                queryParameter(
+                  "offset",
+                  { type: "integer", minimum: 0 },
+                  "Page offset when listing published sites.",
+                ),
+              ],
+              responses: {
+                "200": {
+                  description: "Published site list or one discovered site",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        oneOf: [
+                          { $ref: "#/components/schemas/SiteListEnvelope" },
+                          { $ref: "#/components/schemas/SiteEnvelope" },
+                        ],
+                      },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "429": {
+                  description: "Discovery rate limit exceeded",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           [`/api/sites/${site.id}/manifest`]: {
             get: {
               tags: ["Discovery"],
@@ -2408,6 +2469,42 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
               },
             },
+            SiteSummary: {
+              type: "object",
+              required: ["id", "slug", "name"],
+              additionalProperties: true,
+              properties: {
+                id: { type: "string" },
+                slug: { type: "string" },
+                name: { type: "string" },
+                description: { type: ["string", "null"] },
+                customDomain: { type: ["string", "null"] },
+                status: {
+                  type: "string",
+                  enum: ["draft", "published", "scheduled", "archived"],
+                },
+                isPublished: { type: "boolean" },
+                theme: { type: "object", additionalProperties: true },
+              },
+            },
+            SiteListEnvelope: envelopeSchema({
+              type: "object",
+              required: ["sites", "pagination"],
+              properties: {
+                sites: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/SiteSummary" },
+                },
+                pagination: { type: "object", additionalProperties: true },
+              },
+            }),
+            SiteEnvelope: envelopeSchema({
+              type: "object",
+              required: ["site"],
+              properties: {
+                site: { $ref: "#/components/schemas/SiteSummary" },
+              },
+            }),
             RouteResolveEnvelope: envelopeSchema({
               type: "object",
               required: ["site", "route"],

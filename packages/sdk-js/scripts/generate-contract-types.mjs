@@ -369,7 +369,6 @@ sourceLines.push(
   'export const generatedBackyContractTypeSources = [',
   ...schemaFiles.map((file) => `  ${literal(relative(repoRoot, join(schemaDir, file)))},`),
   '] as const;',
-  '',
 );
 
 writeFileSync(outputFile, `${sourceLines.join('\n')}\n`);
