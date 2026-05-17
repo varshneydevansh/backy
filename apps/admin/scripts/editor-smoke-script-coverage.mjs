@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packagePath = path.resolve(__dirname, '../package.json');
 const smokePath = path.resolve(__dirname, 'editor-drag-smoke.mjs');
+const activeEditorContextPath = path.resolve(__dirname, '../src/components/editor/ActiveEditorContext.tsx');
 
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const smokeSource = fs.readFileSync(smokePath, 'utf8');
+const activeEditorContextSource = fs.readFileSync(activeEditorContextPath, 'utf8');
 const editorScripts = Object.entries(packageJson.scripts ?? {})
   .filter(([name]) => name.startsWith('test:editor'))
   .map(([name, command]) => ({ name, command }));
@@ -60,12 +62,60 @@ const missingWorkflowScripts = editorScripts
   .filter((name) => !workflowExclusions.has(name))
   .filter((name) => !workflowReachableScripts.has(name));
 
-if (missingEnvScripts.length || missingWorkflowScripts.length || missingComponentScripts.length) {
+const collectMissingSnippets = (source, snippets) => snippets.filter((snippet) => !source.includes(snippet));
+const countOccurrences = (source, snippet) => source.split(snippet).length - 1;
+
+const missingTableRangeSourceSnippets = collectMissingSnippets(activeEditorContextSource, [
+  'const getSelectedTableCellPaths = useCallback',
+  'const anchorCellPath = readCellPathAtPoint(selection.anchor) || context.cellPath;',
+  'const focusCellPath = readCellPathAtPoint(selection.focus) || context.cellPath;',
+  'if (!isSamePath(anchorTablePath, focusTablePath) || !isSamePath(anchorTablePath, context.tablePath)) {',
+  'return [context.cellPath];',
+  'const minRowIndex = Math.min',
+  'const maxRowIndex = Math.max',
+  'const minCellIndex = Math.min',
+  'const maxCellIndex = Math.max',
+  'for (let rowIndex = minRowIndex; rowIndex <= maxRowIndex; rowIndex += 1) {',
+  'for (let cellIndex = minCellIndex; cellIndex <= maxCellIndex; cellIndex += 1) {',
+  'cellPaths.push([...context.tablePath, rowIndex, cellIndex]);',
+  'return cellPaths.length > 0 ? cellPaths : [context.cellPath];',
+  '__backySelectActiveEditorTableCellRange',
+]);
+const missingTableRangeSmokeSnippets = collectMissingSnippets(smokeSource, [
+  '__backySelectActiveEditorTableCellRange',
+  'selectedMergedRangeBeforeStyle',
+  'mergedRangeStyleState',
+  'selectedMultiCellFillRange',
+  'tableMultiCellStyleState',
+  'multiCellValueOneCell',
+  'multiCellValueTwoCell',
+  'Persisted multi-cell table fill missing',
+  'Persisted multi-cell table border color missing',
+  'Persisted multi-cell table vertical alignment missing',
+]);
+const tableCellPathReaderCount = countOccurrences(activeEditorContextSource, 'const cellPaths = getSelectedTableCellPaths(editor);');
+const tableCellPathLoopCount = countOccurrences(activeEditorContextSource, 'for (const cellPath of cellPaths) {');
+const missingTableStyleSetterGuards = [
+  tableCellPathReaderCount < 3 ? `expected at least 3 table style cell-path reader calls, found ${tableCellPathReaderCount}` : '',
+  tableCellPathLoopCount < 3 ? `expected at least 3 table style cell-path loops, found ${tableCellPathLoopCount}` : '',
+].filter(Boolean);
+
+if (
+  missingEnvScripts.length ||
+  missingWorkflowScripts.length ||
+  missingComponentScripts.length ||
+  missingTableRangeSourceSnippets.length ||
+  missingTableRangeSmokeSnippets.length ||
+  missingTableStyleSetterGuards.length
+) {
   console.error(JSON.stringify({
     ok: false,
     missingEnvScripts,
     missingWorkflowScripts,
     missingComponentScripts,
+    missingTableRangeSourceSnippets,
+    missingTableRangeSmokeSnippets,
+    missingTableStyleSetterGuards,
   }, null, 2));
   process.exit(1);
 }
@@ -75,4 +125,6 @@ console.log(JSON.stringify({
   editorSmokeEnvCount: envNames.length,
   editorComponentSmokeCount: componentHandlerNames.length,
   editorWorkflowScriptCount: editorScripts.length - workflowExclusions.size,
+  tableRangeSourceSnippets: 14,
+  tableRangeSmokeSnippets: 10,
 }, null, 2));

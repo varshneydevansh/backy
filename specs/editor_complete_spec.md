@@ -138,6 +138,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Table cell fill and border color controls can clear previously applied selected-cell colors and persist the removed metadata.
     - Selected table cells can receive independent vertical alignment from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
     - Selected multi-cell table ranges can receive persisted fill color, border color, and vertical alignment metadata across the selected rectangle without leaking into unselected cells.
+    - Editor smoke coverage now guards the rich-text table range-selection source path plus the merged/multi-cell browser smoke assertions so table fill, border, and vertical alignment remain applied across the selected rectangle only.
     - Added richer appearance controls (border style/width/color, box shadow, spacing).
     - Added applied-change feedback in both standalone and embedded inspector layouts.
 
