@@ -90,6 +90,18 @@ const SETTINGS_PERMISSION_ROLE_DEFAULTS: Record<SettingsPermissionKey, Array<'ow
   'sites.configure': ['owner', 'admin'],
 };
 
+const isSettingsPermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentUser: { role: 'owner' | 'admin' | 'editor' | 'viewer' } | null | undefined,
+  key: SettingsPermissionKey,
+) => {
+  if (isAdminPermissionAllowed(permissionMatrix, currentUser, key, SETTINGS_PERMISSION_ROLE_DEFAULTS)) {
+    return true;
+  }
+
+  return !permissionMatrix && Boolean(currentUser && SETTINGS_PERMISSION_ROLE_DEFAULTS[key].includes(currentUser.role));
+};
+
 interface SettingsSearch {
   tab?: SettingsTab;
 }
@@ -847,13 +859,13 @@ function SettingsPage() {
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
   const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'settings.view', SETTINGS_PERMISSION_ROLE_DEFAULTS);
-  const canConfigureSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'settings.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
-  const canManageApiKeys = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'settings.manageKeys', SETTINGS_PERMISSION_ROLE_DEFAULTS);
-  const canConfigureMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'media.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
-  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'activity.export', SETTINGS_PERMISSION_ROLE_DEFAULTS);
-  const canViewSiteSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'sites.view', SETTINGS_PERMISSION_ROLE_DEFAULTS);
-  const canConfigureSiteSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'sites.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canViewSettings = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'settings.view');
+  const canConfigureSettings = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'settings.configure');
+  const canManageApiKeys = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'settings.manageKeys');
+  const canConfigureMedia = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'media.configure');
+  const canExportActivity = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'activity.export');
+  const canViewSiteSettings = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'sites.view');
+  const canConfigureSiteSettings = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'sites.configure');
   const viewPermissionTitle = canViewSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.view', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const configurePermissionTitle = canConfigureSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const manageKeysPermissionTitle = canManageApiKeys ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.manageKeys', SETTINGS_PERMISSION_ROLE_DEFAULTS);
@@ -867,8 +879,8 @@ function SettingsPage() {
     : mediaConfigurePermissionTitle || configurePermissionTitle;
   const canSaveActiveSettingsTab = activeTab === 'infrastructure' ? canConfigureInfrastructure : canConfigureSettings;
   const activeSavePermissionTitle = activeTab === 'infrastructure' ? infrastructurePermissionTitle : configurePermissionTitle;
-  const settingsFormDisabled = isSaving || isPermissionMatrixPending || !canConfigureSettings;
-  const infrastructureFormDisabled = isSaving || isPermissionMatrixPending || !canConfigureInfrastructure;
+  const settingsFormDisabled = isSaving || !canConfigureSettings;
+  const infrastructureFormDisabled = isSaving || !canConfigureInfrastructure;
 
   const applyBackendSettings = useCallback((backendSettings: SiteSettingsInput) => {
     const snapshot = createSettingsDraftSnapshot(backendSettings);
@@ -935,7 +947,6 @@ function SettingsPage() {
   }, [currentUser?.id]);
 
   const loadSettingsAuditLogs = useCallback(async () => {
-    if (isPermissionMatrixPending) return;
     if (!canExportActivity) {
       setSettingsAuditLogs([]);
       setAuditNotice(null);
@@ -957,10 +968,9 @@ function SettingsPage() {
     } finally {
       setIsAuditLoading(false);
     }
-  }, [canExportActivity, isPermissionMatrixPending]);
+  }, [canExportActivity]);
 
   const loadSiteSettingsAuditLogs = useCallback(async (siteId = selectedSiteSettingsSiteId) => {
-    if (isPermissionMatrixPending) return;
     if (!siteId || !canExportActivity) {
       setSiteSettingsAuditLogs([]);
       setSiteSettingsAuditNotice(null);
@@ -984,13 +994,12 @@ function SettingsPage() {
     } finally {
       setIsSiteSettingsAuditLoading(false);
     }
-  }, [canExportActivity, isPermissionMatrixPending, selectedSiteSettingsSiteId]);
+  }, [canExportActivity, selectedSiteSettingsSiteId]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadSettings = async () => {
-      if (isPermissionMatrixPending) return;
       if (!canViewSettings) {
         setNotice(viewPermissionTitle || 'Your account cannot view settings.');
         return;
@@ -1014,13 +1023,12 @@ function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyBackendSettings, canViewSettings, isPermissionMatrixPending, viewPermissionTitle]);
+  }, [applyBackendSettings, canViewSettings, viewPermissionTitle]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadSitesForSiteSettings = async () => {
-      if (isPermissionMatrixPending) return;
       if (!canViewSettings || !canViewSiteSettings) {
         setSiteSettingsSites([]);
         setSelectedSiteSettingsSiteId('');
@@ -1045,7 +1053,7 @@ function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canViewSettings, canViewSiteSettings, isPermissionMatrixPending]);
+  }, [canViewSettings, canViewSiteSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1089,10 +1097,8 @@ function SettingsPage() {
   }, [canViewSiteSettings, selectedSiteSettingsSiteId]);
 
   useEffect(() => {
-    if (!isPermissionMatrixPending) {
-      void loadSettingsAuditLogs();
-    }
-  }, [isPermissionMatrixPending, loadSettingsAuditLogs]);
+    void loadSettingsAuditLogs();
+  }, [loadSettingsAuditLogs]);
 
   useEffect(() => {
     if (!isPermissionMatrixPending) {
@@ -1837,7 +1843,7 @@ function SettingsPage() {
           {hasUnsavedChanges && (
             <Button
               variant="ghost"
-              disabled={isSaving || isPermissionMatrixPending || !canSaveActiveSettingsTab}
+              disabled={isSaving || !canSaveActiveSettingsTab}
               title={activeSavePermissionTitle}
               onClick={discardUnsavedChanges}
             >
@@ -1846,7 +1852,7 @@ function SettingsPage() {
           )}
           <Button
             variant="outline"
-            disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings}
+            disabled={isSaving || !canConfigureSettings}
             title={configurePermissionTitle}
             onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
             iconStart={<Copy className="size-4" />}
@@ -1855,7 +1861,7 @@ function SettingsPage() {
           </Button>
           <Button
             variant="outline"
-            disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings}
+            disabled={isSaving || !canConfigureSettings}
             title={configurePermissionTitle}
             onClick={downloadSettingsHandoff}
             iconStart={<Download className="size-4" />}
@@ -1865,7 +1871,7 @@ function SettingsPage() {
           <Button
             variant="primary"
             onClick={() => void handleSave()}
-            disabled={isSaving || isPermissionMatrixPending || !canSaveActiveSettingsTab || !hasUnsavedChanges || activeBlockingValidationIssues.length > 0}
+            disabled={isSaving || !canSaveActiveSettingsTab || !hasUnsavedChanges || activeBlockingValidationIssues.length > 0}
             title={activeSavePermissionTitle}
             iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
           >
@@ -2052,7 +2058,7 @@ function SettingsPage() {
         <PanelContent className="pt-5">
         <fieldset
           disabled={activeTab === 'security'
-            ? isSaving || isPermissionMatrixPending || (!canConfigureSettings && !canManageApiKeys)
+            ? isSaving || (!canConfigureSettings && !canManageApiKeys)
             : activeTab === 'infrastructure'
               ? infrastructureFormDisabled
               : settingsFormDisabled}
@@ -2151,7 +2157,7 @@ function SettingsPage() {
             auditNotice={siteSettingsAuditNotice}
             canViewAudit={canExportActivity}
             auditPermissionTitle={activityExportPermissionTitle}
-            disabled={isSiteSettingsLoading || isSiteSettingsSaving || isPermissionMatrixPending || !canConfigureSiteSettings}
+            disabled={isSiteSettingsLoading || isSiteSettingsSaving || !canConfigureSiteSettings}
             canView={canViewSiteSettings}
             permissionTitle={siteSettingsConfigurePermissionTitle}
             onSelectSite={setSelectedSiteSettingsSiteId}

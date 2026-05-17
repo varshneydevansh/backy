@@ -53,6 +53,43 @@ interface ApiSiteResponse {
   };
 }
 
+export interface AdminSiteSettingsScope {
+  schemaVersion: 'backy.site-settings-scope.v1';
+  scope: {
+    level: 'site';
+    siteId: string;
+    siteSlug: string;
+    teamId: string | null;
+    workspaceSettingsScope: 'global';
+    siteSettingsScope: 'site';
+  };
+  siteSettings: SiteSettings;
+  workspaceSettings: {
+    deliveryMode?: 'managed-hosting' | 'custom-frontend';
+    integrations?: Record<string, unknown>;
+    authPolicy?: Record<string, unknown>;
+  };
+  effectiveSettings: {
+    workspace?: Record<string, unknown>;
+    site: SiteSettings;
+  };
+  endpoints: {
+    workspaceSettings: string;
+    siteSettings: string;
+    siteDetail: string;
+  };
+}
+
+interface ApiSiteSettingsScopeResponse {
+  success: boolean;
+  data?: {
+    settings: AdminSiteSettingsScope;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface AdminNavigationResolvedItem {
   id: string;
   type: 'page' | 'route' | 'url';
@@ -1170,6 +1207,7 @@ interface ApiSettings {
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
+  runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
   updatedAt?: string;
 }
 
@@ -1414,7 +1452,7 @@ interface ApiCollectionRecordResponse {
 export interface CommerceProductProviderSyncResult {
   provider: string;
   status: 'handoff' | 'synced' | 'failed';
-  executionMode: 'handoff' | 'stripe-api' | 'paddle-api' | 'square-api' | 'http-api';
+  executionMode: 'handoff' | 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'shopify-api' | 'bigcommerce-api' | 'woocommerce-api' | 'etsy-api' | 'magento-api' | 'http-api';
   syncedAt: string;
   requestId: string;
   reason?: string;
@@ -1438,7 +1476,7 @@ export interface CommerceProductProviderSyncResult {
     active?: boolean | null;
     livemode?: boolean | null;
     url?: string;
-  };
+  } | null;
   error?: {
     type?: string;
     code?: string;
@@ -1505,7 +1543,7 @@ export interface ProductSubscriptionLifecycle {
     fulfillmentStatus: string;
     lifecycleStatus: 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
     subscriptionReference: string;
-    actionExecutionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'http-api' | 'handoff';
+    actionExecutionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
     actionHistory: Array<{
       id: string;
       schemaVersion: string;
@@ -1551,7 +1589,7 @@ export interface ProductSubscriptionLifecycle {
     supportedActions: Array<'pause' | 'resume' | 'cancel'>;
     providers: Array<{
       provider: 'stripe' | 'paypal' | 'http' | 'manual' | string;
-      executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'http-api' | 'handoff';
+      executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
       configured: boolean;
       referencePattern: string;
       executableSubscriptions: number;
@@ -1576,7 +1614,7 @@ export interface ProductSubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'http-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;
@@ -1700,7 +1738,7 @@ export interface AdminOrderQuote {
   discountRate: number;
   providerAdjustments?: Array<{
     kind: 'tax' | 'shipping' | 'discount';
-    provider: 'http' | 'stripe';
+    provider: 'http' | 'stripe' | 'taxjar' | 'avalara' | 'easypost' | 'shippo';
     status: 'succeeded' | 'failed' | 'skipped';
     url?: string;
     amount?: number;
@@ -2172,14 +2210,16 @@ export interface SiteSettingsInput {
       shippingBaseAmount?: number;
       shippingWeightRate?: number;
       discountPercent?: number;
-      taxProvider?: 'manual' | 'http' | 'stripe';
+      taxProvider?: 'manual' | 'http' | 'stripe' | 'taxjar' | 'avalara';
       taxProviderUrl?: string;
-      shippingProvider?: 'manual' | 'http';
+      shippingProvider?: 'manual' | 'http' | 'easypost' | 'shippo';
       shippingProviderUrl?: string;
-      discountProvider?: 'manual' | 'http';
+      discountProvider?: 'manual' | 'http' | 'stripe';
       discountProviderUrl?: string;
       catalogSyncProvider?: 'manual' | 'http' | 'generic-http' | 'custom-http';
       catalogSyncProviderUrl?: string;
+      subscriptionActionProvider?: 'manual' | 'http' | 'generic-http' | 'custom-http';
+      subscriptionActionProviderUrl?: string;
       shippingLabelProvider?: 'manual' | 'easypost' | 'shippo';
       shippingOriginAddress?: string;
       shippingDefaultParcel?: string;
@@ -2286,25 +2326,78 @@ export interface SiteSettingsInput {
     webhookSecretEnvKeys?: string[];
     stripeSecretConfigured?: boolean;
     stripeApiBaseUrl?: string;
+    stripeApiVersion?: string;
     stripeTaxApiBaseUrl?: string;
+    stripeDiscountApiBaseUrl?: string;
     stripeRefundApiBaseUrl?: string;
     paypalAccessTokenConfigured?: boolean;
     paypalApiBaseUrl?: string;
+    paddleApiKeyConfigured?: boolean;
+    paddleApiBaseUrl?: string;
     squareAccessTokenConfigured?: boolean;
     squareApiBaseUrl?: string;
     squareVersion?: string;
     adyenApiKeyConfigured?: boolean;
     adyenMerchantAccountConfigured?: boolean;
     adyenApiBaseUrl?: string;
+    adyenRecurringApiBaseUrl?: string;
     mollieApiKeyConfigured?: boolean;
     mollieApiBaseUrl?: string;
+    razorpayKeyIdConfigured?: boolean;
+    razorpayKeySecretConfigured?: boolean;
+    razorpayApiBaseUrl?: string;
     paymentProvider?: 'none' | 'stripe' | 'manual';
-    taxProvider?: 'manual' | 'http' | 'stripe';
+    taxProvider?: 'manual' | 'http' | 'stripe' | 'taxjar' | 'avalara';
+    shippingProvider?: 'manual' | 'http' | 'easypost' | 'shippo';
+    discountProvider?: 'manual' | 'http' | 'stripe';
+    taxJarApiKeyConfigured?: boolean;
+    taxJarApiBaseUrl?: string;
+    avalaraAccountConfigured?: boolean;
+    avalaraLicenseKeyConfigured?: boolean;
+    avalaraCompanyCodeConfigured?: boolean;
+    avalaraApiBaseUrl?: string;
     easyPostApiKeyConfigured?: boolean;
     easyPostApiBaseUrl?: string;
     shippoApiKeyConfigured?: boolean;
     shippoApiBaseUrl?: string;
     shippingLabelProvider?: 'manual' | 'easypost' | 'shippo';
+    shopifyAdminAccessTokenConfigured?: boolean;
+    shopifyStoreConfigured?: boolean;
+    shopifyStoreDomain?: string;
+    shopifyAdminApiBaseUrl?: string;
+    bigCommerceAccessTokenConfigured?: boolean;
+    bigCommerceStoreConfigured?: boolean;
+    bigCommerceStoreHash?: string;
+    bigCommerceApiBaseUrl?: string;
+    wooCommerceConsumerKeyConfigured?: boolean;
+    wooCommerceConsumerSecretConfigured?: boolean;
+    wooCommerceStoreConfigured?: boolean;
+    wooCommerceStoreUrl?: string;
+    wooCommerceApiBaseUrl?: string;
+    etsyAccessTokenConfigured?: boolean;
+    etsyApiKeyConfigured?: boolean;
+    etsyShopConfigured?: boolean;
+    etsyShopId?: string;
+    etsyApiBaseUrl?: string;
+    magentoAccessTokenConfigured?: boolean;
+    magentoStoreConfigured?: boolean;
+    magentoStoreUrl?: string;
+    magentoApiBaseUrl?: string;
+    missing: string[];
+  };
+  runtimeInteractiveComponents?: {
+    registryProvider: string;
+    registryConfigured: boolean;
+    registryUrl?: string;
+    bundleBaseUrl?: string;
+    signingKeyConfigured?: boolean;
+    reviewRequired?: boolean;
+    customCodeEnabled?: boolean;
+    sandboxOrigin?: string;
+    cspConfigured?: boolean;
+    iframeSandbox?: string;
+    allowedConnectSrc?: string;
+    configured: boolean;
     missing: string[];
   };
   runtimeVercel?: {
@@ -2327,7 +2420,7 @@ export interface SettingsInfrastructureDiagnosticCheck {
 }
 
 export interface SettingsInfrastructureDiagnostic {
-  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce';
+  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce' | 'interactiveComponents';
   label: string;
   status: 'ready' | 'warning' | 'blocked';
   summary: string;
@@ -3444,6 +3537,63 @@ export interface ReusableSectionListFilters {
   search?: string;
 }
 
+export interface InteractiveComponentRegistryEntry {
+  componentKey: string;
+  displayName: string;
+  type: 'interactiveFigure' | 'codeComponent' | string;
+  status: 'active' | 'disabled' | string;
+  version: string;
+  renderMode: 'trusted-component' | 'sandbox-iframe' | 'static-fallback' | string;
+  source: 'built-in' | 'registry' | 'custom' | string;
+  description?: string;
+  allowedDataScopes?: string[];
+  controls?: Array<Record<string, unknown>>;
+  fallback?: {
+    required?: boolean;
+    supported?: string[];
+    [key: string]: unknown;
+  };
+  security?: Record<string, unknown>;
+  integrity?: Record<string, unknown>;
+  runtime?: {
+    sandboxUrl?: string | null;
+    bundleUrl?: string | null;
+    iframeSandbox?: string;
+    allowedPermissions?: string[];
+    postMessageProtocol?: string;
+    [key: string]: unknown;
+  };
+  dependencyPolicy?: Record<string, unknown>;
+  compatibility?: Record<string, unknown>;
+  dataBindingPresets?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface InteractiveComponentRegistry {
+  schemaVersion: 'backy.interactive-component-registry.v1' | string;
+  siteId: string;
+  contract?: Record<string, unknown>;
+  components: InteractiveComponentRegistryEntry[];
+  pagination?: {
+    total?: number;
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+  };
+}
+
+interface ApiInteractiveComponentRegistryResponse {
+  success: boolean;
+  data?: InteractiveComponentRegistry;
+  registry?: InteractiveComponentRegistry;
+  components?: InteractiveComponentRegistryEntry[];
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
 export interface ReusableSectionsExportFilters extends ReusableSectionListFilters {
   sectionIds?: string[];
 }
@@ -3997,6 +4147,37 @@ export async function getAdminSite(siteId: string): Promise<ApiSite> {
   }
 
   return payload.data.site;
+}
+
+export async function getAdminSiteSettingsScope(siteId: string): Promise<AdminSiteSettingsScope> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/settings`);
+  const payload = await readJson<ApiSiteSettingsScopeResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.settings) {
+    throw new Error(payload.error?.message || 'Unable to load site settings scope');
+  }
+
+  return payload.data.settings;
+}
+
+export async function updateAdminSiteSettingsScope(
+  siteId: string,
+  settings: Partial<SiteSettings>,
+): Promise<AdminSiteSettingsScope> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ settings }),
+  });
+  const payload = await readJson<ApiSiteSettingsScopeResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.settings) {
+    throw new Error(payload.error?.message || 'Unable to save site settings scope');
+  }
+
+  return payload.data.settings;
 }
 
 export async function deleteSite(siteId: string): Promise<void> {
@@ -4641,6 +4822,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
     runtimeVercel: payload.data.settings.runtimeVercel,
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
+    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
   };
 }
 
@@ -4670,6 +4852,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     runtimeVercel: payload.data.settings.runtimeVercel,
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
+    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
   };
 }
 
@@ -4699,6 +4882,7 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
     runtimeVercel: payload.data.settings.runtimeVercel,
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
+    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
   };
 }
 
@@ -4732,6 +4916,7 @@ export async function issueSettingsAdminApiKey(label: string): Promise<{
       runtimeVercel: payload.data.settings.runtimeVercel,
       runtimeNotifications: payload.data.settings.runtimeNotifications,
       runtimeCommerce: payload.data.settings.runtimeCommerce,
+      runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
     },
     issuedKey: payload.data.issuedKey,
   };
@@ -4763,6 +4948,7 @@ export async function revokeSettingsAdminApiKey(keyId: string): Promise<SiteSett
     runtimeVercel: payload.data.settings.runtimeVercel,
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
+    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
   };
 }
 
@@ -6837,7 +7023,7 @@ export async function voidOrderShippingLabel(
 export async function refreshOrderTracking(
   siteId: string,
   orderId: string,
-  input: { provider?: string; executionProvider?: string; trackingNumber?: string; trackingUrl?: string } = {},
+  input: { provider?: string; executionProvider?: string; carrier?: string; shippingCarrier?: string; trackingNumber?: string; trackingUrl?: string } = {},
 ): Promise<{ record: CollectionRecord; tracking: AdminOrderTrackingStatus }> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/tracking`, {
     method: 'POST',
@@ -7026,6 +7212,46 @@ export interface OrderAnalytics {
     subscriptionPausedCount?: number;
     subscriptionResumedCount?: number;
     subscriptionTrialEndingCount?: number;
+    providerRefundPendingCount?: number;
+    providerRefundFailureCount?: number;
+    providerRefundRequiresActionCount?: number;
+    fulfillmentDispatchPendingCount?: number;
+    fulfillmentDispatchFailureCount?: number;
+    shippingLabelIssueCount?: number;
+  };
+  providerOperations?: {
+    paymentProviders: Array<{
+      provider: string;
+      count: number;
+      total: number;
+      statuses: Record<string, number>;
+    }>;
+    refundProviders: Array<{
+      provider: string;
+      count: number;
+      total: number;
+      statuses: Record<string, number>;
+    }>;
+    fulfillmentProviders: Array<{
+      provider: string;
+      count: number;
+      total: number;
+      statuses: Record<string, number>;
+    }>;
+    shippingLabelProviders: Array<{
+      provider: string;
+      count: number;
+      total: number;
+      statuses: Record<string, number>;
+    }>;
+    attention: {
+      providerRefundPendingCount: number;
+      providerRefundFailureCount: number;
+      providerRefundRequiresActionCount: number;
+      fulfillmentDispatchPendingCount: number;
+      fulfillmentDispatchFailureCount: number;
+      shippingLabelIssueCount: number;
+    };
   };
   sources: Array<{ source: string; count: number; total: number }>;
   currencies: Array<{ currency: string; count: number; total: number }>;
@@ -7165,6 +7391,27 @@ export async function listReusableSections(
   }
 
   return payload.data.sections.map(toReusableSection);
+}
+
+export async function getInteractiveComponentRegistry(
+  siteId: string,
+): Promise<InteractiveComponentRegistry> {
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/interactive-components`);
+  const payload = await readJson<ApiInteractiveComponentRegistryResponse>(response);
+  const registry = payload.data || payload.registry;
+
+  if (!response.ok || !payload.success || !registry) {
+    throw adminContentApiError(payload, 'Unable to load interactive component registry');
+  }
+
+  return {
+    ...registry,
+    components: Array.isArray(registry.components)
+      ? registry.components
+      : Array.isArray(payload.components)
+        ? payload.components
+        : [],
+  };
 }
 
 export async function createReusableSection(

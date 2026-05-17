@@ -40,6 +40,62 @@ const assert = (condition, message) => {
   }
 };
 
+const assertSettingsSourceContracts = () => {
+  const settingsRoute = fs.readFileSync(new URL('../src/routes/settings.tsx', import.meta.url), 'utf8');
+  const requiredSettingsRouteSnippets = [
+    'formatSiteScopedLocaleRows',
+    'parseSiteScopedLocaleRows',
+    "localeStrategy: 'none' | 'path-prefix' | 'domain'",
+    'data-testid="settings-site-scope-default-locale"',
+    'data-testid="settings-site-scope-locale-strategy"',
+    'data-testid="settings-site-scope-locales"',
+    "editableSections: ['seo', 'analytics', 'social', 'localization', 'commentPolicy']",
+    'localization: siteSettingsScope.siteSettings.localization',
+    'localization: {',
+    'locales: parseSiteScopedLocaleRows',
+    'runSettingsStorageCredentialRotationProbe',
+    'runSettingsStorageSecretManager',
+    "Run rotation probe",
+    "Plan env sync",
+    "Promote env",
+    "Revoke next env",
+    'data-testid="settings-release-certification-runbook"',
+    '.github/workflows/backy-release-certification.yml',
+    'npm run test:release-certification-preflight-contract',
+    'certify_database',
+    'certify_settings_providers',
+    'certify_commerce_providers',
+    'BACKY_DATABASE_URL',
+    'ci:sdk-postgres-smoke',
+    'ci:settings-provider-certification',
+    'ci:commerce-provider-certification',
+    'releaseCertification',
+  ];
+
+  const missingRouteSnippets = requiredSettingsRouteSnippets.filter((snippet) => !settingsRoute.includes(snippet));
+  assert(
+    missingRouteSnippets.length === 0,
+    `Settings route is missing site-scoped localization contract snippets: ${missingRouteSnippets.join(', ')}`,
+  );
+
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
+  const requiredSmokeSnippets = [
+    "await setLabeledControl(client, 'Default locale', 'en')",
+    "await setLabeledControl(client, 'Locale routing', 'path-prefix')",
+    "await setLabeledControl(client, 'Locale entries'",
+    "siteScopeSaved.localeStrategy === 'path-prefix'",
+    "handoffState.editableSections.includes('localization')",
+    "handoffState.localization?.localeStrategy === 'path-prefix'",
+    "scope.siteSettings?.localization?.localeStrategy === 'path-prefix'",
+    "entry.metadata?.changedKeys?.includes('localization')",
+  ];
+  const missingSmokeSnippets = requiredSmokeSnippets.filter((snippet) => !smokeSource.includes(snippet));
+  assert(
+    missingSmokeSnippets.length === 0,
+    `Settings smoke is missing site-scoped localization coverage snippets: ${missingSmokeSnippets.join(', ')}`,
+  );
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -120,7 +176,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -128,9 +184,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_SETTINGS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -148,11 +214,62 @@ const readSettings = async (sessionToken = apiAdminSessionToken) => {
   return payload.data.settings;
 };
 
+const createSite = async (input) => {
+  const payload = await requestApi('/api/admin/sites', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const site = payload.data?.site;
+  assert(site?.id, `Create settings smoke site did not return a site: ${JSON.stringify(payload).slice(0, 500)}`);
+  return site;
+};
+
+const deleteSite = async (siteId) => {
+  if (!siteId) return;
+  await requestApi(`/api/admin/sites/${siteId}`, { method: 'DELETE' });
+};
+
+const readSiteSettingsScope = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}/settings`);
+  assert(payload.data?.settings, `Site settings scope API returned no settings payload: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data.settings;
+};
+
 const setAdminPermissionOverrides = async (overrides) => {
   await requestApi('/api/admin/users/user-admin/permissions', {
     method: 'PATCH',
     body: JSON.stringify({ overrides }),
   });
+};
+
+const readAdminPermissionMatrix = async () => {
+  const payload = await requestApi('/api/admin/users/user-admin/permissions');
+  const permissions = payload.data?.permissions;
+  assert(permissions?.groups, `User permissions API returned no permission matrix: ${JSON.stringify(payload).slice(0, 500)}`);
+  return permissions;
+};
+
+const findAdminPermissionRule = (matrix, key) => matrix.groups
+  .flatMap((group) => group.permissions || [])
+  .find((permission) => permission.key === key) || null;
+
+const waitForAdminPermissionRules = async (expectedRules) => {
+  let last = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const matrix = await readAdminPermissionMatrix();
+    const rules = Object.fromEntries(
+      Object.keys(expectedRules).map((key) => [key, findAdminPermissionRule(matrix, key)]),
+    );
+    last = { role: matrix.role, status: matrix.status, rules };
+
+    if (Object.entries(expectedRules).every(([key, expected]) => rules[key]?.allowed === expected)) {
+      return last;
+    }
+
+    await sleep(100);
+  }
+
+  throw new Error(`Admin permission overrides did not settle: ${JSON.stringify(last).slice(0, 800)}`);
 };
 
 const assertSettingsApiForbidden = async (label, { method = 'POST', body } = {}) => {
@@ -310,6 +427,43 @@ const restoreSettings = async (settings, options = {}) => {
   });
 };
 
+const normalizeSettingsSmokePreconditions = async (settings) => {
+  if (settings.auth?.requireTwoFactor !== true) {
+    return settings;
+  }
+
+  await restoreSettings({
+    ...settings,
+    auth: {
+      ...(settings.auth || {}),
+      requireTwoFactor: false,
+    },
+  });
+  return readSettings();
+};
+
+const buildRestoreSettingsSnapshot = (originalSettings, ownerOriginalSettings) => {
+  if (!ownerOriginalSettings) return originalSettings;
+  return {
+    ...ownerOriginalSettings,
+    auth: originalSettings.auth,
+  };
+};
+
+const restoreSettingsWithFallback = async (settings, options = {}) => {
+  try {
+    await restoreSettings(settings, options);
+  } catch (error) {
+    if (!options.sessionToken || options.sessionToken === apiAdminSessionToken) {
+      throw error;
+    }
+    await restoreSettings(settings, {
+      ...options,
+      sessionToken: apiAdminSessionToken,
+    });
+  }
+};
+
 const createUser = async (input) => {
   const payload = await requestApi('/api/admin/users', {
     method: 'POST',
@@ -355,7 +509,7 @@ const fetchJson = async (endpoint) => {
 };
 
 const waitForCdp = async () => {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  for (let attempt = 0; attempt < 160; attempt += 1) {
     try {
       return await fetchJson('/json/list');
     } catch {
@@ -439,7 +593,19 @@ localStorage.setItem('backy-db', ${JSON.stringify(JSON.stringify({
 }))});
 `;
 
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.setCookie', {
+    name: 'backy_admin_session',
+    value: sessionToken,
+    url: API_BASE_URL,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
+
 const setBrowserSession = async (client, sessionToken, user) => {
+  await seedBrowserSessionCookie(client, sessionToken);
   const state = await evaluate(client, `(() => {
     ${authStorageScript(sessionToken, user)}
     return {
@@ -603,7 +769,7 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
     if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
       return { ok: false, reason: 'control-not-found', labelText, text: normalized(label.textContent) };
     }
-    if (control.disabled) {
+    if (control.disabled || control.matches(':disabled')) {
       return { ok: false, reason: 'control-disabled', labelText };
     }
     if (control instanceof HTMLInputElement && control.type === 'checkbox') {
@@ -672,6 +838,43 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
   return result;
 };
 
+const setControlValueById = async (client, id, value) => {
+  const result = await evaluate(client, `(() => {
+    const id = ${JSON.stringify(id)};
+    const control = document.getElementById(id);
+    const value = ${JSON.stringify(value)};
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
+      return { ok: false, reason: 'control-not-found', id };
+    }
+    if (control.disabled || control.matches(':disabled')) {
+      return { ok: false, reason: 'control-disabled', id };
+    }
+    const previousValue = control.value;
+    const prototype = control instanceof HTMLInputElement
+      ? HTMLInputElement.prototype
+      : control instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLTextAreaElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    setter?.call(control, String(value));
+    control._valueTracker?.setValue?.(previousValue);
+    if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+      control.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertReplacementText',
+        data: String(value),
+      }));
+    } else {
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, id, value: control.value };
+  })()`);
+  assert(result.ok && result.value === String(value), `Unable to set control ${id}: ${JSON.stringify(result)}`);
+  await sleep(80);
+  return result;
+};
+
 const assertTwoFactorAvailable = async (client) => {
   const state = await evaluate(client, `(() => {
     const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
@@ -693,6 +896,82 @@ const assertTwoFactorAvailable = async (client) => {
     `Require 2FA should be available now that login enforcement exists: ${JSON.stringify(state)}`,
   );
   return state;
+};
+
+const selectSiteScopeSite = async (client, siteId) => {
+  let result = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const select = document.querySelector('[data-testid="settings-site-scope-site"]');
+      if (!(select instanceof HTMLSelectElement)) {
+        return { ok: false, reason: 'select-not-found' };
+      }
+      const options = Array.from(select.options).map((option) => option.value);
+      if (!options.includes(${JSON.stringify(siteId)})) {
+        return {
+          ok: true,
+          waiting: true,
+          value: select.value,
+          options,
+          notice: document.querySelector('[data-testid="settings-site-scope"]')?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 1000) || '',
+          resources: performance.getEntriesByType('resource')
+            .filter((entry) => String(entry.name).includes('/api/admin/sites'))
+            .map((entry) => ({ name: entry.name, responseEnd: entry.responseEnd, transferSize: entry.transferSize }))
+            .slice(-6),
+        };
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+      const previousValue = select.value;
+      descriptor?.set?.call(select, ${JSON.stringify(siteId)});
+      select._valueTracker?.setValue?.(previousValue);
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return {
+        ok: true,
+        value: select.value,
+        options,
+        notice: document.querySelector('[data-testid="settings-site-scope"]')?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 1000) || '',
+      };
+    })()`);
+    if (result.ok && result.value === siteId) {
+      break;
+    }
+    await sleep(250);
+  }
+  assert(result?.ok && result.value === siteId, `Unable to select site-scoped settings site: ${JSON.stringify(result)}`);
+  await sleep(250);
+  return result;
+};
+
+const waitForSiteScopeEditable = async (client, siteId) => {
+  let last = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      hasPanel: Boolean(document.querySelector('[data-testid="settings-site-scope-panel"]')),
+      schema: document.querySelector('[data-testid="settings-site-scope-panel"]')?.textContent?.includes('backy.site-settings-scope.v1') || false,
+      endpoint: document.querySelector('[data-testid="settings-site-scope-panel"]')?.textContent?.includes('/api/admin/sites/') || false,
+      selected: document.querySelector('[data-testid="settings-site-scope-site"]')?.value || '',
+      titleTemplateDisabled: document.querySelector('[data-testid="settings-site-scope-title-template"]')?.matches(':disabled') ?? true,
+      saveDisabled: Array.from(document.querySelectorAll('button')).some((button) => (
+        (button.textContent || '').includes('No site changes') && button.disabled
+      )),
+      notice: document.querySelector('[data-testid="settings-site-scope-panel"]')?.textContent?.slice(0, 500) || '',
+    }))()`);
+    last = state;
+    if (
+      state.hasPanel &&
+      state.schema &&
+      state.endpoint &&
+      state.selected === siteId &&
+      !state.titleTemplateDisabled &&
+      state.saveDisabled
+    ) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`Site-scoped settings panel did not become editable: ${JSON.stringify(last)}`);
 };
 
 const setDeliveryMode = async (client, mode) => {
@@ -954,13 +1233,30 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   assert(
     rotatedSessionState.hasPanel &&
       rotatedSessionState.hasNotice &&
-      rotatedSessionState.token &&
-      rotatedSessionState.token !== beforeSessionToken,
+      !rotatedSessionState.token &&
+      rotatedSessionState.issuedAt &&
+      rotatedSessionState.expiresAt &&
+      rotatedSessionState.authMode === 'local-demo',
     `Current session did not rotate through Settings UI: ${JSON.stringify(rotatedSessionState)}`,
+  );
+  const rotatedSessionPayload = await evaluate(client, `(async () => {
+    const response = await fetch(${JSON.stringify(`${API_BASE_URL}/api/admin/auth/session`)}, {
+      credentials: 'include',
+    });
+    const payload = await response.json().catch(() => ({}));
+    return {
+      ok: response.ok,
+      status: response.status,
+      payload,
+    };
+  })()`);
+  assert(
+    rotatedSessionPayload.ok && rotatedSessionPayload.payload?.data?.session?.token,
+    `Rotated cookie session was not readable through auth/session: ${rotatedSessionPayload.status} ${JSON.stringify(rotatedSessionPayload.payload).slice(0, 500)}`,
   );
   ownerSession.session = {
     ...ownerSession.session,
-    token: rotatedSessionState.token,
+    token: rotatedSessionPayload.payload.data.session.token,
     issuedAt: rotatedSessionState.issuedAt,
     expiresAt: rotatedSessionState.expiresAt,
     authMode: rotatedSessionState.authMode,
@@ -1050,39 +1346,272 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   };
 };
 
-const updateSettingsThroughUi = async (client, suffix, originalSettings, notificationWebhookUrl) => {
+const updateSettingsThroughUi = async (client, suffix, originalSettings, notificationWebhookUrl, siteScopeSite) => {
   const initial = await navigateToSettings(client);
+  const originalGeneral = originalSettings?.integrations?.general || {};
 
   await openSettingsTab(client, 'Delivery', 'tab=delivery');
   const delivery = await setDeliveryMode(client, 'custom-frontend');
 
   await openSettingsTab(client, 'General', 'tab=general');
-  const originalSiteName = originalSettings?.integrations?.general?.siteName || 'My Website';
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const loaded = await evaluate(client, `(() => ({
       siteName: document.querySelector('#settings-site-name')?.value || '',
-    }))()`);
-    if (loaded.siteName === originalSiteName) {
+      disabled: document.querySelector('#settings-site-name')?.matches(':disabled') ?? true,
+      fieldsetTitle: document.querySelector('#settings-tab-content fieldset')?.getAttribute('title') || '',
+      permissionWarning: Array.from(document.querySelectorAll('[role="alert"], [data-testid*="notice"], .border-warning'))
+        .map((element) => element.textContent?.replace(/\\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join(' | ')
+        .slice(0, 500),
+      authUser: (() => {
+        try {
+          return JSON.parse(localStorage.getItem('backy-auth-storage') || '{}')?.state?.user || null;
+        } catch {
+          return null;
+        }
+      })(),
+	      permissionResource: performance.getEntriesByType('resource')
+	        .filter((entry) => String(entry.name).includes('/api/admin/users/user-admin/permissions'))
+	        .map((entry) => ({ name: entry.name, responseEnd: entry.responseEnd, transferSize: entry.transferSize }))
+	        .at(-1) || null,
+	      body: document.body?.innerText?.slice(0, 700) || '',
+	    }))()`);
+    if (
+      loaded.siteName === (originalGeneral.siteName || '') &&
+      !loaded.disabled
+    ) {
       break;
     }
     if (attempt === 79) {
       throw new Error(`General settings did not finish backend hydration: ${JSON.stringify(loaded)}`);
     }
-    await sleep(100);
+    await sleep(150);
   }
-  await setLabeledControl(client, 'Site Name', `Backy Smoke ${suffix}`);
-  await setLabeledControl(client, 'Site Description', `Settings smoke coverage ${suffix}`);
-  await setLabeledControl(client, 'Timezone', 'America/New_York');
-  const generalState = await evaluate(client, `(() => ({
-    siteName: document.querySelector('#settings-site-name')?.value || '',
-    siteDescription: document.querySelector('#settings-site-description')?.value || '',
-    timezone: document.querySelector('#settings-timezone')?.value || '',
+  const expectedGeneralState = {
+    siteName: `Backy Smoke ${suffix}`,
+    siteDescription: `Settings smoke coverage ${suffix}`,
+    timezone: 'America/New_York',
+  };
+  let generalState = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await setLabeledControl(client, 'Site Name', expectedGeneralState.siteName, { exact: true });
+    await setLabeledControl(client, 'Site Description', expectedGeneralState.siteDescription, { exact: true });
+    await setLabeledControl(client, 'Timezone', expectedGeneralState.timezone, { exact: true });
+    await sleep(150);
+    generalState = await evaluate(client, `(() => ({
+      siteName: document.querySelector('#settings-site-name')?.value || '',
+      siteDescription: document.querySelector('#settings-site-description')?.value || '',
+      timezone: document.querySelector('#settings-timezone')?.value || '',
+    }))()`);
+    if (
+      generalState.siteName === expectedGeneralState.siteName &&
+      generalState.siteDescription === expectedGeneralState.siteDescription &&
+      generalState.timezone === expectedGeneralState.timezone
+    ) {
+      break;
+    }
+  }
+  assert(
+    generalState?.siteName === expectedGeneralState.siteName &&
+    generalState?.siteDescription === expectedGeneralState.siteDescription &&
+    generalState?.timezone === expectedGeneralState.timezone,
+    `General settings controls did not accept input: ${JSON.stringify({ actual: generalState, expected: expectedGeneralState })}`,
+  );
+  const generalSaved = await saveSettings(client);
+  let persistedGeneral = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const persisted = await readSettings();
+    persistedGeneral = persisted.integrations?.general || null;
+    if (
+      persistedGeneral?.siteName === expectedGeneralState.siteName &&
+      persistedGeneral?.siteDescription === expectedGeneralState.siteDescription &&
+      persistedGeneral?.timezone === expectedGeneralState.timezone
+    ) {
+      break;
+    }
+    if (attempt === 39) {
+      throw new Error(`General settings did not persist before continuing: ${JSON.stringify({
+        actual: persistedGeneral,
+        expected: expectedGeneralState,
+      })}`);
+    }
+    await sleep(250);
+  }
+
+  await selectSiteScopeSite(client, siteScopeSite.id);
+  const siteScopeInitial = await waitForSiteScopeEditable(client, siteScopeSite.id);
+  const expectedSiteScopeDraft = {
+    titleTemplate: `%s | Scoped ${suffix}`,
+    description: `Scoped site description ${suffix}`,
+    googleAnalyticsId: `G-SCOPED${suffix.toUpperCase().replace(/[^A-Z0-9]/g, '')}`,
+    plausibleDomain: `scoped-${suffix}.example.com`,
+    twitter: `https://twitter.com/${suffix}`,
+    github: `https://github.com/backy/${suffix}`,
+    linkedin: `https://www.linkedin.com/company/${suffix}`,
+    defaultLocale: 'en',
+    localeStrategy: 'path-prefix',
+    locales: `en | English | ltr | |\nfr | French | ltr | /fr |`,
+    moderationMode: 'auto-approve',
+    blockedTerms: `scoped-${suffix}\nblocked-${suffix}`,
+  };
+  let siteScopeDraftState = null;
+  let siteScopeDraftError = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await waitForSiteScopeEditable(client, siteScopeSite.id);
+      await setControlValueById(client, 'settings-site-scope-title-template', expectedSiteScopeDraft.titleTemplate);
+      await setControlValueById(client, 'settings-site-scope-description', expectedSiteScopeDraft.description);
+      await setControlValueById(client, 'settings-site-scope-ga', expectedSiteScopeDraft.googleAnalyticsId);
+      await setControlValueById(client, 'settings-site-scope-plausible', expectedSiteScopeDraft.plausibleDomain);
+      await setControlValueById(client, 'settings-site-scope-twitter', expectedSiteScopeDraft.twitter);
+      await setControlValueById(client, 'settings-site-scope-github', expectedSiteScopeDraft.github);
+      await setControlValueById(client, 'settings-site-scope-linkedin', expectedSiteScopeDraft.linkedin);
+      await setControlValueById(client, 'settings-site-scope-default-locale', expectedSiteScopeDraft.defaultLocale);
+      await setControlValueById(client, 'settings-site-scope-locale-strategy', expectedSiteScopeDraft.localeStrategy);
+      await setControlValueById(client, 'settings-site-scope-locales', expectedSiteScopeDraft.locales);
+      await setControlValueById(client, 'settings-site-scope-moderation', expectedSiteScopeDraft.moderationMode);
+      await setControlValueById(client, 'settings-site-scope-blocked-terms', expectedSiteScopeDraft.blockedTerms);
+    } catch (error) {
+      siteScopeDraftError = error instanceof Error ? error.message : String(error);
+      await sleep(150);
+      continue;
+    }
+    await sleep(150);
+    siteScopeDraftState = await evaluate(client, `(() => ({
+      titleTemplate: document.querySelector('[data-testid="settings-site-scope-title-template"]')?.value || '',
+      description: document.querySelector('[data-testid="settings-site-scope-description"]')?.value || '',
+      googleAnalyticsId: document.querySelector('[data-testid="settings-site-scope-ga"]')?.value || '',
+      plausibleDomain: document.querySelector('[data-testid="settings-site-scope-plausible"]')?.value || '',
+      twitter: document.querySelector('[data-testid="settings-site-scope-twitter"]')?.value || '',
+      github: document.querySelector('[data-testid="settings-site-scope-github"]')?.value || '',
+      linkedin: document.querySelector('[data-testid="settings-site-scope-linkedin"]')?.value || '',
+      defaultLocale: document.querySelector('[data-testid="settings-site-scope-default-locale"]')?.value || '',
+      localeStrategy: document.querySelector('[data-testid="settings-site-scope-locale-strategy"]')?.value || '',
+      locales: document.querySelector('[data-testid="settings-site-scope-locales"]')?.value || '',
+      moderationMode: document.querySelector('[data-testid="settings-site-scope-moderation"]')?.value || '',
+      blockedTerms: document.querySelector('[data-testid="settings-site-scope-blocked-terms"]')?.value || '',
+    }))()`);
+    if (Object.entries(expectedSiteScopeDraft).every(([key, value]) => siteScopeDraftState?.[key] === value)) {
+      break;
+    }
+  }
+  assert(
+    Object.entries(expectedSiteScopeDraft).every(([key, value]) => siteScopeDraftState?.[key] === value),
+    `Site-scoped settings controls did not accept input: ${JSON.stringify({ actual: siteScopeDraftState, expected: expectedSiteScopeDraft, lastError: siteScopeDraftError })}`,
+  );
+  await clickByText(client, 'Save site settings');
+  await waitForText(client, 'Site-scoped settings saved.');
+  await waitForText(client, 'Site settings updated');
+  await waitForSiteScopeEditable(client, siteScopeSite.id);
+  await setControlValueById(client, 'settings-site-scope-description', `Discard me ${suffix}`);
+  await clickByText(client, 'Discard site changes');
+  await waitForText(client, 'Site-scoped settings changes discarded.');
+  const siteScopeSaved = await evaluate(client, `(() => ({
+    titleTemplate: document.querySelector('[data-testid="settings-site-scope-title-template"]')?.value || '',
+    description: document.querySelector('[data-testid="settings-site-scope-description"]')?.value || '',
+    googleAnalyticsId: document.querySelector('[data-testid="settings-site-scope-ga"]')?.value || '',
+    plausibleDomain: document.querySelector('[data-testid="settings-site-scope-plausible"]')?.value || '',
+    twitter: document.querySelector('[data-testid="settings-site-scope-twitter"]')?.value || '',
+    github: document.querySelector('[data-testid="settings-site-scope-github"]')?.value || '',
+    linkedin: document.querySelector('[data-testid="settings-site-scope-linkedin"]')?.value || '',
+    defaultLocale: document.querySelector('[data-testid="settings-site-scope-default-locale"]')?.value || '',
+    localeStrategy: document.querySelector('[data-testid="settings-site-scope-locale-strategy"]')?.value || '',
+    locales: document.querySelector('[data-testid="settings-site-scope-locales"]')?.value || '',
+    moderationMode: document.querySelector('[data-testid="settings-site-scope-moderation"]')?.value || '',
+    blockedTerms: document.querySelector('[data-testid="settings-site-scope-blocked-terms"]')?.value || '',
+    notice: document.querySelector('[data-testid="settings-site-scope-panel"]')?.textContent || '',
+    audit: document.querySelector('[data-testid="settings-site-scope-audit"]')?.textContent || '',
+    discardDisabled: Array.from(document.querySelectorAll('button')).some((button) => (
+      (button.textContent || '').includes('Discard site changes') && button.disabled
+    )),
   }))()`);
   assert(
-    generalState.siteName === `Backy Smoke ${suffix}` &&
-    generalState.siteDescription === `Settings smoke coverage ${suffix}` &&
-    generalState.timezone === 'America/New_York',
-    `General settings controls did not accept input: ${JSON.stringify(generalState)}`,
+    siteScopeSaved.titleTemplate === `%s | Scoped ${suffix}` &&
+      siteScopeSaved.description === `Scoped site description ${suffix}` &&
+      siteScopeSaved.googleAnalyticsId === `G-SCOPED${suffix.toUpperCase().replace(/[^A-Z0-9]/g, '')}` &&
+      siteScopeSaved.plausibleDomain === `scoped-${suffix}.example.com` &&
+      siteScopeSaved.twitter === `https://twitter.com/${suffix}` &&
+      siteScopeSaved.github === `https://github.com/backy/${suffix}` &&
+      siteScopeSaved.linkedin === `https://www.linkedin.com/company/${suffix}` &&
+      siteScopeSaved.defaultLocale === 'en' &&
+      siteScopeSaved.localeStrategy === 'path-prefix' &&
+      siteScopeSaved.locales.includes('fr | French | ltr | /fr') &&
+      siteScopeSaved.moderationMode === 'auto-approve' &&
+      siteScopeSaved.blockedTerms.includes(`scoped-${suffix}`) &&
+      siteScopeSaved.notice.includes('Site-scoped settings changes discarded.') &&
+      siteScopeSaved.discardDisabled,
+    `Site-scoped settings UI did not retain saved values: ${JSON.stringify(siteScopeSaved)}`,
+  );
+  let siteScopeAudit = siteScopeSaved.audit;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    siteScopeAudit = await evaluate(client, `document.querySelector('[data-testid="settings-site-scope-audit"]')?.textContent || ''`);
+    if (
+      siteScopeAudit.includes('Site settings audit') &&
+      siteScopeAudit.includes('Site settings updated') &&
+      siteScopeAudit.includes('analytics') &&
+      siteScopeAudit.includes('req_')
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
+  assert(
+    siteScopeAudit.includes('Site settings audit') &&
+      siteScopeAudit.includes('Site settings updated') &&
+      siteScopeAudit.includes('analytics') &&
+      siteScopeAudit.includes('req_'),
+    `Site-scoped settings audit did not render the saved request: ${JSON.stringify({ ...siteScopeSaved, audit: siteScopeAudit })}`,
+  );
+
+  const handoffState = await evaluate(client, `(() => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const copy = buttons.find((button) => (button.textContent || '').includes('Copy handoff'));
+    if (!(copy instanceof HTMLButtonElement) || copy.disabled) {
+      return { ok: false, reason: 'copy-unavailable' };
+    }
+    const writes = [];
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => {
+          writes.push(value);
+        },
+      },
+    });
+    copy.click();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
+    const payload = JSON.parse(writes[0] || '{}');
+    return {
+      ok: true,
+      hasScopedSettings: payload.siteScopedSettings?.schemaVersion === 'backy.site-settings-scope.v1',
+      siteId: payload.siteScopedSettings?.scope?.siteId || '',
+      endpoint: payload.siteScopedSettings?.endpoints?.siteSettings || '',
+      editableSections: payload.siteScopedSettings?.editableSections || [],
+      dirty: payload.siteScopedSettings?.dirty,
+      description: payload.siteScopedSettings?.savedSiteSettings?.seo?.defaultDescription || '',
+      analytics: payload.siteScopedSettings?.savedSiteSettings?.analytics?.googleAnalyticsId || '',
+      localization: payload.siteScopedSettings?.savedSiteSettings?.localization || null,
+    };
+  })()`);
+  assert(
+    handoffState.ok &&
+      handoffState.hasScopedSettings &&
+      handoffState.siteId === siteScopeSite.id &&
+      handoffState.endpoint.includes(`/api/admin/sites/${siteScopeSite.id}/settings`) &&
+      handoffState.editableSections.includes('analytics') &&
+      handoffState.editableSections.includes('localization') &&
+      handoffState.dirty === false &&
+      handoffState.description === `Scoped site description ${suffix}` &&
+      handoffState.analytics === `G-SCOPED${suffix.toUpperCase().replace(/[^A-Z0-9]/g, '')}` &&
+      handoffState.localization?.defaultLocale === 'en' &&
+      handoffState.localization?.localeStrategy === 'path-prefix' &&
+      handoffState.localization?.locales?.some((locale) => locale.code === 'fr' && locale.pathPrefix === '/fr'),
+    `Settings handoff manifest did not include saved site-scoped settings: ${JSON.stringify(handoffState)}`,
   );
 
   await openSettingsTab(client, 'Appearance', 'tab=appearance');
@@ -1131,12 +1660,33 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasMediaScannerRuntime: document.body?.innerText?.includes('Media scanner runtime') || false,
     hasNotificationRuntime: document.body?.innerText?.includes('Notification runtime') || false,
     hasCommerceRuntime: document.body?.innerText?.includes('Commerce runtime') || false,
+    hasInteractiveComponentRuntime: document.body?.innerText?.includes('Interactive component runtime') || false,
     hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
+    hasComponentRegistryEnv: document.body?.innerText?.includes('Interactive component registry') || false,
+    hasComponentSandboxEnv: document.body?.innerText?.includes('Code component sandbox origin') || false,
     hasStripeApiEnv: document.body?.innerText?.includes('Payment provider API key') || false,
     hasStripeApiBaseEnv: document.body?.innerText?.includes('Stripe API base URL') || false,
+    hasStripeApiVersionEnv: document.body?.innerText?.includes('Stripe API version') || false,
+    hasStripeDiscountApiBaseEnv: document.body?.innerText?.includes('Stripe discount API base URL') || false,
+    hasPaddleSubscriptionEnv: document.body?.innerText?.includes('Paddle subscription API key') || false,
+    hasShopifyCatalogEnv: document.body?.innerText?.includes('Shopify catalog access token') || false,
+    hasBigCommerceCatalogEnv: document.body?.innerText?.includes('BigCommerce catalog access token') || false,
+    hasWooCommerceCatalogEnv: document.body?.innerText?.includes('WooCommerce consumer key') || false,
+    hasEtsyCatalogEnv: document.body?.innerText?.includes('Etsy access token') || false,
     hasEasyPostLabelEnv: document.body?.innerText?.includes('EasyPost label API key') || false,
     hasStorageSecretRefs: document.body?.innerText?.includes('Storage credentials stay in deployment env') || false,
     hasInfrastructureCheck: document.body?.innerText?.includes('Run infrastructure check') || false,
+    hasStorageProbe: document.body?.innerText?.includes('Run storage probe') || false,
+    hasRotationProbe: document.body?.innerText?.includes('Run rotation probe') || false,
+    hasSecretManagerPlan: document.body?.innerText?.includes('Plan env sync') || false,
+    hasSecretManagerPromote: document.body?.innerText?.includes('Promote env') || false,
+    hasSecretManagerRevoke: document.body?.innerText?.includes('Revoke next env') || false,
+    hasReleaseCertificationRunbook: Boolean(document.querySelector('[data-testid="settings-release-certification-runbook"]')),
+    hasReleaseCertificationWorkflow: document.body?.innerText?.includes('.github/workflows/backy-release-certification.yml') || false,
+    hasReleaseCertificationPreflight: document.body?.innerText?.includes('npm run test:release-certification-preflight-contract') || false,
+    hasReleaseCertificationDatabaseGate: document.body?.innerText?.includes('certify_database') && document.body?.innerText?.includes('BACKY_DATABASE_URL'),
+    hasReleaseCertificationSettingsGate: document.body?.innerText?.includes('certify_settings_providers') && document.body?.innerText?.includes('ci:settings-provider-certification'),
+    hasReleaseCertificationCommerceGate: document.body?.innerText?.includes('certify_commerce_providers') && document.body?.innerText?.includes('ci:commerce-provider-certification'),
   }))()`);
   assert(infrastructureState.search.includes('tab=infrastructure'), `Infrastructure tab search state was not persisted: ${JSON.stringify(infrastructureState)}`);
   assert(infrastructureState.hasEnvContract, `Infrastructure env contract was not visible: ${JSON.stringify(infrastructureState)}`);
@@ -1145,14 +1695,50 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasMediaScannerRuntime &&
     infrastructureState.hasNotificationRuntime &&
     infrastructureState.hasCommerceRuntime &&
+    infrastructureState.hasInteractiveComponentRuntime &&
     infrastructureState.hasCommerceWebhookSecretEnv &&
+    infrastructureState.hasComponentRegistryEnv &&
+    infrastructureState.hasComponentSandboxEnv &&
     infrastructureState.hasStripeApiEnv &&
     infrastructureState.hasStripeApiBaseEnv &&
+    infrastructureState.hasStripeApiVersionEnv &&
+    infrastructureState.hasStripeDiscountApiBaseEnv &&
+    infrastructureState.hasPaddleSubscriptionEnv &&
+    infrastructureState.hasShopifyCatalogEnv &&
+    infrastructureState.hasBigCommerceCatalogEnv &&
+    infrastructureState.hasWooCommerceCatalogEnv &&
+    infrastructureState.hasEtsyCatalogEnv &&
     infrastructureState.hasEasyPostLabelEnv &&
     infrastructureState.hasStorageSecretRefs,
     `Infrastructure environment validation did not expose broader runtime coverage: ${JSON.stringify(infrastructureState)}`,
   );
   assert(infrastructureState.hasInfrastructureCheck, `Infrastructure check control was not visible: ${JSON.stringify(infrastructureState)}`);
+  assert(infrastructureState.hasStorageProbe, `Storage provisioning probe control was not visible: ${JSON.stringify(infrastructureState)}`);
+  await clickByText(client, 'Run storage probe');
+  await waitForText(client, 'Run rotation probe');
+  const storageOperationState = await evaluate(client, `(() => ({
+    hasRotationProbe: document.body?.innerText?.includes('Run rotation probe') || false,
+    hasSecretManagerPlan: document.body?.innerText?.includes('Plan env sync') || false,
+    hasSecretManagerPromote: document.body?.innerText?.includes('Promote env') || false,
+    hasSecretManagerRevoke: document.body?.innerText?.includes('Revoke next env') || false,
+    body: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 1200) || '',
+  }))()`);
+  assert(
+    storageOperationState.hasRotationProbe &&
+      storageOperationState.hasSecretManagerPlan &&
+      storageOperationState.hasSecretManagerPromote &&
+      storageOperationState.hasSecretManagerRevoke,
+    `Storage provider operation controls were not visible after storage probe: ${JSON.stringify(storageOperationState)}`,
+  );
+  assert(
+    infrastructureState.hasReleaseCertificationRunbook &&
+      infrastructureState.hasReleaseCertificationWorkflow &&
+      infrastructureState.hasReleaseCertificationPreflight &&
+      infrastructureState.hasReleaseCertificationDatabaseGate &&
+      infrastructureState.hasReleaseCertificationSettingsGate &&
+      infrastructureState.hasReleaseCertificationCommerceGate,
+    `Settings release certification runbook was not visible: ${JSON.stringify(infrastructureState)}`,
+  );
   await clickByText(client, 'Run infrastructure check');
   await waitForText(client, 'Infrastructure check results');
   const checkState = await evaluate(client, `(() => ({
@@ -1162,7 +1748,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasNotificationDelivery: document.body?.innerText?.includes('Notification delivery') || false,
     hasCommerceSecrets: document.body?.innerText?.includes('Commerce webhook secrets') || false,
     hasStripeApiExecution: document.body?.innerText?.includes('Stripe API execution') || false,
-    hasEasyPostLabelExecution: document.body?.innerText?.includes('EasyPost label execution') || false,
+    hasCatalogProviderCredentials: document.body?.innerText?.includes('Catalog provider credentials') || false,
+    hasShippingProviderExecution: document.body?.innerText?.includes('Shipping provider execution') || false,
+    hasSubscriptionLifecycleExecution: document.body?.innerText?.includes('Subscription lifecycle execution') || false,
     hasBlocked: document.body?.innerText?.includes('blocked') || false,
     hasDeploymentHistory: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('Deployment history') || false,
     hasRecordedDeploymentCheck: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('recorded') || false,
@@ -1175,7 +1763,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       checkState.hasNotificationDelivery &&
       checkState.hasCommerceSecrets &&
       checkState.hasStripeApiExecution &&
-      checkState.hasEasyPostLabelExecution,
+      checkState.hasCatalogProviderCredentials &&
+      checkState.hasShippingProviderExecution &&
+      checkState.hasSubscriptionLifecycleExecution,
     `Infrastructure check did not show provider diagnostics: ${JSON.stringify(checkState)}`,
   );
   assert(
@@ -1213,6 +1803,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   await setLabeledControl(client, 'Shipping endpoint URL', `https://pricing.example.com/${suffix}/shipping`);
   await setLabeledControl(client, 'Discount provider', 'http');
   await setLabeledControl(client, 'Discount endpoint URL', `https://pricing.example.com/${suffix}/discount`);
+  await setLabeledControl(client, 'Product catalog sync provider', 'http');
+  await setLabeledControl(client, 'Catalog sync endpoint URL', `https://catalog.example.com/${suffix}/products`);
+  await setLabeledControl(client, 'Subscription lifecycle provider', 'http');
+  await setLabeledControl(client, 'Subscription lifecycle endpoint URL', `https://subscriptions.example.com/${suffix}/actions`);
   await setLabeledControl(client, 'Fulfillment dispatch provider', 'http');
   await setLabeledControl(client, 'Fulfillment endpoint URL', `https://warehouse.example.com/${suffix}/dispatch`);
   await setLabeledControl(client, 'Label provider', 'easypost');
@@ -1235,6 +1829,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasStorefrontHandoff: document.body?.innerText?.includes('Storefront API handoff') || false,
     hasCheckoutProvider: document.body?.innerText?.includes('Checkout provider') || false,
     hasSettlement: document.body?.innerText?.includes('Settlement') || false,
+    hasCatalogSync: document.body?.innerText?.includes('Product catalog sync provider') &&
+      document.body?.innerText?.includes('Catalog sync endpoint URL'),
+    hasSubscriptionLifecycle: document.body?.innerText?.includes('Subscription lifecycle provider') &&
+      document.body?.innerText?.includes('Subscription lifecycle endpoint URL'),
     hasShippingLabelExecution: document.body?.innerText?.includes('Shipping label execution') || false,
   }))()`);
   assert(commerceState.search.includes('tab=commerce'), `Commerce tab search state was not persisted: ${JSON.stringify(commerceState)}`);
@@ -1242,6 +1840,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     commerceState.hasStorefrontHandoff &&
       commerceState.hasCheckoutProvider &&
       commerceState.hasSettlement &&
+      commerceState.hasCatalogSync &&
+      commerceState.hasSubscriptionLifecycle &&
       commerceState.hasShippingLabelExecution,
     `Commerce tab did not expose storefront handoff controls: ${JSON.stringify(commerceState)}`,
   );
@@ -1317,6 +1917,18 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
 
   await openSettingsTab(client, 'Delivery', 'tab=delivery');
   const finalDelivery = await setDeliveryMode(client, 'custom-frontend');
+  const deliveryApiState = await evaluate(client, `(() => {
+    const text = document.querySelector('#settings-tab-content')?.textContent || document.body?.innerText || '';
+    return {
+      hasSiteSettingsRead: text.includes('GET') && text.includes('/sites/:siteId/settings'),
+      hasSiteSettingsPatch: text.includes('PATCH') && text.includes('/sites/:siteId/settings'),
+      hasScopedDescription: text.includes('site-scoped Settings envelope') || text.includes('site-owned Settings sections'),
+    };
+  })()`);
+  assert(
+    deliveryApiState.hasSiteSettingsRead && deliveryApiState.hasSiteSettingsPatch && deliveryApiState.hasScopedDescription,
+    `Delivery API handoff did not expose site-scoped settings endpoints: ${JSON.stringify(deliveryApiState)}`,
+  );
   const saved = await saveSettings(client);
 
   const layout = await evaluate(client, `(() => ({
@@ -1332,8 +1944,11 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     initial,
     delivery: finalDelivery,
     initialDelivery: delivery,
+    generalSaved,
     infrastructureState,
     notificationWebhookState,
+    siteScopeSaved,
+    deliveryApiState,
     saved,
     layout,
   };
@@ -1341,7 +1956,16 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
 
 const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.deliveryMode === 'custom-frontend', `Delivery mode was not persisted: ${settings.deliveryMode}`);
-  assert(settings.integrations?.general?.siteName === `Backy Smoke ${suffix}`, 'General site name was not persisted');
+  assert(
+    settings.integrations?.general?.siteName === `Backy Smoke ${suffix}`,
+    `General site name was not persisted: ${JSON.stringify({
+      expected: `Backy Smoke ${suffix}`,
+      actual: settings.integrations?.general,
+      appearance: settings.integrations?.appearance,
+      seo: settings.integrations?.seo,
+      deliveryMode: settings.deliveryMode,
+    }).slice(0, 1000)}`,
+  );
   assert(settings.integrations?.appearance?.primaryColor === '#0f766e', 'Appearance primary color was not persisted');
   assert(settings.integrations?.seo?.titleTemplate === `%s | Backy Smoke ${suffix}`, 'SEO title template was not persisted');
   assert(settings.integrations?.storage?.provider === 'supabase', 'Storage provider was not persisted');
@@ -1367,6 +1991,39 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
     `Commerce runtime Stripe secret readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
   );
   assert(settings.runtimeCommerce?.stripeApiBaseUrl, `Commerce runtime Stripe API base URL was not reported: ${JSON.stringify(settings.runtimeCommerce)}`);
+  assert(settings.runtimeCommerce?.stripeDiscountApiBaseUrl, `Commerce runtime Stripe discount API base URL was not reported: ${JSON.stringify(settings.runtimeCommerce)}`);
+  assert(
+    settings.runtimeCommerce?.paddleApiKeyConfigured === Boolean(process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY),
+    `Commerce runtime Paddle API key readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
+  );
+  assert(settings.runtimeCommerce?.paddleApiBaseUrl, `Commerce runtime Paddle API base URL was not reported: ${JSON.stringify(settings.runtimeCommerce)}`);
+  assert(settings.runtimeCommerce?.adyenRecurringApiBaseUrl, `Commerce runtime Adyen recurring API base URL was not reported: ${JSON.stringify(settings.runtimeCommerce)}`);
+  assert(
+    settings.runtimeCommerce?.shopifyAdminAccessTokenConfigured === Boolean(process.env.BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN || process.env.SHOPIFY_ADMIN_ACCESS_TOKEN),
+    `Commerce runtime Shopify catalog token readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
+  );
+  assert(
+    settings.runtimeCommerce?.bigCommerceAccessTokenConfigured === Boolean(process.env.BACKY_BIGCOMMERCE_ACCESS_TOKEN || process.env.BIGCOMMERCE_ACCESS_TOKEN),
+    `Commerce runtime BigCommerce catalog token readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
+  );
+  assert(
+    settings.runtimeCommerce?.wooCommerceConsumerKeyConfigured === Boolean(process.env.BACKY_WOOCOMMERCE_CONSUMER_KEY || process.env.WOOCOMMERCE_CONSUMER_KEY),
+    `Commerce runtime WooCommerce consumer key readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
+  );
+  assert(
+    settings.runtimeCommerce?.etsyAccessTokenConfigured === Boolean(process.env.BACKY_ETSY_ACCESS_TOKEN || process.env.ETSY_ACCESS_TOKEN),
+    `Commerce runtime Etsy access token readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
+  );
+  assert(
+    settings.runtimeCommerce?.etsyApiKeyConfigured === Boolean(process.env.BACKY_ETSY_API_KEY || process.env.ETSY_API_KEY),
+    `Commerce runtime Etsy API key readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
+  );
+  assert(settings.runtimeCommerce?.etsyApiBaseUrl, `Commerce runtime Etsy API base URL was not reported: ${JSON.stringify(settings.runtimeCommerce)}`);
+  assert(settings.runtimeInteractiveComponents?.registryProvider, `Interactive component registry runtime was not reported: ${JSON.stringify(settings.runtimeInteractiveComponents)}`);
+  assert(
+    settings.runtimeInteractiveComponents?.registryConfigured === true,
+    `Interactive component registry readiness did not default to local-ready: ${JSON.stringify(settings.runtimeInteractiveComponents)}`,
+  );
   assert(settings.integrations?.commerce?.providerAccountId === `acct_${suffix}`, 'Commerce provider account ID was not persisted');
   assert(settings.integrations?.commerce?.providerMode === 'live', 'Commerce provider mode was not persisted');
   assert(settings.integrations?.commerce?.providerWebhookUrl === `https://hooks.example.com/commerce/${suffix}`, 'Commerce provider webhook URL was not persisted');
@@ -1387,6 +2044,10 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.commerce?.shippingProviderUrl === `https://pricing.example.com/${suffix}/shipping`, 'Commerce shipping provider URL was not persisted');
   assert(settings.integrations?.commerce?.discountProvider === 'http', 'Commerce discount provider was not persisted');
   assert(settings.integrations?.commerce?.discountProviderUrl === `https://pricing.example.com/${suffix}/discount`, 'Commerce discount provider URL was not persisted');
+  assert(settings.integrations?.commerce?.catalogSyncProvider === 'http', 'Commerce catalog sync provider was not persisted');
+  assert(settings.integrations?.commerce?.catalogSyncProviderUrl === `https://catalog.example.com/${suffix}/products`, 'Commerce catalog sync provider URL was not persisted');
+  assert(settings.integrations?.commerce?.subscriptionActionProvider === 'http', 'Commerce subscription lifecycle provider was not persisted');
+  assert(settings.integrations?.commerce?.subscriptionActionProviderUrl === `https://subscriptions.example.com/${suffix}/actions`, 'Commerce subscription lifecycle provider URL was not persisted');
   assert(settings.integrations?.commerce?.fulfillmentProvider === 'http', 'Commerce fulfillment provider was not persisted');
   assert(settings.integrations?.commerce?.fulfillmentProviderUrl === `https://warehouse.example.com/${suffix}/dispatch`, 'Commerce fulfillment provider URL was not persisted');
   assert(settings.integrations?.commerce?.shippingLabelProvider === 'easypost', 'Commerce shipping label provider was not persisted');
@@ -1415,6 +2076,53 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.auth?.requireTwoFactor === true, 'Require 2FA toggle was not persisted');
   assert(settings.auth?.inviteOnly === true, 'Invite-only toggle was not persisted');
   assert(settings.auth?.minPasswordLength === 12, 'Password length was not persisted');
+};
+
+const assertPersistedSiteScopedSettings = async (siteId, suffix) => {
+  const scope = await readSiteSettingsScope(siteId);
+  assert(scope.schemaVersion === 'backy.site-settings-scope.v1', `Site settings scope schema was not returned: ${JSON.stringify(scope).slice(0, 500)}`);
+  assert(scope.scope?.siteId === siteId, `Site settings scope returned wrong site: ${JSON.stringify(scope.scope).slice(0, 500)}`);
+  assert(scope.scope?.workspaceSettingsScope === 'global', `Site settings scope did not separate workspace settings: ${JSON.stringify(scope.scope).slice(0, 500)}`);
+  assert(scope.scope?.siteSettingsScope === 'site', `Site settings scope did not mark site settings scope: ${JSON.stringify(scope.scope).slice(0, 500)}`);
+  assert(scope.endpoints?.workspaceSettings === '/api/admin/settings', `Site settings scope missing workspace endpoint: ${JSON.stringify(scope.endpoints).slice(0, 500)}`);
+  assert(scope.siteSettings?.seo?.titleTemplate === `%s | Scoped ${suffix}`, 'Site-scoped SEO title template was not persisted');
+  assert(scope.siteSettings?.seo?.defaultDescription === `Scoped site description ${suffix}`, 'Site-scoped SEO description was not persisted');
+  assert(scope.siteSettings?.analytics?.googleAnalyticsId === `G-SCOPED${suffix.toUpperCase().replace(/[^A-Z0-9]/g, '')}`, 'Site-scoped Google Analytics ID was not persisted');
+  assert(scope.siteSettings?.analytics?.plausibleDomain === `scoped-${suffix}.example.com`, 'Site-scoped Plausible domain was not persisted');
+  assert(scope.siteSettings?.social?.twitter === `https://twitter.com/${suffix}`, 'Site-scoped Twitter URL was not persisted');
+  assert(scope.siteSettings?.social?.github === `https://github.com/backy/${suffix}`, 'Site-scoped GitHub URL was not persisted');
+  assert(scope.siteSettings?.social?.linkedin === `https://www.linkedin.com/company/${suffix}`, 'Site-scoped LinkedIn URL was not persisted');
+  assert(scope.siteSettings?.localization?.defaultLocale === 'en', 'Site-scoped default locale was not persisted');
+  assert(scope.siteSettings?.localization?.localeStrategy === 'path-prefix', 'Site-scoped locale strategy was not persisted');
+  assert(
+    scope.siteSettings?.localization?.locales?.some((locale) => (
+      locale.code === 'fr' &&
+        locale.label === 'French' &&
+        locale.direction === 'ltr' &&
+        locale.pathPrefix === '/fr'
+    )),
+    `Site-scoped French locale was not persisted: ${JSON.stringify(scope.siteSettings?.localization).slice(0, 500)}`,
+  );
+  assert(scope.siteSettings?.commentPolicy?.moderationMode === 'auto-approve', 'Site-scoped comment moderation was not persisted');
+  assert(scope.siteSettings?.commentPolicy?.blockedTerms?.includes(`scoped-${suffix}`), 'Site-scoped blocked term was not persisted');
+
+  const audit = await requestApi(`/api/admin/audit-logs?siteId=${siteId}&entity=site&entityId=${siteId}&action=${encodeURIComponent('site.settings.updated')}`);
+  assert(
+    audit.data?.logs?.some((entry) => (
+      entry.entity === 'site' &&
+      entry.entityId === siteId &&
+      entry.action === 'site.settings.updated' &&
+      entry.metadata?.source === 'admin-site-settings-api' &&
+      entry.metadata?.changedKeys?.includes('seo') &&
+      entry.metadata?.changedKeys?.includes('analytics') &&
+      entry.metadata?.changedKeys?.includes('social') &&
+      entry.metadata?.changedKeys?.includes('localization') &&
+      entry.metadata?.changedKeys?.includes('commentPolicy')
+    )),
+    `Site settings audit log did not include scoped update: ${JSON.stringify(audit.data?.logs || []).slice(0, 500)}`,
+  );
+
+  return scope;
 };
 
 const assertDirectSettingsApiNormalizesPlannedNotifications = async (settings) => {
@@ -1544,9 +2252,69 @@ const assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints = async (se
     `Rejected provider endpoint patch should not mutate persisted commerce URL: ${JSON.stringify(after.integrations?.commerce).slice(0, 500)}`,
   );
 
+  const catalogResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        commerce: {
+          ...(settings.integrations?.commerce || {}),
+          catalogSyncProvider: 'http',
+          catalogSyncProviderUrl: 'not-a-valid-url',
+        },
+      },
+    }),
+  });
+  const catalogPayload = await catalogResponse.json().catch(() => ({}));
+
+  assert(catalogResponse.status === 400, `Invalid catalog sync endpoint should be rejected, got ${catalogResponse.status}: ${JSON.stringify(catalogPayload).slice(0, 500)}`);
+  assert(catalogPayload?.error?.code === 'VALIDATION_ERROR', `Invalid catalog sync endpoint rejection should return VALIDATION_ERROR: ${JSON.stringify(catalogPayload).slice(0, 500)}`);
+
+  const afterCatalog = await readSettings();
+  assert(
+    afterCatalog.integrations?.commerce?.catalogSyncProviderUrl === settings.integrations?.commerce?.catalogSyncProviderUrl,
+    `Rejected catalog sync endpoint patch should not mutate persisted commerce URL: ${JSON.stringify(afterCatalog.integrations?.commerce).slice(0, 500)}`,
+  );
+
+  const subscriptionResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        commerce: {
+          ...(settings.integrations?.commerce || {}),
+          subscriptionActionProvider: 'http',
+          subscriptionActionProviderUrl: 'not-a-valid-url',
+        },
+      },
+    }),
+  });
+  const subscriptionPayload = await subscriptionResponse.json().catch(() => ({}));
+
+  assert(subscriptionResponse.status === 400, `Invalid subscription lifecycle endpoint should be rejected, got ${subscriptionResponse.status}: ${JSON.stringify(subscriptionPayload).slice(0, 500)}`);
+  assert(subscriptionPayload?.error?.code === 'VALIDATION_ERROR', `Invalid subscription lifecycle endpoint rejection should return VALIDATION_ERROR: ${JSON.stringify(subscriptionPayload).slice(0, 500)}`);
+
+  const afterSubscription = await readSettings();
+  assert(
+    afterSubscription.integrations?.commerce?.subscriptionActionProviderUrl === settings.integrations?.commerce?.subscriptionActionProviderUrl,
+    `Rejected subscription lifecycle endpoint patch should not mutate persisted commerce URL: ${JSON.stringify(afterSubscription.integrations?.commerce).slice(0, 500)}`,
+  );
+
   return {
     status: response.status,
+    catalogStatus: catalogResponse.status,
+    subscriptionStatus: subscriptionResponse.status,
     code: payload.error?.code,
+    catalogCode: catalogPayload.error?.code,
+    subscriptionCode: subscriptionPayload.error?.code,
   };
 };
 
@@ -1942,11 +2710,26 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  assertSettingsSourceContracts();
+
   const suffix = `settings-smoke-${Date.now().toString(36)}`;
   const adminSession = await loginAdminApi();
   const originalSettings = await readSettings();
   const permissionDenials = await assertSettingsPermissionDenials(originalSettings);
-  await setAdminPermissionOverrides({ 'settings.manageKeys': 'deny' });
+  const baselineSettings = await normalizeSettingsSmokePreconditions(originalSettings);
+  await setAdminPermissionOverrides({
+    'settings.configure': 'allow',
+    'settings.manageKeys': 'deny',
+    'sites.view': 'allow',
+    'sites.configure': 'allow',
+  });
+  await waitForAdminPermissionRules({
+    'settings.view': true,
+    'settings.configure': true,
+    'settings.manageKeys': false,
+    'sites.view': true,
+    'sites.configure': true,
+  });
   let ownerUserId = '';
   let ownerSession = null;
   let ownerOriginalSettings = null;
@@ -1954,9 +2737,17 @@ const main = async () => {
   let client;
   let restored = false;
   let adminPreloadIdentifier = '';
+  let siteScopeSiteId = '';
   const webhookCapture = await createWebhookCaptureServer();
 
   try {
+    const siteScopeSite = await createSite({
+      name: `Settings Scope ${suffix}`,
+      slug: `settings-scope-${suffix}`,
+      description: 'Temporary settings smoke site scope target',
+      status: 'draft',
+    });
+    siteScopeSiteId = siteScopeSite.id;
     const owner = await createUser({
       fullName: `Settings Owner ${suffix}`,
       email: `settings-owner-${suffix}@example.com`,
@@ -1977,12 +2768,14 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await client.send('Network.enable');
+    await seedBrowserSessionCookie(client, adminSession.session.token);
     const adminPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(adminSession.session.token),
     });
     adminPreloadIdentifier = adminPreload.identifier || '';
 
-    const ui = await updateSettingsThroughUi(client, suffix, originalSettings, webhookCapture.url);
+    const ui = await updateSettingsThroughUi(client, suffix, baselineSettings, webhookCapture.url, siteScopeSite);
     const ownerRotation = await assertOwnerCanRotateApiKeyThroughUi(
       client,
       ownerSession,
@@ -1991,6 +2784,7 @@ const main = async () => {
     );
     const persisted = await readSettings();
     assertPersistedSettings(persisted, suffix, webhookCapture.url);
+    const siteScope = await assertPersistedSiteScopedSettings(siteScopeSiteId, suffix);
     assert(webhookCapture.requests.length >= 2, `Settings webhook test/retry did not hit capture server: ${JSON.stringify(webhookCapture.requests)}`);
     assert(
       webhookCapture.requests.some((entry) => entry.headers['x-backy-settings-webhook-test'] === 'true' && entry.body?.kind === 'settings.notification_webhook.test'),
@@ -2021,13 +2815,16 @@ const main = async () => {
 
     assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
 
-    await restoreSettings(ownerOriginalSettings || originalSettings, {
+    const restoreSnapshot = buildRestoreSettingsSnapshot(originalSettings, ownerOriginalSettings);
+    await restoreSettingsWithFallback(restoreSnapshot, {
       sessionToken: ownerSession?.session?.token,
-      includeApiKeys: Boolean(ownerOriginalSettings && ownerSession?.session?.token),
+      includeApiKeys: Boolean(restoreSnapshot?.apiKeys && ownerSession?.session?.token),
     });
     restored = true;
     await deleteUser(ownerUserId);
     ownerUserId = '';
+    await deleteSite(siteScopeSiteId);
+    siteScopeSiteId = '';
 
     console.log(JSON.stringify({
       ok: true,
@@ -2059,18 +2856,33 @@ const main = async () => {
           requestId: entry.body?.requestId,
         })),
         auth: persisted.auth,
+        siteScope: {
+          siteId: siteScope.scope.siteId,
+          schemaVersion: siteScope.schemaVersion,
+          seo: siteScope.siteSettings.seo,
+          analytics: siteScope.siteSettings.analytics,
+          social: siteScope.siteSettings.social,
+          localization: siteScope.siteSettings.localization,
+          commentPolicy: siteScope.siteSettings.commentPolicy,
+        },
       },
       restored,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await setAdminPermissionOverrides({ 'settings.manageKeys': null }).catch((error) => {
-      console.warn('Unable to restore default admin key-management permission:', error instanceof Error ? error.message : error);
+    await setAdminPermissionOverrides({
+      'settings.configure': null,
+      'settings.manageKeys': null,
+      'sites.view': null,
+      'sites.configure': null,
+    }).catch((error) => {
+      console.warn('Unable to restore default admin settings smoke permissions:', error instanceof Error ? error.message : error);
     });
     if (!restored) {
-      await restoreSettings(ownerOriginalSettings || originalSettings, {
+      const restoreSnapshot = buildRestoreSettingsSnapshot(originalSettings, ownerOriginalSettings);
+      await restoreSettingsWithFallback(restoreSnapshot, {
         sessionToken: ownerSession?.session?.token,
-        includeApiKeys: Boolean(ownerOriginalSettings && ownerSession?.session?.token),
+        includeApiKeys: Boolean(restoreSnapshot?.apiKeys && ownerSession?.session?.token),
       }).catch((error) => {
         console.warn('Unable to restore original settings:', error instanceof Error ? error.message : error);
       });
@@ -2080,12 +2892,23 @@ const main = async () => {
         console.warn('Unable to remove temporary settings owner:', error instanceof Error ? error.message : error);
       });
     }
+    if (siteScopeSiteId) {
+      await deleteSite(siteScopeSiteId).catch((error) => {
+        console.warn('Unable to remove temporary settings site:', error instanceof Error ? error.message : error);
+      });
+    }
     await webhookCapture.close().catch((error) => {
       console.warn('Unable to stop settings webhook capture server:', error instanceof Error ? error.message : error);
     });
     await cleanup({ client, childProcess, userDataDir });
   }
 };
+
+if (process.env.BACKY_SETTINGS_SOURCE_GUARD === '1') {
+  assertSettingsSourceContracts();
+  console.log(JSON.stringify({ ok: true, guard: 'settings-site-scoped-localization' }));
+  process.exit(0);
+}
 
 main().catch((error) => {
   console.error(error);
