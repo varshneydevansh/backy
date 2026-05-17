@@ -150,6 +150,82 @@ const main = async () => {
     permission: 'pages.view',
   });
 
+  const nonMemberNestedChecks = [
+    {
+      label: 'repository non-member nested blog denied',
+      path: `/api/admin/sites/${site.id}/blog`,
+      permission: 'pages.view',
+    },
+    {
+      label: 'repository non-member nested media denied',
+      path: `/api/admin/sites/${site.slug}/media`,
+      permission: 'media.view',
+    },
+    {
+      label: 'repository non-member nested collections denied',
+      path: `/api/admin/sites/${site.id}/collections`,
+      permission: 'collections.view',
+    },
+    {
+      label: 'repository non-member nested forms denied',
+      path: `/api/admin/sites/${site.id}/forms`,
+      permission: 'forms.view',
+    },
+    {
+      label: 'repository non-member nested navigation denied',
+      path: `/api/admin/sites/${site.id}/navigation`,
+      permission: 'sites.view',
+    },
+    {
+      label: 'repository non-member nested SEO denied',
+      path: `/api/admin/sites/${site.id}/seo`,
+      permission: 'sites.view',
+    },
+    {
+      label: 'repository non-member nested redirects denied',
+      path: `/api/admin/sites/${site.id}/redirects`,
+      permission: 'sites.view',
+    },
+    {
+      label: 'repository non-member nested reusable sections denied',
+      path: `/api/admin/sites/${site.id}/reusable-sections`,
+      permission: 'pages.view',
+    },
+    {
+      label: 'repository non-member nested frontend-design denied',
+      path: `/api/admin/sites/${site.id}/frontend-design`,
+      permission: 'sites.view',
+    },
+    {
+      label: 'repository non-member nested interactive components denied',
+      path: `/api/admin/sites/${site.id}/interactive-components`,
+      permission: 'pages.view',
+    },
+    {
+      label: 'repository non-member nested readiness denied',
+      path: `/api/admin/sites/${site.id}/readiness`,
+      permission: 'dashboard.view',
+    },
+    {
+      label: 'repository non-member site duplicate denied',
+      path: `/api/admin/sites/${site.id}/duplicate`,
+      permission: 'sites.create',
+    },
+    {
+      label: 'repository non-member nested commerce denied',
+      path: `/api/admin/sites/${site.id}/commerce/orders/analytics`,
+      permission: 'commerce.view',
+    },
+  ];
+
+  for (const check of nonMemberNestedChecks) {
+    await expectForbiddenSiteScope({
+      userId: 'repo-non-member',
+      path: check.path,
+      permission: check.permission,
+    });
+  }
+
   await expectForbiddenSiteScope({
     userId: 'repo-non-member',
     path: `/api/admin/sites/${site.id}/settings`,
@@ -184,6 +260,7 @@ const main = async () => {
     ok: true,
     checks: [
       'repository non-member nested site read denied',
+      ...nonMemberNestedChecks.map((check) => check.label),
       'repository non-member nested site settings read denied',
       'repository non-member nested site settings write denied',
       'repository viewer nested site read allowed by slug',
