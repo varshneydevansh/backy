@@ -157,6 +157,11 @@ const main = async () => {
       permission: 'pages.view',
     },
     {
+      label: 'repository non-member nested blog categories denied',
+      path: `/api/admin/sites/${site.id}/blog/categories`,
+      permission: 'pages.view',
+    },
+    {
       label: 'repository non-member nested media denied',
       path: `/api/admin/sites/${site.slug}/media`,
       permission: 'media.view',
@@ -167,9 +172,39 @@ const main = async () => {
       permission: 'collections.view',
     },
     {
+      label: 'repository non-member nested collection export denied',
+      path: `/api/admin/sites/${site.id}/collections/export`,
+      permission: 'collections.export',
+    },
+    {
+      label: 'repository non-member nested collection import denied',
+      path: `/api/admin/sites/${site.id}/collections/import`,
+      permission: 'collections.edit',
+    },
+    {
       label: 'repository non-member nested forms denied',
       path: `/api/admin/sites/${site.id}/forms`,
       permission: 'forms.view',
+    },
+    {
+      label: 'repository non-member nested forms analytics denied',
+      path: `/api/admin/sites/${site.id}/forms/analytics`,
+      permission: 'forms.view',
+    },
+    {
+      label: 'repository non-member nested form contact lists denied',
+      path: `/api/admin/sites/${site.id}/forms/contact-lists`,
+      permission: 'forms.view',
+    },
+    {
+      label: 'repository non-member nested media provider analytics denied',
+      path: `/api/admin/sites/${site.id}/media/provider-analytics`,
+      permission: 'media.edit',
+    },
+    {
+      label: 'repository non-member nested editor binding presets denied',
+      path: `/api/admin/sites/${site.id}/editor/collection-binding-presets`,
+      permission: 'pages.view',
     },
     {
       label: 'repository non-member nested navigation denied',
@@ -190,6 +225,16 @@ const main = async () => {
       label: 'repository non-member nested reusable sections denied',
       path: `/api/admin/sites/${site.id}/reusable-sections`,
       permission: 'pages.view',
+    },
+    {
+      label: 'repository non-member nested reusable section export denied',
+      path: `/api/admin/sites/${site.id}/reusable-sections/export`,
+      permission: 'pages.view',
+    },
+    {
+      label: 'repository non-member nested reusable section import denied',
+      path: `/api/admin/sites/${site.id}/reusable-sections/import`,
+      permission: 'pages.edit',
     },
     {
       label: 'repository non-member nested frontend-design denied',

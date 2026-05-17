@@ -194,6 +194,20 @@ try {
       },
     },
     {
+      label: 'non-member admin nested collection export denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/collections/export`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested collection import denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/collections/import`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ collections: [] }),
+      },
+    },
+    {
       label: 'non-member admin nested forms list denied',
       path: `/api/admin/sites/${encodeURIComponent(site.id)}/forms`,
       init: { headers: scopedHeaders },
@@ -206,6 +220,30 @@ try {
         headers: { ...scopedHeaders, 'content-type': 'application/json' },
         body: JSON.stringify({ title: `Denied Form ${suffix}`, slug: `denied-form-${suffix}` }),
       },
+    },
+    {
+      label: 'non-member admin nested forms analytics denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/forms/analytics`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested form contact lists denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/forms/contact-lists`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested media provider analytics denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/media/provider-analytics`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ entries: [] }),
+      },
+    },
+    {
+      label: 'non-member admin nested editor binding presets denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/editor/collection-binding-presets`,
+      init: { headers: scopedHeaders },
     },
     {
       label: 'non-member admin nested navigation read denied',
@@ -254,6 +292,11 @@ try {
       },
     },
     {
+      label: 'non-member admin nested blog categories denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/blog/categories`,
+      init: { headers: scopedHeaders },
+    },
+    {
       label: 'non-member admin nested SEO read denied',
       path: `/api/admin/sites/${encodeURIComponent(site.id)}/seo`,
       init: { headers: scopedHeaders },
@@ -293,6 +336,20 @@ try {
         method: 'POST',
         headers: { ...scopedHeaders, 'content-type': 'application/json' },
         body: JSON.stringify({ name: `Denied Section ${suffix}`, slug: `denied-section-${suffix}`, content: [] }),
+      },
+    },
+    {
+      label: 'non-member admin nested reusable section export denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/reusable-sections/export`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested reusable section import denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/reusable-sections/import`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ sections: [] }),
       },
     },
     {
