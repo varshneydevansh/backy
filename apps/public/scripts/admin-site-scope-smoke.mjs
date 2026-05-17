@@ -236,6 +236,94 @@ try {
       },
     },
     {
+      label: 'non-member admin nested blog list denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/blog?includeUnpublished=true`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested blog create denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/blog`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: `Denied Blog Post ${suffix}`,
+          slug: `denied-blog-post-${suffix}`,
+          status: 'draft',
+        }),
+      },
+    },
+    {
+      label: 'non-member admin nested SEO read denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/seo`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested SEO update denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/seo`,
+      init: {
+        method: 'PATCH',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: `Denied SEO ${suffix}`, description: 'Denied' }),
+      },
+    },
+    {
+      label: 'non-member admin nested redirects read denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/redirects`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested redirects update denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/redirects`,
+      init: {
+        method: 'PATCH',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ redirects: [] }),
+      },
+    },
+    {
+      label: 'non-member admin nested reusable sections list denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/reusable-sections`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested reusable section create denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/reusable-sections`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: `Denied Section ${suffix}`, slug: `denied-section-${suffix}`, content: [] }),
+      },
+    },
+    {
+      label: 'non-member admin nested interactive components list denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/interactive-components`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested interactive component create denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/interactive-components`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: `Denied Component ${suffix}`, key: `denied-component-${suffix}` }),
+      },
+    },
+    {
+      label: 'non-member admin nested readiness read denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/readiness`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin site duplicate denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/duplicate`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: `Denied Duplicate ${suffix}`, slug: `denied-duplicate-${suffix}` }),
+      },
+    },
+    {
       label: 'non-member admin nested site settings read denied',
       path: `/api/admin/sites/${encodeURIComponent(site.id)}/settings`,
       init: { headers: scopedHeaders },
