@@ -91,6 +91,11 @@ includesAll(
 );
 
 assert(
+  /subscription_provider:[\s\S]*?options:[\s\S]*?- razorpay[\s\S]*?webhook_provider:/m.test(workflow),
+  'Backy release certification workflow must expose razorpay as a subscription_provider option.',
+);
+
+assert(
     workflow.indexOf('- name: Run local release preflight contracts') < workflow.indexOf('- name: Run Forms Postgres certification') &&
     workflow.indexOf('- name: Run local release preflight contracts') < workflow.indexOf('- name: Run non-secret release certification doctor') &&
     workflow.indexOf('- name: Run non-secret release certification doctor') < workflow.indexOf('- name: Write non-secret release certification summary') &&

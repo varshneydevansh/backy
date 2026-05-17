@@ -137,6 +137,11 @@ includesAll(
 );
 
 assert(
+  /subscription_provider:[\s\S]*?options:[\s\S]*?- razorpay[\s\S]*?certify_webhooks:/m.test(workflow),
+  'Commerce provider certification workflow must expose razorpay as a subscription_provider option.',
+);
+
+assert(
   workflow.indexOf('- name: Run Commerce provider certification preflight') < workflow.indexOf('- name: Write non-secret Commerce certification summary') &&
     workflow.indexOf('- name: Run Commerce provider certification preflight') < workflow.indexOf('- name: Run non-secret certification doctor') &&
     workflow.indexOf('- name: Run non-secret certification doctor') < workflow.indexOf('- name: Write non-secret Commerce certification summary') &&

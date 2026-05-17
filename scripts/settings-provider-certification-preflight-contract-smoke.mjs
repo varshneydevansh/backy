@@ -143,6 +143,11 @@ includesAll(
 );
 
 assert(
+  /subscription_provider:[\s\S]*?options:[\s\S]*?- razorpay[\s\S]*?webhook_provider:/m.test(workflow),
+  'Settings provider certification workflow must expose razorpay as a nested subscription_provider option.',
+);
+
+assert(
   workflow.indexOf('- name: Run Settings provider certification preflight') < workflow.indexOf('- name: Run Settings provider certification\n') &&
     workflow.indexOf('- name: Run Settings provider certification preflight') < workflow.indexOf('- name: Run non-secret certification doctor') &&
     workflow.indexOf('- name: Run non-secret certification doctor') < workflow.indexOf('- name: Write non-secret Settings certification summary') &&
