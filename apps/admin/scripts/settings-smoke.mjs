@@ -1652,7 +1652,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   await setLabeledControl(client, 'Auto deploy', true);
   await setLabeledControl(client, 'Preview deploys', true);
 
-  const infrastructureState = await evaluate(client, `(() => ({
+  const infrastructureState = await evaluate(client, `(() => {
+    const runbookText = document.querySelector('[data-testid="settings-release-certification-runbook"]')?.textContent || '';
+    return {
     search: window.location.search,
     text: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 500) || '',
     hasEnvContract: document.body?.innerText?.includes('Environment contract') || document.body?.innerText?.includes('Copy the environment contract'),
@@ -1684,15 +1686,17 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasSecretManagerPlan: document.body?.innerText?.includes('Plan env sync') || false,
     hasSecretManagerPromote: document.body?.innerText?.includes('Promote env') || false,
     hasSecretManagerRevoke: document.body?.innerText?.includes('Revoke next env') || false,
-    hasReleaseCertificationRunbook: Boolean(document.querySelector('[data-testid="settings-release-certification-runbook"]')),
-    hasReleaseCertificationWorkflow: document.body?.innerText?.includes('.github/workflows/backy-release-certification.yml') || false,
-    hasReleaseCertificationPreflight: document.body?.innerText?.includes('npm run test:release-certification-preflight-contract') || false,
-    hasReleaseCertificationDatabaseGate: document.body?.innerText?.includes('certify_database') && document.body?.innerText?.includes('BACKY_DATABASE_URL') && document.body?.innerText?.includes('DATABASE_URL'),
-    hasReleaseCertificationSettingsGate: document.body?.innerText?.includes('certify_settings_providers') && document.body?.innerText?.includes('ci:settings-provider-certification'),
-    hasReleaseCertificationCommerceGate: document.body?.innerText?.includes('certify_commerce_providers') && document.body?.innerText?.includes('ci:commerce-provider-certification'),
-    hasReleaseCertificationStorageAliases: document.body?.innerText?.includes('BACKY_MEDIA_STORAGE_PROVIDER') && document.body?.innerText?.includes('SUPABASE_SERVICE_ROLE_KEY') && document.body?.innerText?.includes('AWS_ACCESS_KEY_ID'),
-    hasReleaseCertificationCommerceAliases: document.body?.innerText?.includes('STRIPE_SECRET_KEY') && document.body?.innerText?.includes('PAYPAL_ACCESS_TOKEN') && document.body?.innerText?.includes('SHOPIFY_ADMIN_ACCESS_TOKEN') && document.body?.innerText?.includes('COMMERCE_WEBHOOK_SECRET'),
-  }))()`);
+    hasReleaseCertificationRunbook: Boolean(runbookText),
+    hasReleaseCertificationWorkflow: runbookText.includes('.github/workflows/backy-release-certification.yml'),
+    hasReleaseCertificationPreflight: runbookText.includes('npm run test:release-certification-preflight-contract'),
+    hasReleaseCertificationDatabaseGate: runbookText.includes('certify_database') && runbookText.includes('BACKY_DATABASE_URL') && runbookText.includes('DATABASE_URL'),
+    hasReleaseCertificationSettingsGate: runbookText.includes('certify_settings_providers') && runbookText.includes('ci:settings-provider-certification'),
+    hasReleaseCertificationCommerceGate: runbookText.includes('certify_commerce_providers') && runbookText.includes('ci:commerce-provider-certification'),
+    hasReleaseCertificationStorageAliases: runbookText.includes('BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('SUPABASE_SERVICE_ROLE_KEY') && runbookText.includes('AWS_ACCESS_KEY_ID'),
+    hasReleaseCertificationNotificationAliases: runbookText.includes('RESEND_API_KEY') && runbookText.includes('SMTP_HOST') && runbookText.includes('SMTP_USER') && runbookText.includes('SMTP_PASSWORD') && runbookText.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
+    hasReleaseCertificationCommerceAliases: runbookText.includes('STRIPE_SECRET_KEY') && runbookText.includes('PAYPAL_ACCESS_TOKEN') && runbookText.includes('SHOPIFY_ADMIN_ACCESS_TOKEN') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
+  };
+})()`);
   assert(infrastructureState.search.includes('tab=infrastructure'), `Infrastructure tab search state was not persisted: ${JSON.stringify(infrastructureState)}`);
   assert(infrastructureState.hasEnvContract, `Infrastructure env contract was not visible: ${JSON.stringify(infrastructureState)}`);
   assert(
@@ -1746,6 +1750,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationSettingsGate &&
       infrastructureState.hasReleaseCertificationCommerceGate &&
       infrastructureState.hasReleaseCertificationStorageAliases &&
+      infrastructureState.hasReleaseCertificationNotificationAliases &&
       infrastructureState.hasReleaseCertificationCommerceAliases &&
       infrastructureState.hasVercelAliasEnv,
     `Settings release certification runbook was not visible: ${JSON.stringify(infrastructureState)}`,

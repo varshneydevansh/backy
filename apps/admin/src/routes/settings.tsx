@@ -1634,7 +1634,7 @@ function SettingsPage() {
           'BACKY_DATABASE_URL/DATABASE_URL',
           'BACKY_STORAGE_PROVIDER/BACKY_MEDIA_STORAGE_PROVIDER plus Supabase/S3 runtime aliases',
           'VERCEL_TOKEN/BACKY_VERCEL_TOKEN and project metadata',
-          'notification provider credentials',
+          'notification aliases including RESEND_API_KEY, SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
           'commerce provider aliases including STRIPE_SECRET_KEY, TAXJAR_API_KEY, PAYPAL_ACCESS_TOKEN, SHOPIFY_ADMIN_ACCESS_TOKEN, and COMMERCE_WEBHOOK_SECRET',
         ],
       },
@@ -5695,7 +5695,7 @@ function InfrastructureSettings({
             ))}
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, storage aliases such as <span className="font-mono">BACKY_STORAGE_PROVIDER</span>/<span className="font-mono">BACKY_MEDIA_STORAGE_PROVIDER</span>, <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, and <span className="font-mono">AWS_ACCESS_KEY_ID</span>, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification provider credentials, and commerce aliases such as <span className="font-mono">STRIPE_SECRET_KEY</span>, <span className="font-mono">TAXJAR_API_KEY</span>, <span className="font-mono">PAYPAL_ACCESS_TOKEN</span>, <span className="font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</span>, and <span className="font-mono">COMMERCE_WEBHOOK_SECRET</span> for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento.
+            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, storage aliases such as <span className="font-mono">BACKY_STORAGE_PROVIDER</span>/<span className="font-mono">BACKY_MEDIA_STORAGE_PROVIDER</span>, <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, and <span className="font-mono">AWS_ACCESS_KEY_ID</span>, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification aliases such as <span className="font-mono">RESEND_API_KEY</span>, <span className="font-mono">SMTP_HOST</span>, <span className="font-mono">SMTP_USER</span>, <span className="font-mono">SMTP_PASSWORD</span>, and <span className="font-mono">BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL</span>, and commerce aliases such as <span className="font-mono">STRIPE_SECRET_KEY</span>, <span className="font-mono">TAXJAR_API_KEY</span>, <span className="font-mono">PAYPAL_ACCESS_TOKEN</span>, <span className="font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</span>, and <span className="font-mono">COMMERCE_WEBHOOK_SECRET</span> for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento.
           </p>
         </PanelContent>
       </Panel>
