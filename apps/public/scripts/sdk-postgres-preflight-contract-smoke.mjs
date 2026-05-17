@@ -18,6 +18,8 @@ const sdkSmokeCi = read('../../../scripts/sdk-smoke-ci.mjs');
 const rootPackage = read('../../../package.json');
 const sdkPostgresWorkflow = read('../../../.github/workflows/sdk-postgres-smoke.yml');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
+const sdkReadme = read('../../../packages/sdk-js/README.md');
+const apiContracts = read('../../../specs/backy-api-contracts.md');
 
 assert(
   sdkSmokeCi.includes('requiredDatabaseSchema') &&
@@ -132,6 +134,18 @@ assert(
   sdkPostgresWorkflow.indexOf('Require disposable Postgres or Supabase database URL') < sdkPostgresWorkflow.indexOf('Run SDK Postgres/Supabase smoke') &&
     sdkPostgresWorkflow.indexOf('inputs.disposable_database_confirmed') < sdkPostgresWorkflow.indexOf('Run SDK Postgres/Supabase smoke'),
   'SDK Postgres manual workflow must require explicit disposable database confirmation before the DB-backed smoke.',
+);
+
+assert(
+  sdkReadme.includes('BACKY_DATABASE_URL` or `DATABASE_URL` pointing at a disposable migrated Supabase/Postgres database') &&
+    sdkReadme.includes('with the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias'),
+  'SDK README must document both database secret aliases for the disposable migrated Supabase/Postgres smoke.',
+);
+
+assert(
+  apiContracts.includes('forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database') &&
+    apiContracts.includes('sdk-postgres-smoke.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database'),
+  'API contracts must document both database secret aliases for Forms and SDK Postgres manual gates.',
 );
 
 assert(
