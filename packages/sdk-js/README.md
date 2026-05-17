@@ -9,6 +9,7 @@ const backy = createBackyClient({ baseUrl: 'https://your-backy-host.com' });
 
 await backy.discoverSite('demo');
 const manifest = await backy.manifest();
+const localeRoutes = manifest.data.modules.routing.localizedRoutePatterns || [];
 const page = await backy.render('/');
 const seo = await backy.seo();
 const sections = await backy.reusableSections();
@@ -20,6 +21,7 @@ page.data.content.elements.forEach((element) => {
   console.log(element.id, element.type);
 });
 
+console.log(manifest.data.delivery.localeStrategy, localeRoutes.map((entry) => entry.locale));
 console.log(sections.data.sections.map((section) => section.name));
 console.log(asset?.data.media.id);
 console.log(catalog.data.products.map((product) => product.title));
@@ -146,15 +148,21 @@ if (fontsSecond.notModified) {
 ```
 
 The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, frontend-design contract, route resolution, render payload, SEO discovery, media, collection, commerce, reusable-section, blog taxonomy, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
+Manifest responses expose site-settings-backed locale discovery through `data.delivery` and per-locale router expansions through `data.modules.routing.localizedRoutePatterns`, so custom frontends can honor Backy's `none`, `path-prefix`, or `domain` locale strategy before calling `resolve()`/`render()`. The convenience SDK exports `BackyLocaleStrategy`, narrows `BackyManifestDeliveryDiscovery.localeStrategy` to those documented routing modes, and types `BackyManifestRoutePattern`, `BackyManifestRouteFrontendDesign`, `BackyManifestLocalizedRoutePatternGroup`, `BackyManifestRedirectRule`, `BackyManifestRoutingModule`, `BackyManifestPageResource`, `BackyManifestPostResource`, `BackyManifestBlogModule`, `BackyManifestBlogCategory`, `BackyManifestBlogTag`, `BackyManifestBlogAuthor`, `BackyManifestCollectionSchema`, `BackyManifestReusableSection`, `BackyManifestReusableSectionsModule`, `BackyManifestFormDefinition`, and `BackyManifestMediaModule` for locale-aware router, redirect, route-template, blog archive/feed, dynamic collection, reusable-block, public form, and media discovery setup.
 The default return types expose Backy contract shapes such as `BackyFrontendDesignContract`, `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyFontManifest`, `BackyCollectionRecord`, `BackyBlogCategory`, `BackyBlogTag`, `BackyBlogAuthor`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
+Schema-derived public contract types are generated from `specs/ai-frontend-contract/*.schema.json` into `src/generated-contract-types.ts` before SDK build/typecheck. The generator also reads the live public OpenAPI route source to export `GeneratedBackyOpenApiOperationId`, `GeneratedBackyOpenApiComponentName`, per-component `GeneratedBackyOpenApi*` schema shapes, dedicated route resource/route-resolution types, typed navigation/SEO/page/blog/font/frontend-design schemas, typed media asset/reference/editable-metadata schemas, typed collection field/permission/record schemas, typed form list/detail/definition/submission/validation/contact schemas, typed comment/moderation/report/blocklist schemas, typed interaction-event/runtime-record schemas, typed commerce catalog/order/webhook schemas, reusable-section content/document schemas, generated render-payload media/font/form/comment/navigation/frontend-design subtypes, generated content action/data-binding/editable-map subtypes, and dedicated interactive registry/runtime request types for the advertised operation/component inventory. Consumers can import generated shapes such as `GeneratedBackyFrontendManifest`, `GeneratedBackyFrontendManifestNavigationItem`, `GeneratedBackyPublicRenderPayload`, `GeneratedBackyThemeTokens`, `GeneratedBackyContentElement`, `GeneratedBackyContentStatus`, `GeneratedBackyRenderMediaAsset`, `GeneratedBackyRenderNavigationItem`, `GeneratedBackyRenderFrontendDesign`, `GeneratedBackyFrontendDesignContract`, `GeneratedBackyElementAction`, `GeneratedBackyDataBinding`, `GeneratedBackyEditableMap`, `GeneratedBackyOpenApiDocument`, `GeneratedBackyOpenApiRouteResolveEnvelope`, `GeneratedBackyOpenApiGoneRouteResolveEnvelope`, `GeneratedBackyOpenApiPageRouteResource`, `GeneratedBackyOpenApiDynamicItemRouteResource`, `GeneratedBackyOpenApiNavigationEnvelope`, `GeneratedBackyOpenApiSeoDiscoveryEnvelope`, `GeneratedBackyOpenApiPageEnvelope`, `GeneratedBackyOpenApiBlogPostEnvelope`, `GeneratedBackyOpenApiFontManifestEnvelope`, `GeneratedBackyOpenApiFrontendDesignEnvelope`, `GeneratedBackyOpenApiMediaAsset`, `GeneratedBackyOpenApiMediaReferences`, `GeneratedBackyOpenApiCollectionFieldSchema`, `GeneratedBackyOpenApiCollectionSchema`, `GeneratedBackyOpenApiCollectionRecordEnvelope`, `GeneratedBackyOpenApiFormListEnvelope`, `GeneratedBackyOpenApiFormDefinitionEnvelope`, `GeneratedBackyOpenApiFormSubmissionValidationErrorEnvelope`, `GeneratedBackyOpenApiCommentBlocklistDeleteRequest`, `GeneratedBackyOpenApiCommentReportEnvelope`, `GeneratedBackyOpenApiEventsEnvelope`, `GeneratedBackyOpenApiRuntimeEventRecordEnvelope`, `GeneratedBackyOpenApiCommerceProduct`, `GeneratedBackyOpenApiCommerceOrderEnvelope`, `GeneratedBackyOpenApiBackyContentDocument`, `GeneratedBackyOpenApiBackyReusableSectionContent`, `GeneratedBackyOpenApiInteractiveComponentRegistryEnvelope`, and `GeneratedBackyOpenApiInteractiveRuntimeEventRequest` when they need the strict schema contract rather than the more permissive convenience SDK interfaces.
 `submitForm()` accepts field values under `values`, `fields`, `data`, `submission`, or direct field keys for custom frontend compatibility. Validation failures throw `BackyApiError` with `code === "VALIDATION_ERROR"` and a `validation` array of `{ field, code, message, label? }` details.
 
 ## Local validation
 
 ```sh
+npm run generate:types --workspace @backy/sdk-js
 npm run build --workspace @backy/sdk-js
+npm run test:generated-types --workspace @backy/sdk-js
 npm run test:smoke --workspace @backy/sdk-js
+npm run ci:sdk-postgres-smoke
 ```
 
 `test:smoke` expects a running Backy public app at `http://localhost:3001` unless `BACKY_SDK_BASE_URL` is set.
 By default it also creates and deletes a temporary site through the local admin API so it can verify SDK SEO/reusable-section reads and public writes for collection records, forms, contacts, comments, reports, and events. Set `BACKY_SDK_SKIP_WRITE_SMOKE=1` to run the read-only smoke against an environment where admin fixture setup is unavailable.
+`ci:sdk-postgres-smoke` runs the same SDK typecheck/build/server/smoke flow with `BACKY_DATA_MODE=database`; it requires `BACKY_DATABASE_URL` or `DATABASE_URL` pointing at a disposable migrated Supabase/Postgres database. The manual `SDK Postgres Smoke` GitHub Actions workflow runs this gate with the `BACKY_DATABASE_URL` repository secret and an ephemeral admin API key.

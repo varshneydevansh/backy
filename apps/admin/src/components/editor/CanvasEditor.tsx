@@ -85,7 +85,9 @@ import { listMedia } from '@/lib/mediaApi';
 import {
   createReusableSection,
   deleteReusableSection,
+  getInteractiveComponentRegistry,
   listReusableSections,
+  type InteractiveComponentRegistryEntry,
   type ReusableSection,
   updateReusableSection,
 } from '@/lib/adminContentApi';
@@ -122,6 +124,8 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'quote',
   'repeater',
   'comment',
+  'interactiveFigure',
+  'codeComponent',
 ];
 
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
@@ -300,6 +304,130 @@ const normalizeResponsiveFieldValue = (
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const INTERACTIVE_ELEMENT_TYPES = new Set<CanvasElement['type']>(['interactiveFigure', 'codeComponent']);
+
+const getNonEmptyString = (value: unknown): string | null => (
+  typeof value === 'string' && value.trim() ? value.trim() : null
+);
+
+const hasInteractiveFallback = (props: Record<string, unknown>): boolean => {
+  if (getNonEmptyString(props.fallbackText)) {
+    return true;
+  }
+
+  const fallback = props.fallback;
+  if (getNonEmptyString(fallback)) {
+    return true;
+  }
+
+  if (!isPlainRecord(fallback)) {
+    return false;
+  }
+
+  return Boolean(
+    getNonEmptyString(fallback.title) ||
+    getNonEmptyString(fallback.text) ||
+    getNonEmptyString(fallback.html) ||
+    getNonEmptyString(fallback.imageUrl) ||
+    getNonEmptyString(fallback.src),
+  );
+};
+
+const getInteractiveHydrationMode = (props: Record<string, unknown>): string | null => {
+  const renderCapabilities = isPlainRecord(props.renderCapabilities) ? props.renderCapabilities : null;
+  return getNonEmptyString(renderCapabilities?.hydrationMode) || getNonEmptyString(props.hydrationMode);
+};
+
+const getInteractiveSandboxUrl = (props: Record<string, unknown>): string | null => (
+  getNonEmptyString(props.sandboxUrl) ||
+  getNonEmptyString(props.iframeUrl) ||
+  getNonEmptyString(props.url) ||
+  getNonEmptyString(props.src)
+);
+
+const decodeSandboxPathSegment = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const isPublishSafeSandboxUrl = (value: string, componentKey: string | null, version: string | null): boolean => {
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (!trimmed || lower.startsWith('//')) {
+    return false;
+  }
+
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('file:') ||
+    lower.startsWith('vbscript:')
+  ) {
+    return false;
+  }
+
+  const match = trimmed.match(/^\/api\/sites\/[^/?#]+\/interactive-components\/([^/?#]+)\/([^/?#]+)\/sandbox(?:[?#].*)?$/);
+  if (!match) {
+    return false;
+  }
+
+  const [, routeComponentKey, routeVersion] = match.map(decodeSandboxPathSegment);
+  return (!componentKey || routeComponentKey === componentKey) && (!version || routeVersion === version);
+};
+
+export const collectInteractiveReadinessIssues = (elements: CanvasElement[]): string[] => {
+  const issues: string[] = [];
+
+  const walk = (items: CanvasElement[]) => {
+    items.forEach((element) => {
+      if (INTERACTIVE_ELEMENT_TYPES.has(element.type)) {
+        const label = element.name || element.id || element.type;
+        const props = isPlainRecord(element.props) ? element.props : {};
+        const componentKey = getNonEmptyString(props.componentKey);
+        const version = getNonEmptyString(props.version);
+        const hydrationMode = getInteractiveHydrationMode(props);
+
+        if (!componentKey) {
+          issues.push(`${label}: choose a registry component key.`);
+        }
+
+        if (!version) {
+          issues.push(`${label}: pin the interactive component version before publishing.`);
+        }
+
+        if (!hydrationMode) {
+          issues.push(`${label}: choose a hydration mode.`);
+        }
+
+        if (!hasInteractiveFallback(props)) {
+          issues.push(`${label}: add crawlable fallback text, HTML, or an image.`);
+        }
+
+        if (element.type === 'codeComponent') {
+          const sandboxUrl = getInteractiveSandboxUrl(props);
+          if (!sandboxUrl) {
+            issues.push(`${label}: choose a sandbox runtime URL from the component registry.`);
+          } else if (!isPublishSafeSandboxUrl(sandboxUrl, componentKey, version)) {
+            issues.push(`${label}: use the Backy /api/sites/:siteId/interactive-components/:componentKey/:version/sandbox URL that matches this component key and version.`);
+          }
+        }
+      }
+
+      if (element.children?.length) {
+        walk(element.children);
+      }
+    });
+  };
+
+  walk(elements);
+  return issues;
+};
 
 const jsonEqual = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
@@ -763,6 +891,7 @@ export interface CanvasEditorProps {
   collectionsViewDisabledReason?: string;
   reusableDeleteDisabledReason?: string;
   onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
+  onInteractiveReadinessIssuesChange?: (issues: string[]) => void;
 }
 
 const normalizeTypeToken = (value: string): string => {
@@ -890,6 +1019,7 @@ export function CanvasEditor({
   collectionsViewDisabledReason,
   reusableDeleteDisabledReason,
   onUnsavedChangesChange,
+  onInteractiveReadinessIssuesChange,
 }: CanvasEditorProps) {
   const media = useStore((state) => state.media);
   const setMedia = useStore((state) => state.setMedia);
@@ -898,6 +1028,9 @@ export function CanvasEditor({
   const [reusableSections, setReusableSections] = useState<ReusableSection[]>([]);
   const [reusableSectionsLoading, setReusableSectionsLoading] = useState(false);
   const [reusableSectionsError, setReusableSectionsError] = useState<string | null>(null);
+  const [interactiveComponents, setInteractiveComponents] = useState<InteractiveComponentRegistryEntry[]>([]);
+  const [interactiveComponentsLoading, setInteractiveComponentsLoading] = useState(false);
+  const [interactiveComponentsError, setInteractiveComponentsError] = useState<string | null>(null);
   const [isSavingReusableSection, setIsSavingReusableSection] = useState(false);
   const [pendingDeleteReusableSection, setPendingDeleteReusableSection] = useState<ReusableSection | null>(null);
   const [reusableSectionDraft, setReusableSectionDraft] = useState<{
@@ -1025,6 +1158,15 @@ export function CanvasEditor({
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pageSettings, setPageSettings] = useState<PageSettings>(initialSettings);
+  const interactiveReadinessIssues = useMemo(
+    () => collectInteractiveReadinessIssues(elements),
+    [elements],
+  );
+  const interactivePublishDisabledReason = interactiveReadinessIssues.length > 0
+    ? `Resolve interactive block readiness before publishing: ${interactiveReadinessIssues[0]}`
+    : null;
+  const effectivePublishDisabled = publishDisabled || interactiveReadinessIssues.length > 0;
+  const effectivePublishDisabledReason = publishDisabledReason || interactivePublishDisabledReason;
 
   // Clipboard State
   const [clipboardElements, setClipboardElements] = useState<CanvasElement[]>([]);
@@ -1504,6 +1646,29 @@ export function CanvasEditor({
     void loadReusableSections();
   }, [loadReusableSections]);
 
+  const loadInteractiveComponents = useCallback(async () => {
+    if (!activeSiteId || !canView) {
+      setInteractiveComponents([]);
+      setInteractiveComponentsError(null);
+      return;
+    }
+
+    setInteractiveComponentsLoading(true);
+    setInteractiveComponentsError(null);
+    try {
+      const registry = await getInteractiveComponentRegistry(activeSiteId);
+      setInteractiveComponents(registry.components);
+    } catch (error) {
+      setInteractiveComponentsError(error instanceof Error ? error.message : 'Unable to load interactive components');
+    } finally {
+      setInteractiveComponentsLoading(false);
+    }
+  }, [activeSiteId, canView]);
+
+  useEffect(() => {
+    void loadInteractiveComponents();
+  }, [loadInteractiveComponents]);
+
   const updateElementById = (
     items: CanvasElement[],
     targetId: string,
@@ -1762,6 +1927,10 @@ export function CanvasEditor({
   useEffect(() => {
     onUnsavedChangesChange?.(hasUnsavedChanges);
   }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
+  useEffect(() => {
+    onInteractiveReadinessIssuesChange?.(interactiveReadinessIssues);
+  }, [interactiveReadinessIssues, onInteractiveReadinessIssuesChange]);
 
   useEffect(() => {
     if (!isParentPersistence || saveOwnerVersionRef.current === saveOwnerVersion) {
@@ -3757,6 +3926,10 @@ export function CanvasEditor({
       setEditorNotice(message);
       throw new Error(message);
     }
+    if ((newSettings.status === 'published' || newSettings.status === 'scheduled') && interactivePublishDisabledReason) {
+      setEditorNotice(interactivePublishDisabledReason);
+      throw new Error(interactivePublishDisabledReason);
+    }
 
     const previousChangeSequence = changeSequenceRef.current;
     const previousPendingChangeCount = pendingChangeCount;
@@ -3780,6 +3953,7 @@ export function CanvasEditor({
     editDisabledReason,
     handleSaveWrapper,
     hasUnsavedChanges,
+    interactivePublishDisabledReason,
     markChanges,
     pageSettings.status,
     pendingChangeCount,
@@ -3798,8 +3972,8 @@ export function CanvasEditor({
       setEditorNotice(publishDisabledReason || 'You do not have permission to change this page publication status.');
       return;
     }
-    if (nextStatus === 'published' && publishDisabled) {
-      setEditorNotice(publishDisabledReason || 'Resolve page readiness issues before publishing.');
+    if (nextStatus === 'published' && effectivePublishDisabled) {
+      setEditorNotice(effectivePublishDisabledReason || 'Resolve page readiness issues before publishing.');
       return;
     }
 
@@ -3814,7 +3988,7 @@ export function CanvasEditor({
       setPageSettings(previousSettings);
       setHasUnsavedChanges(wasDirty);
     }
-  }, [canEdit, canPublish, editDisabledReason, handleSaveWrapper, hasUnsavedChanges, pageSettings, markChanges, publishDisabled, publishDisabledReason]);
+  }, [canEdit, canPublish, editDisabledReason, effectivePublishDisabled, effectivePublishDisabledReason, handleSaveWrapper, hasUnsavedChanges, pageSettings, markChanges]);
 
   const performReload = useCallback(() => {
     const nextElements = getInitialElements();
@@ -4759,13 +4933,13 @@ export function CanvasEditor({
                   <button
                     type="button"
                     onClick={handleTogglePublish}
-                    disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && publishDisabled)}
+                    disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && effectivePublishDisabled)}
                     className={cn(
                       'px-2 py-1.5 rounded-md text-sm font-medium',
                       pageSettings.status === 'published'
                         ? 'bg-amber-500 text-white hover:bg-amber-500/90'
                         : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
-                      isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && publishDisabled)
+                      isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && effectivePublishDisabled)
                         ? 'opacity-70 cursor-not-allowed'
                         : '',
                     )}
@@ -4776,8 +4950,8 @@ export function CanvasEditor({
                           ? publishDisabledReason || 'You do not have permission to change this page publication status'
                           : pageSettings.status === 'published'
                             ? 'Set page back to draft'
-                            : publishDisabled
-                              ? publishDisabledReason || 'Resolve page readiness issues before publishing'
+                            : effectivePublishDisabled
+                              ? effectivePublishDisabledReason || 'Resolve page readiness issues before publishing'
                               : 'Publish page'
                     }
                     aria-label={
@@ -4785,8 +4959,8 @@ export function CanvasEditor({
                         ? publishDisabledReason || 'Publication status disabled'
                         : pageSettings.status === 'published'
                           ? 'Unpublish page'
-                          : publishDisabled
-                            ? publishDisabledReason || 'Publish disabled'
+                          : effectivePublishDisabled
+                            ? effectivePublishDisabledReason || 'Publish disabled'
                             : 'Publish page'
                     }
                   >
@@ -5400,6 +5574,9 @@ export function CanvasEditor({
                     mediaViewDisabledReason={mediaViewDisabledReason}
                     mediaCreateDisabledReason={mediaCreateDisabledReason}
                     collectionsViewDisabledReason={collectionsViewDisabledReason}
+                    interactiveComponents={interactiveComponents}
+                    interactiveComponentsLoading={interactiveComponentsLoading}
+                    interactiveComponentsError={interactiveComponentsError}
                     embedded
                     hideHeader
                   />
@@ -5579,7 +5756,7 @@ export function CanvasEditor({
           canViewMedia={canViewMedia}
           canCreateMedia={canCreateMedia}
           editDisabledReason={editDisabledReason}
-          publishDisabledReason={publishDisabledReason}
+          publishDisabledReason={effectivePublishDisabledReason || undefined}
           mediaViewDisabledReason={mediaViewDisabledReason}
           mediaCreateDisabledReason={mediaCreateDisabledReason}
         />

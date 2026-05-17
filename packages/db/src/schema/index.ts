@@ -76,7 +76,11 @@ export const profiles = pgTable('profiles', {
 
     /** Last update timestamp */
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    emailIdx: uniqueIndex('profiles_email_idx').on(table.email),
+    roleStatusUpdatedIdx: index('profiles_role_status_updated_idx').on(table.role, table.status, table.updatedAt),
+    statusUpdatedIdx: index('profiles_status_updated_idx').on(table.status, table.updatedAt),
+}));
 
 /**
  * Local admin password credentials.
@@ -111,7 +115,10 @@ export const teams = pgTable('teams', {
     ownerId: uuid('owner_id').references(() => profiles.id),
     settings: jsonb('settings').default({}).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    ownerCreatedIdx: index('teams_owner_created_idx').on(table.ownerId, table.createdAt),
+    createdIdx: index('teams_created_idx').on(table.createdAt),
+}));
 
 /**
  * Team members junction table
@@ -126,7 +133,11 @@ export const teamMembers = pgTable('team_members', {
         .notNull(),
     role: text('role').$type<UserRole>().default('editor').notNull(),
     joinedAt: timestamp('joined_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    teamUserIdx: uniqueIndex('team_members_team_user_idx').on(table.teamId, table.userId),
+    teamRoleJoinedIdx: index('team_members_team_role_joined_idx').on(table.teamId, table.role, table.joinedAt),
+    userJoinedIdx: index('team_members_user_joined_idx').on(table.userId, table.joinedAt),
+}));
 
 // ==========================================================================
 // SITES - Main content container
@@ -225,7 +236,11 @@ export const pages = pgTable('pages', {
     updatedBy: uuid('updated_by').references(() => profiles.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteSlugIdx: uniqueIndex('pages_site_slug_idx').on(table.siteId, table.slug),
+    siteStatusUpdatedIdx: index('pages_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
+    siteHomepageIdx: index('pages_site_homepage_idx').on(table.siteId, table.isHomepage),
+}));
 
 // ==========================================================================
 // BLOG - Posts, categories, tags
@@ -258,7 +273,11 @@ export const blogPosts = pgTable('blog_posts', {
 
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteSlugIdx: uniqueIndex('blog_posts_site_slug_idx').on(table.siteId, table.slug),
+    siteStatusUpdatedIdx: index('blog_posts_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
+    sitePublishedIdx: index('blog_posts_site_published_idx').on(table.siteId, table.publishedAt),
+}));
 
 /**
  * Blog categories
@@ -275,7 +294,10 @@ export const blogCategories = pgTable('blog_categories', {
     sortOrder: integer('sort_order').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteSlugIdx: uniqueIndex('blog_categories_site_slug_idx').on(table.siteId, table.slug),
+    siteSortIdx: index('blog_categories_site_sort_idx').on(table.siteId, table.sortOrder),
+}));
 
 /**
  * Blog tags
@@ -290,7 +312,10 @@ export const blogTags = pgTable('blog_tags', {
     description: text('description'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteSlugIdx: uniqueIndex('blog_tags_site_slug_idx').on(table.siteId, table.slug),
+    siteUpdatedIdx: index('blog_tags_site_updated_idx').on(table.siteId, table.updatedAt),
+}));
 
 // ==========================================================================
 // MEDIA - File storage references
@@ -431,7 +456,7 @@ export const contentCollectionRecords = pgTable('content_collection_records', {
         table.status,
         table.updatedAt,
     ),
-    siteCollectionSlugIdx: index('content_collection_records_site_collection_slug_idx').on(table.siteId, table.collectionId, table.slug),
+    siteCollectionSlugIdx: uniqueIndex('content_collection_records_site_collection_slug_idx').on(table.siteId, table.collectionId, table.slug),
     valuesGinIdx: index('idx_content_collection_records_values_gin').on(table.values).using(sql`gin`),
     publicUpdatedIdx: index('content_collection_records_public_updated_idx')
         .on(table.siteId, table.collectionId, table.updatedAt)
@@ -473,7 +498,11 @@ export const formDefinitions = pgTable('form_definitions', {
     updatedBy: uuid('updated_by').references(() => profiles.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteActiveUpdatedIdx: index('form_definitions_site_active_updated_idx').on(table.siteId, table.isActive, table.updatedAt),
+    sitePageUpdatedIdx: index('form_definitions_site_page_updated_idx').on(table.siteId, table.pageId, table.updatedAt),
+    sitePostUpdatedIdx: index('form_definitions_site_post_updated_idx').on(table.siteId, table.postId, table.updatedAt),
+}));
 
 /**
  * Form submissions - captured public interaction payloads.
@@ -500,7 +529,12 @@ export const formSubmissions = pgTable('form_submissions', {
     collectionRecordErrors: jsonb('collection_record_errors').default([]),
     submittedAt: timestamp('submitted_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteFormSubmittedIdx: index('form_submissions_site_form_submitted_idx').on(table.siteId, table.formId, table.submittedAt),
+    siteFormStatusSubmittedIdx: index('form_submissions_site_form_status_submitted_idx').on(table.siteId, table.formId, table.status, table.submittedAt),
+    siteRequestIdx: index('form_submissions_site_request_idx').on(table.siteId, table.requestId),
+    siteStatusUpdatedIdx: index('form_submissions_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
+}));
 
 /**
  * Form contacts - CRM-style leads derived from accepted submissions.
@@ -521,12 +555,17 @@ export const formContacts = pgTable('form_contacts', {
     notes: text('notes'),
     sourceValues: jsonb('source_values').default({}),
     status: text('status').default('new').notNull(),
-    sourceSubmissionId: uuid('source_submission_id'),
+    sourceSubmissionId: uuid('source_submission_id').references(() => formSubmissions.id, { onDelete: 'set null' }),
     requestId: text('request_id'),
     sourceIpHash: text('source_ip_hash'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteFormUpdatedIdx: index('form_contacts_site_form_updated_idx').on(table.siteId, table.formId, table.updatedAt),
+    siteFormStatusUpdatedIdx: index('form_contacts_site_form_status_updated_idx').on(table.siteId, table.formId, table.status, table.updatedAt),
+    siteRequestIdx: index('form_contacts_site_request_idx').on(table.siteId, table.requestId),
+    siteEmailIdx: index('form_contacts_site_email_idx').on(table.siteId, table.email),
+}));
 
 // ==========================================================================
 // PLATFORM SETTINGS - Runtime/admin configuration
@@ -570,7 +609,56 @@ export const reusableSections = pgTable('reusable_sections', {
     updatedBy: text('updated_by'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteSlugIdx: uniqueIndex('reusable_sections_site_slug_idx').on(table.siteId, table.slug),
+    siteStatusUpdatedIdx: index('reusable_sections_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
+    siteCategoryIdx: index('reusable_sections_site_category_idx').on(table.siteId, table.category),
+}));
+
+// ==========================================================================
+// INTERACTIVE COMPONENT REGISTRY - Versioned page/blog runtime components
+// ==========================================================================
+
+/**
+ * Interactive components - site-scoped trusted/custom component versions for
+ * interactive figures, calculators, simulations, and sandboxed code blocks.
+ */
+export const interactiveComponents = pgTable('interactive_components', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    componentKey: text('component_key').notNull(),
+    displayName: text('display_name').notNull(),
+    type: text('type').default('codeComponent').notNull(),
+    status: text('status').default('disabled').notNull(),
+    reviewStatus: text('review_status').default('draft').notNull(),
+    version: text('version').notNull(),
+    renderMode: text('render_mode').default('sandbox-iframe').notNull(),
+    source: text('source').default('custom').notNull(),
+    description: text('description').default('').notNull(),
+    allowedDataScopes: jsonb('allowed_data_scopes').default([]).notNull(),
+    requiredFields: jsonb('required_fields').default([]).notNull(),
+    controls: jsonb('controls').default([]).notNull(),
+    fallback: jsonb('fallback').default({ required: true, supported: [] }).notNull(),
+    security: jsonb('security').default({}).notNull(),
+    integrity: jsonb('integrity').default({ signed: false, signatureRequiredForCustomCode: true }).notNull(),
+    runtime: jsonb('runtime').default({}).notNull(),
+    ownerId: text('owner_id'),
+    dependencyMetadata: jsonb('dependency_metadata').default({}).notNull(),
+    changelog: text('changelog'),
+    rollbackFromVersion: text('rollback_from_version'),
+    createdBy: text('created_by'),
+    updatedBy: text('updated_by'),
+    reviewedBy: text('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    siteKeyVersionIdx: uniqueIndex('interactive_components_site_key_version_idx').on(table.siteId, table.componentKey, table.version),
+    siteStatusIdx: index('interactive_components_site_status_idx').on(table.siteId, table.status),
+    siteReviewStatusIdx: index('interactive_components_site_review_status_idx').on(table.siteId, table.reviewStatus),
+}));
 
 // ==========================================================================
 // CONTENT WORKFLOWS - Revisions and preview tokens
@@ -646,7 +734,12 @@ export const comments = pgTable('comments', {
 
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteTargetStatusIdx: index('comments_site_target_status_idx').on(table.siteId, table.targetType, table.targetId, table.status, table.createdAt),
+    siteThreadIdx: index('comments_site_thread_idx').on(table.siteId, table.commentThreadId),
+    siteStatusUpdatedIdx: index('comments_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
+    siteReportedIdx: index('comments_site_reported_idx').on(table.siteId, table.reportCount),
+}));
 
 /**
  * Comment blocklist entries - durable moderation blocks by email/IP hash.
@@ -662,7 +755,10 @@ export const commentBlocklist = pgTable('comment_blocklist', {
     actor: text('actor'),
     requestId: text('request_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteTypeValueIdx: uniqueIndex('comment_blocklist_site_type_value_idx').on(table.siteId, table.type, table.value),
+    siteCreatedIdx: index('comment_blocklist_site_created_idx').on(table.siteId, table.createdAt),
+}));
 
 // ==========================================================================
 // DOMAINS - Custom domain mapping
@@ -790,6 +886,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     forms: many(formDefinitions),
     comments: many(comments),
     reusableSections: many(reusableSections),
+    interactiveComponents: many(interactiveComponents),
     contentRevisions: many(contentRevisions),
     previewTokens: many(previewTokens),
     cacheInvalidationEvents: many(cacheInvalidationEvents),
@@ -910,6 +1007,13 @@ export const commentBlocklistRelations = relations(commentBlocklist, ({ one }) =
 export const reusableSectionsRelations = relations(reusableSections, ({ one }) => ({
     site: one(sites, {
         fields: [reusableSections.siteId],
+        references: [sites.id],
+    }),
+}));
+
+export const interactiveComponentsRelations = relations(interactiveComponents, ({ one }) => ({
+    site: one(sites, {
+        fields: [interactiveComponents.siteId],
         references: [sites.id],
     }),
 }));

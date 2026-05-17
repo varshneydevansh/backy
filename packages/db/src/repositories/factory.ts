@@ -7,6 +7,7 @@ import { createCollectionRepository } from './collections';
 import { createCommentRepository } from './comments';
 import { createContentWorkflowRepository } from './content-workflows';
 import { createFormRepository } from './forms';
+import { createInteractiveComponentRepository } from './interactive-components';
 import { createMediaRepository } from './media';
 import { createReusableSectionRepository } from './reusable-sections';
 import { createSettingsRepository } from './settings';
@@ -18,7 +19,7 @@ import {
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'teams' | 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs' | 'cacheInvalidations'>;
+type ImplementedBackyRepositories = Pick<BackyRepositories, 'teams' | 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'interactiveComponents' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs' | 'cacheInvalidations'>;
 
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
@@ -38,6 +39,7 @@ export function createDatabaseRepositories(
         forms: createFormRepository(input.adapter.db),
         comments: createCommentRepository(input.adapter.db),
         reusableSections: createReusableSectionRepository(input.adapter.db),
+        interactiveComponents: createInteractiveComponentRepository(input.adapter.db),
         contentWorkflows: createContentWorkflowRepository(input.adapter.db),
         users: createUserRepository(input.adapter.db),
         settings: createSettingsRepository(input.adapter.db),

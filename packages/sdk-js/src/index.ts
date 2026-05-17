@@ -1,7 +1,163 @@
 import type {
   BackyContentDocument as CoreBackyContentDocument,
   BackyContentElement,
-} from '@backy-cms/core/content-contract';
+} from "@backy-cms/core/content-contract";
+
+export type {
+  GeneratedBackyContentStatus,
+  GeneratedBackyContentElement,
+  GeneratedBackyDataBinding,
+  GeneratedBackyDataBindingDataset,
+  GeneratedBackyDataBindings,
+  GeneratedBackyEditableMap,
+  GeneratedBackyEditableMapEntry,
+  GeneratedBackyElementAction,
+  GeneratedBackyElementActions,
+  GeneratedBackyFrontendDesignContract,
+  GeneratedBackyFrontendDesignProvenance,
+  GeneratedBackyFrontendManifest,
+  GeneratedBackyFrontendManifestEnvelope,
+  GeneratedBackyFrontendManifestNavigationItem,
+  GeneratedBackyInteractiveControl,
+  GeneratedBackyInteractiveFallback,
+  GeneratedBackyInteractiveRenderCapabilities,
+  GeneratedBackyOpenApiBackyContentDocument,
+  GeneratedBackyOpenApiBackyContentAssetRef,
+  GeneratedBackyOpenApiBackyContentElement,
+  GeneratedBackyOpenApiBackyContentElementAccessibility,
+  GeneratedBackyOpenApiBackyDataBinding,
+  GeneratedBackyOpenApiBackyDataBindingSource,
+  GeneratedBackyOpenApiBackyEditableMapEntry,
+  GeneratedBackyOpenApiBackyElementAction,
+  GeneratedBackyOpenApiBackyReusableSectionContent,
+  GeneratedBackyOpenApiBlogAuthorListEnvelope,
+  GeneratedBackyOpenApiBlogAuthorResource,
+  GeneratedBackyOpenApiBlogCategoryListEnvelope,
+  GeneratedBackyOpenApiBlogCategoryResource,
+  GeneratedBackyOpenApiBlogFeedDiscovery,
+  GeneratedBackyOpenApiBlogPostEnvelope,
+  GeneratedBackyOpenApiBlogPostListEnvelope,
+  GeneratedBackyOpenApiBlogPostResource,
+  GeneratedBackyOpenApiBlogTagListEnvelope,
+  GeneratedBackyOpenApiBlogTagResource,
+  GeneratedBackyOpenApiComment,
+  GeneratedBackyOpenApiCommentBlocklistDeleteEnvelope,
+  GeneratedBackyOpenApiCommentBlocklistDeleteRequest,
+  GeneratedBackyOpenApiCommentBlocklistEntry,
+  GeneratedBackyOpenApiCommentBlocklistEnvelope,
+  GeneratedBackyOpenApiCommentBulkUpdateEnvelope,
+  GeneratedBackyOpenApiCommentBulkUpdateRequest,
+  GeneratedBackyOpenApiCommentEnvelope,
+  GeneratedBackyOpenApiCommentReportEnvelope,
+  GeneratedBackyOpenApiCommentReportReasonsEnvelope,
+  GeneratedBackyOpenApiCommentSubmitRequest,
+  GeneratedBackyOpenApiCommentUpdateRequest,
+  GeneratedBackyOpenApiCommentsEnvelope,
+  GeneratedBackyOpenApiCommerceCatalogEnvelope,
+  GeneratedBackyOpenApiCommerceOrderContractEnvelope,
+  GeneratedBackyOpenApiCommerceOrderCreateRequest,
+  GeneratedBackyOpenApiCommerceOrderEnvelope,
+  GeneratedBackyOpenApiCommerceProduct,
+  GeneratedBackyOpenApiCommerceProductDesign,
+  GeneratedBackyOpenApiCommerceWebhookEnvelope,
+  GeneratedBackyOpenApiCommerceWebhookRequest,
+  GeneratedBackyOpenApiCollectionFieldOption,
+  GeneratedBackyOpenApiCollectionFieldSchema,
+  GeneratedBackyOpenApiCollectionFieldValidation,
+  GeneratedBackyOpenApiCollectionPermissions,
+  GeneratedBackyOpenApiCollectionEnvelope,
+  GeneratedBackyOpenApiCollectionListEnvelope,
+  GeneratedBackyOpenApiCollectionRecord,
+  GeneratedBackyOpenApiCollectionRecordEnvelope,
+  GeneratedBackyOpenApiCollectionRecordListEnvelope,
+  GeneratedBackyOpenApiCollectionSchema,
+  GeneratedBackyOpenApiComponentName,
+  GeneratedBackyOpenApiComponents,
+  GeneratedBackyOpenApiDynamicItemRoute,
+  GeneratedBackyOpenApiDynamicItemRouteResource,
+  GeneratedBackyOpenApiDynamicListRoute,
+  GeneratedBackyOpenApiDynamicListRouteResource,
+  GeneratedBackyOpenApiErrorEnvelope,
+  GeneratedBackyOpenApiEventsEnvelope,
+  GeneratedBackyOpenApiFontManifestEnvelope,
+  GeneratedBackyOpenApiFontVariant,
+  GeneratedBackyOpenApiFormCollectionRecordError,
+  GeneratedBackyOpenApiFormCollectionRecordLink,
+  GeneratedBackyOpenApiFormContact,
+  GeneratedBackyOpenApiFormContactEnvelope,
+  GeneratedBackyOpenApiFormContactsEnvelope,
+  GeneratedBackyOpenApiFormDefinition,
+  GeneratedBackyOpenApiFormDefinitionEnvelope,
+  GeneratedBackyOpenApiFormEnvelope,
+  GeneratedBackyOpenApiFormFieldDefinition,
+  GeneratedBackyOpenApiFormListEnvelope,
+  GeneratedBackyOpenApiFormSubmission,
+  GeneratedBackyOpenApiFormSubmissionEnvelope,
+  GeneratedBackyOpenApiFormSubmissionRequest,
+  GeneratedBackyOpenApiFormSubmissionValidationDetail,
+  GeneratedBackyOpenApiFormSubmissionValidationErrorEnvelope,
+  GeneratedBackyOpenApiFormSubmissionsEnvelope,
+  GeneratedBackyOpenApiFormValidationRule,
+  GeneratedBackyOpenApiFrontendDesignContract,
+  GeneratedBackyOpenApiFrontendDesignEnvelope,
+  GeneratedBackyOpenApiFrontendDesignTemplate,
+  GeneratedBackyOpenApiFrontendEditableMapEntry,
+  GeneratedBackyOpenApiGoneRoute,
+  GeneratedBackyOpenApiGoneRouteResolveEnvelope,
+  GeneratedBackyOpenApiInteractiveComponentControl,
+  GeneratedBackyOpenApiInteractiveComponentFallback,
+  GeneratedBackyOpenApiInteractiveComponentIntegrity,
+  GeneratedBackyOpenApiInteractiveComponentManifestContract,
+  GeneratedBackyOpenApiInteractiveComponentRegistry,
+  GeneratedBackyOpenApiInteractiveComponentRegistryEnvelope,
+  GeneratedBackyOpenApiInteractiveComponentRegistryEntry,
+  GeneratedBackyOpenApiInteractiveComponentRegistryPagination,
+  GeneratedBackyOpenApiInteractiveComponentRuntime,
+  GeneratedBackyOpenApiInteractiveComponentSecurity,
+  GeneratedBackyOpenApiInteractiveRuntimeEventRequest,
+  GeneratedBackyOpenApiMediaAsset,
+  GeneratedBackyOpenApiMediaDetailEnvelope,
+  GeneratedBackyOpenApiMediaEditableMetadata,
+  GeneratedBackyOpenApiMediaList,
+  GeneratedBackyOpenApiMediaReferenceTarget,
+  GeneratedBackyOpenApiMediaReferences,
+  GeneratedBackyOpenApiNavigationEnvelope,
+  GeneratedBackyOpenApiDocument,
+  GeneratedBackyOpenApiOperation,
+  GeneratedBackyOpenApiOperationId,
+  GeneratedBackyOpenApiPageEnvelope,
+  GeneratedBackyOpenApiPageListEnvelope,
+  GeneratedBackyOpenApiPageRoute,
+  GeneratedBackyOpenApiPageResource,
+  GeneratedBackyOpenApiPageRouteResource,
+  GeneratedBackyOpenApiPageSeoMetadata,
+  GeneratedBackyOpenApiPostRoute,
+  GeneratedBackyOpenApiPostRouteResource,
+  GeneratedBackyOpenApiPublicDeleteEnvelope,
+  GeneratedBackyOpenApiRedirectRoute,
+  GeneratedBackyOpenApiResolvedRoute,
+  GeneratedBackyOpenApiRouteResolveEnvelope,
+  GeneratedBackyOpenApiRuntimeEventRecordEnvelope,
+  GeneratedBackyOpenApiReusableSection,
+  GeneratedBackyOpenApiReusableSectionEnvelope,
+  GeneratedBackyOpenApiReusableSectionFrontendDesign,
+  GeneratedBackyOpenApiReusableSectionListEnvelope,
+  GeneratedBackyOpenApiSeoDiscoveryEnvelope,
+  GeneratedBackyOpenApiSeoRoute,
+  GeneratedBackyOpenApiSiteWebhookPayload,
+  GeneratedBackyRenderCommentThread,
+  GeneratedBackyRenderFontAsset,
+  GeneratedBackyRenderForm,
+  GeneratedBackyRenderFrontendDesign,
+  GeneratedBackyRenderMediaAsset,
+  GeneratedBackyRenderNavigationItem,
+  GeneratedBackyRenderNavigationLayout,
+  GeneratedBackyPublicRenderPayload,
+  GeneratedBackyPublicRenderPayloadEnvelope,
+  GeneratedBackyThemeTokenContract,
+  GeneratedBackyThemeTokens,
+} from "./generated-contract-types";
+export { generatedBackyContractTypeSources } from "./generated-contract-types";
 
 export interface BackyClientOptions {
   baseUrl: string;
@@ -94,22 +250,31 @@ export const BACKY_MAX_LIST_LIMIT = 100;
 
 type BackyQueryValue = string | number | boolean | undefined;
 
-function normalizeListNumber(value: string | number | undefined): number | undefined {
-  if (typeof value === 'string' && value.trim() !== '') {
+function normalizeListNumber(
+  value: string | number | undefined,
+): number | undefined {
+  if (typeof value === "string" && value.trim() !== "") {
     return Number(value);
   }
-  return typeof value === 'number' ? value : undefined;
+  return typeof value === "number" ? value : undefined;
 }
 
-function normalizeListLimit(limit: string | number | undefined): number | undefined {
+function normalizeListLimit(
+  limit: string | number | undefined,
+): number | undefined {
   const normalizedLimit = normalizeListNumber(limit);
   if (normalizedLimit === undefined || !Number.isFinite(normalizedLimit)) {
     return undefined;
   }
-  return Math.min(BACKY_MAX_LIST_LIMIT, Math.max(1, Math.trunc(normalizedLimit)));
+  return Math.min(
+    BACKY_MAX_LIST_LIMIT,
+    Math.max(1, Math.trunc(normalizedLimit)),
+  );
 }
 
-function normalizeListOffset(offset: string | number | undefined): number | undefined {
+function normalizeListOffset(
+  offset: string | number | undefined,
+): number | undefined {
   const normalizedOffset = normalizeListNumber(offset);
   if (normalizedOffset === undefined || !Number.isFinite(normalizedOffset)) {
     return undefined;
@@ -118,7 +283,7 @@ function normalizeListOffset(offset: string | number | undefined): number | unde
 }
 
 function normalizeListQuery<TOptions extends BackyListOptions>(
-  options: Omit<TOptions, 'requestId'>,
+  options: Omit<TOptions, "requestId">,
 ): Record<string, BackyQueryValue> {
   return {
     ...options,
@@ -143,7 +308,7 @@ export interface BackyThemeTokens {
 }
 
 export interface BackyFrontendDesignSource {
-  type: 'managed-site' | 'custom-frontend' | 'manual' | string;
+  type: "managed-site" | "custom-frontend" | "manual" | string;
   label?: string;
   url?: string;
   repository?: string;
@@ -154,7 +319,14 @@ export interface BackyFrontendDesignSource {
 
 export interface BackyFrontendDesignTemplate {
   id: string;
-  type: 'page' | 'blogPost' | 'form' | 'product' | 'collection' | 'section' | string;
+  type:
+    | "page"
+    | "blogPost"
+    | "form"
+    | "product"
+    | "collection"
+    | "section"
+    | string;
   name: string;
   routePattern?: string;
   description?: string;
@@ -178,8 +350,8 @@ export interface BackyFrontendEditableMapEntry {
 }
 
 export interface BackyFrontendDesignContract {
-  schemaVersion: 'backy.frontend-design.v1' | string;
-  status: 'unconfigured' | 'captured' | 'synced' | 'stale' | string;
+  schemaVersion: "backy.frontend-design.v1" | string;
+  status: "unconfigured" | "captured" | "synced" | "stale" | string;
   source: BackyFrontendDesignSource;
   tokens?: BackyThemeTokens & {
     customCss?: string;
@@ -214,7 +386,7 @@ export interface BackySiteSummary {
 }
 
 export interface BackyFrontendDesignResponse {
-  schemaVersion: 'backy.frontend-design-response.v1' | string;
+  schemaVersion: "backy.frontend-design-response.v1" | string;
   site: BackySiteSummary;
   frontendDesign: BackyFrontendDesignContract;
   capabilities: {
@@ -231,23 +403,69 @@ export interface BackyFrontendDesignResponse {
 
 export interface BackyNavigationItem {
   id?: string;
-  type?: 'page' | 'route' | 'url' | string;
+  type?: "page" | "route" | "url" | string;
   pageId?: string;
   label?: string;
   title?: string;
   path?: string;
   href?: string;
-  target?: '_self' | '_blank' | string;
+  target?: "_self" | "_blank" | string;
   children?: BackyNavigationItem[];
   [key: string]: unknown;
 }
 
-export type BackyElement = BackyContentElement & Record<string, unknown>;
-export type BackyContentDocument = CoreBackyContentDocument & Record<string, unknown>;
+export interface BackyInteractiveControl {
+  key: string;
+  label?: string;
+  type: string;
+  value?: unknown;
+  defaultValue?: unknown;
+  options?: unknown[];
+  min?: number;
+  max?: number;
+  step?: number;
+  required?: boolean;
+  [key: string]: unknown;
+}
+
+export interface BackyInteractiveFallback {
+  title?: string;
+  text?: string;
+  html?: string;
+  imageUrl?: string;
+  alt?: string;
+  ariaLabel?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyInteractiveRenderCapabilities {
+  hydrationMode:
+    | "trusted-component"
+    | "sandbox-iframe"
+    | "static-fallback"
+    | string;
+  requiresSandbox?: boolean;
+  requiresSignedBundle?: boolean;
+  fallbackRequired?: boolean;
+  allowedPermissions?: string[];
+  allowedConnectSrc?: string[];
+  postMessageProtocol?: string;
+  [key: string]: unknown;
+}
+
+export type BackyElement = BackyContentElement & {
+  componentKey?: string;
+  version?: string;
+  controls?: BackyInteractiveControl[];
+  fallback?: string | BackyInteractiveFallback;
+  renderCapabilities?: BackyInteractiveRenderCapabilities;
+} & Record<string, unknown>;
+export type BackyContentDocument = CoreBackyContentDocument &
+  Record<string, unknown>;
 
 export interface BackyMediaAsset {
   id: string;
-  type: 'image' | 'video' | 'audio' | 'document' | 'font' | string;
+  type: "image" | "video" | "audio" | "document" | "font" | "other" | string;
   url?: string;
   deliveryUrl?: string;
   downloadUrl?: string;
@@ -275,7 +493,7 @@ export interface BackyMediaAsset {
     storageProvider?: string;
   };
   references?: {
-    schemaVersion: 'backy.media.references.v1' | string;
+    schemaVersion: "backy.media.references.v1" | string;
     global: boolean;
     scoped: boolean;
     scopes: string[];
@@ -302,7 +520,7 @@ export interface BackyMediaAsset {
     scoped: boolean;
   };
   editableMetadata?: {
-    schemaVersion: 'backy.media.editable-metadata.v1' | string;
+    schemaVersion: "backy.media.editable-metadata.v1" | string;
     title: string | null;
     altText: string | null;
     caption: string | null;
@@ -357,7 +575,7 @@ export interface BackyFontFamily {
 }
 
 export interface BackyFontManifest {
-  schemaVersion: 'backy.font-manifest.v1';
+  schemaVersion: "backy.font-manifest.v1";
   generatedAt?: string;
   siteId: string;
   families: BackyFontFamily[];
@@ -402,7 +620,9 @@ export interface BackyCollectionSchema {
   [key: string]: unknown;
 }
 
-export interface BackyCollectionRecord<TValues extends Record<string, unknown> = Record<string, unknown>> {
+export interface BackyCollectionRecord<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> {
   id: string;
   slug: string;
   status?: string;
@@ -414,9 +634,9 @@ export interface BackyCollectionRecord<TValues extends Record<string, unknown> =
 }
 
 export interface BackyCollectionRecordWritePolicy {
-  createFieldMode?: 'all' | 'selected' | string;
+  createFieldMode?: "all" | "selected" | string;
   allowedCreateFields?: string[];
-  updateFieldMode?: 'all' | 'selected' | string;
+  updateFieldMode?: "all" | "selected" | string;
   allowedUpdateFields?: string[];
   ignoredFields?: string[];
   [key: string]: unknown;
@@ -432,7 +652,9 @@ export interface BackyCollectionRecordCreateOptions extends BackyCollectionRecor
   slug?: string;
 }
 
-export interface BackyCollectionRecordMutationResult<TValues extends Record<string, unknown> = Record<string, unknown>> {
+export interface BackyCollectionRecordMutationResult<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> {
   record: BackyCollectionRecord<TValues>;
   visitorWritePolicy?: BackyCollectionRecordWritePolicy;
 }
@@ -463,6 +685,23 @@ export interface BackyCommerceProductDesign {
   [key: string]: unknown;
 }
 
+export interface BackyManifestCollectionSchema extends BackyCollectionSchema {
+  id: string;
+  slug: string;
+  name: string;
+  fields: BackyFieldSchema[];
+  recordsUrl: string;
+  listRoutePattern?: string;
+  dynamicListRoutePattern: string;
+  dynamicListRouteResolveUrl?: string;
+  dynamicListRouteRenderUrl?: string;
+  routePattern?: string;
+  dynamicRoutePattern: string;
+  dynamicRouteResolveUrl?: string;
+  dynamicRouteRenderUrl?: string;
+  frontendDesign?: BackyManifestRouteFrontendDesign;
+}
+
 export interface BackyCommerceProduct {
   id: string;
   slug: string;
@@ -479,13 +718,13 @@ export interface BackyCommerceProduct {
   tags?: string[];
   vendor?: string;
   featured?: boolean;
-  productType?: 'physical' | 'digital' | 'service' | string;
+  productType?: "physical" | "digital" | "service" | string;
   inventory?: Record<string, unknown>;
   delivery?: Record<string, unknown>;
   checkout?: Record<string, unknown>;
   subscription?: {
     enabled: boolean;
-    interval: 'weekly' | 'monthly' | 'quarterly' | 'yearly' | string;
+    interval: "weekly" | "monthly" | "quarterly" | "yearly" | string;
     trialDays: number;
     [key: string]: unknown;
   };
@@ -501,10 +740,10 @@ export interface BackyCommerceCatalogOptions extends BackyListOptions {
   category?: string;
   tag?: string;
   vendor?: string;
-  productType?: 'physical' | 'digital' | 'service' | string;
+  productType?: "physical" | "digital" | "service" | string;
   featured?: boolean;
   sortBy?: string;
-  sortDirection?: 'asc' | 'desc';
+  sortDirection?: "asc" | "desc";
   siteId?: string;
 }
 
@@ -557,7 +796,7 @@ export interface BackyCommerceWebhookInput {
 }
 
 export interface BackyCommerceWebhookResult {
-  schemaVersion: 'backy.commerce-webhook.v1';
+  schemaVersion: "backy.commerce-webhook.v1";
   event: {
     id: string;
     type: string;
@@ -577,11 +816,11 @@ export interface BackyCommerceWebhookResult {
 
 export interface BackyCommerceCheckoutSession {
   id: string;
-  provider: 'manual' | 'stripe';
-  providerMode: 'test' | 'live';
+  provider: "manual" | "stripe";
+  providerMode: "test" | "live";
   accountId?: string | null;
-  status: 'requires_action' | 'provider_ready';
-  handoffMode: 'manual' | 'provider';
+  status: "requires_action" | "provider_ready";
+  handoffMode: "manual" | "provider";
   url?: string | null;
   successUrl: string;
   cancelUrl: string;
@@ -595,13 +834,13 @@ export interface BackyCommerceCheckoutSession {
 }
 
 export interface BackyCommerceStorefrontContract {
-  schemaVersion: 'backy.commerce-settings.v1';
-  mode: 'catalog-only' | 'manual-orders' | 'checkout-provider';
+  schemaVersion: "backy.commerce-settings.v1";
+  mode: "catalog-only" | "manual-orders" | "checkout-provider";
   currency: string;
-  paymentProvider: 'none' | 'stripe' | 'manual';
+  paymentProvider: "none" | "stripe" | "manual";
   providerAccountId?: string | null;
   provider?: {
-    mode: 'test' | 'live';
+    mode: "test" | "live";
     accountId?: string | null;
     webhookConfigured: boolean;
     webhookEndpointUrl?: string | null;
@@ -647,7 +886,7 @@ export interface BackyCommerceStorefrontContract {
     [key: string]: unknown;
   };
   reconciliation?: {
-    mode: 'manual' | 'webhook' | 'scheduled';
+    mode: "manual" | "webhook" | "scheduled";
     windowHours: number;
     requiresManualReview: boolean;
     [key: string]: unknown;
@@ -656,7 +895,7 @@ export interface BackyCommerceStorefrontContract {
 }
 
 export interface BackyCommerceCatalog {
-  schemaVersion: 'backy.commerce-catalog.v1';
+  schemaVersion: "backy.commerce-catalog.v1";
   collection?: BackyCollectionSchema;
   products: BackyCommerceProduct[];
   commerce?: BackyCommerceStorefrontContract;
@@ -666,8 +905,144 @@ export interface BackyCommerceCatalog {
   pagination: BackyPagination;
 }
 
+export interface BackyInteractiveComponentsContract {
+  schemaVersion: "backy.interactive-components.v1";
+  elementTypes: Array<"interactiveFigure" | "codeComponent" | string>;
+  capabilities: {
+    trustedRegistry: boolean;
+    customCodeSandbox: boolean;
+    signedBundles: boolean;
+    staticFallbacks: boolean;
+    versionedBundles: boolean;
+    dataBindings: boolean;
+    [key: string]: unknown;
+  };
+  registry: {
+    provider: string;
+    configured: boolean;
+    endpoint?: string | null;
+    bundleBaseUrl?: string | null;
+    signedBundles: boolean;
+    reviewRequired: boolean;
+    [key: string]: unknown;
+  };
+  sandbox: {
+    enabled: boolean;
+    origin?: string | null;
+    cspConfigured: boolean;
+    iframeSandbox: string;
+    allowedConnectSrc: string;
+    requiresDedicatedOrigin: boolean;
+    responseHeaders: {
+      contentSecurityPolicy: string[];
+      permissionsPolicy: string[];
+      referrerPolicy: "no-referrer" | string;
+      contentTypeOptions: "nosniff" | string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  renderContract: {
+    fields: string[];
+    hydrationModes: string[];
+    postMessageProtocol: string;
+    fallbackRequired: boolean;
+    unknownComponentBehavior: string;
+    [key: string]: unknown;
+  };
+  dataBindingScopes: string[];
+  security: {
+    parentDomAccess: boolean;
+    parentCookieAccess: boolean;
+    adminApiAccess: boolean;
+    secretsInPayload: boolean;
+    communication: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface BackyInteractiveComponentRegistryEntry {
+  componentKey: string;
+  displayName: string;
+  type: "interactiveFigure" | "codeComponent" | string;
+  status: "active" | "disabled" | string;
+  version: string;
+  renderMode:
+    | "trusted-component"
+    | "sandbox-iframe"
+    | "static-fallback"
+    | string;
+  source: "built-in" | "registry" | "custom" | string;
+  description?: string;
+  allowedDataScopes: string[];
+  requiredFields: string[];
+  controls: BackyInteractiveControl[];
+  fallback: {
+    required: boolean;
+    supported: string[];
+    [key: string]: unknown;
+  };
+  security: {
+    adminApiAccess: boolean;
+    parentDomAccess: boolean;
+    parentCookieAccess: boolean;
+    secretsInPayload: boolean;
+    communication?: string;
+    [key: string]: unknown;
+  };
+  integrity: {
+    signed: boolean;
+    signatureRequiredForCustomCode: boolean;
+    [key: string]: unknown;
+  };
+  runtime?: {
+    sandboxUrl?: string | null;
+    bundleUrl?: string | null;
+    iframeSandbox?: string;
+    allowedPermissions?: string[];
+    postMessageProtocol?: string;
+    [key: string]: unknown;
+  };
+  dependencyPolicy?: {
+    preset?: string;
+    allowedPackagePatterns?: string[];
+    blockedBuiltins?: string[];
+    lifecycleScripts?: boolean;
+    remoteRuntimeUrls?: boolean;
+    [key: string]: unknown;
+  };
+  compatibility?: {
+    backyRuntime?: string;
+    renderTargets?: string[];
+    animationLibraries?: string[];
+    browserSupport?: string[];
+    reducedMotion?: string;
+    [key: string]: unknown;
+  };
+  dataBindingPresets?: Array<{
+    id?: string;
+    label?: string;
+    scope?: string;
+    targetPath?: string;
+    mode?: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface BackyInteractiveComponentRegistry {
+  schemaVersion: "backy.interactive-component-registry.v1" | string;
+  siteId: string;
+  generatedAt?: string;
+  contract: BackyInteractiveComponentsContract;
+  components: BackyInteractiveComponentRegistryEntry[];
+  pagination: BackyPagination;
+  [key: string]: unknown;
+}
+
 export interface BackyCommerceOrderContract {
-  schemaVersion: 'backy.commerce-orders.v1';
+  schemaVersion: "backy.commerce-orders.v1";
   accepts: Record<string, unknown>;
   creates: Record<string, unknown>;
   inventoryReservation?: Record<string, unknown>;
@@ -791,30 +1166,39 @@ export interface BackyBlogListOptions extends BackyListOptions {
   previewToken?: string;
 }
 
-export type BackyBlogResponse = BackyEnvelope<{
-  post?: BackyPostResource;
-  posts?: BackyPostResource[];
-  pagination?: BackyPagination;
-} & Record<string, unknown>>;
+export type BackyBlogResponse = BackyEnvelope<
+  {
+    post?: BackyPostResource;
+    posts?: BackyPostResource[];
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
 
-export type BackyBlogConditionalResult = BackyConditionalResult<BackyBlogResponse>;
+export type BackyBlogConditionalResult =
+  BackyConditionalResult<BackyBlogResponse>;
 
-export type BackyBlogCategoriesResponse = BackyEnvelope<{
-  categories: BackyBlogCategory[];
-} & Record<string, unknown>>;
+export type BackyBlogCategoriesResponse = BackyEnvelope<
+  {
+    categories: BackyBlogCategory[];
+  } & Record<string, unknown>
+>;
 
-export type BackyBlogTagsResponse = BackyEnvelope<{
-  tags: BackyBlogTag[];
-} & Record<string, unknown>>;
+export type BackyBlogTagsResponse = BackyEnvelope<
+  {
+    tags: BackyBlogTag[];
+  } & Record<string, unknown>
+>;
 
-export type BackyBlogAuthorsResponse = BackyEnvelope<{
-  authors: BackyBlogAuthor[];
-} & Record<string, unknown>>;
+export type BackyBlogAuthorsResponse = BackyEnvelope<
+  {
+    authors: BackyBlogAuthor[];
+  } & Record<string, unknown>
+>;
 
 export interface BackyBlogFeedDiscovery {
   id: string;
   title?: string;
-  format: 'rss' | string;
+  format: "rss" | string;
   version?: string;
   rel?: string;
   contentType: string;
@@ -846,7 +1230,7 @@ export interface BackyReusableSection {
   slug: string;
   description?: string | null;
   category?: string;
-  status?: 'active' | 'archived' | string;
+  status?: "active" | "archived" | string;
   tags?: string[];
   content: {
     elements: BackyElement[];
@@ -910,7 +1294,7 @@ export interface BackyContact {
 
 export interface BackyComment {
   id: string;
-  targetType?: 'page' | 'post';
+  targetType?: "page" | "post";
   targetId?: string;
   siteId?: string;
   commentThreadId?: string;
@@ -946,7 +1330,7 @@ export interface BackyInteractionEvent {
 }
 
 export interface BackyMediaListOptions extends BackyListOptions {
-  type?: 'image' | 'video' | 'audio' | 'document' | 'font';
+  type?: "image" | "video" | "audio" | "document" | "font" | "other";
   q?: string;
   tag?: string;
   folderId?: string;
@@ -976,7 +1360,7 @@ export interface BackyCollectionRecordListOptions extends BackyListOptions {
   fieldKey?: string;
   fieldValue?: string;
   sortBy?: string;
-  sortDirection?: 'asc' | 'desc';
+  sortDirection?: "asc" | "desc";
 }
 
 export interface BackyFormSubmissionInput {
@@ -1010,26 +1394,26 @@ export interface BackyCommentInput {
   parentId?: string;
   threadId?: string;
   commentThreadId?: string;
-  moderationMode?: 'manual' | 'auto-approve';
+  moderationMode?: "manual" | "auto-approve";
 }
 
 export interface BackyCommentListOptions extends BackyListOptions {
-  targetType?: 'page' | 'post';
+  targetType?: "page" | "post";
   targetId?: string;
-  status?: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all';
+  status?: "pending" | "approved" | "rejected" | "spam" | "blocked" | "all";
   parentId?: string;
   parentOnly?: boolean;
   commentThreadId?: string;
   requestId?: string;
   q?: string;
-  sort?: 'newest' | 'oldest';
+  sort?: "newest" | "oldest";
 }
 
 export interface BackyCommentBulkUpdateInput {
   commentIds?: string[];
   ids?: string[];
-  status?: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
-  action?: 'clearReports';
+  status?: "pending" | "approved" | "rejected" | "spam" | "blocked";
+  action?: "clearReports";
   clearReports?: boolean;
   reviewedBy?: string;
   actor?: string;
@@ -1041,7 +1425,7 @@ export interface BackyCommentBulkUpdateInput {
 export interface BackyCommentBlocklistEntry {
   id: string;
   siteId?: string;
-  type: 'email' | 'ip';
+  type: "email" | "ip";
   value: string;
   reason: string;
   actor?: string;
@@ -1051,7 +1435,7 @@ export interface BackyCommentBlocklistEntry {
 }
 
 export interface BackyCommentBlocklistOptions extends BackyListOptions {
-  type?: 'email' | 'ip' | 'all';
+  type?: "email" | "ip" | "all";
   q?: string;
   requestId?: string;
 }
@@ -1060,9 +1444,29 @@ export interface BackyEventListOptions extends BackyListOptions {
   kind?: string;
 }
 
-export type BackyResolvedRouteType = 'page' | 'post' | 'dynamicList' | 'dynamicItem' | 'redirect' | 'gone' | 'notFound';
+export interface BackyInteractiveRuntimeEventInput {
+  type?: "ready" | "init" | "resize" | "error" | "fallback" | "blocked";
+  componentKey: string;
+  version?: string;
+  elementId?: string;
+  pageId?: string;
+  postId?: string;
+  message: string;
+  requestId?: string;
+}
 
-export interface BackyResolvedRouteBase<TRouteType extends BackyResolvedRouteType = BackyResolvedRouteType> {
+export type BackyResolvedRouteType =
+  | "page"
+  | "post"
+  | "dynamicList"
+  | "dynamicItem"
+  | "redirect"
+  | "gone"
+  | "notFound";
+
+export interface BackyResolvedRouteBase<
+  TRouteType extends BackyResolvedRouteType = BackyResolvedRouteType,
+> {
   type: TRouteType;
   path: string;
   status?: string;
@@ -1072,7 +1476,7 @@ export interface BackyResolvedRouteBase<TRouteType extends BackyResolvedRouteTyp
   [key: string]: unknown;
 }
 
-export interface BackyDynamicListRoute extends BackyResolvedRouteBase<'dynamicList'> {
+export interface BackyDynamicListRoute extends BackyResolvedRouteBase<"dynamicList"> {
   resource?: Record<string, unknown> & {
     collectionId?: string;
     collectionSlug?: string;
@@ -1083,7 +1487,7 @@ export interface BackyDynamicListRoute extends BackyResolvedRouteBase<'dynamicLi
   };
 }
 
-export interface BackyDynamicItemRoute extends BackyResolvedRouteBase<'dynamicItem'> {
+export interface BackyDynamicItemRoute extends BackyResolvedRouteBase<"dynamicItem"> {
   resource?: Record<string, unknown> & {
     collectionId?: string;
     collectionSlug?: string;
@@ -1096,17 +1500,17 @@ export interface BackyDynamicItemRoute extends BackyResolvedRouteBase<'dynamicIt
 }
 
 export type BackyRenderableRoute =
-  | BackyResolvedRouteBase<'page' | 'post' | 'notFound'>
+  | BackyResolvedRouteBase<"page" | "post" | "notFound">
   | BackyDynamicListRoute
   | BackyDynamicItemRoute;
 
-export interface BackyRedirectRoute extends BackyResolvedRouteBase<'redirect'> {
-  type: 'redirect';
-  status: 'published';
+export interface BackyRedirectRoute extends BackyResolvedRouteBase<"redirect"> {
+  type: "redirect";
+  status: "published";
   canonical: string;
   resource: {
     id: string;
-    kind: 'redirect';
+    kind: "redirect";
     from: string;
     to: string;
     statusCode: 301 | 302 | 307 | 308;
@@ -1114,24 +1518,31 @@ export interface BackyRedirectRoute extends BackyResolvedRouteBase<'redirect'> {
   };
 }
 
-export interface BackyGoneRoute extends BackyResolvedRouteBase<'gone'> {
-  type: 'gone';
-  status: 'archived';
+export interface BackyGoneRoute extends BackyResolvedRouteBase<"gone"> {
+  type: "gone";
+  status: "archived";
   resource: {
     id: string;
-    kind: 'gone';
+    kind: "gone";
     from: string;
     statusCode: 410;
     [key: string]: unknown;
   };
 }
 
-export type BackyResolvedRoute = BackyRenderableRoute | BackyRedirectRoute | BackyGoneRoute;
+export type BackyResolvedRoute =
+  | BackyRenderableRoute
+  | BackyRedirectRoute
+  | BackyGoneRoute;
 
 export interface BackyRouteResolve {
   site: BackySiteSummary;
   route: BackyResolvedRoute;
-  navigation?: { primary?: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown };
+  navigation?: {
+    primary?: BackyNavigationItem[];
+    footer?: BackyNavigationItem[];
+    [key: string]: unknown;
+  };
 }
 
 export type BackyRouteResolveResult =
@@ -1142,7 +1553,7 @@ export type BackyRouteResolveResult =
     });
 
 export interface BackySeoRoute {
-  type: 'page' | 'post' | 'dynamicList' | 'dynamicItem' | string;
+  type: "page" | "post" | "dynamicList" | "dynamicItem" | string;
   id: string;
   title: string;
   description?: string;
@@ -1199,7 +1610,7 @@ export interface BackySeoDiscovery {
 export interface BackyManifestAdminDiscovery {
   auth: {
     authenticated: boolean;
-    mode: 'anonymous' | 'session' | 'api-key';
+    mode: "anonymous" | "session" | "api-key";
     user?: {
       id: string;
       role: string;
@@ -1220,19 +1631,22 @@ export interface BackyManifestAdminDiscovery {
   [key: string]: unknown;
 }
 
+export type BackyLocaleStrategy = "none" | "path-prefix" | "domain";
+
 export interface BackyManifestDeliveryDiscovery {
   canonicalBaseUrl: string;
   managedBaseUrl: string;
   primaryDomain: string;
   customDomain?: string | null;
   defaultLocale: string;
-  localeStrategy: string;
+  localeStrategy: BackyLocaleStrategy;
   locales: Array<{
     code: string;
     label?: string;
     default: boolean;
-    direction: 'ltr' | 'rtl';
+    direction: "ltr" | "rtl";
     pathPrefix: string;
+    domain?: string | null;
     [key: string]: unknown;
   }>;
   domains: Array<{
@@ -1254,49 +1668,173 @@ export interface BackyManifestDeliveryDiscovery {
   [key: string]: unknown;
 }
 
+export interface BackyManifestRouteFrontendDesign extends BackyFrontendDesignProvenance {}
+
+export interface BackyManifestRoutePattern {
+  type: string;
+  pattern: string;
+  resolveUrl: string;
+  renderUrl: string;
+  frontendDesign?: BackyManifestRouteFrontendDesign;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestLocalizedRoutePattern extends BackyManifestRoutePattern {
+  locale: string;
+  basePattern: string;
+}
+
+export interface BackyManifestLocalizedRoutePatternGroup {
+  locale: string;
+  default: boolean;
+  pathPrefix: string;
+  domain?: string | null;
+  patterns: BackyManifestLocalizedRoutePattern[];
+  [key: string]: unknown;
+}
+
+export interface BackyManifestRedirectRule {
+  id?: string;
+  type: "redirect" | "gone";
+  from: string;
+  to?: string | null;
+  statusCode: 301 | 302 | 307 | 308 | 410;
+  resolveUrl: string;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestRedirectRules {
+  count: number;
+  items: BackyManifestRedirectRule[];
+  [key: string]: unknown;
+}
+
+export interface BackyManifestRoutingModule {
+  supportedRouteTypes?: BackyResolvedRouteType[];
+  redirectRules?: BackyManifestRedirectRules;
+  localizedRoutePatterns?: BackyManifestLocalizedRoutePatternGroup[];
+  [key: string]: unknown;
+}
+
+export interface BackyManifestPageResource extends BackyPageResource {
+  slug: string;
+  path: string;
+  renderUrl: string;
+  frontendDesign?: BackyManifestRouteFrontendDesign;
+}
+
+export interface BackyManifestPostResource extends BackyPostResource {
+  slug: string;
+  path: string;
+  renderUrl: string;
+  frontendDesign?: BackyManifestRouteFrontendDesign;
+}
+
+export interface BackyManifestBlogTaxonomy {
+  id: string;
+  name: string;
+  slug: string;
+  postCount: number;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestBlogCategory extends BackyBlogCategory {
+  id: string;
+  name: string;
+  slug: string;
+  postCount: number;
+}
+
+export interface BackyManifestBlogTag extends BackyBlogTag {
+  id: string;
+  name: string;
+  slug: string;
+  postCount: number;
+}
+
+export interface BackyManifestBlogAuthor extends BackyBlogAuthor {
+  id: string;
+  name: string;
+  slug: string;
+  role?: string;
+  status?: string;
+  postCount: number;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestBlogModule {
+  count: number;
+  rssUrl?: string;
+  hostedRssPath?: string;
+  items?: BackyManifestPostResource[];
+  feeds?: BackyBlogFeedDiscovery[];
+  categories: BackyManifestBlogCategory[];
+  tags: BackyManifestBlogTag[];
+  authors: BackyManifestBlogAuthor[];
+  [key: string]: unknown;
+}
+
+export interface BackyManifestReusableSection {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  category?: string;
+  tags?: string[];
+  detailUrl: string;
+  canvasSize?: Record<string, unknown>;
+  elementCount: number;
+  frontendDesign?: BackyManifestRouteFrontendDesign;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestReusableSectionsModule {
+  count: number;
+  listUrl: string;
+  categories: string[];
+  tags: string[];
+  items: BackyManifestReusableSection[];
+  [key: string]: unknown;
+}
+
+export interface BackyManifestFormDefinition extends BackyFormDefinition {
+  id: string;
+  active: boolean;
+  fields: Array<Record<string, unknown>>;
+  submitUrl: string;
+  detailUrl?: string;
+  definitionUrl?: string;
+  submissionsUrl?: string;
+  contactsUrl?: string;
+  frontendDesign?: BackyManifestRouteFrontendDesign;
+}
+
+export interface BackyManifestMediaModule {
+  count: number;
+  publicCount: number;
+  fontCount: number;
+  types: string[];
+  listUrl: string;
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifest {
   schemaVersion: string;
   site: BackySiteSummary;
   contract: Record<string, unknown>;
   capabilities: Record<string, boolean>;
   endpoints: Record<string, string>;
-  routePatterns: Array<Record<string, unknown>>;
+  routePatterns: BackyManifestRoutePattern[];
   modules: {
-    routing?: {
-      supportedRouteTypes?: BackyResolvedRouteType[];
-      redirectRules?: {
-        count?: number;
-        items?: Array<{
-          id?: string;
-          type: 'redirect' | 'gone';
-          from: string;
-          to?: string | null;
-          statusCode: 301 | 302 | 307 | 308 | 410;
-          resolveUrl?: string;
-          [key: string]: unknown;
-        }>;
-        [key: string]: unknown;
-      };
-      [key: string]: unknown;
-    };
-    pages?: { count: number; items: BackyPageResource[] };
-    blog?: Record<string, unknown> & {
-      count?: number;
-      items?: BackyPostResource[];
-      feeds?: BackyBlogFeedDiscovery[];
-    };
-    collections?: BackyCollectionSchema[];
-    reusableSections?: {
-      count?: number;
-      listUrl?: string;
-      categories?: string[];
-      tags?: string[];
-      items?: Array<Record<string, unknown>>;
-      [key: string]: unknown;
-    };
-    forms?: BackyFormDefinition[];
-    media?: Record<string, unknown>;
+    routing?: BackyManifestRoutingModule;
+    pages?: { count: number; items: BackyManifestPageResource[] };
+    blog?: BackyManifestBlogModule;
+    collections?: BackyManifestCollectionSchema[];
+    reusableSections?: BackyManifestReusableSectionsModule;
+    forms?: BackyManifestFormDefinition[];
+    media?: BackyManifestMediaModule;
     commerce?: BackyCommerceStorefrontContract;
+    interactiveComponents?: BackyInteractiveComponentsContract;
     [key: string]: unknown;
   };
   admin: BackyManifestAdminDiscovery;
@@ -1306,7 +1844,11 @@ export interface BackyFrontendManifest {
 
 export interface BackyRenderPayload {
   site: BackySiteSummary;
-  navigation: { primary: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown };
+  navigation: {
+    primary: BackyNavigationItem[];
+    footer?: BackyNavigationItem[];
+    [key: string]: unknown;
+  };
   frontendDesign?: BackyRenderFrontendDesign;
   route: Record<string, unknown>;
   content: BackyContentDocument;
@@ -1337,7 +1879,7 @@ export class BackyApiError extends Error {
 
   constructor(status: number, envelope: BackyErrorEnvelope) {
     super(envelope.error.message);
-    this.name = 'BackyApiError';
+    this.name = "BackyApiError";
     this.status = status;
     this.requestId = envelope.requestId;
     this.code = envelope.error.code;
@@ -1357,17 +1899,20 @@ export class BackyClient {
 
   constructor(options: BackyClientOptions) {
     if (!options.baseUrl) {
-      throw new Error('BackyClient requires a baseUrl.');
+      throw new Error("BackyClient requires a baseUrl.");
     }
 
-    this.baseUrl = options.baseUrl.replace(/\/$/, '');
+    this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.siteId = options.siteId;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
-    this.requestIdFactory = options.requestIdFactory ?? (() => `sdk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`);
+    this.requestIdFactory =
+      options.requestIdFactory ??
+      (() =>
+        `sdk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`);
     this.defaultHeaders = options.defaultHeaders;
 
     if (!this.fetchImpl) {
-      throw new Error('BackyClient requires a fetch implementation.');
+      throw new Error("BackyClient requires a fetch implementation.");
     }
   }
 
@@ -1379,399 +1924,789 @@ export class BackyClient {
     return this.siteId;
   }
 
-  sites(): Promise<BackyEnvelope<{ sites: BackySiteSummary[]; pagination?: BackyPagination }>> {
-    return this.request('/api/sites');
+  sites(): Promise<
+    BackyEnvelope<{ sites: BackySiteSummary[]; pagination?: BackyPagination }>
+  > {
+    return this.request("/api/sites");
   }
 
-  async discoverSite(identifier: string): Promise<BackyEnvelope<{ site: BackySiteSummary }>> {
-    const envelope = await this.request<{ site: BackySiteSummary }>('/api/sites', {
-      query: { identifier },
-    });
-    const discoveredSiteId = typeof envelope.data.site.id === 'string' ? envelope.data.site.id : undefined;
+  async discoverSite(
+    identifier: string,
+  ): Promise<BackyEnvelope<{ site: BackySiteSummary }>> {
+    const envelope = await this.request<{ site: BackySiteSummary }>(
+      "/api/sites",
+      {
+        query: { identifier },
+      },
+    );
+    const discoveredSiteId =
+      typeof envelope.data.site.id === "string"
+        ? envelope.data.site.id
+        : undefined;
     if (discoveredSiteId) {
       this.siteId = discoveredSiteId;
     }
     return envelope;
   }
 
-  manifest(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyFrontendManifest>> {
+  manifest(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyFrontendManifest>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/manifest`);
   }
 
-  frontendDesign(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyFrontendDesignResponse>> {
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/frontend-design`);
+  interactiveComponents(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyInteractiveComponentRegistry>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/interactive-components`,
+    );
   }
 
-  frontendDesignCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyFrontendDesignResponse>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  interactiveComponentsCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<BackyEnvelope<BackyInteractiveComponentRegistry>>
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  manifestCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyFrontendManifest>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/manifest`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  recordInteractiveRuntimeEvent(
+    input: BackyInteractiveRuntimeEventInput,
+    siteId = this.requireSiteId(),
+  ): Promise<
+    BackyEnvelope<{
+      recorded: boolean;
+      siteId: string;
+      componentKey: string;
+      version?: string | null;
+    }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/interactive-components/runtime-events`,
+      {
+        method: "POST",
+        body: input,
+        requestId: input.requestId,
+      },
+    );
+  }
+
+  frontendDesign(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyFrontendDesignResponse>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/frontend-design`,
+    );
+  }
+
+  frontendDesignCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<BackyEnvelope<BackyFrontendDesignResponse>>
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
+  }
+
+  manifestCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<BackyFrontendManifest>>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/manifest`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
   openapi(siteId = this.requireSiteId()): Promise<Record<string, unknown>> {
-    return this.requestRawJson(`/api/sites/${encodeURIComponent(siteId)}/openapi`);
+    return this.requestRawJson(
+      `/api/sites/${encodeURIComponent(siteId)}/openapi`,
+    );
   }
 
-  openapiCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<Record<string, unknown>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/openapi`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  openapiCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<Record<string, unknown>>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/openapi`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  resolve(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyRouteResolveResult> {
-    return this.requestRouteResolve(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/resolve`, {
-      query: { path, previewToken: options.previewToken },
-    });
+  resolve(
+    path: string,
+    options: { previewToken?: string; siteId?: string } = {},
+  ): Promise<BackyRouteResolveResult> {
+    return this.requestRouteResolve(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/resolve`,
+      {
+        query: { path, previewToken: options.previewToken },
+      },
+    );
   }
 
-  render<TPayload = BackyRenderPayload>(path: string, options: BackyRenderRequestOptions = {}): Promise<BackyEnvelope<TPayload>> {
-    return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`, {
-      query: { path, previewToken: options.previewToken, schemaVersion: options.schemaVersion },
-    });
+  render<TPayload = BackyRenderPayload>(
+    path: string,
+    options: BackyRenderRequestOptions = {},
+  ): Promise<BackyEnvelope<TPayload>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`,
+      {
+        query: {
+          path,
+          previewToken: options.previewToken,
+          schemaVersion: options.schemaVersion,
+        },
+      },
+    );
   }
 
   renderCached<TPayload = BackyRenderPayload>(
     path: string,
     options: BackyRenderConditionalOptions = {},
   ): Promise<BackyConditionalResult<BackyEnvelope<TPayload>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`, {
-      query: { path, previewToken: options.previewToken, schemaVersion: options.schemaVersion },
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`,
+      {
+        query: {
+          path,
+          previewToken: options.previewToken,
+          schemaVersion: options.schemaVersion,
+        },
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  navigation(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ site?: BackySiteSummary; navigation: { primary: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown } }>> {
+  navigation(
+    siteId = this.requireSiteId(),
+  ): Promise<
+    BackyEnvelope<{
+      site?: BackySiteSummary;
+      navigation: {
+        primary: BackyNavigationItem[];
+        footer?: BackyNavigationItem[];
+        [key: string]: unknown;
+      };
+    }>
+  > {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/navigation`);
   }
 
-  navigationCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ site?: BackySiteSummary; navigation: { primary: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown } }>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/navigation`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  navigationCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<{
+        site?: BackySiteSummary;
+        navigation: {
+          primary: BackyNavigationItem[];
+          footer?: BackyNavigationItem[];
+          [key: string]: unknown;
+        };
+      }>
+    >
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/navigation`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  seo(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackySeoDiscovery>> {
+  seo(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackySeoDiscovery>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/seo`);
   }
 
-  seoCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackySeoDiscovery>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/seo`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  seoCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<BackySeoDiscovery>>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/seo`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  pages(options: BackyPageListOptions = {}): Promise<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
+  pages(
+    options: BackyPageListOptions = {},
+  ): Promise<
+    BackyEnvelope<
+      {
+        page?: BackyPageResource;
+        pages?: BackyPageResource[];
+        pagination?: BackyPagination;
+      } & Record<string, unknown>
+    >
+  > {
     const { requestId, siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  pagesCached(options: BackyPageListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>>> {
+  pagesCached(
+    options: BackyPageListOptions & BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<
+        {
+          page?: BackyPageResource;
+          pages?: BackyPageResource[];
+          pagination?: BackyPagination;
+        } & Record<string, unknown>
+      >
+    >
+  > {
     const { requestId, etag, siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`, {
-      query,
-      ifNoneMatch: etag,
-      requestId,
-    });
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`,
+      {
+        query,
+        ifNoneMatch: etag,
+        requestId,
+      },
+    );
   }
 
   blog(options: BackyBlogListOptions = {}): Promise<BackyBlogResponse> {
-    const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
+    const siteId =
+      typeof options.siteId === "string"
+        ? options.siteId
+        : this.requireSiteId();
     const { requestId, siteId: _siteId, ...queryOptions } = options;
-    const query = normalizeListQuery(queryOptions as BackyListOptions & Record<string, BackyQueryValue>);
+    const query = normalizeListQuery(
+      queryOptions as BackyListOptions & Record<string, BackyQueryValue>,
+    );
     void _siteId;
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog`, { query, requestId });
-  }
-
-  blogCached(options: BackyBlogListOptions & BackyConditionalOptions = {}): Promise<BackyBlogConditionalResult> {
-    const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
-    const { requestId, etag, siteId: _siteId, ...queryOptions } = options;
-    const query = normalizeListQuery(queryOptions as BackyListOptions & Record<string, BackyQueryValue>);
-    void _siteId;
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId)}/blog`, {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog`, {
       query,
-      ifNoneMatch: etag,
       requestId,
     });
+  }
+
+  blogCached(
+    options: BackyBlogListOptions & BackyConditionalOptions = {},
+  ): Promise<BackyBlogConditionalResult> {
+    const siteId =
+      typeof options.siteId === "string"
+        ? options.siteId
+        : this.requireSiteId();
+    const { requestId, etag, siteId: _siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(
+      queryOptions as BackyListOptions & Record<string, BackyQueryValue>,
+    );
+    void _siteId;
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(siteId)}/blog`,
+      {
+        query,
+        ifNoneMatch: etag,
+        requestId,
+      },
+    );
   }
 
   blogRssUrl(options: { siteId?: string; limit?: number } = {}): string {
     const siteId = options.siteId ?? this.requireSiteId();
     const limit = normalizeListLimit(options.limit);
-    const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
+    const query =
+      limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : "";
     return `${this.baseUrl}/api/sites/${encodeURIComponent(siteId)}/blog/rss${query}`;
   }
 
-  async blogRss(options: { siteId?: string; limit?: number; requestId?: string } = {}): Promise<string> {
-    return this.requestText(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/rss`, {
-      query: { limit: normalizeListLimit(options.limit) },
-      requestId: options.requestId,
-    });
+  async blogRss(
+    options: { siteId?: string; limit?: number; requestId?: string } = {},
+  ): Promise<string> {
+    return this.requestText(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/rss`,
+      {
+        query: { limit: normalizeListLimit(options.limit) },
+        requestId: options.requestId,
+      },
+    );
   }
 
-  async blogFeeds(options: { siteId?: string } = {}): Promise<BackyBlogFeedDiscovery[]> {
-    const manifest = await this.manifest(options.siteId ?? this.requireSiteId());
-    return Array.isArray(manifest.data.modules?.blog?.feeds) ? manifest.data.modules.blog.feeds : [];
+  async blogFeeds(
+    options: { siteId?: string } = {},
+  ): Promise<BackyBlogFeedDiscovery[]> {
+    const manifest = await this.manifest(
+      options.siteId ?? this.requireSiteId(),
+    );
+    return Array.isArray(manifest.data.modules?.blog?.feeds)
+      ? manifest.data.modules.blog.feeds
+      : [];
   }
 
-  blogCategories(siteId = this.requireSiteId()): Promise<BackyBlogCategoriesResponse> {
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog/categories`);
+  blogCategories(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyBlogCategoriesResponse> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/blog/categories`,
+    );
   }
 
-  blogCategoriesCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyBlogCategoriesResponse>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  blogCategoriesCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyBlogCategoriesResponse>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
   blogTags(siteId = this.requireSiteId()): Promise<BackyBlogTagsResponse> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog/tags`);
   }
 
-  blogTagsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyBlogTagsResponse>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  blogTagsCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyBlogTagsResponse>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  blogAuthors(siteId = this.requireSiteId()): Promise<BackyBlogAuthorsResponse> {
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog/authors`);
+  blogAuthors(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyBlogAuthorsResponse> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/blog/authors`,
+    );
   }
 
-  blogAuthorsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyBlogAuthorsResponse>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/authors`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  blogAuthorsCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyBlogAuthorsResponse>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/authors`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  media(options: BackyMediaListOptions = {}): Promise<BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>> {
+  media(
+    options: BackyMediaListOptions = {},
+  ): Promise<
+    BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>
+  > {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/media`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/media`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  mediaCached(options: BackyMediaListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>>> {
+  mediaCached(
+    options: BackyMediaListOptions & BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>
+    >
+  > {
     const { requestId, etag, siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/media`, {
-      query,
-      ifNoneMatch: etag,
-      requestId,
-    });
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/media`,
+      {
+        query,
+        ifNoneMatch: etag,
+        requestId,
+      },
+    );
   }
 
-  mediaAsset(mediaId: string): Promise<BackyEnvelope<{ media: BackyMediaAsset }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`);
+  mediaAsset(
+    mediaId: string,
+  ): Promise<BackyEnvelope<{ media: BackyMediaAsset }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`,
+    );
   }
 
-  mediaAssetCached(mediaId: string, options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ media: BackyMediaAsset }>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  mediaAssetCached(
+    mediaId: string,
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<BackyEnvelope<{ media: BackyMediaAsset }>>
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  mediaFonts(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyFontManifest>> {
+  mediaFonts(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyFontManifest>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/media/fonts`);
   }
 
-  mediaFontsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyFontManifest>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/fonts`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  mediaFontsCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<BackyFontManifest>>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/fonts`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
   mediaFileUrl(
     mediaId: string,
-    access: { token?: string; expiresAt?: number; disposition?: 'inline' | 'attachment' } = {},
+    access: {
+      token?: string;
+      expiresAt?: number;
+      disposition?: "inline" | "attachment";
+    } = {},
   ): string {
     const searchParams = new URLSearchParams();
-    if (access.token) searchParams.set('token', access.token);
-    if (access.expiresAt) searchParams.set('expiresAt', String(access.expiresAt));
-    if (access.disposition) searchParams.set('disposition', access.disposition);
+    if (access.token) searchParams.set("token", access.token);
+    if (access.expiresAt)
+      searchParams.set("expiresAt", String(access.expiresAt));
+    if (access.disposition) searchParams.set("disposition", access.disposition);
     const query = searchParams.toString();
-    return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/file${query ? `?${query}` : ''}`;
+    return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/file${query ? `?${query}` : ""}`;
   }
 
-  mediaTransformUrl(mediaId: string, options: { width: number; quality?: number }): string {
+  mediaTransformUrl(
+    mediaId: string,
+    options: { width: number; quality?: number },
+  ): string {
     const searchParams = new URLSearchParams({
       width: String(options.width),
     });
     if (options.quality !== undefined) {
-      searchParams.set('quality', String(options.quality));
+      searchParams.set("quality", String(options.quality));
     }
     return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/transform?${searchParams.toString()}`;
   }
 
-  collections(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ collections: BackyCollectionSchema[] }>> {
+  collections(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<{ collections: BackyCollectionSchema[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/collections`);
   }
 
-  collectionsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ collections: BackyCollectionSchema[] }>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  collectionsCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<{ collections: BackyCollectionSchema[] }>
+    >
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  collection(collectionId: string): Promise<BackyEnvelope<{ collection: BackyCollectionSchema }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`);
+  collection(
+    collectionId: string,
+  ): Promise<BackyEnvelope<{ collection: BackyCollectionSchema }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`,
+    );
   }
 
-  collectionCached(collectionId: string, options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ collection: BackyCollectionSchema }>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  collectionCached(
+    collectionId: string,
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<BackyEnvelope<{ collection: BackyCollectionSchema }>>
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  reusableSections(options: { category?: string; tag?: string; search?: string; siteId?: string } = {}): Promise<BackyEnvelope<{ sections: BackyReusableSection[]; pagination: BackyPagination }>> {
+  reusableSections(
+    options: {
+      category?: string;
+      tag?: string;
+      search?: string;
+      siteId?: string;
+    } = {},
+  ): Promise<
+    BackyEnvelope<{
+      sections: BackyReusableSection[];
+      pagination: BackyPagination;
+    }>
+  > {
     const { siteId, ...query } = options;
-    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/reusable-sections`, {
-      query,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/reusable-sections`,
+      {
+        query,
+      },
+    );
   }
 
   reusableSectionsCached(
-    options: { category?: string; tag?: string; search?: string } & BackyConditionalOptions = {},
-  ): Promise<BackyConditionalResult<BackyEnvelope<{ sections: BackyReusableSection[]; pagination: BackyPagination }>>> {
+    options: {
+      category?: string;
+      tag?: string;
+      search?: string;
+    } & BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<{
+        sections: BackyReusableSection[];
+        pagination: BackyPagination;
+      }>
+    >
+  > {
     const { requestId, etag, siteId, ...query } = options;
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/reusable-sections`, {
-      query,
-      ifNoneMatch: etag,
-      requestId,
-    });
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/reusable-sections`,
+      {
+        query,
+        ifNoneMatch: etag,
+        requestId,
+      },
+    );
   }
 
-  reusableSection(sectionId: string, siteId = this.requireSiteId()): Promise<BackyEnvelope<{ section: BackyReusableSection }>> {
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/reusable-sections/${encodeURIComponent(sectionId)}`);
+  reusableSection(
+    sectionId: string,
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<{ section: BackyReusableSection }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/reusable-sections/${encodeURIComponent(sectionId)}`,
+    );
   }
 
-  reusableSectionCached(sectionId: string, options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ section: BackyReusableSection }>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  reusableSectionCached(
+    sectionId: string,
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<BackyEnvelope<{ section: BackyReusableSection }>>
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
   records<TValues extends Record<string, unknown> = Record<string, unknown>>(
     collectionId: string,
     options: BackyCollectionRecordListOptions = {},
-  ): Promise<BackyEnvelope<{ collection: BackyCollectionSchema; records: Array<BackyCollectionRecord<TValues>>; pagination: BackyPagination }>> {
+  ): Promise<
+    BackyEnvelope<{
+      collection: BackyCollectionSchema;
+      records: Array<BackyCollectionRecord<TValues>>;
+      pagination: BackyPagination;
+    }>
+  > {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  recordsCached<TValues extends Record<string, unknown> = Record<string, unknown>>(
+  recordsCached<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
     collectionId: string,
     options: BackyCollectionRecordListOptions & BackyConditionalOptions = {},
-  ): Promise<BackyConditionalResult<BackyEnvelope<{ collection: BackyCollectionSchema; records: Array<BackyCollectionRecord<TValues>>; pagination: BackyPagination }>>> {
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<{
+        collection: BackyCollectionSchema;
+        records: Array<BackyCollectionRecord<TValues>>;
+        pagination: BackyPagination;
+      }>
+    >
+  > {
     const { requestId, etag, siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
-      query,
-      ifNoneMatch: etag,
-      requestId,
-    });
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`,
+      {
+        query,
+        ifNoneMatch: etag,
+        requestId,
+      },
+    );
   }
 
-  commerceCatalog(options: BackyCommerceCatalogOptions = {}): Promise<BackyEnvelope<BackyCommerceCatalog>> {
+  commerceCatalog(
+    options: BackyCommerceCatalogOptions = {},
+  ): Promise<BackyEnvelope<BackyCommerceCatalog>> {
     const { requestId, siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  commerceCatalogCached(options: BackyCommerceCatalogOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyCommerceCatalog>>> {
+  commerceCatalogCached(
+    options: BackyCommerceCatalogOptions & BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<BackyCommerceCatalog>>> {
     const { requestId, etag, siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`, {
-      query,
-      ifNoneMatch: etag,
-      requestId,
-    });
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`,
+      {
+        query,
+        ifNoneMatch: etag,
+        requestId,
+      },
+    );
   }
 
-  commerceOrderContract(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyCommerceOrderContract>> {
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/orders`);
+  commerceOrderContract(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyCommerceOrderContract>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/commerce/orders`,
+    );
   }
 
-  commerceOrderContractCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyCommerceOrderContract>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  commerceOrderContractCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<BackyEnvelope<BackyCommerceOrderContract>>
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  createCommerceOrder(input: BackyCommerceOrderInput, siteId = this.requireSiteId()): Promise<BackyEnvelope<{
-    schemaVersion: 'backy.commerce-orders.v1';
-    order: BackyCommerceOrderSummary;
-    checkoutSession?: BackyCommerceCheckoutSession;
-    lineItems: Array<Record<string, unknown>>;
-  }>> {
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/orders`, {
-      method: 'POST',
-      body: input,
-      requestId: input.requestId,
-    });
+  createCommerceOrder(
+    input: BackyCommerceOrderInput,
+    siteId = this.requireSiteId(),
+  ): Promise<
+    BackyEnvelope<{
+      schemaVersion: "backy.commerce-orders.v1";
+      order: BackyCommerceOrderSummary;
+      checkoutSession?: BackyCommerceCheckoutSession;
+      lineItems: Array<Record<string, unknown>>;
+    }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/commerce/orders`,
+      {
+        method: "POST",
+        body: input,
+        requestId: input.requestId,
+      },
+    );
   }
 
-  receiveCommerceWebhook(input: BackyCommerceWebhookInput, siteId = this.requireSiteId(), requestId?: string): Promise<BackyEnvelope<BackyCommerceWebhookResult>> {
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/webhook`, {
-      method: 'POST',
-      body: input,
-      requestId,
-    });
+  receiveCommerceWebhook(
+    input: BackyCommerceWebhookInput,
+    siteId = this.requireSiteId(),
+    requestId?: string,
+  ): Promise<BackyEnvelope<BackyCommerceWebhookResult>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/commerce/webhook`,
+      {
+        method: "POST",
+        body: input,
+        requestId,
+      },
+    );
   }
 
-  createRecord<TValues extends Record<string, unknown> = Record<string, unknown>>(
+  createRecord<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
     collectionId: string,
     values: TValues,
     slugOrOptions?: string | BackyCollectionRecordCreateOptions,
     options: BackyCollectionRecordWriteOptions = {},
   ): Promise<BackyEnvelope<BackyCollectionRecordMutationResult<TValues>>> {
-    const writeOptions = typeof slugOrOptions === 'string'
-      ? { ...options, slug: slugOrOptions }
-      : (slugOrOptions ?? {});
+    const writeOptions =
+      typeof slugOrOptions === "string"
+        ? { ...options, slug: slugOrOptions }
+        : (slugOrOptions ?? {});
     const { siteId, requestId, publicWriteToken, slug } = writeOptions;
 
-    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
-      method: 'POST',
-      body: { values, slug, publicWriteToken },
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`,
+      {
+        method: "POST",
+        body: { values, slug, publicWriteToken },
+        requestId,
+      },
+    );
   }
 
-  updateRecord<TValues extends Record<string, unknown> = Record<string, unknown>>(
+  updateRecord<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
     collectionId: string,
     recordId: string,
     values: Partial<TValues>,
@@ -1779,11 +2714,14 @@ export class BackyClient {
   ): Promise<BackyEnvelope<BackyCollectionRecordMutationResult<TValues>>> {
     const { siteId, requestId, publicWriteToken } = options;
 
-    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`, {
-      method: 'PATCH',
-      body: { values, publicWriteToken },
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`,
+      {
+        method: "PATCH",
+        body: { values, publicWriteToken },
+        requestId,
+      },
+    );
   }
 
   deleteRecord(
@@ -1793,242 +2731,528 @@ export class BackyClient {
   ): Promise<BackyEnvelope<BackyCollectionRecordDeleteResult>> {
     const { siteId, requestId, publicWriteToken } = options;
 
-    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`, {
-      method: 'DELETE',
-      body: { publicWriteToken },
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`,
+      {
+        method: "DELETE",
+        body: { publicWriteToken },
+        requestId,
+      },
+    );
   }
 
-  forms(options: BackyFormListOptions = {}): Promise<BackyEnvelope<{ forms: BackyFormDefinition[]; total?: number; pagination?: BackyPagination }>> {
+  forms(
+    options: BackyFormListOptions = {},
+  ): Promise<
+    BackyEnvelope<{
+      forms: BackyFormDefinition[];
+      total?: number;
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, siteId, ...query } = options;
-    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  formsCached(options: BackyFormListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ forms: BackyFormDefinition[]; total?: number; pagination?: BackyPagination }>>> {
+  formsCached(
+    options: BackyFormListOptions & BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<{
+        forms: BackyFormDefinition[];
+        total?: number;
+        pagination?: BackyPagination;
+      }>
+    >
+  > {
     const { requestId, etag, siteId, ...query } = options;
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms`, {
-      query,
-      ifNoneMatch: etag,
-      requestId,
-    });
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms`,
+      {
+        query,
+        ifNoneMatch: etag,
+        requestId,
+      },
+    );
   }
 
-  form(formId: string): Promise<BackyEnvelope<{ form: BackyFormDefinition; endpoints: BackyFormEndpoints }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}`);
+  form(
+    formId: string,
+  ): Promise<
+    BackyEnvelope<{ form: BackyFormDefinition; endpoints: BackyFormEndpoints }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}`,
+    );
   }
 
-  formDefinition(formId: string): Promise<BackyEnvelope<{ schemaVersion: 'backy.form-definition.v1'; form: BackyFormDefinition; submitUrl: string }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/definition`);
+  formDefinition(
+    formId: string,
+  ): Promise<
+    BackyEnvelope<{
+      schemaVersion: "backy.form-definition.v1";
+      form: BackyFormDefinition;
+      submitUrl: string;
+    }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/definition`,
+    );
   }
 
   formDefinitionCached(
     formId: string,
     options: BackyConditionalOptions = {},
-  ): Promise<BackyConditionalResult<BackyEnvelope<{ schemaVersion: 'backy.form-definition.v1'; form: BackyFormDefinition; submitUrl: string }>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/definition`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  ): Promise<
+    BackyConditionalResult<
+      BackyEnvelope<{
+        schemaVersion: "backy.form-definition.v1";
+        form: BackyFormDefinition;
+        submitUrl: string;
+      }>
+    >
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/definition`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  formSubmissions(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<{ form: BackyFormDefinition; submissions: { data?: BackyFormSubmission[]; [key: string]: unknown }; pagination?: BackyPagination }>> {
+  formSubmissions(
+    formId: string,
+    options: BackyListOptions & { status?: string } = {},
+  ): Promise<
+    BackyEnvelope<{
+      form: BackyFormDefinition;
+      submissions: { data?: BackyFormSubmission[]; [key: string]: unknown };
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, ...query } = options;
-    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  submitForm(formId: string, input: BackyFormSubmissionInput): Promise<BackyEnvelope<{ submission: BackyFormSubmission; contact?: BackyContact; collectionRecord?: BackyCollectionRecord | null; collectionRecordErrors?: Array<Record<string, unknown>> }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`, {
-      method: 'POST',
-      body: input,
-      requestId: input.requestId,
-    });
+  submitForm(
+    formId: string,
+    input: BackyFormSubmissionInput,
+  ): Promise<
+    BackyEnvelope<{
+      submission: BackyFormSubmission;
+      contact?: BackyContact;
+      collectionRecord?: BackyCollectionRecord | null;
+      collectionRecordErrors?: Array<Record<string, unknown>>;
+    }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`,
+      {
+        method: "POST",
+        body: input,
+        requestId: input.requestId,
+      },
+    );
   }
 
-  formSubmission(formId: string, submissionId: string): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
-    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`);
+  formSubmission(
+    formId: string,
+    submissionId: string,
+  ): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
+    );
   }
 
-  updateFormSubmission(formId: string, submissionId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
-    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`, {
-      method: 'PATCH',
-      body: updates,
-    });
+  updateFormSubmission(
+    formId: string,
+    submissionId: string,
+    updates: Record<string, unknown>,
+  ): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
+      {
+        method: "PATCH",
+        body: updates,
+      },
+    );
   }
 
-  formContacts(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<{ form: BackyFormDefinition; contacts: BackyContact[]; pagination?: BackyPagination }>> {
+  formContacts(
+    formId: string,
+    options: BackyListOptions & { status?: string } = {},
+  ): Promise<
+    BackyEnvelope<{
+      form: BackyFormDefinition;
+      contacts: BackyContact[];
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, ...query } = options;
-    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  updateFormContact(formId: string, contactId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ contact: BackyContact }>> {
-    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`, {
-      method: 'PATCH',
-      body: updates,
-    });
+  updateFormContact(
+    formId: string,
+    contactId: string,
+    updates: Record<string, unknown>,
+  ): Promise<BackyEnvelope<{ contact: BackyContact }>> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`,
+      {
+        method: "PATCH",
+        body: updates,
+      },
+    );
   }
 
-  deleteFormContact(formId: string, contactId: string): Promise<BackyEnvelope<{ deleted: true; contact: BackyContact }>> {
-    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`, {
-      method: 'DELETE',
-    });
+  deleteFormContact(
+    formId: string,
+    contactId: string,
+  ): Promise<BackyEnvelope<{ deleted: true; contact: BackyContact }>> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
-  pageComments(pageId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
+  pageComments(
+    pageId: string,
+    options: BackyCommentListOptions = {},
+  ): Promise<
+    BackyEnvelope<{
+      comments: BackyComment[];
+      count: number;
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  submitPageComment(pageId: string, input: BackyCommentInput): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`, {
-      method: 'POST',
-      body: normalizeCommentInput(input),
-      requestId: input.requestId,
-    });
+  submitPageComment(
+    pageId: string,
+    input: BackyCommentInput,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`,
+      {
+        method: "POST",
+        body: normalizeCommentInput(input),
+        requestId: input.requestId,
+      },
+    );
   }
 
-  pageComment(pageId: string, commentId: string): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments/${encodeURIComponent(commentId)}`);
+  pageComment(
+    pageId: string,
+    commentId: string,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments/${encodeURIComponent(commentId)}`,
+    );
   }
 
-  updatePageComment(pageId: string, commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments/${encodeURIComponent(commentId)}`, {
-      method: 'PATCH',
-      body: updates,
-    });
+  updatePageComment(
+    pageId: string,
+    commentId: string,
+    updates: Record<string, unknown>,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: "PATCH",
+        body: updates,
+      },
+    );
   }
 
-  blogComments(postId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
+  blogComments(
+    postId: string,
+    options: BackyCommentListOptions = {},
+  ): Promise<
+    BackyEnvelope<{
+      comments: BackyComment[];
+      count: number;
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  submitBlogComment(postId: string, input: BackyCommentInput): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`, {
-      method: 'POST',
-      body: normalizeCommentInput(input),
-      requestId: input.requestId,
-    });
+  submitBlogComment(
+    postId: string,
+    input: BackyCommentInput,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`,
+      {
+        method: "POST",
+        body: normalizeCommentInput(input),
+        requestId: input.requestId,
+      },
+    );
   }
 
-  blogComment(postId: string, commentId: string): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`);
+  blogComment(
+    postId: string,
+    commentId: string,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+    );
   }
 
-  updateBlogComment(postId: string, commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, {
-      method: 'PATCH',
-      body: updates,
-    });
+  updateBlogComment(
+    postId: string,
+    commentId: string,
+    updates: Record<string, unknown>,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: "PATCH",
+        body: updates,
+      },
+    );
   }
 
-  siteComments(options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
+  siteComments(
+    options: BackyCommentListOptions = {},
+  ): Promise<
+    BackyEnvelope<{
+      comments: BackyComment[];
+      count: number;
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  updateComments(input: BackyCommentBulkUpdateInput): Promise<BackyEnvelope<{ siteId?: string; updated: BackyComment[]; updatedCount?: number; missingIds?: string[] }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`, {
-      method: 'PATCH',
-      body: input,
-      requestId: input.requestId,
-    });
+  updateComments(
+    input: BackyCommentBulkUpdateInput,
+  ): Promise<
+    BackyEnvelope<{
+      siteId?: string;
+      updated: BackyComment[];
+      updatedCount?: number;
+      missingIds?: string[];
+    }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`,
+      {
+        method: "PATCH",
+        body: input,
+        requestId: input.requestId,
+      },
+    );
   }
 
-  clearCommentReports(commentIds: string[], input: Omit<BackyCommentBulkUpdateInput, 'commentIds' | 'ids' | 'action' | 'clearReports' | 'status'> = {}): Promise<BackyEnvelope<{ siteId?: string; updated: BackyComment[]; updatedCount?: number; missingIds?: string[] }>> {
+  clearCommentReports(
+    commentIds: string[],
+    input: Omit<
+      BackyCommentBulkUpdateInput,
+      "commentIds" | "ids" | "action" | "clearReports" | "status"
+    > = {},
+  ): Promise<
+    BackyEnvelope<{
+      siteId?: string;
+      updated: BackyComment[];
+      updatedCount?: number;
+      missingIds?: string[];
+    }>
+  > {
     return this.updateComments({
       ...input,
       commentIds,
-      action: 'clearReports',
+      action: "clearReports",
     });
   }
 
-  commentBlocklist(options: BackyCommentBlocklistOptions = {}): Promise<BackyEnvelope<{ siteId?: string; blocklist: BackyCommentBlocklistEntry[]; count: number; pagination?: BackyPagination }>> {
+  commentBlocklist(
+    options: BackyCommentBlocklistOptions = {},
+  ): Promise<
+    BackyEnvelope<{
+      siteId?: string;
+      blocklist: BackyCommentBlocklistEntry[];
+      count: number;
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
-  deleteCommentBlocklistEntries(ids: string[], input: { requestId?: string } = {}): Promise<BackyEnvelope<{ siteId?: string; deleted: BackyCommentBlocklistEntry[]; deletedCount?: number; missingIds?: string[] }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`, {
-      method: 'DELETE',
-      body: { ids },
-      requestId: input.requestId,
-    });
+  deleteCommentBlocklistEntries(
+    ids: string[],
+    input: { requestId?: string } = {},
+  ): Promise<
+    BackyEnvelope<{
+      siteId?: string;
+      deleted: BackyCommentBlocklistEntry[];
+      deletedCount?: number;
+      missingIds?: string[];
+    }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`,
+      {
+        method: "DELETE",
+        body: { ids },
+        requestId: input.requestId,
+      },
+    );
   }
 
-  comment(commentId: string): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`);
+  comment(
+    commentId: string,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
+    );
   }
 
-  updateComment(commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ comment: BackyComment }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`, {
-      method: 'PATCH',
-      body: updates,
-    });
+  updateComment(
+    commentId: string,
+    updates: Record<string, unknown>,
+  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: "PATCH",
+        body: updates,
+      },
+    );
   }
 
-  deleteComment(commentId: string): Promise<BackyEnvelope<{ deleted: BackyComment[]; deletedCount: number }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`, {
-      method: 'DELETE',
-    });
+  deleteComment(
+    commentId: string,
+  ): Promise<BackyEnvelope<{ deleted: BackyComment[]; deletedCount: number }>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
   reportReasons(): Promise<BackyEnvelope<{ reasons: string[] }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/report-reasons`);
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/report-reasons`,
+    );
   }
 
-  reportReasonsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ reasons: string[] }>>> {
-    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/report-reasons`, {
-      ifNoneMatch: options.etag,
-      requestId: options.requestId,
-    });
+  reportReasonsCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<{ reasons: string[] }>>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/report-reasons`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
-  reportComment(commentId: string, input: { reason: string; details?: string; reporterEmail?: string; requestId?: string }): Promise<BackyEnvelope<{ comment: BackyComment; report?: Record<string, unknown> }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/report`, {
-      method: 'POST',
-      body: input,
-      requestId: input.requestId,
-    });
+  reportComment(
+    commentId: string,
+    input: {
+      reason: string;
+      details?: string;
+      reporterEmail?: string;
+      requestId?: string;
+    },
+  ): Promise<
+    BackyEnvelope<{ comment: BackyComment; report?: Record<string, unknown> }>
+  > {
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/report`,
+      {
+        method: "POST",
+        body: input,
+        requestId: input.requestId,
+      },
+    );
   }
 
-  events(options: BackyEventListOptions = {}): Promise<BackyEnvelope<{ siteId: string; events: BackyInteractionEvent[]; count: number; pagination?: BackyPagination }>> {
+  events(
+    options: BackyEventListOptions = {},
+  ): Promise<
+    BackyEnvelope<{
+      siteId: string;
+      events: BackyInteractionEvent[];
+      count: number;
+      pagination?: BackyPagination;
+    }>
+  > {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/events`, {
-      query,
-      requestId,
-    });
+    return this.request(
+      `/api/sites/${encodeURIComponent(this.requireSiteId())}/events`,
+      {
+        query,
+        requestId,
+      },
+    );
   }
 
   private requireSiteId(): string {
     if (!this.siteId) {
-      throw new Error('BackyClient requires a siteId. Pass siteId to the constructor or call discoverSite().');
+      throw new Error(
+        "BackyClient requires a siteId. Pass siteId to the constructor or call discoverSite().",
+      );
     }
     return this.siteId;
   }
@@ -2070,11 +3294,15 @@ export class BackyClient {
       if (isBackyErrorEnvelope(json)) {
         throw new BackyApiError(response.status, json);
       }
-      throw new Error(`Backy API request failed with HTTP ${response.status} for ${responsePath}.`);
+      throw new Error(
+        `Backy API request failed with HTTP ${response.status} for ${responsePath}.`,
+      );
     }
 
     if (!isBackyEnvelope<BackyRouteResolve>(json)) {
-      throw new Error(`Backy API returned an invalid route envelope for ${responsePath}.`);
+      throw new Error(
+        `Backy API returned an invalid route envelope for ${responsePath}.`,
+      );
     }
 
     return json;
@@ -2096,11 +3324,15 @@ export class BackyClient {
       if (isBackyErrorEnvelope(json)) {
         throw new BackyApiError(response.status, json);
       }
-      throw new Error(`Backy API request failed with HTTP ${response.status} for ${responsePath}.`);
+      throw new Error(
+        `Backy API request failed with HTTP ${response.status} for ${responsePath}.`,
+      );
     }
 
-    if (!json || typeof json !== 'object') {
-      throw new Error(`Backy API returned non-JSON response for ${responsePath}.`);
+    if (!json || typeof json !== "object") {
+      throw new Error(
+        `Backy API returned non-JSON response for ${responsePath}.`,
+      );
     }
 
     return json as Record<string, unknown>;
@@ -2133,11 +3365,15 @@ export class BackyClient {
       if (isBackyErrorEnvelope(json)) {
         throw new BackyApiError(response.status, json);
       }
-      throw new Error(`Backy API request failed with HTTP ${response.status} for ${responsePath}.`);
+      throw new Error(
+        `Backy API request failed with HTTP ${response.status} for ${responsePath}.`,
+      );
     }
 
-    if (!json || typeof json !== 'object') {
-      throw new Error(`Backy API returned non-JSON response for ${responsePath}.`);
+    if (!json || typeof json !== "object") {
+      throw new Error(
+        `Backy API returned non-JSON response for ${responsePath}.`,
+      );
     }
 
     return {
@@ -2157,7 +3393,9 @@ export class BackyClient {
       requestId?: string;
     } = {},
   ): Promise<string> {
-    const url = new URL(path.startsWith('http') ? path : `${this.baseUrl}${path}`);
+    const url = new URL(
+      path.startsWith("http") ? path : `${this.baseUrl}${path}`,
+    );
     for (const [key, value] of Object.entries(options.query || {})) {
       if (value !== undefined) {
         url.searchParams.set(key, String(value));
@@ -2165,19 +3403,22 @@ export class BackyClient {
     }
 
     const headers = new Headers(this.defaultHeaders);
-    headers.set('x-request-id', options.requestId ?? this.requestIdFactory());
-    if (options.body !== undefined && !headers.has('content-type')) {
-      headers.set('content-type', 'application/json');
+    headers.set("x-request-id", options.requestId ?? this.requestIdFactory());
+    if (options.body !== undefined && !headers.has("content-type")) {
+      headers.set("content-type", "application/json");
     }
 
     const response = await this.fetchImpl(url, {
-      method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
+      method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
     });
 
     if (!response.ok) {
-      throw new Error(`Backy API request failed with HTTP ${response.status} for ${response.url || path}.`);
+      throw new Error(
+        `Backy API request failed with HTTP ${response.status} for ${response.url || path}.`,
+      );
     }
 
     return response.text();
@@ -2193,7 +3434,9 @@ export class BackyClient {
       ifNoneMatch?: string;
     } = {},
   ): Promise<{ response: Response; json: unknown }> {
-    const url = new URL(path.startsWith('http') ? path : `${this.baseUrl}${path}`);
+    const url = new URL(
+      path.startsWith("http") ? path : `${this.baseUrl}${path}`,
+    );
     for (const [key, value] of Object.entries(options.query || {})) {
       if (value !== undefined) {
         url.searchParams.set(key, String(value));
@@ -2202,18 +3445,19 @@ export class BackyClient {
 
     const headers = new Headers(this.defaultHeaders);
     const requestId = options.requestId ?? this.requestIdFactory();
-    headers.set('x-request-id', requestId);
+    headers.set("x-request-id", requestId);
     if (options.ifNoneMatch) {
-      headers.set('if-none-match', options.ifNoneMatch);
+      headers.set("if-none-match", options.ifNoneMatch);
     }
-    if (options.body !== undefined && !headers.has('content-type')) {
-      headers.set('content-type', 'application/json');
+    if (options.body !== undefined && !headers.has("content-type")) {
+      headers.set("content-type", "application/json");
     }
 
     const response = await this.fetchImpl(url, {
-      method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
+      method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
     });
 
     if (response.status === 304) {
@@ -2222,60 +3466,72 @@ export class BackyClient {
 
     return {
       response,
-      json: await response.json().catch(() => null) as unknown,
+      json: (await response.json().catch(() => null)) as unknown,
     };
   }
 }
 
-export const createBackyClient = (options: BackyClientOptions) => new BackyClient(options);
+export const createBackyClient = (options: BackyClientOptions) =>
+  new BackyClient(options);
 
 function isBackyEnvelope<TData>(value: unknown): value is BackyEnvelope<TData> {
   return Boolean(
     value &&
-    typeof value === 'object' &&
+    typeof value === "object" &&
     (value as { success?: unknown }).success === true &&
-    typeof (value as { requestId?: unknown }).requestId === 'string' &&
-    'data' in value,
+    typeof (value as { requestId?: unknown }).requestId === "string" &&
+    "data" in value,
   );
 }
 
 function isBackyErrorEnvelope(value: unknown): value is BackyErrorEnvelope {
   return Boolean(
     value &&
-    typeof value === 'object' &&
+    typeof value === "object" &&
     (value as { success?: unknown }).success === false &&
-    typeof (value as { error?: { code?: unknown; message?: unknown } }).error?.code === 'string' &&
-    typeof (value as { error?: { code?: unknown; message?: unknown } }).error?.message === 'string',
+    typeof (value as { error?: { code?: unknown; message?: unknown } }).error
+      ?.code === "string" &&
+    typeof (value as { error?: { code?: unknown; message?: unknown } }).error
+      ?.message === "string",
   );
 }
 
-function isBackyGoneRouteResolveEnvelope(value: unknown): value is BackyRouteResolveResult {
+function isBackyGoneRouteResolveEnvelope(
+  value: unknown,
+): value is BackyRouteResolveResult {
   if (!isBackyErrorEnvelope(value)) {
     return false;
   }
 
-  const data = value.data as { route?: { type?: unknown; resource?: { statusCode?: unknown } } } | undefined;
-  return data?.route?.type === 'gone' && data.route.resource?.statusCode === 410;
+  const data = value.data as
+    | { route?: { type?: unknown; resource?: { statusCode?: unknown } } }
+    | undefined;
+  return (
+    data?.route?.type === "gone" && data.route.resource?.statusCode === 410
+  );
 }
 
-function normalizeCommentInput(input: BackyCommentInput): Record<string, unknown> {
+function normalizeCommentInput(
+  input: BackyCommentInput,
+): Record<string, unknown> {
   const { body, content, ...rest } = input;
   return {
     ...rest,
-    content: content ?? body ?? '',
+    content: content ?? body ?? "",
   };
 }
 
 function extractResponseMeta(response: Response): BackyResponseMeta {
   return {
     status: response.status,
-    etag: response.headers.get('etag') || undefined,
-    cacheControl: response.headers.get('cache-control') || undefined,
-    cacheScope: response.headers.get('x-backy-cache-scope') || undefined,
-    cacheRevision: response.headers.get('x-backy-cache-revision') || undefined,
-    contractVersion: response.headers.get('x-backy-contract-version') || undefined,
-    schemaVersion: response.headers.get('x-backy-schema-version') || undefined,
-    requestId: response.headers.get('x-backy-request-id') || undefined,
-    siteId: response.headers.get('x-backy-site-id') || undefined,
+    etag: response.headers.get("etag") || undefined,
+    cacheControl: response.headers.get("cache-control") || undefined,
+    cacheScope: response.headers.get("x-backy-cache-scope") || undefined,
+    cacheRevision: response.headers.get("x-backy-cache-revision") || undefined,
+    contractVersion:
+      response.headers.get("x-backy-contract-version") || undefined,
+    schemaVersion: response.headers.get("x-backy-schema-version") || undefined,
+    requestId: response.headers.get("x-backy-request-id") || undefined,
+    siteId: response.headers.get("x-backy-site-id") || undefined,
   };
 }

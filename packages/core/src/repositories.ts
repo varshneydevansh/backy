@@ -113,6 +113,7 @@ export type BackyRepositoryEntity =
   | 'form'
   | 'formSubmission'
   | 'reusableSection'
+  | 'interactiveComponent'
   | 'contact'
   | 'comment'
   | 'team'
@@ -651,6 +652,139 @@ export interface BackyReusableSectionListInput extends BackyPaginationInput {
   search?: string;
 }
 
+export type BackyInteractiveComponentType = 'interactiveFigure' | 'codeComponent';
+export type BackyInteractiveComponentStatus = 'active' | 'disabled' | 'archived';
+export type BackyInteractiveComponentReviewStatus = 'draft' | 'in_review' | 'approved' | 'rejected';
+export type BackyInteractiveComponentRenderMode = 'trusted-component' | 'sandbox-iframe' | 'static-fallback';
+export type BackyInteractiveComponentSource = 'registry' | 'custom';
+
+export interface BackyInteractiveComponentFallback {
+  required: boolean;
+  supported: string[];
+}
+
+export interface BackyInteractiveComponentIntegrity {
+  signed: boolean;
+  signatureRequiredForCustomCode: boolean;
+  algorithm?: string;
+  sha256?: string;
+  signature?: string;
+  signedBy?: string | null;
+  signedAt?: string | null;
+  storageProvider?: string;
+  storagePath?: string;
+  bundleUrl?: string;
+  sizeBytes?: number;
+  contentType?: string;
+  filename?: string;
+}
+
+export interface BackyInteractiveComponentRuntime {
+  sandboxUrl?: string | null;
+  bundleUrl?: string | null;
+  iframeSandbox?: string;
+  allowedPermissions?: string[];
+  postMessageProtocol: string;
+}
+
+export interface BackyInteractiveComponent {
+  id: string;
+  siteId: string;
+  componentKey: string;
+  displayName: string;
+  type: BackyInteractiveComponentType;
+  status: BackyInteractiveComponentStatus;
+  reviewStatus: BackyInteractiveComponentReviewStatus;
+  version: string;
+  renderMode: BackyInteractiveComponentRenderMode;
+  source: BackyInteractiveComponentSource;
+  description: string;
+  allowedDataScopes: string[];
+  requiredFields: string[];
+  controls: BackyJsonObject[];
+  fallback: BackyInteractiveComponentFallback;
+  security: BackyJsonObject;
+  integrity: BackyInteractiveComponentIntegrity;
+  runtime?: BackyInteractiveComponentRuntime;
+  ownerId?: string | null;
+  dependencyMetadata: BackyJsonObject;
+  changelog?: string | null;
+  rollbackFromVersion?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackyInteractiveComponentCreateInput {
+  siteId: string;
+  componentKey: string;
+  displayName: string;
+  type: BackyInteractiveComponentType;
+  status?: BackyInteractiveComponentStatus;
+  reviewStatus?: BackyInteractiveComponentReviewStatus;
+  version: string;
+  renderMode: BackyInteractiveComponentRenderMode;
+  source?: BackyInteractiveComponentSource;
+  description?: string;
+  allowedDataScopes?: string[];
+  requiredFields?: string[];
+  controls?: BackyJsonObject[];
+  fallback?: BackyInteractiveComponentFallback;
+  security?: BackyJsonObject;
+  integrity?: BackyInteractiveComponentIntegrity;
+  runtime?: BackyInteractiveComponentRuntime;
+  ownerId?: string | null;
+  dependencyMetadata?: BackyJsonObject;
+  changelog?: string | null;
+  rollbackFromVersion?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+}
+
+export interface BackyInteractiveComponentUpdateInput {
+  displayName?: string;
+  type?: BackyInteractiveComponentType;
+  status?: BackyInteractiveComponentStatus;
+  reviewStatus?: BackyInteractiveComponentReviewStatus;
+  renderMode?: BackyInteractiveComponentRenderMode;
+  source?: BackyInteractiveComponentSource;
+  description?: string;
+  allowedDataScopes?: string[];
+  requiredFields?: string[];
+  controls?: BackyJsonObject[];
+  fallback?: BackyInteractiveComponentFallback;
+  security?: BackyJsonObject;
+  integrity?: BackyInteractiveComponentIntegrity;
+  runtime?: BackyInteractiveComponentRuntime;
+  ownerId?: string | null;
+  dependencyMetadata?: BackyJsonObject;
+  changelog?: string | null;
+  rollbackFromVersion?: string | null;
+  updatedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+}
+
+export interface BackyInteractiveComponentListInput extends BackyPaginationInput {
+  siteId: string;
+  status?: BackyInteractiveComponentStatus | 'all';
+  reviewStatus?: BackyInteractiveComponentReviewStatus | 'all';
+  type?: BackyInteractiveComponentType | 'all';
+  publicOnly?: boolean;
+  search?: string;
+}
+
+export interface BackyInteractiveComponentRollbackResult {
+  restored: BackyInteractiveComponent;
+  disabledVersions: BackyInteractiveComponent[];
+  restoredFromVersion: string | null;
+}
+
 export type BackyContentTargetType = 'page' | 'post';
 
 export interface BackyContentRevision {
@@ -954,6 +1088,16 @@ export interface BackyReusableSectionRepository {
   delete(siteId: string, sectionId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
+export interface BackyInteractiveComponentRepository {
+  list(input: BackyInteractiveComponentListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyInteractiveComponent>>;
+  getById(siteId: string, componentId: string, context?: BackyRepositoryContext): Promise<BackyInteractiveComponent | null>;
+  getByKeyVersion(siteId: string, componentKey: string, version: string, context?: BackyRepositoryContext): Promise<BackyInteractiveComponent | null>;
+  create(input: BackyInteractiveComponentCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyInteractiveComponent>>;
+  update(siteId: string, componentKey: string, version: string, input: BackyInteractiveComponentUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyInteractiveComponent>>;
+  rollbackVersion(siteId: string, componentKey: string, version: string, input?: { rollbackBy?: string | null; updatedBy?: string | null; changelog?: string | null }, context?: BackyRepositoryContext): Promise<BackyInteractiveComponentRollbackResult | null>;
+  delete(siteId: string, componentKey: string, version: string, context?: BackyRepositoryContext): Promise<boolean>;
+}
+
 export interface BackyContentWorkflowRepository {
   listRevisions(input: BackyContentRevisionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyContentRevision>>;
   getRevisionById(siteId: string, targetType: BackyContentTargetType, targetId: string, revisionId: string, context?: BackyRepositoryContext): Promise<BackyContentRevision | null>;
@@ -1014,6 +1158,7 @@ export interface BackyRepositories {
   forms: BackyFormRepository;
   comments: BackyCommentRepository;
   reusableSections: BackyReusableSectionRepository;
+  interactiveComponents: BackyInteractiveComponentRepository;
   contentWorkflows: BackyContentWorkflowRepository;
   users: BackyUserRepository;
   settings: BackySettingsRepository;

@@ -130,6 +130,19 @@ export const DEFAULT_SITE_SETTINGS = {
       },
     },
   },
+  localization: {
+    defaultLocale: 'en',
+    localeStrategy: 'none',
+    locales: [
+      {
+        code: 'en',
+        label: 'English',
+        default: true,
+        direction: 'ltr',
+        pathPrefix: '',
+      },
+    ],
+  },
   domainVerification: {
     status: 'not_started',
     method: 'dns-txt',

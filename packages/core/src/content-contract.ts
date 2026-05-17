@@ -120,12 +120,52 @@ export interface BackyElementAccessibility {
   aria?: Record<string, string | number | boolean>;
 }
 
+export type BackyInteractiveElementType = 'interactiveFigure' | 'codeComponent';
+export type BackyInteractiveHydrationMode = 'trusted-component' | 'sandbox-iframe' | 'static-fallback';
+
+export interface BackyInteractiveControl {
+  key: string;
+  label?: string;
+  type: 'text' | 'number' | 'boolean' | 'select' | 'color' | 'range' | 'json' | string;
+  value?: BackyJsonValue;
+  defaultValue?: BackyJsonValue;
+  options?: BackyJsonValue[];
+  min?: number;
+  max?: number;
+  step?: number;
+  required?: boolean;
+}
+
+export interface BackyInteractiveFallback {
+  title?: string;
+  text?: string;
+  html?: string;
+  imageUrl?: string;
+  alt?: string;
+  ariaLabel?: string;
+}
+
+export interface BackyInteractiveRenderCapabilities {
+  hydrationMode: BackyInteractiveHydrationMode | string;
+  requiresSandbox?: boolean;
+  requiresSignedBundle?: boolean;
+  fallbackRequired?: boolean;
+  allowedPermissions?: string[];
+  allowedConnectSrc?: string[];
+  postMessageProtocol?: string;
+}
+
 export interface BackyContentElement extends BackyElementLayout {
   id: string;
   type: string;
   name?: string;
   children: BackyContentElement[];
   props: Record<string, BackyJsonValue>;
+  componentKey?: string;
+  version?: string;
+  controls?: BackyInteractiveControl[];
+  fallback?: BackyInteractiveFallback;
+  renderCapabilities?: BackyInteractiveRenderCapabilities;
   styles?: Record<string, BackyJsonValue>;
   responsive?: Partial<Record<BackyBreakpoint, BackyResponsiveElementOverride>>;
   tokenRefs?: Record<string, string>;

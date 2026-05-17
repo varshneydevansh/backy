@@ -20,6 +20,9 @@ export {
     createFormRepository,
 } from './forms';
 export {
+    createInteractiveComponentRepository,
+} from './interactive-components';
+export {
     createMediaRepository,
 } from './media';
 export {

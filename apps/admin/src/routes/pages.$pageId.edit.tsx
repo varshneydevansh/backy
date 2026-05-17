@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, EyeOff, History, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
-import { CanvasEditor } from '@/components/editor/CanvasEditor';
+import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -517,6 +517,13 @@ function PageEditorRoute() {
 
   const editorElements = initialElements.length ? initialElements : fallbackElements;
   const canvasTreeStats = useMemo(() => getCanvasTreeStats(editorElements), [editorElements]);
+  const interactiveReadinessIssues = useMemo(
+    () => collectInteractiveReadinessIssues(editorElements),
+    [editorElements],
+  );
+  const interactivePublishDisabledReason = interactiveReadinessIssues.length
+    ? `Resolve interactive block readiness before publishing: ${interactiveReadinessIssues[0]}`
+    : null;
 
   const parseSerializedContent = (serialized: string): unknown => {
     try {
@@ -617,6 +624,8 @@ function PageEditorRoute() {
       ? routeCheckBlockedMessage
     : isUsingLocalPageCopy
       ? localPageCopyDisabledMessage
+    : interactivePublishDisabledReason
+      ? interactivePublishDisabledReason
     : isReadinessBlocked
       ? pageReadinessFindings.find((check) => check.severity === 'error')?.message || 'Resolve page readiness errors before publishing.'
       : null;
@@ -1036,6 +1045,11 @@ function PageEditorRoute() {
       }
 
       if (action === 'publish') {
+        if (interactivePublishDisabledReason) {
+          setSaveWarning(interactivePublishDisabledReason);
+          return;
+        }
+
         const readiness = await loadPageReadiness();
         if (readiness?.statusLabel === 'blocked') {
           const firstError = readiness.checks.find((check) => check.status !== 'pass' && check.severity === 'error');

@@ -31,6 +31,8 @@ import { normalizeRedirectRules } from '@/lib/redirectRules';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { buildUserPermissionMatrix, isOwnerOnlyAdminPermission, type AdminUserPermissionMatrix } from '@/lib/adminPermissions';
 import { getHostedRouteUrl, getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
+import { buildInteractiveComponentManifestContract } from '@/lib/interactiveComponentRegistry';
+import { localizedRoutePatternVariants, normalizeSiteLocalization, type PublicRoutePattern } from '@/lib/siteLocalization';
 
 interface RouteParams {
   params: Promise<{
@@ -80,7 +82,7 @@ type ManifestDeliveryDiscovery = ReturnType<typeof buildDeliveryDiscovery>;
 type ManifestDeliverySite = {
   slug: string;
   customDomain?: string | null;
-  settings?: Pick<SiteSettings, 'domainVerification'> | null;
+  settings?: Pick<SiteSettings, 'domainVerification' | 'localization'> | null;
 };
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -108,6 +110,7 @@ const buildDeliveryDiscovery = (
   site: ManifestDeliverySite,
 ) => {
   const canonicalBaseUrl = getSiteCanonicalBaseUrl(origin, site);
+  const localization = normalizeSiteLocalization(site.settings);
   const customDomain = normalizeManifestDomain(site.customDomain);
   const verificationDomain = normalizeManifestDomain(site.settings?.domainVerification?.domain);
   const domainVerification = site.settings?.domainVerification || null;
@@ -149,17 +152,9 @@ const buildDeliveryDiscovery = (
     managedBaseUrl,
     primaryDomain: customDomain || new URL(managedBaseUrl).host,
     customDomain,
-    defaultLocale: 'en',
-    localeStrategy: 'none',
-    locales: [
-      {
-        code: 'en',
-        label: 'English',
-        default: true,
-        direction: 'ltr',
-        pathPrefix: '',
-      },
-    ],
+    defaultLocale: localization.defaultLocale,
+    localeStrategy: localization.localeStrategy,
+    locales: localization.locales,
     domains,
     urls: {
       home: getHostedRouteUrl(origin, site.slug, '/', site.customDomain),
@@ -421,6 +416,25 @@ const dynamicCollectionRoutePatterns = (
   ];
 });
 
+const manifestRoutePatterns = (
+  siteId: string,
+  collections: ManifestCollectionRoute[],
+): PublicRoutePattern[] => [
+  {
+    type: 'page',
+    pattern: '/:pageSlug',
+    resolveUrl: `/api/sites/${siteId}/resolve?path=/:pageSlug`,
+    renderUrl: `/api/sites/${siteId}/render?path=/:pageSlug`,
+  },
+  {
+    type: 'blogPost',
+    pattern: '/blog/:postSlug',
+    resolveUrl: `/api/sites/${siteId}/resolve?path=/blog/:postSlug`,
+    renderUrl: `/api/sites/${siteId}/render?path=/blog/:postSlug`,
+  },
+  ...dynamicCollectionRoutePatterns(siteId, collections),
+];
+
 const manifestRedirectRules = (
   siteId: string,
   settings: Pick<Site['settings'], 'redirectRules'> | undefined | null,
@@ -496,6 +510,8 @@ const buildRepositoryManifest = (
     hasCatalog: hasCommerceCatalog,
     hasOrderIntake: hasCommerceCatalog && hasPrivateOrders,
   });
+  const interactiveComponents = buildInteractiveComponentManifestContract();
+  const routePatterns = manifestRoutePatterns(input.site.id, publicCollections);
 
   return {
     success: true,
@@ -550,6 +566,8 @@ const buildRepositoryManifest = (
         redirectRoutes: redirectRules.length > 0,
         reusableSections: input.reusableSections.length > 0,
         frontendDesignContract: Boolean(input.site.settings?.frontendDesign && input.site.settings.frontendDesign.status !== 'unconfigured'),
+        interactiveComponents: true,
+        sandboxedCodeComponents: interactiveComponents.capabilities.customCodeSandbox,
         previewTokens: true,
       },
       endpoints: {
@@ -564,6 +582,9 @@ const buildRepositoryManifest = (
         navigation: `/api/sites/${input.site.id}/navigation`,
         frontendDesign: `/api/sites/${input.site.id}/frontend-design`,
         frontendDesignInManifest: `/api/sites/${input.site.id}/manifest#data.site.frontendDesign`,
+        interactiveComponents: `/api/sites/${input.site.id}/interactive-components`,
+        interactiveRuntimeEvents: `/api/sites/${input.site.id}/interactive-components/runtime-events`,
+        interactiveComponentsInManifest: `/api/sites/${input.site.id}/manifest#data.modules.interactiveComponents`,
         media: `/api/sites/${input.site.id}/media`,
         mediaFonts: `/api/sites/${input.site.id}/media/fonts`,
         mediaDetail: `/api/sites/${input.site.id}/media/{mediaId}`,
@@ -594,24 +615,11 @@ const buildRepositoryManifest = (
         commentReport: `/api/sites/${input.site.id}/comments/{commentId}/report`,
         events: `/api/sites/${input.site.id}/events`,
       },
-      routePatterns: [
-        {
-          type: 'page',
-          pattern: '/:pageSlug',
-          resolveUrl: `/api/sites/${input.site.id}/resolve?path=/:pageSlug`,
-          renderUrl: `/api/sites/${input.site.id}/render?path=/:pageSlug`,
-        },
-        {
-          type: 'blogPost',
-          pattern: '/blog/:postSlug',
-          resolveUrl: `/api/sites/${input.site.id}/resolve?path=/blog/:postSlug`,
-          renderUrl: `/api/sites/${input.site.id}/render?path=/blog/:postSlug`,
-        },
-        ...dynamicCollectionRoutePatterns(input.site.id, publicCollections),
-      ],
+      routePatterns,
       modules: {
         routing: {
           supportedRouteTypes: ['page', 'post', 'dynamicList', 'dynamicItem', 'redirect', 'gone'],
+          localizedRoutePatterns: localizedRoutePatternVariants(routePatterns, input.delivery),
           redirectRules: {
             count: redirectRules.length,
             items: redirectRules,
@@ -724,6 +732,7 @@ const buildRepositoryManifest = (
           listUrl: `/api/sites/${input.site.id}/media`,
         },
         commerce,
+        interactiveComponents,
       },
       admin: input.admin,
       delivery: input.delivery,
@@ -768,6 +777,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         getUserById: repositories.users.getById,
       });
       const origin = new URL(request.url).origin;
+      const delivery = buildDeliveryDiscovery(origin, site);
       const manifest = buildRepositoryManifest({
         requestId,
         site,
@@ -782,7 +792,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         media: media.items,
         commerceSettings: settings.integrations?.commerce,
         admin,
-        delivery: buildDeliveryDiscovery(origin, site),
+        delivery,
       });
 
       return publicContractJson(manifest, {
@@ -824,10 +834,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       hasCatalog: hasCommerceCatalog,
       hasOrderIntake: hasCommerceCatalog && hasPrivateOrders,
     });
+    const origin = new URL(request.url).origin;
+    const interactiveComponents = buildInteractiveComponentManifestContract();
+    const delivery = buildDeliveryDiscovery(origin, site);
+    const routePatterns = manifestRoutePatterns(site.id, collections);
     const admin = await buildAdminDiscovery(request, site.id, {
       configuredAdminKey: getAdminSettings().apiKeys?.adminApiKey,
     });
-    const origin = new URL(request.url).origin;
 
     const manifest = {
       success: true,
@@ -882,6 +895,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           redirectRoutes: redirectRules.length > 0,
           reusableSections: reusableSections.length > 0,
           frontendDesignContract: Boolean(site.settings?.frontendDesign && site.settings.frontendDesign.status !== 'unconfigured'),
+          interactiveComponents: true,
+          sandboxedCodeComponents: interactiveComponents.capabilities.customCodeSandbox,
           previewTokens: true,
         },
         endpoints: {
@@ -896,6 +911,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           navigation: `/api/sites/${site.id}/navigation`,
           frontendDesign: `/api/sites/${site.id}/frontend-design`,
           frontendDesignInManifest: `/api/sites/${site.id}/manifest#data.site.frontendDesign`,
+          interactiveComponents: `/api/sites/${site.id}/interactive-components`,
+          interactiveRuntimeEvents: `/api/sites/${site.id}/interactive-components/runtime-events`,
+          interactiveComponentsInManifest: `/api/sites/${site.id}/manifest#data.modules.interactiveComponents`,
           media: `/api/sites/${site.id}/media`,
           mediaFonts: `/api/sites/${site.id}/media/fonts`,
           mediaDetail: `/api/sites/${site.id}/media/{mediaId}`,
@@ -926,24 +944,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           commentReport: `/api/sites/${site.id}/comments/{commentId}/report`,
           events: `/api/sites/${site.id}/events`,
         },
-        routePatterns: [
-          {
-            type: 'page',
-            pattern: '/:pageSlug',
-            resolveUrl: `/api/sites/${site.id}/resolve?path=/:pageSlug`,
-            renderUrl: `/api/sites/${site.id}/render?path=/:pageSlug`,
-          },
-          {
-            type: 'blogPost',
-            pattern: '/blog/:postSlug',
-            resolveUrl: `/api/sites/${site.id}/resolve?path=/blog/:postSlug`,
-            renderUrl: `/api/sites/${site.id}/render?path=/blog/:postSlug`,
-          },
-          ...dynamicCollectionRoutePatterns(site.id, collections),
-        ],
+        routePatterns,
         modules: {
           routing: {
             supportedRouteTypes: ['page', 'post', 'dynamicList', 'dynamicItem', 'redirect', 'gone'],
+            localizedRoutePatterns: localizedRoutePatternVariants(routePatterns, delivery),
             redirectRules: {
               count: redirectRules.length,
               items: redirectRules,
@@ -1062,9 +1067,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             listUrl: `/api/sites/${site.id}/media`,
           },
           commerce,
+          interactiveComponents,
         },
         admin,
-        delivery: buildDeliveryDiscovery(origin, site),
+        delivery,
         navigation: getSiteNavigation(site.id),
       },
     };

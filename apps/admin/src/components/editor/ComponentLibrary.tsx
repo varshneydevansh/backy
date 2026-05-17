@@ -536,6 +536,25 @@ function ComponentPreviewArtwork({ item }: { item: ComponentLibraryItem }) {
         </div>
       );
 
+    case 'interactiveFigure':
+    case 'codeComponent':
+      return (
+        <div
+          className="grid h-20 w-40 place-items-center rounded border p-3 text-center text-xs font-semibold shadow-sm"
+          style={{
+            backgroundColor: getPreviewColor(props.backgroundColor, resolvedType === 'codeComponent' ? '#111827' : '#f8fafc'),
+            color: getPreviewColor(props.color, resolvedType === 'codeComponent' ? '#f9fafb' : '#0f172a'),
+            borderColor: getPreviewColor(props.borderColor, resolvedType === 'codeComponent' ? '#374151' : '#cbd5e1'),
+            borderRadius: getPreviewRadius(props.borderRadius, 8),
+          }}
+        >
+          <div>
+            <div className="mb-1 text-[10px] uppercase tracking-wide opacity-70">{resolvedType === 'codeComponent' ? 'Sandbox' : 'Figure'}</div>
+            <div className="truncate">{getPreviewContent(props.componentKey, item.name)}</div>
+          </div>
+        </div>
+      );
+
     case 'divider':
       return (
         <div className="w-40 border-t" style={{ borderColor: getPreviewColor(props.borderColor, '#94a3b8'), borderTopWidth: getPreviewContent(props.thickness, '2px') }} />

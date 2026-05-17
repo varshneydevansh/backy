@@ -22,7 +22,7 @@
  * - **editor**: Can create/edit content but cannot manage users or settings
  * - **viewer**: Read-only access for reviewing content
  */
-export type UserRole = 'owner' | 'admin' | 'editor' | 'viewer';
+export type UserRole = "owner" | "admin" | "editor" | "viewer";
 
 /**
  * Extended user profile that supplements Supabase Auth's auth.users table.
@@ -93,7 +93,7 @@ export interface TeamSettings {
   allowedDomains?: string[];
 
   /** Billing/plan information */
-  plan?: 'free' | 'pro' | 'enterprise';
+  plan?: "free" | "pro" | "enterprise";
 }
 
 /**
@@ -116,12 +116,12 @@ export interface TeamMember {
 /**
  * Status of a custom domain's configuration
  */
-export type DomainStatus = 'pending' | 'active' | 'error' | 'expired';
+export type DomainStatus = "pending" | "active" | "error" | "expired";
 
 /**
  * SSL certificate status for custom domains
  */
-export type SSLStatus = 'pending' | 'active' | 'error' | 'expired';
+export type SSLStatus = "pending" | "active" | "error" | "expired";
 
 /**
  * A Site is the main container for all content.
@@ -242,7 +242,7 @@ export interface ThemeConfig {
  */
 export interface SiteSettings {
   /** Admin lifecycle status for the site workspace. Public rendering still uses isPublished as the delivery gate. */
-  siteStatus?: 'draft' | 'published' | 'archived';
+  siteStatus?: "draft" | "published" | "archived";
 
   /** SEO defaults */
   seo: {
@@ -261,7 +261,7 @@ export interface SiteSettings {
       /** Whether sitemap XML should include indexable routes */
       enabled?: boolean;
       /** Default route change frequency when a route does not override it */
-      defaultChangeFrequency?: 'daily' | 'weekly' | 'monthly';
+      defaultChangeFrequency?: "daily" | "weekly" | "monthly";
       /** Default route priority when a route does not override it */
       defaultPriority?: number;
       /** Whether dynamic collection list/item routes are included */
@@ -289,7 +289,7 @@ export interface SiteSettings {
       keywords?: string[];
       jsonLd?: Array<Record<string, unknown>>;
       priority?: number;
-      changeFrequency?: 'daily' | 'weekly' | 'monthly';
+      changeFrequency?: "daily" | "weekly" | "monthly";
       robots?: {
         index?: boolean;
         follow?: boolean;
@@ -327,6 +327,9 @@ export interface SiteSettings {
   /** Site-level navigation menus for default and custom frontends */
   navigation: SiteNavigationConfig;
 
+  /** Public locale and routing discovery for custom/generated frontends */
+  localization?: SiteLocalizationSettings;
+
   /** Custom-domain DNS verification state for managed and custom frontend delivery */
   domainVerification?: SiteDomainVerificationSettings;
 
@@ -349,9 +352,24 @@ export interface SiteSettings {
   editor?: SiteEditorSettings;
 }
 
+export interface SiteLocaleSettings {
+  code: string;
+  label?: string;
+  default?: boolean;
+  direction?: "ltr" | "rtl";
+  pathPrefix?: string;
+  domain?: string | null;
+}
+
+export interface SiteLocalizationSettings {
+  defaultLocale?: string;
+  localeStrategy?: "none" | "path-prefix" | "domain";
+  locales?: SiteLocaleSettings[];
+}
+
 export interface SiteDomainVerificationSettings {
-  status: 'not_started' | 'pending' | 'verified' | 'failed';
-  method: 'dns-txt';
+  status: "not_started" | "pending" | "verified" | "failed";
+  method: "dns-txt";
   domain?: string | null;
   token?: string;
   txtHost?: string;
@@ -364,16 +382,20 @@ export interface SiteDomainVerificationSettings {
 }
 
 export type SiteWebhookEventKind =
-  | 'form-submission'
-  | 'contact-shared'
-  | 'contact-sync'
-  | 'contact-status'
-  | 'commerce-order'
-  | 'commerce-product'
-  | 'commerce-webhook'
-  | 'comment-submitted'
-  | 'comment-status'
-  | 'comment-reported';
+  | "site-created"
+  | "site-updated"
+  | "site-deleted"
+  | "form-submission"
+  | "contact-shared"
+  | "contact-sync"
+  | "contact-status"
+  | "commerce-order"
+  | "commerce-product"
+  | "commerce-webhook"
+  | "comment-submitted"
+  | "comment-status"
+  | "comment-reported"
+  | "interactive-runtime";
 
 export interface SiteWebhookEndpointSettings {
   id: string;
@@ -391,15 +413,26 @@ export interface SiteWebhookSettings {
 }
 
 export interface SiteVercelDeploymentSettings {
-  status: 'not_started' | 'preview_queued' | 'preview_ready' | 'production_ready' | 'rolled_back' | 'blocked';
+  status:
+    | "not_started"
+    | "preview_queued"
+    | "preview_ready"
+    | "production_ready"
+    | "rolled_back"
+    | "blocked";
   projectId?: string;
   teamSlug?: string;
   productionDomain?: string;
   previewUrl?: string;
   productionUrl?: string;
   deploymentId?: string;
-  environment?: 'preview' | 'production';
-  lastAction?: 'prepare-preview' | 'record-preview' | 'promote-production' | 'rollback-production' | null;
+  environment?: "preview" | "production";
+  lastAction?:
+    | "prepare-preview"
+    | "record-preview"
+    | "promote-production"
+    | "rollback-production"
+    | null;
   requestedAt?: string | null;
   completedAt?: string | null;
   promotedAt?: string | null;
@@ -411,9 +444,13 @@ export interface SiteVercelDeploymentSettings {
 
 export interface SiteVercelDeploymentRun {
   id: string;
-  action: 'prepare-preview' | 'record-preview' | 'promote-production' | 'rollback-production';
-  status: SiteVercelDeploymentSettings['status'];
-  environment: 'preview' | 'production';
+  action:
+    | "prepare-preview"
+    | "record-preview"
+    | "promote-production"
+    | "rollback-production";
+  status: SiteVercelDeploymentSettings["status"];
+  environment: "preview" | "production";
   targetUrl?: string;
   command?: string;
   requestedAt: string;
@@ -422,8 +459,8 @@ export interface SiteVercelDeploymentRun {
 }
 
 export interface SiteBillingQuotaSettings {
-  plan: 'free' | 'pro' | 'business' | 'enterprise';
-  status: 'active' | 'trialing' | 'past_due' | 'paused' | 'comped';
+  plan: "free" | "pro" | "business" | "enterprise";
+  status: "active" | "trialing" | "past_due" | "paused" | "comped";
   billingOwnerId?: string | null;
   billingEmail?: string;
   renewalAt?: string | null;
@@ -448,19 +485,25 @@ export interface SiteBillingQuotaSettings {
     customDomains: number;
     updatedAt?: string;
   };
-  lastAction?: 'set-free' | 'set-pro' | 'set-business' | 'set-enterprise' | 'refresh-usage' | null;
+  lastAction?:
+    | "set-free"
+    | "set-pro"
+    | "set-business"
+    | "set-enterprise"
+    | "refresh-usage"
+    | null;
   notes?: string;
   history?: SiteBillingQuotaEvent[];
 }
 
 export interface SiteBillingQuotaEvent {
   id: string;
-  action: NonNullable<SiteBillingQuotaSettings['lastAction']>;
-  plan: SiteBillingQuotaSettings['plan'];
-  status: SiteBillingQuotaSettings['status'];
+  action: NonNullable<SiteBillingQuotaSettings["lastAction"]>;
+  plan: SiteBillingQuotaSettings["plan"];
+  status: SiteBillingQuotaSettings["status"];
   requestedAt: string;
-  usage: SiteBillingQuotaSettings['usage'];
-  limits: SiteBillingQuotaSettings['limits'];
+  usage: SiteBillingQuotaSettings["usage"];
+  limits: SiteBillingQuotaSettings["limits"];
 }
 
 export interface SiteEditorCollectionBindingPreset {
@@ -474,7 +517,7 @@ export interface SiteEditorCollectionBindingPreset {
   filterField?: string;
   filterValue?: string;
   sortBy?: string;
-  sortDirection?: 'asc' | 'desc';
+  sortDirection?: "asc" | "desc";
   limit?: string;
   offset?: string;
   createdAt?: string;
@@ -488,17 +531,17 @@ export interface SiteEditorSettings {
 }
 
 export type SiteContactSavedListQuality =
-  | 'all'
-  | 'missing-email'
-  | 'missing-phone'
-  | 'needs-notes'
-  | 'has-source-values'
-  | 'ready-to-promote'
-  | 'duplicate-email';
+  | "all"
+  | "missing-email"
+  | "missing-phone"
+  | "needs-notes"
+  | "has-source-values"
+  | "ready-to-promote"
+  | "duplicate-email";
 
 export interface SiteContactSavedListFilters {
-  formId?: string | 'all';
-  status?: 'all' | 'new' | 'contacted' | 'qualified' | 'archived';
+  formId?: string | "all";
+  status?: "all" | "new" | "contacted" | "qualified" | "archived";
   quality?: SiteContactSavedListQuality;
   query?: string;
 }
@@ -518,14 +561,14 @@ export interface SiteContactPipelineSettings {
 
 export interface SiteFrontendDesignContract {
   /** Contract schema identifier for frontend design ingestion */
-  schemaVersion: 'backy.frontend-design.v1' | string;
+  schemaVersion: "backy.frontend-design.v1" | string;
 
   /** Whether Backy has captured an external/frontend design source for this site */
-  status: 'unconfigured' | 'captured' | 'synced' | 'stale';
+  status: "unconfigured" | "captured" | "synced" | "stale";
 
   /** Source metadata for the connected frontend or manually imported design */
   source: {
-    type: 'manual' | 'managed-site' | 'custom-frontend';
+    type: "manual" | "managed-site" | "custom-frontend";
     label?: string;
     url?: string;
     repository?: string;
@@ -553,7 +596,7 @@ export interface SiteFrontendDesignContract {
   /** Reusable frontend-derived templates for new content surfaces */
   templates: Array<{
     id: string;
-    type: 'page' | 'blogPost' | 'form' | 'product' | 'collection' | 'section';
+    type: "page" | "blogPost" | "form" | "product" | "collection" | "section";
     name: string;
     routePattern?: string;
     description?: string;
@@ -583,7 +626,7 @@ export interface SiteCommentPolicy {
   enabled?: boolean;
 
   /** Default moderation behavior when a comment block does not override it */
-  moderationMode?: 'manual' | 'auto-approve';
+  moderationMode?: "manual" | "auto-approve";
 
   /** Whether anonymous visitors can submit comments */
   allowGuests?: boolean;
@@ -604,7 +647,7 @@ export interface SiteCommentPolicy {
   enableCaptcha?: boolean;
 
   /** Public captcha provider hint for custom frontends rendering comment forms */
-  captchaProvider?: 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock';
+  captchaProvider?: "turnstile" | "hcaptcha" | "recaptcha" | "mock";
 
   /** Public captcha site key for custom frontends rendering comment forms */
   captchaSiteKey?: string;
@@ -616,7 +659,7 @@ export interface SiteCommentPolicy {
   closedMessage?: string;
 
   /** Default public sort order */
-  sort?: 'newest' | 'oldest';
+  sort?: "newest" | "oldest";
 }
 
 /**
@@ -669,13 +712,13 @@ export interface SiteNavigationLayoutConfig {
 
 export interface SiteNavigationHeaderConfig {
   /** Header composition pattern */
-  variant?: 'minimal' | 'centered' | 'split' | 'commerce';
+  variant?: "minimal" | "centered" | "split" | "commerce";
 
   /** Header scroll behavior */
-  position?: 'static' | 'sticky' | 'transparent';
+  position?: "static" | "sticky" | "transparent";
 
   /** Header content width */
-  width?: 'contained' | 'full';
+  width?: "contained" | "full";
 
   /** Whether the site name/logo slot is shown */
   showBrand?: boolean;
@@ -698,10 +741,10 @@ export interface SiteNavigationHeaderConfig {
 
 export interface SiteNavigationFooterConfig {
   /** Footer composition pattern */
-  variant?: 'simple' | 'columns' | 'mega';
+  variant?: "simple" | "columns" | "mega";
 
   /** Footer content width */
-  width?: 'contained' | 'full';
+  width?: "contained" | "full";
 
   /** Whether social links should be rendered by the frontend */
   showSocial?: boolean;
@@ -721,7 +764,7 @@ export interface SiteNavigationConfigItem {
   id?: string;
 
   /** Item type */
-  type: 'page' | 'route' | 'url';
+  type: "page" | "route" | "url";
 
   /** Display label */
   label: string;
@@ -736,7 +779,7 @@ export interface SiteNavigationConfigItem {
   href?: string;
 
   /** Link target */
-  target?: '_self' | '_blank';
+  target?: "_self" | "_blank";
 
   /** Whether the item is shown publicly */
   visible?: boolean;
@@ -752,7 +795,7 @@ export interface SiteNavigationConfigItem {
 /**
  * Publishing status for pages and posts
  */
-export type PublishStatus = 'draft' | 'published' | 'scheduled' | 'archived';
+export type PublishStatus = "draft" | "published" | "scheduled" | "archived";
 
 /**
  * A Page represents a single page on a website.
@@ -873,7 +916,7 @@ export interface CanvasNode {
 
   /** Position configuration for absolute/fixed positioning */
   position?: {
-    type: 'static' | 'relative' | 'absolute' | 'fixed' | 'sticky';
+    type: "static" | "relative" | "absolute" | "fixed" | "sticky";
     top?: number;
     left?: number;
     right?: number;
@@ -929,16 +972,16 @@ export interface PageMeta {
   frontendDesignTemplateName?: string;
 
   /** Frontend design source snapshot used to preserve custom frontend context */
-  frontendDesignSource?: SiteFrontendDesignContract['source'];
+  frontendDesignSource?: SiteFrontendDesignContract["source"];
 
   /** Frontend design route pattern snapshot used when the content was seeded */
   frontendDesignRoutePattern?: string;
 
   /** Frontend design token snapshot used to preserve custom frontend styling */
-  frontendDesignTokens?: SiteFrontendDesignContract['tokens'];
+  frontendDesignTokens?: SiteFrontendDesignContract["tokens"];
 
   /** Frontend design chrome snapshot used to preserve header/navigation/footer context */
-  frontendDesignChrome?: SiteFrontendDesignContract['chrome'];
+  frontendDesignChrome?: SiteFrontendDesignContract["chrome"];
 
   /** Frontend design custom CSS snapshot used when the content was seeded */
   frontendDesignCustomCss?: string;
@@ -948,8 +991,8 @@ export interface PageMeta {
 
   /** Collection dataset route/record-resolution contract for dynamic list/detail pages */
   collectionDataset?: {
-    schemaVersion: 'backy.collection-dataset-page.v1';
-    mode: 'list' | 'item';
+    schemaVersion: "backy.collection-dataset-page.v1";
+    mode: "list" | "item";
     collectionId: string;
     collectionSlug: string;
     collectionName?: string;
@@ -957,7 +1000,7 @@ export interface PageMeta {
     routePattern: string;
     listRoutePattern: string;
     resolvedPath: string;
-    recordParam: 'recordSlug' | null;
+    recordParam: "recordSlug" | null;
     slugField?: string | null;
     titleField?: string | null;
     descriptionField?: string | null;
@@ -984,7 +1027,7 @@ export interface PageVersion {
 /**
  * Content format for blog posts
  */
-export type ContentFormat = 'editor' | 'markdown' | 'html';
+export type ContentFormat = "editor" | "markdown" | "html";
 
 /**
  * A BlogPost represents a single blog article.
@@ -1094,7 +1137,13 @@ export interface BlogTag {
 /**
  * Media file types we support
  */
-export type MediaType = 'image' | 'video' | 'audio' | 'document' | 'font' | 'other';
+export type MediaType =
+  | "image"
+  | "video"
+  | "audio"
+  | "document"
+  | "font"
+  | "other";
 
 /**
  * A MediaItem represents a file in the media library.
@@ -1209,12 +1258,12 @@ export interface MediaVersion {
 /**
  * Media scope for usage isolation.
  */
-export type MediaScope = 'global' | 'page' | 'post';
+export type MediaScope = "global" | "page" | "post";
 
 /**
  * Media visibility for internal/public access policy.
  */
-export type MediaVisibility = 'public' | 'private';
+export type MediaVisibility = "public" | "private";
 
 /**
  * Optional media binding record for explicit reuse context.
@@ -1247,14 +1296,14 @@ export interface MediaBinding {
 
 /** Supported usage categories for media in canvas and rich components */
 export type MediaUsageType =
-  | 'content'
-  | 'background'
-  | 'thumbnail'
-  | 'cover'
-  | 'avatar'
-  | 'document'
-  | 'icon'
-  | 'other';
+  | "content"
+  | "background"
+  | "thumbnail"
+  | "cover"
+  | "avatar"
+  | "document"
+  | "icon"
+  | "other";
 
 /**
  * Media metadata varies by file type
@@ -1292,24 +1341,24 @@ export interface MediaFolder {
  * Form field types for frontend embeddable forms.
  */
 export type FormFieldType =
-  | 'text'
-  | 'email'
-  | 'number'
-  | 'textarea'
-  | 'select'
-  | 'checkbox'
-  | 'radio'
-  | 'date'
-  | 'tel'
-  | 'url'
-  | 'file';
+  | "text"
+  | "email"
+  | "number"
+  | "textarea"
+  | "select"
+  | "checkbox"
+  | "radio"
+  | "date"
+  | "tel"
+  | "url"
+  | "file";
 
 /**
  * Validation rule for a specific form field.
  */
 export interface FormValidationRule {
   /** Rule kind */
-  type: 'required' | 'minLength' | 'maxLength' | 'pattern' | 'min' | 'max';
+  type: "required" | "minLength" | "maxLength" | "pattern" | "min" | "max";
 
   /** Value used by the rule (string/number) */
   value?: string | number;
@@ -1351,7 +1400,7 @@ export interface FormFieldDefinition {
 }
 
 /** Form access model used by page renderer and admin config. */
-export type FormAudience = 'public' | 'authenticated' | 'adminOnly';
+export type FormAudience = "public" | "authenticated" | "adminOnly";
 
 /** Form definition tied to a site/page/post/editor block */
 export interface FormDefinition {
@@ -1434,7 +1483,7 @@ export interface FormDefinition {
   notificationWebhook?: string | null;
 
   /** Auto-approval / moderation mode */
-  moderationMode?: 'manual' | 'auto-approve';
+  moderationMode?: "manual" | "auto-approve";
 
   /** Optional contact conversion mapping for lead share */
   contactShare?: {
@@ -1488,7 +1537,7 @@ export interface FormCollectionRecordLink {
   collectionSlug: string;
   recordId: string;
   recordSlug: string;
-  status: 'draft' | 'published' | 'scheduled' | 'archived';
+  status: "draft" | "published" | "scheduled" | "archived";
   createdAt: string;
 }
 
@@ -1512,7 +1561,7 @@ export interface FormSubmission {
   requestId?: string | null;
 
   /** Tracking and moderation */
-  status: 'pending' | 'approved' | 'rejected' | 'spam';
+  status: "pending" | "approved" | "rejected" | "spam";
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   adminNotes?: string | null;
@@ -1526,21 +1575,26 @@ export interface FormSubmission {
 }
 
 /** Comment status */
-export type CommentStatus = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
+export type CommentStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "spam"
+  | "blocked";
 
 /** Allowed report/block reason taxonomy for moderation and analytics. */
 export type CommentReportReason =
-  | 'spam'
-  | 'harassment'
-  | 'abuse'
-  | 'hate-speech'
-  | 'off-topic'
-  | 'copyright'
-  | 'privacy'
-  | 'other';
+  | "spam"
+  | "harassment"
+  | "abuse"
+  | "hate-speech"
+  | "off-topic"
+  | "copyright"
+  | "privacy"
+  | "other";
 
 /** Comment target entity types */
-export type CommentTargetType = 'page' | 'post';
+export type CommentTargetType = "page" | "post";
 
 /** Standardized public comment payload */
 export interface Comment {
@@ -1589,7 +1643,7 @@ export interface Comment {
 export interface CommentBlocklistEntry {
   id: string;
   siteId: string;
-  type: 'email' | 'ip';
+  type: "email" | "ip";
   value: string;
   reason: string;
   actor?: string | null;
@@ -1622,7 +1676,7 @@ export interface Contact {
   sourceValues?: Record<string, unknown>;
 
   /** Lead lifecycle */
-  status: 'new' | 'contacted' | 'qualified' | 'archived';
+  status: "new" | "contacted" | "qualified" | "archived";
 
   /** Audit */
   sourceSubmissionId?: string;
@@ -1776,7 +1830,7 @@ export interface RedirectRule {
 /**
  * Type of link target
  */
-export type LinkTargetType = 'page' | 'post' | 'url' | 'file';
+export type LinkTargetType = "page" | "post" | "url" | "file";
 
 /**
  * Custom link/redirect within a site
@@ -1817,19 +1871,25 @@ export interface CustomLink {
  * Types of activities that can be logged
  */
 export type ActivityAction =
-  | 'created'
-  | 'updated'
-  | 'deleted'
-  | 'published'
-  | 'unpublished'
-  | 'login'
-  | 'logout'
-  | 'invite_sent';
+  | "created"
+  | "updated"
+  | "deleted"
+  | "published"
+  | "unpublished"
+  | "login"
+  | "logout"
+  | "invite_sent";
 
 /**
  * Types of entities that can have activities
  */
-export type EntityType = 'site' | 'page' | 'post' | 'media' | 'user' | 'setting';
+export type EntityType =
+  | "site"
+  | "page"
+  | "post"
+  | "media"
+  | "user"
+  | "setting";
 
 /**
  * Activity log entry
@@ -1900,7 +1960,7 @@ export interface PaginationParams {
   page?: number;
   perPage?: number;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
 }
 
 /**

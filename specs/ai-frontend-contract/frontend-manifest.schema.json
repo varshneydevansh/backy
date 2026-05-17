@@ -4,6 +4,30 @@
   "title": "Backy AI Frontend Manifest",
   "type": "object",
   "additionalProperties": true,
+  "$defs": {
+    "navigationItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["page", "route", "url"] },
+        "label": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "pageId": { "type": "string" },
+        "slug": { "type": "string" },
+        "path": { "type": "string" },
+        "href": { "type": "string" },
+        "target": { "enum": ["_self", "_blank"] },
+        "status": { "type": "string" },
+        "isHomepage": { "type": "boolean" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/navigationItem" }
+        }
+      },
+      "required": ["id", "type", "label", "children"]
+    }
+  },
   "properties": {
     "success": { "const": true },
     "requestId": { "type": "string", "minLength": 1 },
@@ -20,6 +44,8 @@
             "id": { "type": "string", "minLength": 1 },
             "slug": { "type": "string", "minLength": 1 },
             "name": { "type": "string", "minLength": 1 },
+            "description": { "type": "string" },
+            "customDomain": { "type": ["string", "null"] },
             "status": { "type": "string" },
             "themeTokens": { "type": "object" },
             "frontendDesign": {
@@ -111,7 +137,26 @@
                 { "type": "null" }
               ]
             },
-            "commentPolicy": { "type": "object" }
+            "commentPolicy": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "moderationMode": { "enum": ["manual", "auto-approve"] },
+                "allowGuests": { "type": "boolean" },
+                "requireName": { "type": "boolean" },
+                "requireEmail": { "type": "boolean" },
+                "allowReplies": { "type": "boolean" },
+                "enableReports": { "type": "boolean" },
+                "enableCaptcha": { "type": "boolean" },
+                "captchaProvider": { "enum": ["turnstile", "hcaptcha", "recaptcha", "mock"] },
+                "captchaSiteKey": { "type": "string" },
+                "blockedTerms": { "type": "array", "items": { "type": "string" } },
+                "closedMessage": { "type": "string" },
+                "sort": { "enum": ["newest", "oldest"] }
+              },
+              "required": ["enabled", "moderationMode", "allowGuests", "requireName", "requireEmail", "allowReplies", "enableReports", "enableCaptcha", "captchaProvider", "captchaSiteKey", "blockedTerms", "closedMessage", "sort"]
+            }
           },
           "required": ["id", "slug", "name", "status", "themeTokens"]
         },
@@ -120,9 +165,18 @@
           "additionalProperties": true,
           "properties": {
             "version": { "const": "backy.ai-frontend.v1" },
+            "docs": { "type": "string", "minLength": 1 },
             "schemas": {
               "type": "object",
               "additionalProperties": { "type": "string" },
+              "properties": {
+                "manifest": { "type": "string", "minLength": 1 },
+                "renderPayload": { "type": "string", "minLength": 1 },
+                "themeTokens": { "type": "string", "minLength": 1 },
+                "elementActions": { "type": "string", "minLength": 1 },
+                "dataBindings": { "type": "string", "minLength": 1 },
+                "editableMap": { "type": "string", "minLength": 1 }
+              },
               "required": ["manifest", "renderPayload", "themeTokens", "elementActions", "dataBindings", "editableMap"]
             }
           },
@@ -131,6 +185,34 @@
         "capabilities": {
           "type": "object",
           "additionalProperties": { "type": "boolean" },
+          "properties": {
+            "routeResolve": { "type": "boolean" },
+            "renderPayload": { "type": "boolean" },
+            "openApi": { "type": "boolean" },
+            "seoDiscovery": { "type": "boolean" },
+            "hostedRendering": { "type": "boolean" },
+            "navigation": { "type": "boolean" },
+            "mediaLibrary": { "type": "boolean" },
+            "uploadedFonts": { "type": "boolean" },
+            "blog": { "type": "boolean" },
+            "comments": { "type": "boolean" },
+            "forms": { "type": "boolean" },
+            "collectionSchemas": { "type": "boolean" },
+            "collectionRecords": { "type": "boolean" },
+            "commerceCatalog": { "type": "boolean" },
+            "commerceOrderIntake": { "type": "boolean" },
+            "commerceProviderCheckout": { "type": "boolean" },
+            "publicCollectionCreate": { "type": "boolean" },
+            "collectionWriteForms": { "type": "boolean" },
+            "dynamicListRoutes": { "type": "boolean" },
+            "dynamicItemRoutes": { "type": "boolean" },
+            "redirectRoutes": { "type": "boolean" },
+            "reusableSections": { "type": "boolean" },
+            "frontendDesignContract": { "type": "boolean" },
+            "interactiveComponents": { "type": "boolean" },
+            "sandboxedCodeComponents": { "type": "boolean" },
+            "previewTokens": { "type": "boolean" }
+          },
           "required": [
             "routeResolve",
             "renderPayload",
@@ -150,6 +232,51 @@
         "endpoints": {
           "type": "object",
           "additionalProperties": { "type": "string" },
+          "properties": {
+            "site": { "type": "string", "minLength": 1 },
+            "manifest": { "type": "string", "minLength": 1 },
+            "openapi": { "type": "string", "minLength": 1 },
+            "resolve": { "type": "string", "minLength": 1 },
+            "render": { "type": "string", "minLength": 1 },
+            "seo": { "type": "string", "minLength": 1 },
+            "sitemap": { "type": "string", "minLength": 1 },
+            "robots": { "type": "string", "minLength": 1 },
+            "navigation": { "type": "string", "minLength": 1 },
+            "frontendDesign": { "type": "string", "minLength": 1 },
+            "frontendDesignInManifest": { "type": "string", "minLength": 1 },
+            "interactiveComponents": { "type": "string", "minLength": 1 },
+            "interactiveRuntimeEvents": { "type": "string", "minLength": 1 },
+            "interactiveComponentsInManifest": { "type": "string", "minLength": 1 },
+            "media": { "type": "string", "minLength": 1 },
+            "mediaFonts": { "type": "string", "minLength": 1 },
+            "mediaDetail": { "type": "string", "minLength": 1 },
+            "mediaFile": { "type": "string", "minLength": 1 },
+            "mediaTransform": { "type": "string", "minLength": 1 },
+            "pages": { "type": "string", "minLength": 1 },
+            "blog": { "type": "string", "minLength": 1 },
+            "blogRss": { "type": "string", "minLength": 1 },
+            "blogCategories": { "type": "string", "minLength": 1 },
+            "blogTags": { "type": "string", "minLength": 1 },
+            "blogAuthors": { "type": "string", "minLength": 1 },
+            "commerceCatalog": { "type": "string", "minLength": 1 },
+            "commerceOrders": { "type": "string", "minLength": 1 },
+            "collections": { "type": "string", "minLength": 1 },
+            "reusableSections": { "type": "string", "minLength": 1 },
+            "reusableSectionDetail": { "type": "string", "minLength": 1 },
+            "forms": { "type": "string", "minLength": 1 },
+            "formDetail": { "type": "string", "minLength": 1 },
+            "formDefinition": { "type": "string", "minLength": 1 },
+            "formSubmissions": { "type": "string", "minLength": 1 },
+            "formContacts": { "type": "string", "minLength": 1 },
+            "comments": { "type": "string", "minLength": 1 },
+            "pageComments": { "type": "string", "minLength": 1 },
+            "pageComment": { "type": "string", "minLength": 1 },
+            "blogComments": { "type": "string", "minLength": 1 },
+            "blogComment": { "type": "string", "minLength": 1 },
+            "commentReportReasons": { "type": "string", "minLength": 1 },
+            "commentReport": { "type": "string", "minLength": 1 },
+            "events": { "type": "string", "minLength": 1 }
+          },
           "required": ["site", "manifest", "openapi", "resolve", "render", "navigation", "frontendDesign", "media", "pages", "blog", "collections", "reusableSections", "forms"]
         },
         "routePatterns": {
@@ -218,6 +345,36 @@
                     }
                   },
                   "required": ["count", "items"]
+                },
+                "localizedRoutePatterns": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "locale": { "type": "string", "minLength": 2 },
+                      "default": { "type": "boolean" },
+                      "pathPrefix": { "type": "string" },
+                      "domain": { "type": ["string", "null"] },
+                      "patterns": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "type": { "type": "string", "minLength": 1 },
+                            "locale": { "type": "string", "minLength": 2 },
+                            "basePattern": { "type": "string", "minLength": 1 },
+                            "pattern": { "type": "string", "minLength": 1 },
+                            "resolveUrl": { "type": "string", "minLength": 1 },
+                            "renderUrl": { "type": "string", "minLength": 1 }
+                          },
+                          "required": ["type", "locale", "basePattern", "pattern", "resolveUrl", "renderUrl"]
+                        }
+                      }
+                    },
+                    "required": ["locale", "default", "pathPrefix", "patterns"]
+                  }
                 }
               },
               "required": ["supportedRouteTypes", "redirectRules"]
@@ -333,9 +490,50 @@
                     "required": ["id", "format", "contentType", "endpoint"]
                   }
                 },
-                "categories": { "type": "array" },
-                "tags": { "type": "array" },
-                "authors": { "type": "array" }
+                "categories": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "name": { "type": "string", "minLength": 1 },
+                      "slug": { "type": "string", "minLength": 1 },
+                      "postCount": { "type": "number", "minimum": 0 }
+                    },
+                    "required": ["id", "name", "slug", "postCount"]
+                  }
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "name": { "type": "string", "minLength": 1 },
+                      "slug": { "type": "string", "minLength": 1 },
+                      "postCount": { "type": "number", "minimum": 0 }
+                    },
+                    "required": ["id", "name", "slug", "postCount"]
+                  }
+                },
+                "authors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "name": { "type": "string", "minLength": 1 },
+                      "slug": { "type": "string", "minLength": 1 },
+                      "role": { "type": "string" },
+                      "status": { "type": "string" },
+                      "postCount": { "type": "number", "minimum": 0 }
+                    },
+                    "required": ["id", "name", "slug", "postCount"]
+                  }
+                }
               },
               "required": ["count", "categories", "tags", "authors"]
             },
@@ -348,7 +546,50 @@
                   "id": { "type": "string", "minLength": 1 },
                   "slug": { "type": "string", "minLength": 1 },
                   "name": { "type": "string", "minLength": 1 },
-                  "fields": { "type": "array" },
+                  "status": { "type": "string" },
+                  "permissions": {
+                    "type": "object",
+                    "additionalProperties": { "type": "boolean" },
+                    "properties": {
+                      "publicRead": { "type": "boolean" },
+                      "publicCreate": { "type": "boolean" },
+                      "publicUpdate": { "type": "boolean" },
+                      "publicDelete": { "type": "boolean" }
+                    }
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "key": { "type": "string", "minLength": 1 },
+                        "label": { "type": "string" },
+                        "type": { "type": "string", "minLength": 1 },
+                        "required": { "type": "boolean" },
+                        "unique": { "type": "boolean" },
+                        "options": {
+                          "type": "array",
+                          "items": {
+                            "oneOf": [
+                              { "type": "string" },
+                              {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                  "value": { "type": "string" },
+                                  "label": { "type": "string" }
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "referenceCollectionId": { "type": ["string", "null"] },
+                        "validation": { "type": "object", "additionalProperties": true }
+                      },
+                      "required": ["key", "type"]
+                    }
+                  },
                   "recordsUrl": { "type": "string", "minLength": 1 },
                   "listRoutePattern": { "type": "string", "minLength": 1 },
                   "dynamicListRoutePattern": { "type": "string", "minLength": 1 },
@@ -386,8 +627,61 @@
                   "id": { "type": "string", "minLength": 1 },
                   "title": { "type": "string" },
                   "active": { "type": "boolean" },
-                  "fields": { "type": "array" },
-                  "submitUrl": { "type": "string", "minLength": 1 }
+                  "moderationMode": { "type": "string" },
+                  "pageId": { "type": ["string", "null"] },
+                  "postId": { "type": ["string", "null"] },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "key": { "type": "string", "minLength": 1 },
+                        "label": { "type": "string" },
+                        "type": { "type": "string", "minLength": 1 },
+                        "placeholder": { "type": "string" },
+                        "helpText": { "type": "string" },
+                        "defaultValue": {},
+                        "options": { "type": "array", "items": { "type": "string" } },
+                        "validation": { "type": "array" },
+                        "required": { "type": "boolean" }
+                      },
+                      "required": ["key", "type"]
+                    }
+                  },
+                  "submitUrl": { "type": "string", "minLength": 1 },
+                  "detailUrl": { "type": "string", "minLength": 1 },
+                  "definitionUrl": { "type": "string", "minLength": 1 },
+                  "submissionsUrl": { "type": "string", "minLength": 1 },
+                  "contactsUrl": { "type": "string", "minLength": 1 },
+                  "collectionTarget": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "collectionId": { "type": "string" },
+                          "mode": { "type": "string" }
+                        }
+                      },
+                      { "type": "null" }
+                    ]
+                  },
+                  "frontendDesign": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "templateId": { "type": "string", "minLength": 1 },
+                      "templateName": { "type": "string" },
+                      "routePattern": { "type": "string" },
+                      "source": { "type": "object", "additionalProperties": true },
+                      "chrome": { "type": "object", "additionalProperties": true },
+                      "tokens": { "type": "object", "additionalProperties": true },
+                      "customCss": { "type": "string" },
+                      "bindingHints": { "type": "array" }
+                    },
+                    "required": ["templateId"]
+                  }
                 },
                 "required": ["id", "active", "fields", "submitUrl"]
               }
@@ -398,8 +692,8 @@
               "properties": {
                 "count": { "type": "number", "minimum": 0 },
                 "listUrl": { "type": "string", "minLength": 1 },
-                "categories": { "type": "array" },
-                "tags": { "type": "array" },
+                "categories": { "type": "array", "items": { "type": "string" } },
+                "tags": { "type": "array", "items": { "type": "string" } },
                 "items": {
                   "type": "array",
                   "items": {
@@ -409,7 +703,18 @@
                       "id": { "type": "string", "minLength": 1 },
                       "slug": { "type": "string", "minLength": 1 },
                       "name": { "type": "string", "minLength": 1 },
+                      "description": { "type": ["string", "null"] },
+                      "category": { "type": "string" },
+                      "tags": { "type": "array", "items": { "type": "string" } },
                       "detailUrl": { "type": "string", "minLength": 1 },
+                      "canvasSize": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "width": { "type": "number" },
+                          "height": { "type": "number" }
+                        }
+                      },
                       "elementCount": { "type": "number", "minimum": 0 },
                       "frontendDesign": {
                         "type": "object",
@@ -439,10 +744,180 @@
                 "count": { "type": "number", "minimum": 0 },
                 "publicCount": { "type": "number", "minimum": 0 },
                 "fontCount": { "type": "number", "minimum": 0 },
-                "types": { "type": "array" },
+                "types": { "type": "array", "items": { "type": "string" } },
                 "listUrl": { "type": "string", "minLength": 1 }
               },
               "required": ["count", "publicCount", "fontCount", "types", "listUrl"]
+            },
+            "commerce": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.commerce-settings.v1" },
+                "mode": { "enum": ["catalog-only", "manual-orders", "checkout-provider"] },
+                "currency": { "type": "string", "minLength": 3 },
+                "paymentProvider": { "enum": ["none", "stripe", "manual"] },
+                "providerAccountId": { "type": ["string", "null"] },
+                "provider": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "mode": { "enum": ["test", "live"] },
+                    "accountId": { "type": ["string", "null"] },
+                    "webhookConfigured": { "type": "boolean" },
+                    "webhookEndpointUrl": { "type": ["string", "null"] }
+                  },
+                  "required": ["mode", "accountId", "webhookConfigured", "webhookEndpointUrl"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "catalog": { "type": "boolean" },
+                    "orderIntake": { "type": "boolean" },
+                    "providerCheckout": { "type": "boolean" }
+                  },
+                  "required": ["catalog", "orderIntake", "providerCheckout"]
+                },
+                "checkout": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "catalogUrl": { "type": "string", "minLength": 1 },
+                    "orderIntakeUrl": { "type": "string", "minLength": 1 },
+                    "successPath": { "type": "string" },
+                    "cancelPath": { "type": "string" },
+                    "guestCheckout": { "type": "boolean" }
+                  },
+                  "required": ["catalogUrl", "orderIntakeUrl", "successPath", "cancelPath", "guestCheckout"]
+                },
+                "pricing": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "taxes": { "type": "boolean" },
+                    "shipping": { "type": "boolean" },
+                    "discounts": { "type": "boolean" },
+                    "rules": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "taxRatePercent": { "type": "number" },
+                        "digitalTaxRatePercent": { "type": "number" },
+                        "shippingBaseAmount": { "type": "number" },
+                        "shippingWeightRate": { "type": "number" },
+                        "discountPercent": { "type": "number" }
+                      }
+                    }
+                  },
+                  "required": ["taxes", "shipping", "discounts", "rules"]
+                },
+                "inventory": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "reservations": { "type": "boolean" },
+                    "reservationMinutes": { "type": "number", "minimum": 1 }
+                  },
+                  "required": ["reservations", "reservationMinutes"]
+                },
+                "webhooks": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "eventsEnabled": { "type": "boolean" },
+                    "endpointConfigured": { "type": "boolean" },
+                    "eventAllowlist": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["eventsEnabled", "endpointConfigured", "eventAllowlist"]
+                },
+                "reconciliation": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "mode": { "enum": ["manual", "webhook", "scheduled"] },
+                    "windowHours": { "type": "number", "minimum": 1 },
+                    "requiresManualReview": { "type": "boolean" }
+                  },
+                  "required": ["mode", "windowHours", "requiresManualReview"]
+                }
+              },
+              "required": ["schemaVersion", "mode", "currency", "paymentProvider", "providerAccountId", "provider", "capabilities", "checkout", "pricing", "inventory", "webhooks", "reconciliation"]
+            },
+            "interactiveComponents": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.interactive-components.v1" },
+                "elementTypes": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "trustedRegistry": { "type": "boolean" },
+                    "customCodeSandbox": { "type": "boolean" },
+                    "signedBundles": { "type": "boolean" },
+                    "staticFallbacks": { "type": "boolean" },
+                    "versionedBundles": { "type": "boolean" },
+                    "dataBindings": { "type": "boolean" }
+                  }
+                },
+                "registry": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "provider": { "type": "string" },
+                    "configured": { "type": "boolean" },
+                    "endpoint": { "type": ["string", "null"] },
+                    "bundleBaseUrl": { "type": ["string", "null"] },
+                    "signedBundles": { "type": "boolean" },
+                    "reviewRequired": { "type": "boolean" }
+                  },
+                  "required": ["provider", "configured", "signedBundles", "reviewRequired"]
+                },
+                "sandbox": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "origin": { "type": ["string", "null"] },
+                    "cspConfigured": { "type": "boolean" },
+                    "iframeSandbox": { "type": "string" },
+                    "allowedConnectSrc": { "type": "string" },
+                    "requiresDedicatedOrigin": { "type": "boolean" }
+                  },
+                  "required": ["enabled", "cspConfigured", "iframeSandbox", "allowedConnectSrc", "requiresDedicatedOrigin"]
+                },
+                "renderContract": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "fields": { "type": "array", "items": { "type": "string" } },
+                    "hydrationModes": { "type": "array", "items": { "type": "string" } },
+                    "postMessageProtocol": { "type": "string" },
+                    "fallbackRequired": { "type": "boolean" },
+                    "unknownComponentBehavior": { "type": "string" }
+                  },
+                  "required": ["fields", "hydrationModes", "postMessageProtocol", "fallbackRequired", "unknownComponentBehavior"]
+                },
+                "dataBindingScopes": { "type": "array", "items": { "type": "string" } },
+                "security": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "parentDomAccess": { "type": "boolean" },
+                    "parentCookieAccess": { "type": "boolean" },
+                    "adminApiAccess": { "type": "boolean" },
+                    "secretsInPayload": { "type": "boolean" },
+                    "communication": { "type": "string" }
+                  },
+                  "required": ["parentDomAccess", "parentCookieAccess", "adminApiAccess", "secretsInPayload", "communication"]
+                }
+              },
+              "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
           "required": ["routing", "pages", "blog", "collections", "forms", "reusableSections", "media"]
@@ -503,7 +978,7 @@
             "primaryDomain": { "type": "string", "minLength": 1 },
             "customDomain": { "type": ["string", "null"] },
             "defaultLocale": { "type": "string", "minLength": 2 },
-            "localeStrategy": { "type": "string" },
+            "localeStrategy": { "enum": ["none", "path-prefix", "domain"] },
             "locales": {
               "type": "array",
               "items": {
@@ -514,7 +989,8 @@
                   "label": { "type": "string" },
                   "default": { "type": "boolean" },
                   "direction": { "enum": ["ltr", "rtl"] },
-                  "pathPrefix": { "type": "string" }
+                  "pathPrefix": { "type": "string" },
+                  "domain": { "type": ["string", "null"] }
                 },
                 "required": ["code", "default", "direction", "pathPrefix"]
               }
@@ -548,7 +1024,53 @@
           },
           "required": ["canonicalBaseUrl", "managedBaseUrl", "primaryDomain", "defaultLocale", "localeStrategy", "locales", "domains", "urls"]
         },
-        "navigation": { "type": "object" }
+        "navigation": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "primary": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/navigationItem" }
+            },
+            "footer": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/navigationItem" }
+            },
+            "layout": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "header": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "variant": { "enum": ["minimal", "centered", "split", "commerce"] },
+                    "position": { "enum": ["static", "sticky", "transparent"] },
+                    "width": { "enum": ["contained", "full"] },
+                    "showBrand": { "type": "boolean" },
+                    "showSearch": { "type": "boolean" },
+                    "showAccount": { "type": "boolean" },
+                    "showCart": { "type": "boolean" },
+                    "ctaLabel": { "type": "string" },
+                    "ctaHref": { "type": "string" }
+                  }
+                },
+                "footer": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "variant": { "enum": ["simple", "columns", "mega"] },
+                    "width": { "enum": ["contained", "full"] },
+                    "showSocial": { "type": "boolean" },
+                    "showNewsletter": { "type": "boolean" },
+                    "note": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "required": ["primary", "footer", "layout"]
+        }
       },
       "required": [
         "schemaVersion",

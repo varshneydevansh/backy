@@ -200,6 +200,51 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend page loaded into the editor.'), 'Page editor reload must clear fallback state after loading backend content');
 };
 
+const assertEditorInteractiveSandboxPreviewSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
+  assert(source.includes('AdminInteractiveSandboxPreview'), 'Editor canvas must include an admin sandbox preview component for code components');
+  assert(source.includes('backy.interactive-component.init'), 'Editor sandbox preview must send the interactive init postMessage payload');
+  assert(source.includes('backy.interactive-component.ready'), 'Editor sandbox preview must listen for ready lifecycle messages');
+  assert(source.includes('backy.interactive-component.error'), 'Editor sandbox preview must surface runtime error lifecycle messages');
+  assert(source.includes('normalizeInteractiveSandboxUrl'), 'Editor sandbox preview must normalize sandbox URLs before mounting iframes');
+  assert(source.includes("lower.startsWith('javascript:')"), 'Editor sandbox preview must reject javascript: sandbox URLs');
+  assert(source.includes('interactiveIframeUsesOpaqueOrigin'), 'Editor sandbox preview must account for opaque sandbox iframe origins');
+  assert(!source.includes("INTERACTIVE_IFRAME_SANDBOX_TOKENS = new Set([\n  'allow-same-origin'"), 'Editor sandbox preview must not allow same-origin sandbox tokens by default');
+};
+
+const assertInteractiveRegistryVersionPinningSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  assert(source.includes('interactiveComponentOptionValue'), 'Interactive registry selector must use a unique option value helper');
+  assert(source.includes('encodeURIComponent(component.componentKey)') && source.includes('encodeURIComponent(component.version)'), 'Interactive registry selector must encode both component key and version');
+  assert(source.includes('component.componentKey === element.props.componentKey') && source.includes('component.version === element.props.version'), 'Interactive registry selection must match the pinned component version');
+  assert(source.includes('version: component.version'), 'Interactive registry selection must persist the selected component version');
+  assert(source.includes('/api/sites/{siteId}/interactive-components/{componentKey}/{version}/sandbox'), 'Interactive sandbox URL help must point authors to the Backy-owned runtime route');
+  assert(source.includes('editor-interactive-runtime-badges'), 'Interactive registry inspector must render runtime capability badges');
+  assert(source.includes('getInteractiveRuntimeBadges'), 'Interactive registry inspector must derive runtime capability badges from registry metadata');
+  assert(source.includes('Dependency policy') && source.includes('Compatibility') && source.includes('Animation libs'), 'Interactive registry inspector must expose dependency policy and compatibility metadata before publish');
+  assert(source.includes('editor-interactive-visual-preview'), 'Interactive registry inspector must render a visual preview panel');
+  assert(source.includes('getInteractivePreviewModel') && source.includes('data-preview-kind'), 'Interactive visual preview must derive its kind from registry component metadata');
+  assert(source.includes('editor-interactive-binding-presets'), 'Interactive registry inspector must render registry-declared binding preset pickers');
+  assert(source.includes('applyInteractiveBindingPreset') && source.includes('dataBindingTargetPath'), 'Interactive binding preset picker must persist the selected target path into element props');
+  assert(source.includes('editor-interactive-control-schema-preview'), 'Interactive registry inspector must render schema-driven control previews');
+  assert(source.includes('updateInteractiveControlValue') && source.includes('controls: nextControls'), 'Interactive registry controls must persist edited control values');
+  assert(source.includes('[controlKey]: value'), 'Interactive registry controls must mirror edited values into element props for renderers');
+
+  const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  assert(editorSource.includes('/api/sites/:siteId/interactive-components/:componentKey/:version/sandbox'), 'Interactive publish readiness must require the Backy-owned sandbox route');
+  assert(editorSource.includes('routeComponentKey === componentKey') && editorSource.includes('routeVersion === version'), 'Interactive publish readiness must bind sandbox route to component key and version');
+
+  const catalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
+  for (const componentKey of ['backy.figure.rounds', 'backy.figure.timeline', 'backy.simulation.parameter', 'backy.data.explorer', 'backy.canvas.sandboxed']) {
+    assert(catalogSource.includes(componentKey), `Editor component catalog must include ${componentKey}`);
+  }
+
+  const registrySource = fs.readFileSync(new URL('../../../apps/public/src/lib/interactiveComponentRegistry.ts', import.meta.url), 'utf8');
+  assert(registrySource.includes('dependencyPolicy') && registrySource.includes('compatibility'), 'Public interactive registry must expose dependency policy and compatibility metadata');
+  assert(registrySource.includes('dataBindingPresets') && registrySource.includes('signedSandboxDependencyPolicy'), 'Public interactive registry must expose binding presets and sandbox dependency policy presets');
+  assert(registrySource.includes('backy.figure.rounds') && registrySource.includes('self-correction'), 'Public interactive registry must expose the communication-round/self-correction figure preset');
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -604,6 +649,58 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-interactive',
+            type: 'interactiveFigure',
+            x: 120,
+            y: 1080,
+            width: 360,
+            height: 260,
+            zIndex: 5,
+            props: {
+              componentKey: 'backy.figure.rounds',
+              version: '1.0.0',
+              title: 'Initial interactive figure',
+              fallbackText: 'Initial fallback text',
+              fallback: {
+                title: 'Initial interactive figure',
+                text: 'Initial fallback text',
+                ariaLabel: 'Initial interactive figure',
+              },
+              renderCapabilities: {
+                hydrationMode: 'trusted-component',
+                fallbackRequired: true,
+                postMessageProtocol: 'backy.interactive-component.v1',
+              },
+            },
+          },
+          {
+            id: 'smoke-code-component',
+            type: 'codeComponent',
+            x: 520,
+            y: 1080,
+            width: 360,
+            height: 260,
+            zIndex: 5,
+            props: {
+              componentKey: 'backy.custom.sandboxed',
+              version: '1.0.0',
+              title: 'Initial code component',
+              fallbackText: 'Initial code fallback',
+              fallback: {
+                title: 'Initial code component',
+                text: 'Initial code fallback',
+                ariaLabel: 'Initial code component',
+              },
+              renderCapabilities: {
+                hydrationMode: 'sandbox-iframe',
+                requiresSandbox: true,
+                requiresSignedBundle: true,
+                fallbackRequired: true,
+                postMessageProtocol: 'backy.interactive-component.v1',
+              },
+            },
+          },
+          {
             id: 'smoke-input',
             type: 'input',
             x: 520,
@@ -708,7 +805,7 @@ const createSmokePage = async () => {
         ],
         canvasSize: {
           width: 1200,
-          height: 1040,
+          height: 1420,
         },
       },
     }),
@@ -8446,12 +8543,52 @@ const testLayerGrouping = async (client, elementIds) => {
     `Ungroup did not preserve expanded child multi-selection: ${JSON.stringify(ungroupedSelection)}`,
   );
 
+  const metaSelected = await selectLayerIds(client, [firstId, secondId]);
+  await pressKey(client, 'g', { metaKey: true });
+  await sleep(250);
+  const metaGrouped = await evaluate(client, `(() => {
+    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+    return {
+      hasSelection: Boolean(selected),
+      selectedText: selected?.textContent || '',
+      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+    };
+  })()`);
+  assert(metaGrouped.hasSelection, `Cmd+G grouped selection was not shown in inspector: ${JSON.stringify(metaGrouped)}`);
+  assert(metaGrouped.ungroupDisabled === false, `Cmd+G did not enable Ungroup after grouping: ${JSON.stringify(metaGrouped)}`);
+
+  await pressKey(client, 'g', { metaKey: true, shiftKey: true });
+  await sleep(250);
+  const afterMeta = await readEditorElementState(client, [firstId, secondId]);
+  const metaUngroupedSelection = await evaluate(client, `(() => {
+    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean);
+    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+    return {
+      selectedLayers,
+      hasMultiSelection: Boolean(multiSelection),
+      inspectorText: multiSelection?.textContent || '',
+    };
+  })()`);
+  assertElementState(afterMeta, before, 'Cmd+G/Cmd+Shift+G group/ungroup roundtrip');
+  assert(
+    metaUngroupedSelection.hasMultiSelection &&
+      [firstId, secondId].every((id) => metaUngroupedSelection.selectedLayers.includes(id)),
+    `Cmd+Shift+G did not preserve expanded child multi-selection: ${JSON.stringify(metaUngroupedSelection)}`,
+  );
+
   return {
     selected: ready,
+    metaSelected,
     grouped,
     ungroupedSelection,
+    metaGrouped,
+    metaUngroupedSelection,
     before,
     after,
+    afterMeta,
   };
 };
 
@@ -12243,6 +12380,144 @@ const assertPersistedCommentBehavior = async (pageId) => {
   return props;
 };
 
+const testInteractiveComponentControls = async (client, elementId, expectedType, nextValues) => {
+  await selectLayerById(client, elementId);
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-interactive-component-key', nextValues.componentKey);
+  await setFormControlByTestId(client, 'editor-interactive-version', nextValues.version);
+  await setFormControlByTestId(client, 'editor-interactive-hydration-mode', nextValues.hydrationMode);
+  if (nextValues.sandboxUrl !== undefined) {
+    await setFormControlByTestId(client, 'editor-interactive-sandbox-url', nextValues.sandboxUrl);
+  }
+  await setFormControlByTestId(client, 'editor-interactive-fallback-title', nextValues.title);
+  await setFormControlByTestId(client, 'editor-interactive-fallback-text', nextValues.text);
+  await setFormControlByTestId(client, 'editor-interactive-aria-label', nextValues.ariaLabel);
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    return {
+      componentKey: value('editor-interactive-component-key'),
+      version: value('editor-interactive-version'),
+      hydrationMode: value('editor-interactive-hydration-mode'),
+      sandboxUrl: value('editor-interactive-sandbox-url'),
+      title: value('editor-interactive-fallback-title'),
+      text: value('editor-interactive-fallback-text'),
+      ariaLabel: value('editor-interactive-aria-label'),
+      previewText: node?.textContent || '',
+      hydrationModeAttr: node?.querySelector('[data-backy-hydration-mode]')?.getAttribute('data-backy-hydration-mode') || '',
+    };
+  })()`);
+
+  assert(state.componentKey === nextValues.componentKey, `${expectedType} component key mismatch: ${JSON.stringify(state)}`);
+  assert(state.version === nextValues.version, `${expectedType} version mismatch: ${JSON.stringify(state)}`);
+  assert(state.hydrationMode === nextValues.hydrationMode, `${expectedType} hydration mode control mismatch: ${JSON.stringify(state)}`);
+  if (nextValues.sandboxUrl !== undefined) {
+    assert(state.sandboxUrl === nextValues.sandboxUrl, `${expectedType} sandbox URL mismatch: ${JSON.stringify(state)}`);
+  }
+  assert(state.title === nextValues.title && state.previewText.includes(nextValues.title), `${expectedType} fallback title mismatch: ${JSON.stringify(state)}`);
+  assert(state.text === nextValues.text && state.previewText.includes(nextValues.text), `${expectedType} fallback text mismatch: ${JSON.stringify(state)}`);
+  assert(state.ariaLabel === nextValues.ariaLabel, `${expectedType} aria label mismatch: ${JSON.stringify(state)}`);
+
+  if (Array.isArray(nextValues.dataTargetOptions) && nextValues.dataTargetOptions.length > 0) {
+    let dataTargetState = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      dataTargetState = await evaluate(client, `(() => {
+        const dataButton = Array.from(document.querySelectorAll('button')).find((button) => (
+          (button.textContent || '').trim() === 'Data'
+        ));
+        if (dataButton instanceof HTMLButtonElement) {
+          dataButton.click();
+        }
+        const target = document.querySelector('[data-testid="editor-data-target"]');
+        return {
+          options: target instanceof HTMLSelectElement
+            ? Array.from(target.options).map((option) => option.value)
+            : [],
+        };
+      })()`);
+      if (nextValues.dataTargetOptions.every((option) => dataTargetState.options.includes(option))) {
+        break;
+      }
+      await sleep(100);
+    }
+    assert(
+      nextValues.dataTargetOptions.every((option) => dataTargetState?.options?.includes(option)),
+      `${expectedType} data target options missing: ${JSON.stringify(dataTargetState)}`,
+    );
+  }
+
+  if (expectedType === 'codeComponent' && nextValues.hydrationMode === 'sandbox-iframe' && nextValues.sandboxUrl) {
+    await assertCodeComponentSandboxPreview(client, elementId, nextValues);
+  }
+
+  return state;
+};
+
+const assertCodeComponentSandboxPreview = async (client, elementId, nextValues) => {
+  await clickControlByTestId(client, 'editor-preview-toggle');
+
+  let state = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const node = document.querySelector('[data-element-id="${elementId}"]');
+      const iframe = node?.querySelector('iframe');
+      const sandbox = iframe?.getAttribute('sandbox') || '';
+      const allow = iframe?.getAttribute('allow') || '';
+      const src = iframe?.getAttribute('src') || '';
+      const text = node?.textContent || '';
+      return {
+        hasNode: Boolean(node),
+        hasIframe: Boolean(iframe),
+        src,
+        sandbox,
+        allow,
+        text,
+        hydrationMode: node?.querySelector('[data-backy-hydration-mode]')?.getAttribute('data-backy-hydration-mode') || '',
+      };
+    })()`);
+
+    if (state?.hasIframe) {
+      break;
+    }
+    await sleep(150);
+  }
+
+  assert(state?.hasNode, `Missing code component node during sandbox preview: ${JSON.stringify(state)}`);
+  assert(state.hasIframe, `Code component preview did not mount a sandbox iframe: ${JSON.stringify(state)}`);
+  assert(state.src === nextValues.sandboxUrl, `Code component preview sandbox URL mismatch: ${JSON.stringify(state)}`);
+  assert(state.sandbox.includes('allow-scripts') && state.sandbox.includes('allow-forms'), `Code component preview sandbox flags missing: ${JSON.stringify(state)}`);
+  assert(!state.sandbox.includes('allow-same-origin'), `Code component preview must not grant same-origin sandbox access: ${JSON.stringify(state)}`);
+  assert(state.hydrationMode === 'sandbox-iframe', `Code component preview hydration mode mismatch: ${JSON.stringify(state)}`);
+  assert(/sandbox preview/i.test(state.text), `Code component preview status text missing: ${JSON.stringify(state)}`);
+
+  await clickControlByTestId(client, 'editor-preview-toggle');
+  return state;
+};
+
+const assertPersistedInteractiveComponent = async (pageId, elementId, expectedType, nextValues) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const element = findCanvasElement(elements, elementId);
+  const props = element?.props || {};
+
+  assert(element?.type === expectedType, `Persisted ${elementId} missing: ${JSON.stringify(element)}`);
+  assert(props.componentKey === nextValues.componentKey, `Persisted ${elementId} component key mismatch: ${JSON.stringify(props)}`);
+  assert(props.version === nextValues.version, `Persisted ${elementId} version mismatch: ${JSON.stringify(props)}`);
+  assert(props.fallback?.title === nextValues.title, `Persisted ${elementId} fallback title mismatch: ${JSON.stringify(props)}`);
+  assert(props.fallback?.text === nextValues.text, `Persisted ${elementId} fallback text mismatch: ${JSON.stringify(props)}`);
+  assert(props.fallback?.ariaLabel === nextValues.ariaLabel, `Persisted ${elementId} aria label mismatch: ${JSON.stringify(props)}`);
+  assert(props.renderCapabilities?.hydrationMode === nextValues.hydrationMode, `Persisted ${elementId} hydration mode mismatch: ${JSON.stringify(props)}`);
+  if (nextValues.sandboxUrl !== undefined) {
+    assert(props.sandboxUrl === nextValues.sandboxUrl, `Persisted ${elementId} sandbox URL mismatch: ${JSON.stringify(props)}`);
+  }
+  assert(props.renderCapabilities?.fallbackRequired === true, `Persisted ${elementId} fallback requirement mismatch: ${JSON.stringify(props)}`);
+  assert(props.renderCapabilities?.postMessageProtocol === 'backy.interactive-component.v1', `Persisted ${elementId} postMessage protocol mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testBoxBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-box');
   await switchToPropertiesPanel(client);
@@ -13072,6 +13347,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   assertPageEditorFallbackIsReadOnly();
+  assertEditorInteractiveSandboxPreviewSource();
+  assertInteractiveRegistryVersionPinningSource();
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
   const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
@@ -13105,7 +13382,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
     if (LIBRARY_SMOKE) {
       assert(!EDITOR_PATH, 'Component library smoke currently requires an internally created smoke page');
@@ -13648,6 +13925,48 @@ const main = async () => {
         test: () => testCommentBehaviorControls(client),
         assertPersisted: () => assertPersistedCommentBehavior(tempPageId),
       },
+      interactiveFigure: {
+        targetElementId: 'smoke-interactive',
+        test: () => testInteractiveComponentControls(client, 'smoke-interactive', 'interactiveFigure', {
+          componentKey: 'backy.figure.rounds',
+          version: '1.1.0',
+          hydrationMode: 'trusted-component',
+          title: 'Smoke self-correction figure',
+          text: 'Smoke fallback for communication rounds.',
+          ariaLabel: 'Smoke communication rounds figure',
+          dataTargetOptions: ['props.data', 'props.series', 'props.rounds'],
+        }),
+        assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-interactive', 'interactiveFigure', {
+          componentKey: 'backy.figure.rounds',
+          version: '1.1.0',
+          hydrationMode: 'trusted-component',
+          title: 'Smoke self-correction figure',
+          text: 'Smoke fallback for communication rounds.',
+          ariaLabel: 'Smoke communication rounds figure',
+        }),
+      },
+      codeComponent: {
+        targetElementId: 'smoke-code-component',
+        test: () => testInteractiveComponentControls(client, 'smoke-code-component', 'codeComponent', {
+          componentKey: 'backy.custom.sandboxed',
+          version: '1.0.0',
+          hydrationMode: 'sandbox-iframe',
+          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.custom.sandboxed/1.0.0/sandbox`,
+          title: 'Smoke sandbox component',
+          text: 'Smoke fallback for sandboxed component.',
+          ariaLabel: 'Smoke sandboxed component',
+          dataTargetOptions: ['props.data', 'props.input', 'props.config'],
+        }),
+        assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-code-component', 'codeComponent', {
+          componentKey: 'backy.custom.sandboxed',
+          version: '1.0.0',
+          hydrationMode: 'sandbox-iframe',
+          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.custom.sandboxed/1.0.0/sandbox`,
+          title: 'Smoke sandbox component',
+          text: 'Smoke fallback for sandboxed component.',
+          ariaLabel: 'Smoke sandboxed component',
+        }),
+      },
       box: {
         targetElementId: 'smoke-box',
         test: () => testBoxBehaviorControls(client),
@@ -13780,7 +14099,7 @@ const main = async () => {
 
       const dataBindingQueryControls = await testCollectionDataBindingControls(client, tempCollection.id);
       const repeaterControls = await testRepeaterControls(client, tempCollection.id);
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       const expectedState = await readEditorElementState(client, elementIds);
       const preSaveStatus = await readEditorSaveStatus(client);
       const savedStatus = await waitForEditorSaveStatus(
@@ -13953,7 +14272,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -14099,7 +14418,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(

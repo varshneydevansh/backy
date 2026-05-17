@@ -12,7 +12,7 @@
  * @license MIT
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import type { CanvasElement, CanvasSize, ComponentLibraryItem } from '@/types/editor';
@@ -165,6 +165,13 @@ const resolveElementMediaSource = (props: Record<string, unknown>, key: string):
 );
 
 const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+const INTERACTIVE_IFRAME_SANDBOX_TOKENS = new Set([
+  'allow-scripts',
+  'allow-forms',
+  'allow-downloads',
+  'allow-pointer-lock',
+  'allow-presentation',
+]);
 const DEFAULT_EMBED_ALLOWED_HOSTS = [
   'youtube.com',
   'www.youtube.com',
@@ -200,6 +207,62 @@ type ImageDecoding = (typeof IMAGE_DECODING_VALUES)[number];
 const normalizeIframeAllow = (value: unknown): string => sanitizeText(value) || DEFAULT_IFRAME_ALLOW;
 
 const normalizeIframeSandbox = (value: unknown): string | undefined => sanitizeText(value) || undefined;
+
+const normalizeInteractiveIframeSandbox = (value: unknown): string => {
+  const tokens = sanitizeText(value)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => INTERACTIVE_IFRAME_SANDBOX_TOKENS.has(token));
+
+  const uniqueTokens = Array.from(new Set(tokens.length ? tokens : ['allow-scripts', 'allow-forms']));
+  return uniqueTokens.join(' ');
+};
+
+const normalizeInteractiveIframeAllow = (value: unknown): string => {
+  const tokens = Array.isArray(value)
+    ? value.map((token) => sanitizeText(token)).filter(Boolean)
+    : sanitizeText(value).split(/[;,]/).map((token) => token.trim()).filter(Boolean);
+
+  return Array.from(new Set(tokens)).join('; ');
+};
+
+const interactiveIframeUsesOpaqueOrigin = (sandbox: string): boolean => !sandbox.split(/\s+/).includes('allow-same-origin');
+
+const normalizeInteractiveSandboxUrl = (raw: unknown): string => {
+  const value = sanitizeText(raw);
+  const lower = value.toLowerCase();
+
+  if (!value || lower.startsWith('//')) {
+    return '';
+  }
+
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('file:') ||
+    lower.startsWith('vbscript:')
+  ) {
+    return '';
+  }
+
+  if (value.startsWith('/')) {
+    return value;
+  }
+
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(value, window.location.origin);
+    return parsed.origin === window.location.origin && (parsed.protocol === 'https:' || parsed.protocol === 'http:')
+      ? `${parsed.pathname}${parsed.search}${parsed.hash}`
+      : '';
+  } catch {
+    return '';
+  }
+};
 
 const normalizeIframeLoading = (value: unknown): IframeLoading => {
   const normalized = sanitizeText(value).toLowerCase();
@@ -2402,6 +2465,152 @@ export function Canvas({
 // CANVAS ELEMENT COMPONENT
 // ============================================
 
+const buildAdminInteractiveSandboxPayload = (
+  element: CanvasElement,
+  componentKey: string,
+  version: string,
+  fallback: Record<string, unknown>,
+): Record<string, unknown> => {
+  const props = JSON.parse(JSON.stringify(element.props || {})) as Record<string, unknown>;
+  delete props.sandboxUrl;
+  delete props.iframeUrl;
+  delete props.url;
+  delete props.src;
+  delete props.fallback;
+  delete props.renderCapabilities;
+
+  return {
+    type: 'backy.interactive-component.init',
+    protocol: 'backy.interactive-component.v1',
+    componentKey,
+    version,
+    props,
+    controls: props.controls,
+    fallback,
+  };
+};
+
+function AdminInteractiveSandboxPreview({
+  element,
+  componentKey,
+  version,
+  src,
+  fallback,
+  renderCapabilities,
+}: {
+  element: CanvasElement;
+  componentKey: string;
+  version: string;
+  src: string;
+  fallback: Record<string, unknown>;
+  renderCapabilities: Record<string, unknown>;
+}) {
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [message, setMessage] = useState('Loading sandbox preview...');
+  const iframeSandbox = normalizeInteractiveIframeSandbox(element.props.sandbox ?? renderCapabilities.sandbox);
+  const payload = useMemo(
+    () => buildAdminInteractiveSandboxPayload(element, componentKey, version, fallback),
+    [componentKey, element, fallback, version],
+  );
+  const postInitPayload = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const frame = frameRef.current;
+    if (!frame?.contentWindow) {
+      return;
+    }
+
+    const targetOrigin = interactiveIframeUsesOpaqueOrigin(iframeSandbox)
+      ? '*'
+      : new URL(src, window.location.origin).origin;
+    frame.contentWindow.postMessage(payload, targetOrigin);
+  }, [iframeSandbox, payload, src]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(postInitPayload, 0);
+    return () => window.clearTimeout(timeout);
+  }, [postInitPayload]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== frameRef.current?.contentWindow || !isRecord(event.data)) {
+        return;
+      }
+
+      if (sanitizeText(event.data.protocol) !== 'backy.interactive-component.v1') {
+        return;
+      }
+
+      const eventComponentKey = sanitizeText(event.data.componentKey);
+      const eventVersion = sanitizeText(event.data.version);
+      if (eventComponentKey && eventComponentKey !== componentKey) {
+        return;
+      }
+      if (eventVersion && eventVersion !== version) {
+        return;
+      }
+
+      const type = sanitizeText(event.data.type);
+      if (type === 'backy.interactive-component.ready') {
+        setStatus('ready');
+        setMessage('Sandbox preview ready.');
+        postInitPayload();
+      }
+
+      if (type === 'backy.interactive-component.error') {
+        setStatus('error');
+        setMessage(sanitizeText(event.data.message) || 'Sandbox preview failed.');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [componentKey, postInitPayload, version]);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateRows: '1fr auto', gap: 8, width: '100%', height: '100%', minHeight: 140 }}>
+      <iframe
+        ref={frameRef}
+        title={`${componentKey} preview`}
+        src={src}
+        sandbox={iframeSandbox}
+        allow={normalizeInteractiveIframeAllow(element.props.allow ?? renderCapabilities.allowedPermissions)}
+        loading={normalizeIframeLoading(element.props.loading)}
+        referrerPolicy="no-referrer"
+        onLoad={postInitPayload}
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: 120,
+          border: '1px solid #374151',
+          borderRadius: 8,
+          background: '#111827',
+        }}
+      />
+      <span
+        style={{
+          color: status === 'error' ? '#fecaca' : status === 'ready' ? '#bbf7d0' : '#d1d5db',
+          fontSize: 12,
+          lineHeight: 1.4,
+        }}
+      >
+        {message}
+      </span>
+    </div>
+  );
+}
+
 interface CanvasElementComponentProps {
   element: CanvasElement;
   isSelected: boolean;
@@ -2903,6 +3112,87 @@ function CanvasElementComponent({
           }}
         />
       );
+      }
+
+      case 'interactiveFigure':
+      case 'codeComponent': {
+        const rawFallback = p.fallback;
+        const fallback = isRecord(rawFallback) ? rawFallback : {};
+        const title = sanitizeText(fallback.title) || sanitizeText(p.title) || sanitizeText(p.componentKey) || (element.type === 'codeComponent' ? 'Code component' : 'Interactive figure');
+        const text = sanitizeText(fallback.text) || sanitizeText(p.fallbackText) || 'Static fallback shown until a supported frontend hydrates this component.';
+        const imageUrl = resolveMediaSource(fallback.imageUrl);
+        const version = sanitizeText(p.version) || '1.0.0';
+        const hydrationMode = isRecord(p.renderCapabilities)
+          ? sanitizeText(p.renderCapabilities.hydrationMode)
+          : sanitizeText(p.hydrationMode);
+        const renderCapabilities = isRecord(p.renderCapabilities) ? p.renderCapabilities : {};
+        const sandboxSrc = normalizeInteractiveSandboxUrl(p.sandboxUrl || p.iframeUrl || p.url || p.src);
+        const showSandboxPreview = isPreview && element.type === 'codeComponent' && hydrationMode === 'sandbox-iframe' && Boolean(sandboxSrc);
+        const showSandboxWarning = isPreview && element.type === 'codeComponent' && hydrationMode === 'sandbox-iframe' && !sandboxSrc;
+
+        return (
+          <figure
+            style={{
+              ...sharedStyle,
+              width: '100%',
+              height: '100%',
+              margin: 0,
+              padding: sharedStyle.padding ?? 16,
+              display: 'grid',
+              alignContent: showSandboxPreview ? 'stretch' : 'center',
+              gridTemplateRows: showSandboxPreview ? 'auto minmax(0, 1fr)' : undefined,
+              gap: 10,
+              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? (element.type === 'codeComponent' ? '#111827' : '#f8fafc'),
+              color: p.color ?? sharedStyle.color ?? (element.type === 'codeComponent' ? '#f9fafb' : '#111827'),
+              border: sharedStyle.border ?? `1px ${p.borderStyle || 'solid'} ${p.borderColor || (element.type === 'codeComponent' ? '#374151' : '#cbd5e1')}`,
+              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 8),
+              overflow: 'hidden',
+            }}
+            role="group"
+            aria-label={sanitizeText(fallback.ariaLabel) || title}
+            data-backy-interactive-component={sanitizeText(p.componentKey) || undefined}
+            data-backy-interactive-version={version}
+            data-backy-hydration-mode={hydrationMode || 'static-fallback'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', opacity: 0.65 }}>
+                {showSandboxPreview ? 'Live sandbox preview' : element.type === 'codeComponent' ? 'Sandboxed code component' : 'Interactive figure'}
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.65 }}>{version}</span>
+            </div>
+            {showSandboxPreview ? (
+              <AdminInteractiveSandboxPreview
+                element={element}
+                componentKey={sanitizeText(p.componentKey) || 'backy.custom.sandboxed'}
+                version={version}
+                src={sandboxSrc}
+                fallback={fallback}
+                renderCapabilities={renderCapabilities}
+              />
+            ) : imageUrl ? (
+              <img src={imageUrl} alt={sanitizeText(fallback.alt) || title} style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain' }} />
+            ) : (
+              <div style={{
+                height: 120,
+                borderRadius: 6,
+                border: `1px dashed ${element.type === 'codeComponent' ? '#4b5563' : '#cbd5e1'}`,
+                display: 'grid',
+                placeItems: 'center',
+                color: element.type === 'codeComponent' ? '#d1d5db' : '#475569',
+                background: element.type === 'codeComponent' ? '#1f2937' : '#ffffff',
+                fontSize: 13,
+              }}>
+                {showSandboxWarning ? 'Choose a safe relative sandbox URL' : sanitizeText(p.componentKey) || 'Select component key'}
+              </div>
+            )}
+            {!showSandboxPreview && (
+              <figcaption style={{ display: 'grid', gap: 4 }}>
+                <strong style={{ fontSize: 16 }}>{title}</strong>
+                <span style={{ fontSize: 13, opacity: 0.78 }}>{showSandboxWarning ? 'Preview mode only hydrates registry sandbox URLs that stay on the Backy origin.' : text}</span>
+              </figcaption>
+            )}
+          </figure>
+        );
       }
 
       case 'embed':

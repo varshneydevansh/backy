@@ -43,26 +43,66 @@ async function request(path, init) {
   return { response, json, text, url: `${baseUrl}${path}` };
 }
 
+function parseAllowedEmailDomains(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => typeof item === 'string')
+      .map((item) => item.trim().toLowerCase().replace(/^@+/, '').replace(/\.+$/, ''))
+      .filter(Boolean);
+  }
+
+  if (typeof value !== 'string') {
+    return [];
+  }
+
+  return value
+    .split(/[\s,;]+/)
+    .map((item) => item.trim().toLowerCase().replace(/^@+/, '').replace(/\.+$/, ''))
+    .filter(Boolean);
+}
+
 async function loginAdminApi() {
   if (adminRequestApiKey || adminSessionToken) {
     return;
   }
 
-  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${baseUrl}/api/admin/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const json = await response.json().catch(() => ({}));
+  let response = await login();
+  let json = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_SDK_MFA_CODE
+    || process.env.BACKY_ADMIN_CONTRACT_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && json.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    json = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || json.success === false || !json.data?.session?.token) {
     throw new Error(`Unable to create admin session for SDK smoke: ${JSON.stringify(json).slice(0, 500)}`);
   }
 
   adminSessionToken = json.data.session.token;
+}
+
+async function getCleanupOwnerEmailDomain() {
+  const configuredDomain = process.env.BACKY_ADMIN_EMAIL_DOMAIN
+    || process.env.BACKY_SDK_ADMIN_EMAIL_DOMAIN;
+  if (configuredDomain) {
+    return configuredDomain.trim().toLowerCase().replace(/^@+/, '').replace(/\.+$/, '') || 'backy.test';
+  }
+
+  const settings = await request('/api/admin/settings').catch(() => null);
+  const allowedDomains = parseAllowedEmailDomains(settings?.json?.data?.settings?.auth?.allowedEmailDomains);
+  return allowedDomains[0] || 'backy.test';
 }
 
 function adminClientHeaders() {
@@ -344,18 +384,19 @@ async function getCleanupOwnerSession() {
   await loginAdminApi();
 
   const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const adminEmailDomain = await getCleanupOwnerEmailDomain();
   const user = await request('/api/admin/users', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       fullName: 'SDK Smoke Cleanup Owner',
-      email: `sdk-smoke-owner-${unique}@backy.io`,
+      email: `sdk-smoke-owner-${unique}@${adminEmailDomain}`,
       role: 'owner',
       status: 'invited',
       createInvite: true,
     }),
   });
-  assert(user.response.status === 201, `${user.url} expected cleanup owner create 201, got ${user.response.status}`);
+  assert(user.response.status === 201, `${user.url} expected cleanup owner create 201, got ${user.response.status}: ${JSON.stringify(user.json || user.text).slice(0, 500)}`);
   const userId = user.json?.data?.user?.id;
   const inviteToken = user.json?.data?.invite?.token;
   assert(userId && inviteToken, 'cleanup owner creation did not return user and invite token');
@@ -384,7 +425,7 @@ async function deleteFixture(siteId) {
       method: 'DELETE',
       headers: { authorization: `Bearer ${owner.token}` },
     });
-    assert(deleted.response.status === 200, `${deleted.url} expected fixture site delete 200, got ${deleted.response.status}`);
+    assert(deleted.response.status === 200, `${deleted.url} expected fixture site delete 200, got ${deleted.response.status}: ${JSON.stringify(deleted.json || deleted.text).slice(0, 500)}`);
   } finally {
     const deletedOwner = await request(`/api/admin/users/${owner.userId}`, { method: 'DELETE' }).catch((error) => ({ error }));
     assert(!deletedOwner?.error, `cleanup owner delete failed: ${deletedOwner?.error?.message || deletedOwner?.error}`);
@@ -412,6 +453,41 @@ assert(site.data.site?.id, 'discoverSite() did not return a site id');
 const manifest = await client.manifest();
 assert(manifest.data.capabilities?.renderPayload === true, 'manifest() missing render payload capability');
 assert(typeof manifest.data.endpoints?.render === 'string', 'manifest() missing render endpoint');
+assert(manifest.data.capabilities?.interactiveComponents === true, 'manifest() missing interactive component capability');
+assert(manifest.data.endpoints?.interactiveComponents === `/api/sites/${site.data.site.id}/interactive-components`, 'manifest() missing interactive component registry endpoint');
+assert(manifest.data.endpoints?.interactiveRuntimeEvents === `/api/sites/${site.data.site.id}/interactive-components/runtime-events`, 'manifest() missing interactive runtime event endpoint');
+assert(manifest.data.modules?.interactiveComponents?.schemaVersion === 'backy.interactive-components.v1', 'manifest() missing interactive component contract');
+assert(manifest.data.modules?.interactiveComponents?.elementTypes?.includes('interactiveFigure'), 'manifest() missing interactiveFigure element type');
+assert(manifest.data.modules?.interactiveComponents?.elementTypes?.includes('codeComponent'), 'manifest() missing codeComponent element type');
+assert(manifest.data.modules?.interactiveComponents?.renderContract?.fallbackRequired === true, 'manifest() missing interactive fallback requirement');
+assert(manifest.data.modules?.interactiveComponents?.security?.adminApiAccess === false, 'manifest() interactive contract should deny admin API access');
+assert(manifest.data.modules?.interactiveComponents?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("default-src 'none'"), 'manifest() missing sandbox CSP response-header contract');
+assert(manifest.data.modules?.interactiveComponents?.sandbox?.responseHeaders?.permissionsPolicy?.includes('camera=()'), 'manifest() missing sandbox permissions response-header contract');
+const interactiveComponents = await client.interactiveComponents();
+assert(interactiveComponents.data.schemaVersion === 'backy.interactive-component-registry.v1', 'interactiveComponents() missing registry schema');
+assert(interactiveComponents.data.contract?.schemaVersion === 'backy.interactive-components.v1', 'interactiveComponents() missing manifest contract');
+assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("object-src 'none'"), 'interactiveComponents() missing sandbox CSP response-header contract');
+assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.permissionsPolicy?.includes('microphone=()'), 'interactiveComponents() missing sandbox permissions response-header contract');
+assert(interactiveComponents.data.components?.some?.((component) => component.componentKey === 'backy.figure.rounds'), 'interactiveComponents() missing communication rounds figure');
+const sandboxedComponent = interactiveComponents.data.components?.find?.((component) => component.componentKey === 'backy.custom.sandboxed');
+assert(sandboxedComponent?.renderMode === 'sandbox-iframe', 'interactiveComponents() missing sandboxed custom component render mode');
+assert(sandboxedComponent?.runtime?.sandboxUrl?.includes('/interactive-components/backy.custom.sandboxed/1.0.0/sandbox'), 'interactiveComponents() missing sandbox runtime URL');
+assert(sandboxedComponent?.runtime?.postMessageProtocol === 'backy.interactive-component.v1', 'interactiveComponents() missing sandbox postMessage protocol');
+assert(interactiveComponents.data.components?.every?.((component) => component.security?.adminApiAccess === false), 'interactiveComponents() should not expose admin API-enabled components');
+const interactiveRuntimeEvent = await client.recordInteractiveRuntimeEvent({
+  componentKey: 'backy.custom.sandboxed',
+  version: '1.0.0',
+  elementId: 'sdk-smoke-code-component',
+  type: 'backy.interactive-component.error',
+  message: 'SDK smoke sandbox runtime error',
+  requestId: `sdk-interactive-runtime-${Date.now()}`,
+});
+assert(interactiveRuntimeEvent.data.recorded === true, 'recordInteractiveRuntimeEvent() did not record runtime telemetry');
+const cachedInteractiveComponents = await client.interactiveComponentsCached();
+assert(cachedInteractiveComponents.notModified === false, 'interactiveComponentsCached() first request should return a body');
+assert(cachedInteractiveComponents.meta.etag, 'interactiveComponentsCached() missing response ETag');
+const revalidatedInteractiveComponents = await client.interactiveComponentsCached({ etag: cachedInteractiveComponents.meta.etag });
+assert(revalidatedInteractiveComponents.notModified === true, 'interactiveComponentsCached() did not return notModified for matching ETag');
 assert(manifest.data.admin?.auth?.authenticated === false, 'manifest() should expose anonymous admin state by default');
 assert(manifest.data.admin?.permissions?.['sites.configure'] === false, 'manifest() should not expose site configure permission anonymously');
 assert(manifest.data.admin?.capabilities?.frontendDesignWrite === false, 'manifest() should not expose frontend design write anonymously');

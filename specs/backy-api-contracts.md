@@ -8,6 +8,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 ---
 
 ## 1) Base conventions
+
 - All responses use JSON.
 - Envelope for list/detail APIs:
   - `{ success: true, data: ... }`
@@ -20,6 +21,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - Public contracts must remain consumable by third-party frontends without importing admin internals.
 
 ### 1.1 API base paths in this repo
+
 - Current repository example routes are exposed under `public app /api/...`:
   - `/api/sites/...` for public read + form/comment submission.
 - `backy-admin` should expose write/API routes under `/api/admin/...` and protect them with auth middleware.
@@ -30,6 +32,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 ## 2) Public API (consumer-facing)
 
 ### 2.1 Resolve site and page
+
 - `GET /api/sites/:identifier` (default public route in this repo)
 - `GET /api/public/sites/:identifier` (optional external contract alias)
   - Resolve by `subdomain`, `siteId`, or `customDomain`.
@@ -42,8 +45,24 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Site-level frontend discovery/bootstrap document described by `specs/ai-frontend-contract/frontend-manifest.schema.json`.
   - Returns site identity, theme tokens, schema references, capability flags, public endpoint URLs, route patterns, navigation, module summaries, collection field schemas, form submit/detail/submission/contact URLs, page/blog comment URL templates, comment report URLs, interaction event URLs, media/font counts, and form-to-collection target metadata.
   - Exposes `data.site.frontendDesign` as the site-level design contract (`schemaVersion`, `status`, `source`, `tokens`, `chrome`, `templates`, `editableMap`) plus `capabilities.frontendDesignContract` and `endpoints.frontendDesign`, so custom frontends can preserve header/navigation/footer, fonts, colors, template provenance, and editable bindings when Backy creates new content.
+  - Exposes `modules.interactiveComponents`, `capabilities.interactiveComponents`, `endpoints.interactiveComponents`, and `endpoints.interactiveComponentsInManifest` so custom frontends can discover registry-backed `interactiveFigure` and `codeComponent` blocks without importing admin/editor code.
   - Published manifest responses include `Cache-Control: public, max-age=60, stale-while-revalidate=300`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: discovery`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
   - Draft/unpublished sites are hidden from the public manifest.
+
+- `GET /api/sites/:siteId/interactive-components`
+  - Site-scoped public registry discovery for rich blog/page figures, calculators, simulations, and custom code components.
+  - Returns `backy.interactive-component-registry.v1` with the shared manifest contract, available component keys, versions, control schemas, allowed data-binding scopes, fallback requirements, sandbox mode, runtime sandbox URLs, and security/integrity flags.
+  - Built-in registry entries currently include `backy.figure.rounds` for communication-round/self-correction diagrams, `backy.figure.stepper` for step-through process diagrams, and `backy.chart.line`; custom code is represented by `backy.custom.sandboxed` and is disabled unless the sandbox runtime is configured.
+  - Published registry responses use discovery cache headers, ETag/304 revalidation, `x-backy-schema-version: backy.interactive-component-registry.v1`, and never expose admin API access or secrets.
+  - Draft/unpublished sites are hidden from the public registry.
+- `GET /api/sites/:siteId/interactive-components/:componentKey/:version/sandbox`
+  - Site-scoped sandbox bootstrap for registered `codeComponent` entries.
+  - Serves a constrained HTML iframe shell with CSP, `no-referrer`, no admin data, and the `backy.interactive-component.v1` `postMessage` ready/init/resize protocol.
+  - Only published sites and active sandbox iframe components are served; unknown, disabled, or unpublished components return a static error shell.
+- `POST /api/sites/:siteId/interactive-components/runtime-events`
+  - Public runtime telemetry endpoint used by the hosted renderer and SDK to record sandbox lifecycle failures.
+  - Accepts bounded `componentKey`, `version`, `elementId`, `pageId`, `postId`, `type`, and `message` fields, then stores an `interactive-runtime` event in the existing interaction event/audit stream.
+  - The endpoint records diagnostics only; it never accepts executable code, secrets, cookies, or admin credentials.
 
 - `GET/PATCH/POST /api/admin/sites/:siteId/frontend-design`
   - Reads and writes the site-level frontend design contract used to preserve custom frontend chrome, navigation, footer, font/color/spacing tokens, template registries, editable bindings, and content-generation provenance.
@@ -55,9 +74,40 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Admin create APIs for pages, blog posts, forms, reusable sections, collections, and product records accept `frontendDesignTemplateId` or `designTemplateId`, seed missing content/schema/field/value data from the matching captured template, and store `frontendDesign*` provenance so custom frontends can continue creating content that keeps the connected frontend's chrome, tokens, routes, and editable bindings.
   - Database mode frontend-design mutations record `settings` cache invalidation events so public discovery/manifest consumers can revalidate the changed design contract.
 
+- `GET /api/admin/sites/:siteId/interactive-components/:componentKey/:version/usage`
+  - Admin-only usage inventory for registry-backed `interactiveFigure` and `codeComponent` versions before delete, rollback, review approval, or migration.
+  - Scans draft, scheduled, published, and archived page/blog content for matching `componentKey@version` records, including nested grouped elements.
+  - Returns target type/id/title/slug/status, element id/type/path, render mode, fallback presence, updated timestamp, and scanned page/post counts.
+
+- `GET /api/admin/sites/:siteId/interactive-components/:componentKey/:version/export`
+  - Admin-only portable export package for moving a reviewed component version between Backy sites or environments.
+  - Returns `backy.interactive-component-export.v1` with component definition, runtime/sandbox URLs, bundle/integrity metadata, dependency metadata, import target, conflict behavior, and a usage-inventory endpoint link.
+  - `POST /api/admin/sites/:siteId/interactive-components` also accepts `{ exportPackage }` and imports the package as a disabled draft, optionally overriding `componentKey`, `version`, or `displayName`, while preserving source/import metadata under `dependencyMetadata.importExport`.
+
+- `POST /api/admin/sites/:siteId/interactive-components/:componentKey/:version/bundle`
+  - Admin-only signed bundle storage for custom interactive component versions.
+  - Accepts `{ filename, contentType, contentBase64, signature?, signedBy?, updatedBy?, changelog? }`, restricts stored bundles to `.js`, `.mjs`, or `.json` payloads up to 5 MB, computes server-side SHA-256, and stores bytes through the configured Backy storage adapter.
+  - If `signature` is omitted, Backy derives `sha256=<hmac>` from `BACKY_COMPONENT_REGISTRY_SIGNING_KEY` or `BACKY_INTERACTIVE_COMPONENT_SIGNING_KEY`; otherwise the caller-provided signature is stored with the computed hash.
+  - Updates the component's `runtime.bundleUrl`, preserves or fills `runtime.sandboxUrl`, stores signed integrity metadata plus `dependencyMetadata.bundle`, and emits `interactiveComponent.bundle.upload` audit/cache invalidation metadata. The route stores bundle bytes only; execution remains constrained to the frontend sandbox/runtime contract.
+  - Repository smoke coverage verifies DB-backed registry persistence for approved sandbox runtime metadata, signed bundle integrity fields, Supabase-style storage provider/path metadata, dependency bundle metadata, rollback, and delete.
+  - Hostile-bundle browser smoke coverage verifies the public/admin iframe allowlists, server validation guards, and real Chrome sandbox isolation for parent DOM/location/cookie/localStorage access, top-navigation escape, and popup escape attempts.
+
+- `POST /api/admin/sites/:siteId/interactive-components/:componentKey/:version/migrate`
+  - Admin-only component version migration tool for page/blog content that references an older `componentKey@version`.
+  - Accepts `{ targetComponentKey?, targetVersion, dryRun?, updatedBy? }`; `dryRun` defaults to `true`, and `dryRun: false` applies the migration.
+  - Scans draft, scheduled, published, and archived pages/blog posts, including nested grouped elements, then updates matching component elements to the target key/version, refreshes render capability metadata from the target component, preserves fallback content, creates content revisions, and emits `interactiveComponent.migrate` audit/cache invalidation metadata.
+
+- `POST /api/admin/sites/:siteId/interactive-components/:componentKey/:version/review`
+  - Admin-only submit/approve/reject workflow for custom interactive component versions.
+  - Accepts `{ action: "submit" | "approve" | "reject", reviewedBy?, updatedBy?, runtime?, integrity?, dependencyMetadata?, notes?, checklist?, changelog? }`.
+  - Submit keeps the component disabled and moves it to `in_review`; approve moves it to `approved`/`active`; reject moves it to `rejected`/`disabled`.
+  - Create/update/review approval validates runtime URLs, iframe sandbox flags, allowed permissions, signed integrity metadata for custom code, dependency names/versions, blocked runtime modules, and lifecycle script fields before a sandbox component can become active.
+  - Review actions emit `interactiveComponent.review.*` audit rows and settings cache invalidations.
+
 - `GET /api/sites/:siteId/openapi`
   - Site-scoped OpenAPI 3.1 document for public frontend integrations.
   - Describes discovery, route resolution, render payload, navigation, media list, collection list/records/create, form detail/submission/contact operations, page/blog/site comment operations, comment reports, report reasons, and interaction events for the selected site.
+  - Form schemas include named field definitions, validation rules, submission records, collection-record links/errors, and contact records so generated SDK clients can type-check both render-time form controls and private submission/contact envelopes.
   - Media detail is exposed as `/api/sites/:siteId/media/{mediaId}` for exact asset lookup by generated/custom frontends.
   - Includes `x-backy` vendor metadata for `siteId`, `siteSlug`, contract version, public collection ids, and form ids.
   - Published OpenAPI responses use the same discovery cache, ETag revalidation, and Backy contract headers as the manifest.
@@ -162,10 +212,15 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Over-quota uploads return `413 SITE_MEDIA_QUOTA_EXCEEDED` with quota details.
 
 - `GET /api/admin/settings`
+  - Success and error responses expose admin/no-store Backy contract headers, including `x-backy-admin-contract-version: backy.admin.v1`, `x-backy-schema-version: backy.admin-settings.v1`, `x-backy-cache-scope: admin`, `cache-control: no-store`, and `x-backy-request-id`.
+  - Success payloads include `data.settings.schemaVersion: "backy.admin-settings.v1"`, `data.settings.scope.workspaceSettingsScope: "global"`, `data.settings.scope.siteSettingsScope: "site"`, and endpoint pointers for `/api/admin/settings` plus `/api/admin/sites/:siteId/settings` so custom admin clients can separate workspace-owned Settings from site-owned Settings.
   - Returns `data.settings.runtimeStorage`, a non-secret diagnostic object with `{ provider, configured, missing, publicUrl?, basePath?, bucket?, region?, endpoint? }` for the active media storage runtime.
   - Returns `data.settings.runtimeDatabase`, `runtimeSupabase`, and `runtimeVercel` non-secret runtime diagnostics so the admin can show database/Supabase/Vercel readiness without exposing tokens or service-role keys.
+  - Returns `data.settings.runtimeCommerce` non-secret provider diagnostics for checkout, catalog sync, refunds, tax/discount/shipping quotes, shipping labels, webhooks, and subscription lifecycle adapters, including Paddle subscription API readiness and the dedicated Adyen PAL Recurring API base URL used by product subscription cancellation separately from the Adyen Checkout API base URL used by refund execution.
 
 - `POST /api/admin/settings`
+  - Body action `"issue-admin-api-key"` requires an owner `settings.manageKeys` session, issues a named non-owner admin service key exactly once, stores only hash/fingerprint/prefix/scope metadata, returns sanitized settings without `keyHash`, records `settings.api_keys.issue`, and lets the service key authenticate ordinary admin API reads while owner-only key management remains session-only.
+  - Body action `"revoke-admin-api-key"` requires an owner `settings.manageKeys` session, marks a named service key revoked, records `settings.api_keys.revoke`, returns sanitized settings without key hashes, and immediately rejects future requests using the revoked key.
   - Body action `"media-storage-provisioning-probe"` creates or verifies the active local/S3/Supabase storage container, performs upload/read/stat/list/delete probe operations, emits a `settings.media_storage.provisioning_probe` audit event, and returns non-secret credential-rotation, lifecycle-policy, lifecycle-cleanup, and storage secret-reference readiness. When provider-specific `BACKY_*_NEXT_*` replacement storage credential environment variables are present, the response validates that replacement credential against the target bucket/path before it is promoted to active runtime variables. When Media storage lifecycle policy is enabled and the active provider is S3-compatible, the response applies Backy cleanup/retained-version lifecycle rules through the provider API. For local/Supabase-compatible providers without a native lifecycle API, the same probe previews or applies Backy-managed cleanup of expired internal probe files and retained media versions through the active storage adapter.
 
 - `PATCH /api/admin/settings`
@@ -173,6 +228,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - `integrations.supabase` persists non-secret metadata only: `projectUrl`, `projectRef`, `databaseEnabled`, `storageEnabled`, and `authEnabled`.
   - `integrations.storage` persists non-secret provider metadata and optional storage secret references only: `accessKeyIdSecretRef`, `secretAccessKeySecretRef`, and `supabaseKeySecretRef` must be env/secret-store references such as `env:BACKY_SUPABASE_SERVICE_ROLE_KEY`; raw secret-like values are rejected before persistence and are never returned as secret values.
   - `integrations.vercel` persists non-secret metadata only: `projectId`, `teamSlug`, `productionDomain`, `autoDeploy`, and `previewDeployments`.
+  - `integrations.commerce.subscriptionActionProvider` and `subscriptionActionProviderUrl` select an optional generic HTTP lifecycle adapter for Products subscription pause/resume/cancel actions; Settings validates the URL and the Products lifecycle endpoints fall back to native provider adapters or manual handoff when it is not configured.
   - Secret values remain environment-owned (`BACKY_DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, Vercel env vars, etc.) and must not be returned in admin settings payloads.
 
 - `GET /api/sites/:siteId/navigation`
@@ -233,7 +289,9 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - The frontend manifest advertises `capabilities.reusableSections`, `endpoints.reusableSections`, `endpoints.reusableSectionDetail`, and `modules.reusableSections`; the site-scoped OpenAPI export includes reusable-section list/detail operations and `x-backy.reusableSectionIds`.
 
 ### 2.2 Render payload
+
 Public page payload should include:
+
 - `content` in shared editor schema
 - `themeTokens`
 - `navigation`
@@ -244,6 +302,7 @@ Public page payload should include:
 - `version`
 
 ### 2.3 Page interactions
+
 - `POST /api/sites/:siteId/forms/:formId/submissions`
 - `POST /api/public/sites/:siteId/forms/:formId/submissions` (optional alias)
   - `GET /api/sites/:siteId/forms` lists public form definitions with `{ success, requestId, data: { forms, total, pagination } }`; legacy top-level `forms` and `total` remain for compatibility.
@@ -286,6 +345,7 @@ Public page payload should include:
   - Lists public interaction audit events with `{ success, requestId, data: { siteId, events, count, pagination } }`; legacy top-level `siteId/events/count/pagination` remain for compatibility.
 
 ### 2.4 Security behavior
+
 - Return `403` if site/page is in private/unpublished state.
 - Return `410` for intentionally removed pages if policy requires.
 - Return `404` for unresolved slugs and preserve internal routing details from leaking.
@@ -295,6 +355,7 @@ Public page payload should include:
 ## 3) Admin API (authenticated)
 
 ### 3.1 Sites
+
 - `GET /api/admin/sites?includeUnpublished=true`
   - Current implementation returns `{ success, requestId, data: { sites, pagination } }`.
   - Includes draft/published sites for admin use when `includeUnpublished=true`.
@@ -317,10 +378,18 @@ Public page payload should include:
 - `PATCH /api/admin/sites/:siteId`
   - Body supports partial site settings updates: `name`, `slug`, `description`, `customDomain`, `status`, `isPublished`, `theme`.
 
+- `GET/PATCH /api/admin/sites/:siteId/settings`
+  - Provides a dedicated site-scoped Settings contract using `backy.site-settings-scope.v1`.
+  - Success and error responses expose admin/no-store Backy contract headers, including `x-backy-admin-contract-version: backy.admin.v1`, `x-backy-schema-version: backy.site-settings-scope.v1`, `x-backy-cache-scope: admin`, `cache-control: no-store`, `x-backy-request-id`, and `x-backy-site-id` on success.
+  - `GET` requires `sites.view`, enforces the existing nested site/team scope guard, and returns a non-secret envelope that separates global workspace settings from the site's own settings plus effective settings and related endpoint URLs.
+  - `PATCH` requires `sites.configure`, enforces the same site/team scope guard, updates only allowlisted site settings sections (`seo`, `analytics`, `social`, `commentPolicy`, `redirectRules`, `navigation`, `localization`, `domainVerification`, `vercelDeployment`, `billingQuota`, `webhooks`, `frontendDesign`), rejects unsupported-only payloads with `NO_SITE_SETTINGS_CHANGES`, rejects mixed site/workspace payloads with `UNSUPPORTED_SITE_SETTINGS_KEYS`, records a `site.settings.updated` audit event for valid changes, and returns the same scoped envelope.
+  - `npm run test:admin-contract --workspace @backy/public` covers read/update/readback behavior, admin contract/cache headers, allowlisted site setting persistence, mixed unsupported payload rejection, unsupported-only patch rejection, and request-id-backed audit metadata.
+
 - `DELETE /api/admin/sites/:siteId`
   - Deletes the site and cascades local page/post records in the current runtime adapter.
 
 ### 3.2 Pages
+
 - `GET /api/admin/sites/:siteId/pages?includeUnpublished=true`
   - Current implementation returns page summaries without content.
 
@@ -349,11 +418,12 @@ Public page payload should include:
 Current sites/pages admin endpoints are intentionally local file-backed. Production completion still requires authenticated database persistence, RBAC, preview tokens, cache invalidation, workflow audit events, and contract tests.
 
 ### 3.3 Media
+
 - `POST /api/admin/sites/:siteId/media`
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
   - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, arbitrary JSON `metadata`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
-  - validates image/video/audio/document/font MIME categories, runs static upload safety checks before storage, optionally enforces HTTP scanner or ClamAV `clamd` clean verdicts through `BACKY_MEDIA_SCAN_*`, rejects active-content SVG or provider-rejected payloads with `MEDIA_SAFETY_SCAN_FAILED`, and writes assets through the active `@backy/storage` adapter
+  - validates image/video/audio/document/font/other MIME categories, classifies unknown safe files as `other`, runs static upload safety checks before storage, optionally enforces HTTP scanner or ClamAV `clamd` clean verdicts through `BACKY_MEDIA_SCAN_*`, rejects active-content SVG or provider-rejected payloads with `MEDIA_SAFETY_SCAN_FAILED`, and writes assets through the active `@backy/storage` adapter
   - stores extension metadata automatically and preserves custom upload metadata through later metadata edits
   - stores clean scan evidence under `metadata.safetyScan`, including provider scan evidence when an HTTP scanner or ClamAV adapter is configured
   - returns `{ success, requestId, data: { media } }`
@@ -397,6 +467,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Media create/update/delete/replace writes emit admin audit logs with entity `media`, request id correlation, before/after snapshots where applicable, and non-secret storage metadata for traceability.
 
 ### 3.4 Reusable sections/templates
+
 - `GET /api/admin/sites/:siteId/reusable-sections`
   - Lists saved reusable canvas sections for a site.
   - Filters: `status=active|archived|all`, `category`, `tag`, `search`.
@@ -473,6 +544,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Backend instance registry/propagation can now discover and refresh synced section copies across pages and blog posts. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Admin reusable-section routes now enforce the existing content permission matrix (`pages.view`, `pages.edit`, `pages.delete`); production completion still requires broader RBAC enforcement across other admin resources.
 
 ### 3.5 Forms
+
 - `POST /api/admin/sites/:siteId/forms`
 - `GET /api/admin/sites/:siteId/forms`
 - `GET /api/admin/sites/:siteId/forms/:formId`
@@ -493,11 +565,13 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
   - Form creation accepts `frontendDesignTemplateId` or `designTemplateId`; when it points to a captured `form` template, Backy seeds fields/settings and stores design provenance in `settings.frontendDesign*`.
 
 ### 3.6 Comments
+
 - `GET /api/admin/sites/:siteId/comments?targetType=page|post&status=`
 - `PATCH /api/admin/sites/:siteId/comments/:commentId`
 - `POST /api/admin/sites/:siteId/comments/:commentId/block-user`
 
 ### 3.7 Blog
+
 - `GET /api/admin/sites/:siteId/blog?status=&limit=&offset=`
   - Current implementation returns `{ success, requestId, data: { posts, pagination } }` and includes unpublished posts for admin use.
   - Admin blog list/detail/readiness/revision/author/taxonomy reads require `pages.view`; post/category/tag create and update plus archive/rollback require `pages.edit`; publish and preview-token creation require `pages.publish`; deletes require `pages.delete`.
@@ -523,6 +597,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 Current blog admin endpoints are local file-backed through `data/backy/admin-content.json` in demo mode and enforce the existing content permission matrix. Production completion still requires authenticated database persistence, audit-event UI, and broader contract tests.
 
 ### 3.8 Publish and revisions
+
 - `GET /api/admin/sites/:siteId/pages/:pageId/revisions`
   - Returns local revision history for the page with pagination metadata.
 
@@ -564,6 +639,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   - Future workflow endpoint for merge/conflict resolution once collaborative editing is implemented.
 
 ### 3.9 Audit logs and governance
+
 - `GET /api/admin/audit-logs`
   - Filters: `siteId`, `teamId`, `actorId`, `entity`, `entityId`, `action`, `requestId`, `limit`, and `offset`.
   - Returns `{ success, requestId, data: { logs, count, pagination } }`; legacy top-level `logs/count/pagination` remain for compatibility.
@@ -574,6 +650,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 ---
 
 ## 4) Canonical contracts and bindings
+
 - `MediaItem.scope` = `global|page|post`
 - `MediaItem.scopeTargetId` = pageId/postId for scoped assets
 - `MediaItem.visibility` = `public|private`
@@ -587,6 +664,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 ## 5) What a frontend should send and what it can expect
 
 ### Frontend sends
+
 - Content save payloads:
   - page/blog `content` in shared schema
   - optional `themeTokens` updates
@@ -595,49 +673,65 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   - `{ fields: Record<string, unknown>, honeypot?: string }`
 
 ### Frontend expects
+
 - Editor payloads and public payloads keep stable keys (`content`, `meta`, `themeTokens`).
 - Comment lists sorted by `createdAt` descending by default.
 - Submission endpoints return machine-readable `submissionId` and moderation status.
 
 ## 6) Custom frontend integration checklist
+
 - Public frontend bootstrap flow:
   1. Resolve site: `GET /api/sites/:identifier`.
   2. Fetch `GET /api/sites/:siteId/manifest` once to discover schema refs, capabilities, endpoints, route patterns, collections, forms, media/font support, navigation, and the site-scoped OpenAPI URL.
-  3. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
-  4. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
-  5. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
-  6. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound, slug-bound, searched, filtered, and sorted datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
-  7. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
-  8. Submit interactive blocks using:
-     - `POST /api/sites/:siteId/forms/:formId/submissions`
-     - `POST /api/sites/:siteId/pages/:pageId/comments`
-  9. Render advanced interactive blocks from a safe registry contract, not arbitrary inline scripts:
-     - trusted blocks use `type: "interactiveFigure"` or `type: "codeComponent"` with `componentKey`, `version`, `props`, `controls`, `dataBindings`, and `fallback` metadata.
-     - custom user code runs only through a signed/versioned component bundle or sandboxed iframe URL selected from Backy's component registry.
-     - public payloads expose CSP requirements, sandbox flags, allowed permissions, allowed data-binding scopes, integrity/version metadata, and static fallback content for crawlers, unsupported clients, or blocked scripts.
-     - registry/sandbox execution is frontend-side; Backy owns authoring, validation, version history, publishing, audit logs, data access, and API compatibility.
+  3. Use `manifest.data.delivery` and `manifest.data.modules.routing.localizedRoutePatterns` to choose the locale strategy, path prefixes, locale domains, and generated page/blog/dynamic route variants before building the frontend router.
+  4. Fetch `GET /api/sites/:siteId/interactive-components` when `capabilities.interactiveComponents` is true and cache it with ETag revalidation.
+  5. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
+  6. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
+  7. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
+  8. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound, slug-bound, searched, filtered, and sorted datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
+  9. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
+  10. Submit interactive blocks using:
+  - `POST /api/sites/:siteId/forms/:formId/submissions`
+  - `POST /api/sites/:siteId/pages/:pageId/comments`
+  11. Render advanced interactive blocks from a safe registry contract, not arbitrary inline scripts:
+  - trusted blocks use `type: "interactiveFigure"` or `type: "codeComponent"` with `componentKey`, `version`, `props`, `controls`, `dataBindings`, and `fallback` metadata.
+  - custom user code runs only through a signed/versioned component bundle or sandboxed iframe URL selected from Backy's component registry.
+  - sandbox runtime failures can be reported to `POST /api/sites/:siteId/interactive-components/runtime-events` and inspected through the existing interaction event stream with `kind=interactive-runtime`.
+  - public payloads expose CSP requirements, sandbox flags, allowed permissions, allowed data-binding scopes, integrity/version metadata, and static fallback content for crawlers, unsupported clients, or blocked scripts.
+  - registry/sandbox execution is frontend-side; Backy owns authoring, validation, version history, publishing, audit logs, data access, and API compatibility.
 - `packages/sdk-js` wraps this public flow for JavaScript/TypeScript frontends. It intentionally calls the same public endpoints documented above, so consumers can use the SDK or raw HTTP interchangeably without depending on admin/editor internals.
+  - SDK build/typecheck now runs `packages/sdk-js/scripts/generate-contract-types.mjs`, which reads `specs/ai-frontend-contract/*.schema.json` and emits exported `GeneratedBacky*` TypeScript shapes for the public manifest, render payload, theme tokens, content elements, element actions, data bindings, editable maps, and OpenAPI document metadata. The same generator evaluates the public OpenAPI route's component schema object from `apps/public/src/app/api/sites/[siteId]/openapi/route.ts` and emits `GeneratedBackyOpenApiOperationId`, `GeneratedBackyOpenApiComponentName`, per-component `GeneratedBackyOpenApi*` schema shapes, dedicated route resource and route-resolution types, navigation/SEO/page/blog/font/frontend-design schema types, media asset/reference/editable-metadata schema types, collection field/permission/record schema types, form list/detail/definition/submission/validation/contact schema types, comment/moderation/report/blocklist schema types, interaction-event/runtime-record envelope types, commerce catalog/order/webhook schema types, reusable-section content/document schema types, generated render-payload media/font/form/comment/navigation/frontend-design subtypes, generated content action/data-binding/editable-map subtypes, and dedicated interactive registry/runtime request types. `npm run test:generated-types --workspace @backy/sdk-js` verifies those generated exports with representative positive and negative compile-time contract cases, including route resource and route-resolution requirements, navigation payload requirements, page SEO and paginated page-list requirements, SEO route sitemap enums, blog feed/category requirements, font manifest versioning, frontend-design lifecycle states, render-payload media/font/form/comment/navigation/frontend-design subtype constraints, media reference/editable metadata requirements, collection field enums/permissions/record values/delete envelopes, form list/detail/schema/submission/validation states, comment target/status/blocklist constraints, event site/pagination/runtime-record requirements, commerce product/order/webhook constraints, reusable-section content/editable-map requirements, generated content action/data-binding constraints, and the interactive registry security boundary.
+- Site webhook deliveries use the stable `backy.site-webhook.v1` payload contract. The site-scoped OpenAPI document exposes this as the `SiteWebhookPayload` component, and the JavaScript SDK exports it as `GeneratedBackyOpenApiSiteWebhookPayload` for typed webhook receivers.
+  - Delivery headers include `x-backy-site-id`, `x-backy-site-webhook-event`, `x-backy-request-id`, and `x-backy-webhook-endpoint-id`.
+  - `kind` currently covers `site-created`, `site-updated`, `site-deleted`, `form-submission`, `contact-shared`, `contact-sync`, `contact-status`, `commerce-order`, `commerce-product`, `commerce-webhook`, `comment-submitted`, `comment-status`, `comment-reported`, `interactive-runtime`, and related site-owned extension events as they are added.
+  - Payloads include `{ schemaVersion, kind, siteId, site, requestId, reason, actor, data }`. The `data` object is event-specific; site-owned admin mutations include compact before/after snapshots and route-specific metadata when those values are available.
 - CORS policy for custom frontends:
   - allow exact frontend origin(s),
   - allow `Authorization`, `X-Backy-Admin-Key`, `X-API-Key`, and `X-Request-Id` headers for configured admin clients,
   - send `x-backy-request-id` for debug parity.
   - Admin API key enforcement is opt-in with `BACKY_REQUIRE_ADMIN_API_KEY=true` plus `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY`. Admin clients can send the key with `X-Backy-Admin-Key` or `Authorization: Bearer ...`; the Vite admin app reads `VITE_BACKY_ADMIN_API_KEY` or `VITE_ADMIN_API_KEY` and attaches the header to admin API requests.
-  - Scheduled commerce reconciliation is wired through root `vercel.json` to call `GET /api/admin/commerce/reconcile?limit=100` daily. Set `CRON_SECRET` to the same server-only value as `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY` so Vercel's bearer cron request authenticates as an admin-key request. `GET /api/admin/commerce/reconcile/readiness` returns non-secret cron readiness booleans for the Vercel cron entry, `CRON_SECRET`, environment admin key presence, and secret/key match status.
-  - Private order analytics are available to admin clients through `GET /api/admin/sites/:siteId/commerce/orders/analytics`. The response uses `backy.order-analytics.v1` and aggregates private order records into revenue totals, payment/fulfillment buckets, source/currency breakdowns, operations counts, 14-day trend points, and recent order summaries without exposing raw order collections publicly.
+  - Forms/Contacts database-mode verification is available through `npm run ci:forms-postgres`, which runs the configured Postgres/Supabase smoke against `BACKY_DATABASE_URL`/`DATABASE_URL` and verifies temporary site/page/form/submission/contact create, read, update, filter, merge, and cleanup behavior. `.github/workflows/forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` repository secret for a disposable Supabase/Postgres database.
+  - SDK database-mode verification is available through `npm run ci:sdk-postgres-smoke`, which preflights the configured Postgres/Supabase schema, starts the public app in database mode, and runs the generated/custom frontend SDK smoke against public manifest, OpenAPI, render, media, CMS collections, reusable sections, forms, comments, events, and interactive component registry endpoints. `.github/workflows/sdk-postgres-smoke.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` repository secret.
+  - Commerce provider mock verification is available through `npm run ci:commerce-provider-smoke`, which starts the public and admin apps, sets the existing commerce/order smoke tests to their local mock provider bases, and runs product catalog sync, checkout/subscription actions, TaxJar/Avalara/Stripe Tax/Stripe discount quotes, EasyPost/Shippo rates/labels/tracking, Stripe/PayPal/Square/Adyen/Mollie refunds, webhook settlement, and reconciliation paths. `.github/workflows/commerce-provider-smoke.yml` runs the same gate on pull requests and main-branch pushes without live provider credentials.
+  - Scheduled commerce reconciliation is wired through root `vercel.json` to call `GET /api/admin/commerce/reconcile?limit=100` daily. Set `CRON_SECRET` to the same server-only value as `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY` so Vercel's bearer cron request authenticates as an admin-key request. `GET /api/admin/commerce/reconcile/readiness` returns non-secret cron readiness booleans for the Vercel cron entry, `CRON_SECRET`, environment admin key presence, and secret/key match status. Site and platform reconciliation responses carry private/no-store Backy contract headers with `backy.commerce-reconciliation.v1`, `backy.commerce-reconciliation-batch.v1`, or `backy.commerce-reconciliation-readiness.v1` schema metadata.
+  - Private order analytics are available to admin clients through `GET /api/admin/sites/:siteId/commerce/orders/analytics`. The response uses `backy.order-analytics.v1`, carries Backy contract headers with `x-backy-schema-version`, `x-backy-site-id`, `x-backy-cache-scope: private`, and `cache-control: no-store`, and aggregates private order records into revenue totals, payment/fulfillment buckets, source/currency breakdowns, operations counts, 14-day trend points, recent order summaries, and provider execution analytics for payment providers, provider refunds, fulfillment dispatches, and shipping-label providers without exposing raw order collections publicly.
   - Public checkout order intake can execute configured commerce order notification email and workflow webhook handoffs. Accepted orders include `data.deliveries`, and delivery activity is available at `GET /api/sites/:siteId/events?kind=commerce-order&requestId=:requestId`.
   - Public checkout order intake returns `data.risk` and persists private `riskscore`, `risklevel`, `riskreasons`, and `riskreviewstatus` fields so admins can hold, approve, or clear risky orders before fulfillment.
-  - Admin order operators can recalculate persisted pricing totals through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/quote`; the endpoint reads saved line items, applies current Settings commerce tax/shipping/discount toggles and rules, persists `subtotal`, `discountamount`, `taxamount`, `shippingamount`, `total`, `currency`, and a private note, emits audit/cache invalidation metadata, and exposes the current quote with `GET` on the same URL using the `backy.order-quote.v1` payload.
-  - Admin order operators can prepare shipment-label handoff metadata through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/shipping-label`; the endpoint persists label status/provider/id/url/service/cost/created-at fields on the private order and exposes the current label with `GET` on the same URL. When `executionProvider`/`labelProvider`/`provider` is `easypost`, `BACKY_EASYPOST_API_KEY` or `EASYPOST_API_KEY` is configured, and the request includes structured `fromAddress`, `toAddress`, and `parcel` payloads, the endpoint creates an EasyPost shipment, buys a matching or lowest available rate, and stores the purchased label URL/cost/carrier/service. Without credentials or shipment data it keeps the existing draft handoff behavior. Admin operators can also void an attached label through `DELETE` on the same URL; EasyPost purchased shipment ids (`shp_...`) use the EasyPost shipment refund endpoint when credentials are present, while manual/draft labels are marked voided locally and processing orders move back to unfulfilled.
-  - Admin order operators can prepare fulfillment dispatch metadata through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/fulfillment`; the endpoint requires a paid, non-closed order, persists dispatch status/provider/id/requested-at/completed-at/payload fields on the private order, moves the order into processing for handoff, emits audit/cache invalidation metadata, and exposes the current `backy.fulfillment-dispatch.v1` payload through `GET` on the same URL for warehouse, 3PL, or custom fulfillment adapters.
-  - Admin order operators can refresh shipment tracking through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/tracking`; the endpoint persists `trackingstatus` and `trackinglastcheckedat` alongside the existing carrier/number/link fields and exposes the current tracking summary with `GET` on the same URL. When `executionProvider`/`trackingProvider`/`provider` is `easypost` and `BACKY_EASYPOST_API_KEY` or `EASYPOST_API_KEY` is configured, the endpoint creates/reads an EasyPost tracker for the order tracking number and stores the sanitized provider status/link; without credentials it records a manual refresh status and audit trail without calling a carrier.
-  - Admin order operators can prepare provider-refund metadata through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/provider-refund`; the endpoint persists refund status/provider/id/reference/amount/reason/requested-at/completed-at/payload fields on the private order and exposes the current refund with `GET` on the same URL. For `paymentprovider=stripe`, a Stripe `pi_` or `ch_` payment reference, and `BACKY_STRIPE_SECRET_KEY` or `STRIPE_SECRET_KEY`, the endpoint calls Stripe refunds directly with a Backy idempotency key and records a sanitized provider result; otherwise it falls back to handoff metadata.
-  - Admin product operators can sync catalog metadata through `POST /api/admin/sites/:siteId/commerce/products/:productId/provider-sync`. `provider: "stripe"` creates Stripe Product/Price metadata when Stripe server credentials are configured and otherwise stores handoff metadata. `provider: "paddle"` creates Paddle Product/Price metadata when Paddle server credentials are configured and otherwise stores handoff metadata. `provider: "square"` upserts a Square Catalog Item with an Item Variation when Square server credentials are configured and otherwise stores handoff metadata. `provider: "http"`, `"generic-http"`, or auto-selected Settings commerce catalog sync config posts a safe `backy.commerce-product-sync.v1` payload to the configured HTTP endpoint and stores sanitized provider product/price/response metadata. `provider: "auto"` chooses the configured HTTP catalog-sync endpoint first, then the configured provider or Stripe fallback.
-  - Admin product operators can inspect product-scoped subscription lifecycle state through `GET /api/admin/sites/:siteId/commerce/products/:productId/subscriptions`. The `backy.product-subscription-lifecycle.v1` response summarizes matching private subscription orders by active, renewal, dunning, paused, trial-ending, cancelled, and pending states, exposes recent order/customer/product-revenue rows plus bounded structured action history/last-action summaries, includes non-secret `backy.product-subscription-execution-readiness.v1` provider readiness for Stripe, PayPal, Paddle, Square, generic HTTP, and manual handoff actions, and documents the related orders, webhook, and reconciliation API contracts.
-  - Admin product operators can run subscription lifecycle actions through `POST /api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action` with `action: "pause" | "resume" | "cancel"`. The endpoint requires `commerce.edit`, verifies the private subscription order belongs to the product, executes Stripe subscription pause/resume/cancel when server Stripe credentials and a `sub_...` payment reference are available, executes PayPal subscription suspend/activate/cancel when server PayPal credentials are available, executes Paddle subscription pause/resume/cancel when `BACKY_PADDLE_API_KEY`/`PADDLE_API_KEY` is configured and the provider is `paddle`, executes Square subscription pause/resume/cancel when `BACKY_SQUARE_ACCESS_TOKEN`/`SQUARE_ACCESS_TOKEN` is configured and the provider is `square`, executes a generic HTTP subscription-action adapter when `BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL`/`COMMERCE_SUBSCRIPTION_ACTION_URL` or Settings commerce `subscriptionActionProviderUrl` is configured and the provider is `http`/`generic-http`/`custom-http`, otherwise records a structured manual handoff, persists an order note/local lifecycle state, emits audit/cache invalidation metadata, and returns `backy.product-subscription-action.v1`.
+  - Commerce provider webhook settlement uses the `backy.commerce-webhook.v1` response schema with private/no-store Backy contract headers. The route verifies the configured webhook signing secret reference, enforces the Settings event allowlist, updates matched private orders and provider-refund metadata, records commerce-webhook activity, and keeps duplicate provider events idempotent.
+  - The `/orders` admin handoff manifest includes an `apiContracts` block for custom admin frontends. It maps order analytics, quote, shipping-label, fulfillment, tracking, provider-refund, commerce webhook settlement, site reconciliation, platform reconciliation, and cron-readiness endpoints to their supported methods, `backy.*.v1` schema versions, private cache scope, and Backy response headers.
+  - Admin order operators can recalculate persisted pricing totals through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/quote`; the endpoint reads saved line items, applies current Settings commerce tax/shipping/discount toggles and rules, persists `subtotal`, `discountamount`, `taxamount`, `shippingamount`, `total`, `currency`, and a private note, emits audit/cache invalidation metadata, and exposes the current quote with `GET` on the same URL using the `backy.order-quote.v1` payload and private/no-store Backy contract headers. In repository/Supabase mode, quote reads and refreshes build the storefront pricing contract and provider settings from persisted Settings before calling HTTP, Stripe Tax, TaxJar, Avalara AvaTax, EasyPost rate, Shippo rate, or Stripe promotion-code discount quote providers. TaxJar execution is selected with `taxProvider: "taxjar"` and uses `BACKY_TAXJAR_API_KEY`/`TAXJAR_API_KEY` plus optional `BACKY_TAXJAR_API_BASE_URL`/`TAXJAR_API_BASE_URL`. Avalara execution is selected with `taxProvider: "avalara"` and uses `BACKY_AVALARA_ACCOUNT_ID`/`AVALARA_ACCOUNT_ID`, `BACKY_AVALARA_LICENSE_KEY`/`AVALARA_LICENSE_KEY`, `BACKY_AVALARA_COMPANY_CODE`/`AVALARA_COMPANY_CODE`, plus optional `BACKY_AVALARA_API_BASE_URL`/`AVALARA_API_BASE_URL`. EasyPost and Shippo shipping quote execution are selected with `shippingProvider: "easypost" | "shippo"`, use the existing label/tracking credentials, and require structured `fromAddress`, `toAddress`, and `parcel` data from the request, order shipping address, or Settings commerce defaults; quote refresh only selects a rate and never purchases a label. Stripe promotion-code discount execution is selected with `discountProvider: "stripe"`, uses `BACKY_STRIPE_SECRET_KEY`/`STRIPE_SECRET_KEY` plus optional `BACKY_STRIPE_DISCOUNT_API_BASE_URL`/`BACKY_STRIPE_API_BASE_URL`/`STRIPE_API_BASE_URL`, and Stripe Tax/discount quote calls can send optional `BACKY_STRIPE_API_VERSION`/`STRIPE_API_VERSION`; the adapter validates the saved/requested discount code against active Stripe promotion codes, applies supported `percent_off` or matching-currency `amount_off` coupons, and keeps unsupported or missing codes as skipped/failed provider adjustments rather than inventing a discount.
+  - Admin order operators can prepare shipment-label handoff metadata through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/shipping-label`; the endpoint persists label status/provider/id/url/service/cost/created-at fields on the private order and exposes the current label with `GET` on the same URL using the `backy.shipping-label.v1` payload and private/no-store Backy contract headers. When `executionProvider`/`labelProvider`/`provider` is `easypost`, `BACKY_EASYPOST_API_KEY` or `EASYPOST_API_KEY` is configured, and the request includes structured `fromAddress`, `toAddress`, and `parcel` payloads, the endpoint creates an EasyPost shipment, buys a matching or lowest available rate, and stores the purchased label URL/cost/carrier/service. When the execution provider is `shippo`, `BACKY_SHIPPO_API_KEY` or `SHIPPO_API_KEY` is configured, and the request includes structured shipment payloads, the endpoint creates a Shippo shipment, purchases the selected transaction/rate, and stores the purchased label URL/cost/carrier/service. Without credentials or shipment data it keeps the existing draft handoff behavior. Admin operators can also void an attached label through `DELETE` on the same URL with the same private contract headers; EasyPost purchased shipment ids (`shp_...`) use the EasyPost shipment refund endpoint when credentials are present, Shippo purchased transaction ids use Shippo refund requests, while manual/draft labels are marked voided locally and processing orders move back to unfulfilled.
+  - Admin order operators can prepare fulfillment dispatch metadata through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/fulfillment`; the endpoint requires a paid, non-closed order, persists dispatch status/provider/id/requested-at/completed-at/payload fields on the private order, moves the order into processing for handoff, emits audit/cache invalidation metadata, and exposes the current `backy.fulfillment-dispatch.v1` payload through `GET` on the same URL for warehouse, 3PL, or custom fulfillment adapters with private/no-store Backy contract headers. In repository/Supabase mode, HTTP fulfillment execution reads the persisted Settings commerce contract before dispatching, so database-backed sites use their configured warehouse/3PL adapter instead of demo-store settings.
+  - Admin order operators can refresh shipment tracking through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/tracking`; the endpoint persists `trackingstatus` and `trackinglastcheckedat` alongside the existing carrier/number/link fields and exposes the current tracking summary with `GET` on the same URL using the `backy.tracking.v1` payload and private/no-store Backy contract headers. When `executionProvider`/`trackingProvider`/`provider` resolves to `easypost` from the request, order fields, or persisted Settings commerce label provider and `BACKY_EASYPOST_API_KEY` or `EASYPOST_API_KEY` is configured, the endpoint creates/reads an EasyPost tracker for the order tracking number and stores the sanitized provider status/link. When the resolved execution provider is `shippo` and `BACKY_SHIPPO_API_KEY` or `SHIPPO_API_KEY` is configured, the endpoint reads Shippo tracking status through `GET /tracks/:carrier/:trackingNumber` and stores sanitized status/history metadata; without credentials or a selected executable carrier provider it records a manual refresh status and audit trail without calling a carrier.
+  - Admin order operators can prepare provider-refund metadata through `POST /api/admin/sites/:siteId/commerce/orders/:orderId/provider-refund`; the endpoint persists refund status/provider/id/reference/amount/reason/requested-at/completed-at/payload fields on the private order and exposes the current refund with `GET` on the same URL using the `backy.provider-refund.v1` payload and private/no-store Backy contract headers. Refund creation resolves provider from the request, then the order payment provider, then persisted Settings commerce payment provider before falling back to manual. For `paymentprovider=stripe`, a Stripe `pi_` or `ch_` payment reference, and `BACKY_STRIPE_SECRET_KEY` or `STRIPE_SECRET_KEY`, the endpoint calls Stripe refunds directly with a Backy idempotency key and records a sanitized provider result. It can also execute PayPal capture refunds with `BACKY_PAYPAL_ACCESS_TOKEN` or `PAYPAL_ACCESS_TOKEN`, Square payment refunds with `BACKY_SQUARE_ACCESS_TOKEN` or `SQUARE_ACCESS_TOKEN`, Adyen payment refunds with `BACKY_ADYEN_API_KEY`/`ADYEN_API_KEY` plus merchant account, and Mollie payment refunds with `BACKY_MOLLIE_API_KEY` or `MOLLIE_API_KEY`. `PATCH` refreshes pending Stripe, PayPal, Square, and Mollie refund statuses through provider APIs and returns the same private contract headers; Adyen refresh returns webhook-pending guidance because refund outcomes settle through asynchronous Adyen notifications. Without matching credentials/reference data it falls back to handoff metadata.
+  - Admin product operators can sync catalog metadata through `POST /api/admin/sites/:siteId/commerce/products/:productId/provider-sync`. `provider: "stripe"` creates Stripe Product/Price metadata when Stripe server credentials are configured and otherwise stores handoff metadata. `provider: "paypal"` creates PayPal catalog product metadata and subscription billing plans when PayPal credentials are configured and otherwise stores handoff metadata. `provider: "paddle"` creates Paddle Product/Price metadata when Paddle server credentials are configured and otherwise stores handoff metadata. `provider: "square"` upserts a Square Catalog Item with an Item Variation when Square server credentials are configured and otherwise stores handoff metadata. `provider: "shopify"` creates Shopify Admin API products/variants with Backy metafields when Shopify Admin credentials and a store domain or API base URL are configured and otherwise stores handoff metadata. `provider: "bigcommerce"` creates BigCommerce Catalog API products/variants with Backy custom fields when a BigCommerce token and store hash or API base URL are configured and otherwise stores handoff metadata. `provider: "woocommerce"` creates WooCommerce REST API products and product variations when WooCommerce consumer credentials and a store URL or API base URL are configured and otherwise stores handoff metadata. `provider: "http"`, `"generic-http"`, or auto-selected Settings commerce catalog sync config posts a safe `backy.commerce-product-sync.v1` payload to the configured HTTP endpoint and stores sanitized provider product/price/response metadata. `provider: "auto"` chooses the configured catalog-sync provider or Stripe fallback. Responses use the `backy.commerce-product-sync.v1` schema with private/no-store Backy contract headers for custom admin clients.
+  - Admin product operators can inspect product-scoped subscription lifecycle state through `GET /api/admin/sites/:siteId/commerce/products/:productId/subscriptions`. The `backy.product-subscription-lifecycle.v1` response summarizes matching private subscription orders by active, renewal, dunning, paused, trial-ending, cancelled, and pending states, exposes recent order/customer/product-revenue rows plus bounded structured action history/last-action summaries, includes non-secret `backy.product-subscription-execution-readiness.v1` provider readiness for Stripe, PayPal, Paddle, Square, Adyen, Mollie, generic HTTP, and manual handoff actions, documents the related orders, webhook, and reconciliation API contracts, and returns private/no-store Backy contract headers.
+  - Admin product operators can run subscription lifecycle actions through `POST /api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action` with `action: "pause" | "resume" | "cancel"`. The endpoint requires `commerce.edit`, verifies the private subscription order belongs to the product, executes Stripe subscription pause/resume/cancel when server Stripe credentials and a `sub_...` payment reference are available, executes PayPal subscription suspend/activate/cancel when server PayPal credentials are available, executes Paddle subscription pause/resume/cancel when `BACKY_PADDLE_API_KEY`/`PADDLE_API_KEY` is configured and the provider is `paddle`, executes Square subscription pause/resume/cancel when `BACKY_SQUARE_ACCESS_TOKEN`/`SQUARE_ACCESS_TOKEN` is configured and the provider is `square`, executes Adyen recurring disable cancellation when `BACKY_ADYEN_API_KEY`/`ADYEN_API_KEY` plus merchant account are configured and the provider reference includes a shopper reference, using `BACKY_ADYEN_RECURRING_API_BASE_URL`/`ADYEN_RECURRING_API_BASE_URL` when supplied or the Adyen PAL Recurring API base by default, executes Mollie subscription cancellation when `BACKY_MOLLIE_API_KEY`/`MOLLIE_API_KEY` is configured and the reference includes a customer/subscription id pair, executes a generic HTTP subscription-action adapter when `BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL`/`COMMERCE_SUBSCRIPTION_ACTION_URL` or Settings commerce `subscriptionActionProviderUrl` is configured and the provider is `http`/`generic-http`/`custom-http`, otherwise records a structured manual handoff, persists an order note/local lifecycle state, emits audit/cache invalidation metadata, and returns `backy.product-subscription-action.v1` with private/no-store Backy contract headers. Provider-native pause/resume is not invented for Adyen or Mollie; those unsupported actions remain structured handoffs unless a generic HTTP lifecycle adapter is configured.
 
 ---
 
 ## 7) Migration-safe policy
+
 - Additive schema changes first (new optional fields, new endpoints with fallbacks).
 - Backward compatibility window: 2 minor versions.
 - No frontend breakage from internal admin fields being added.

@@ -46,6 +46,7 @@ import {
   type CollectionBindingPreset,
   type CollectionField,
   type CollectionRecord,
+  type InteractiveComponentRegistryEntry,
 } from '@/lib/adminContentApi';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import {
@@ -501,7 +502,7 @@ const normalizeTextElementContent = (rawContent: unknown, normalizedType: string
 // TYPES
 // ============================================
 
-type EditorMediaField = 'src' | 'video' | 'embed';
+type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage';
 type EditorMediaAllowedTypes = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'any';
 type EditorMediaUploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
 
@@ -520,6 +521,9 @@ interface PropertyPanelProps {
   mediaViewDisabledReason?: string;
   mediaCreateDisabledReason?: string;
   collectionsViewDisabledReason?: string;
+  interactiveComponents?: InteractiveComponentRegistryEntry[];
+  interactiveComponentsLoading?: boolean;
+  interactiveComponentsError?: string | null;
   embedded?: boolean;
   hideHeader?: boolean;
 }
@@ -546,6 +550,9 @@ export function PropertyPanel({
   mediaViewDisabledReason,
   mediaCreateDisabledReason,
   collectionsViewDisabledReason,
+  interactiveComponents = [],
+  interactiveComponentsLoading = false,
+  interactiveComponentsError = null,
   embedded = false,
   hideHeader = false,
 }: PropertyPanelProps) {
@@ -735,6 +742,9 @@ export function PropertyPanel({
             onChange={updateProps}
             collections={collections}
             collectionsError={collectionsError}
+            interactiveComponents={interactiveComponents}
+            interactiveComponentsLoading={interactiveComponentsLoading}
+            interactiveComponentsError={interactiveComponentsError}
             elementId={element.id}
             onOpenMedia={(field, mode = 'library') => {
               setMediaField(field);
@@ -849,9 +859,20 @@ export function PropertyPanel({
         onClose={() => setIsMediaLibraryOpen(false)}
         onSelect={(media, selectionOptions) => {
           const mediaPropKey = mediaField === 'video' || mediaField === 'embed' ? 'src' : mediaField;
+          const currentFallback = element.props.fallback && typeof element.props.fallback === 'object' && !Array.isArray(element.props.fallback)
+            ? element.props.fallback
+            : {};
           const nextProps = {
             ...element.props,
-            [mediaPropKey]: media.url,
+            ...(mediaField === 'interactiveFallbackImage'
+              ? {
+                  fallback: {
+                    ...currentFallback,
+                    imageUrl: media.url,
+                    alt: currentFallback.alt || media.altText || media.caption || '',
+                  },
+                }
+              : { [mediaPropKey]: media.url }),
             mediaId: media.id,
             mediaScope: media.scope || mediaContext?.scope || 'global',
             mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
@@ -971,8 +992,235 @@ interface ContentPropertiesProps {
   onOpenEmoji: () => void;
   collections: Collection[];
   collectionsError: string | null;
+  interactiveComponents: InteractiveComponentRegistryEntry[];
+  interactiveComponentsLoading: boolean;
+  interactiveComponentsError: string | null;
   elementId?: string;
 }
+
+const interactiveComponentOptionValue = (component: Pick<InteractiveComponentRegistryEntry, 'componentKey' | 'version'>) => (
+  `${encodeURIComponent(component.componentKey)}::${encodeURIComponent(component.version)}`
+);
+
+const getInteractiveControlString = (control: Record<string, unknown>, key: string, fallback = ''): string => (
+  typeof control[key] === 'string' ? control[key].trim() : fallback
+);
+
+const getInteractiveControlKey = (control: Record<string, unknown>): string => (
+  getInteractiveControlString(control, 'key') || getInteractiveControlString(control, 'name')
+);
+
+const getInteractiveControlLabel = (control: Record<string, unknown>): string => (
+  getInteractiveControlString(control, 'label') || getInteractiveControlKey(control) || 'Control'
+);
+
+const getInteractiveControlType = (control: Record<string, unknown>): string => {
+  const type = getInteractiveControlString(control, 'type', 'text').toLowerCase();
+  return ['range', 'number', 'select', 'checkbox', 'boolean', 'toggle', 'color'].includes(type)
+    ? type
+    : 'text';
+};
+
+const getInteractiveControlOptions = (control: Record<string, unknown>): Array<{ label: string; value: string }> => {
+  const options = Array.isArray(control.options) ? control.options : [];
+  return options
+    .map((option) => {
+      if (typeof option === 'string' || typeof option === 'number' || typeof option === 'boolean') {
+        return { label: String(option), value: String(option) };
+      }
+      if (option && typeof option === 'object' && !Array.isArray(option)) {
+        const record = option as Record<string, unknown>;
+        const value = record.value ?? record.id ?? record.key ?? record.label;
+        const label = record.label ?? record.name ?? value;
+        return value === undefined ? null : { label: String(label), value: String(value) };
+      }
+      return null;
+    })
+    .filter((option): option is { label: string; value: string } => Boolean(option));
+};
+
+const getInteractiveControlValue = (control: Record<string, unknown>, props: Record<string, unknown>): unknown => {
+  const key = getInteractiveControlKey(control);
+  if (key && props[key] !== undefined) {
+    return props[key];
+  }
+  if (control.value !== undefined) {
+    return control.value;
+  }
+  return control.defaultValue;
+};
+
+const updateInteractiveControlList = (
+  controls: Record<string, unknown>[],
+  controlKey: string,
+  value: unknown,
+): Record<string, unknown>[] => (
+  controls.map((control) => (
+    getInteractiveControlKey(control) === controlKey
+      ? { ...control, value }
+      : control
+  ))
+);
+
+const getInteractiveRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const getInteractiveStringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value.map((item) => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+    : []
+);
+
+const getInteractivePolicyLabel = (value: unknown): string => {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return '';
+  return text
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const getInteractiveRuntimeBadges = (component: InteractiveComponentRegistryEntry | null): Array<{ label: string; value: string }> => {
+  if (!component) {
+    return [];
+  }
+
+  const runtime = getInteractiveRecord(component.runtime);
+  const integrity = getInteractiveRecord(component.integrity);
+  const security = getInteractiveRecord(component.security);
+  const dependencyPolicy = getInteractiveRecord(component.dependencyPolicy);
+  const compatibility = getInteractiveRecord(component.compatibility);
+  const permissions = getInteractiveStringList(runtime.allowedPermissions);
+  const renderTargets = getInteractiveStringList(compatibility.renderTargets);
+  const animationLibraries = getInteractiveStringList(compatibility.animationLibraries);
+
+  return [
+    { label: 'Status', value: component.status || 'unknown' },
+    { label: 'Mode', value: component.renderMode || 'static-fallback' },
+    { label: 'Source', value: component.source || 'registry' },
+    { label: 'Integrity', value: integrity.signed === true ? 'signed' : 'unsigned' },
+    { label: 'Sandbox', value: typeof runtime.sandboxUrl === 'string' && runtime.sandboxUrl ? 'Backy route' : 'not configured' },
+    { label: 'Permissions', value: permissions.length ? permissions.join(', ') : 'none' },
+    { label: 'Dependency policy', value: getInteractivePolicyLabel(dependencyPolicy.preset) || 'registry default' },
+    { label: 'Compatibility', value: renderTargets.length ? renderTargets.join(', ') : 'declared by registry' },
+    { label: 'Animation libs', value: animationLibraries.length ? animationLibraries.join(', ') : 'none declared' },
+    { label: 'Admin API', value: security.adminApiAccess === true ? 'blocked before publish' : 'denied' },
+  ];
+};
+
+const getInteractiveBindingPresets = (component: InteractiveComponentRegistryEntry | null): Array<{
+  id: string;
+  label: string;
+  scope: string;
+  targetPath: string;
+  mode: string;
+}> => {
+  const presets = Array.isArray(component?.dataBindingPresets) ? component.dataBindingPresets : [];
+  return presets
+    .map((preset) => {
+      const record = getInteractiveRecord(preset);
+      const id = typeof record.id === 'string' ? record.id.trim() : '';
+      const label = typeof record.label === 'string' ? record.label.trim() : '';
+      const scope = typeof record.scope === 'string' ? record.scope.trim() : '';
+      const targetPath = typeof record.targetPath === 'string' ? record.targetPath.trim() : '';
+      const mode = typeof record.mode === 'string' ? record.mode.trim() : '';
+      return id && label && scope && targetPath
+        ? { id, label, scope, targetPath, mode: mode || 'read' }
+        : null;
+    })
+    .filter((preset): preset is { id: string; label: string; scope: string; targetPath: string; mode: string } => Boolean(preset));
+};
+
+const getInteractivePreviewModel = (
+  component: InteractiveComponentRegistryEntry | null,
+  props: Record<string, unknown>,
+  controls: Record<string, unknown>[],
+) => {
+  const componentKey = typeof component?.componentKey === 'string'
+    ? component.componentKey
+    : typeof props.componentKey === 'string'
+      ? props.componentKey
+      : '';
+  const controlValue = (key: string, fallback: unknown) => {
+    const control = controls.find((item) => getInteractiveControlKey(item) === key);
+    const value = control ? getInteractiveControlValue(control, props) : props[key];
+    return value === undefined || value === null || value === '' ? fallback : value;
+  };
+  const title = typeof props.title === 'string' && props.title.trim()
+    ? props.title.trim()
+    : component?.displayName || 'Interactive component';
+  const mode = component?.renderMode || String(getInteractiveRecord(props.renderCapabilities).hydrationMode || 'static-fallback');
+
+  if (componentKey.includes('chart')) {
+    return {
+      kind: 'chart',
+      title,
+      caption: 'Data-bound chart preview',
+      mode,
+      chips: ['series', 'fallback', 'hover'],
+      values: [30, 58, 42, 74, 64, 88],
+    };
+  }
+
+  if (componentKey.includes('timeline')) {
+    return {
+      kind: 'timeline',
+      title,
+      caption: `${String(controlValue('density', 'comfortable'))} density timeline`,
+      mode,
+      chips: ['milestones', 'focus', 'fallback'],
+      values: [1, 2, 3, 4],
+    };
+  }
+
+  if (componentKey.includes('simulation')) {
+    const parameter = Math.max(0, Math.min(100, Number(controlValue('parameterA', 50)) || 50));
+    return {
+      kind: 'simulation',
+      title,
+      caption: `${String(controlValue('scenario', 'baseline'))} scenario`,
+      mode,
+      chips: ['input', 'output', 'what-if'],
+      values: [parameter, Math.max(10, 100 - parameter), Math.round((parameter + 40) / 2)],
+    };
+  }
+
+  if (componentKey.includes('explorer')) {
+    return {
+      kind: 'explorer',
+      title,
+      caption: `${String(controlValue('view', 'table'))} data view`,
+      mode,
+      chips: ['filters', 'records', 'binding'],
+      values: [72, 48, 64],
+    };
+  }
+
+  if (componentKey.includes('canvas') || componentKey.includes('custom')) {
+    return {
+      kind: 'canvas',
+      title,
+      caption: `${String(controlValue('playback', 'manual'))} sandbox runtime`,
+      mode,
+      chips: ['iframe', 'signed', 'postMessage'],
+      values: [Math.max(0, Math.min(100, Number(controlValue('intensity', 50)) || 50))],
+    };
+  }
+
+  const rounds = Math.max(1, Math.min(12, Number(controlValue('rounds', controlValue('steps', 4))) || 4));
+  return {
+    kind: componentKey.includes('stepper') ? 'stepper' : 'rounds',
+    title,
+    caption: `${rounds} ${componentKey.includes('stepper') ? 'steps' : 'communication rounds'} at ${String(controlValue('speed', controlValue('mode', 'normal')))}`,
+    mode,
+    chips: ['states', 'controls', 'fallback'],
+    values: Array.from({ length: Math.min(rounds, 6) }, (_, index) => index + 1),
+  };
+};
 
 function ContentProperties({
   element,
@@ -981,6 +1229,9 @@ function ContentProperties({
   onOpenEmoji,
   collections,
   collectionsError,
+  interactiveComponents,
+  interactiveComponentsLoading,
+  interactiveComponentsError,
   elementId,
 }: ContentPropertiesProps) {
   const normalizedType = normalizeCanvasElementType(element.type);
@@ -997,9 +1248,133 @@ function ContentProperties({
   const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
   const hasFormContent = normalizedType === 'form';
   const hasCommentContent = normalizedType === 'comment';
+  const hasInteractiveContent = normalizedType === 'interactiveFigure' || normalizedType === 'codeComponent';
   const hasListContent = normalizedType === 'list';
   const fieldOptionsText = formatOptionValues(element.props.options);
   const listItems = getListItemsFromProps(element.props);
+  const interactiveFallback = element.props.fallback && typeof element.props.fallback === 'object' && !Array.isArray(element.props.fallback)
+    ? element.props.fallback
+    : {};
+  const interactiveRenderCapabilities = element.props.renderCapabilities && typeof element.props.renderCapabilities === 'object' && !Array.isArray(element.props.renderCapabilities)
+    ? element.props.renderCapabilities
+    : {};
+  const updateInteractiveFallback = useCallback((updates: Record<string, unknown>) => {
+    onChange({
+      fallback: {
+        ...interactiveFallback,
+        ...updates,
+      },
+    });
+  }, [interactiveFallback, onChange]);
+  const updateInteractiveRenderCapabilities = useCallback((updates: Record<string, unknown>) => {
+    onChange({
+      renderCapabilities: {
+        ...interactiveRenderCapabilities,
+        ...updates,
+      },
+    });
+  }, [interactiveRenderCapabilities, onChange]);
+  const compatibleInteractiveComponents = useMemo(() => (
+    interactiveComponents.filter((component) => component.type === normalizedType)
+  ), [interactiveComponents, normalizedType]);
+  const selectedInteractiveComponent = useMemo(() => (
+    compatibleInteractiveComponents.find((component) => (
+      component.componentKey === element.props.componentKey
+      && (!element.props.version || component.version === element.props.version)
+    )) || null
+  ), [compatibleInteractiveComponents, element.props.componentKey, element.props.version]);
+  const selectedInteractiveComponentValue = selectedInteractiveComponent
+    ? interactiveComponentOptionValue(selectedInteractiveComponent)
+    : '';
+  const interactiveRuntimeBadges = useMemo(
+    () => getInteractiveRuntimeBadges(selectedInteractiveComponent),
+    [selectedInteractiveComponent],
+  );
+  const interactiveBindingPresets = useMemo(
+    () => getInteractiveBindingPresets(selectedInteractiveComponent),
+    [selectedInteractiveComponent],
+  );
+  const interactiveControls = useMemo<Record<string, unknown>[]>(() => {
+    const rawControls = Array.isArray(element.props.controls)
+      ? element.props.controls
+      : Array.isArray(selectedInteractiveComponent?.controls)
+        ? selectedInteractiveComponent.controls
+        : [];
+
+    return rawControls.filter((control): control is Record<string, unknown> => (
+      !!control && typeof control === 'object' && !Array.isArray(control) && Boolean(getInteractiveControlKey(control))
+    ));
+  }, [element.props.controls, selectedInteractiveComponent?.controls]);
+  const interactivePreviewModel = useMemo(
+    () => getInteractivePreviewModel(selectedInteractiveComponent, element.props, interactiveControls),
+    [element.props, interactiveControls, selectedInteractiveComponent],
+  );
+  const updateInteractiveControlValue = useCallback((controlKey: string, value: unknown) => {
+    const nextControls = updateInteractiveControlList(interactiveControls, controlKey, value);
+    onChange({
+      controls: nextControls,
+      [controlKey]: value,
+    });
+  }, [interactiveControls, onChange]);
+  const applyInteractiveBindingPreset = useCallback((preset: { id: string; label: string; scope: string; targetPath: string; mode: string }) => {
+    onChange({
+      dataBindingPreset: {
+        id: preset.id,
+        label: preset.label,
+        scope: preset.scope,
+        targetPath: preset.targetPath,
+        mode: preset.mode,
+        componentKey: element.props.componentKey,
+        version: element.props.version,
+      },
+      dataBindingTargetPath: preset.targetPath,
+    });
+  }, [element.props.componentKey, element.props.version, onChange]);
+  const applyInteractiveRegistryComponent = useCallback((selectionValue: string) => {
+    const component = compatibleInteractiveComponents.find((candidate) => (
+      interactiveComponentOptionValue(candidate) === selectionValue
+    ));
+    if (!component) {
+      onChange({ componentKey: selectionValue });
+      return;
+    }
+
+    const fallbackTitle = interactiveFallback.title || element.props.title || component.displayName;
+    const fallbackText = interactiveFallback.text || element.props.fallbackText || component.description || '';
+    onChange({
+      componentKey: component.componentKey,
+      version: component.version,
+      ...(component.renderMode === 'sandbox-iframe' && component.runtime?.sandboxUrl
+        ? { sandboxUrl: component.runtime.sandboxUrl }
+        : {}),
+      controls: Array.isArray(component.controls) ? component.controls : [],
+      fallback: {
+        ...interactiveFallback,
+        title: fallbackTitle,
+        text: fallbackText,
+        ariaLabel: interactiveFallback.ariaLabel || component.displayName,
+      },
+      title: fallbackTitle,
+      fallbackText,
+      renderCapabilities: {
+        ...interactiveRenderCapabilities,
+        hydrationMode: component.renderMode,
+        requiresSandbox: component.renderMode === 'sandbox-iframe',
+        requiresSignedBundle: component.integrity?.signatureRequiredForCustomCode === true,
+        fallbackRequired: true,
+        postMessageProtocol: 'backy.interactive-component.v1',
+      },
+      dataBindingPreset: undefined,
+      dataBindingTargetPath: undefined,
+    });
+  }, [
+    compatibleInteractiveComponents,
+    element.props.fallbackText,
+    element.props.title,
+    interactiveFallback,
+    interactiveRenderCapabilities,
+    onChange,
+  ]);
   const [formFieldsDraft, setFormFieldsDraft] = useState('');
   const [formFieldsError, setFormFieldsError] = useState('');
   const [formBuilderDraft, setFormBuilderDraft] = useState({
@@ -2969,6 +3344,422 @@ function ContentProperties({
         </div>
       )}
 
+      {/* Interactive Component Properties */}
+      {hasInteractiveContent && (
+        <div className="space-y-3">
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            Interactive blocks hydrate in the public frontend from Backy's component registry. The editor and unsupported clients render the saved fallback.
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Registry component
+            </label>
+            <select
+              value={selectedInteractiveComponentValue}
+              onChange={(e) => applyInteractiveRegistryComponent(e.target.value)}
+              data-testid="editor-interactive-registry-component"
+              disabled={interactiveComponentsLoading || compatibleInteractiveComponents.length === 0}
+              className={cn(
+                'mb-2 w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring',
+                (interactiveComponentsLoading || compatibleInteractiveComponents.length === 0) && 'cursor-not-allowed opacity-60'
+              )}
+            >
+              <option value="">
+                {interactiveComponentsLoading
+                  ? 'Loading registry...'
+                  : compatibleInteractiveComponents.length > 0
+                    ? 'Select from registry'
+                    : 'No registry components for this block'}
+              </option>
+              {compatibleInteractiveComponents.map((component) => (
+                <option
+                  key={`${component.componentKey}:${component.version}`}
+                  value={interactiveComponentOptionValue(component)}
+                  disabled={component.status === 'disabled'}
+                >
+                  {component.displayName || component.componentKey} ({component.version})
+                </option>
+              ))}
+            </select>
+            {interactiveComponentsError && (
+              <p className="mb-2 text-xs text-amber-700">{interactiveComponentsError}</p>
+            )}
+            {selectedInteractiveComponent?.description && (
+              <p className="mb-2 text-xs leading-5 text-muted-foreground">{selectedInteractiveComponent.description}</p>
+            )}
+            {interactiveRuntimeBadges.length > 0 && (
+              <div
+                className="mb-3 flex flex-wrap gap-1.5"
+                data-testid="editor-interactive-runtime-badges"
+                aria-label="Interactive component runtime capabilities"
+              >
+                {interactiveRuntimeBadges.map((badge) => (
+                  <span
+                    key={`${badge.label}:${badge.value}`}
+                    className="rounded border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
+                  >
+                    <span className="font-medium text-foreground">{badge.label}:</span> {badge.value}
+                  </span>
+                ))}
+              </div>
+            )}
+            {selectedInteractiveComponent?.allowedDataScopes?.length ? (
+              <p className="mb-2 text-xs leading-5 text-muted-foreground">
+                Data scopes: {selectedInteractiveComponent.allowedDataScopes.join(', ')}. Bind collection data from the Data panel.
+              </p>
+            ) : null}
+            {interactivePreviewModel && (
+              <div
+                className="mb-3 overflow-hidden rounded-md border border-border bg-background"
+                data-testid="editor-interactive-visual-preview"
+                data-preview-kind={interactivePreviewModel.kind}
+              >
+                <div className="flex items-start justify-between gap-2 border-b border-border px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium text-foreground">{interactivePreviewModel.title}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">{interactivePreviewModel.caption}</div>
+                  </div>
+                  <span className="shrink-0 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {interactivePreviewModel.mode}
+                  </span>
+                </div>
+                <div className="relative h-28 bg-slate-950 px-3 py-3 text-white" aria-hidden="true">
+                  {interactivePreviewModel.kind === 'chart' ? (
+                    <div className="flex h-full items-end gap-1.5">
+                      {interactivePreviewModel.values.map((value, index) => (
+                        <div
+                          key={`chart-${index}`}
+                          className="w-full rounded-sm bg-sky-400"
+                          style={{ height: `${Math.max(12, Number(value))}%` }}
+                        />
+                      ))}
+                    </div>
+                  ) : interactivePreviewModel.kind === 'simulation' ? (
+                    <div className="grid h-full grid-cols-3 items-end gap-2">
+                      {interactivePreviewModel.values.map((value, index) => (
+                        <div key={`simulation-${index}`} className="space-y-1">
+                          <div className="rounded bg-emerald-400" style={{ height: `${Math.max(18, Number(value))}%` }} />
+                          <div className="h-1 rounded bg-white/25" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : interactivePreviewModel.kind === 'explorer' ? (
+                    <div className="space-y-2">
+                      {interactivePreviewModel.values.map((value, index) => (
+                        <div key={`explorer-${index}`} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
+                          <div className="h-3 rounded bg-white/25" />
+                          <div className="h-3 rounded bg-cyan-300" style={{ width: `${Math.max(24, Number(value))}%` }} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : interactivePreviewModel.kind === 'canvas' ? (
+                    <div className="relative h-full overflow-hidden rounded border border-white/15 bg-slate-900">
+                      <div className="absolute left-4 top-4 h-8 w-8 rounded-full bg-orange-400" />
+                      <div className="absolute bottom-5 right-7 h-10 w-10 rounded bg-sky-400" />
+                      <div
+                        className="absolute left-1/3 top-1/3 h-12 w-12 rounded-full border-4 border-emerald-300"
+                        style={{ opacity: Math.max(0.35, Number(interactivePreviewModel.values[0]) / 100) }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-full items-center gap-2">
+                      {interactivePreviewModel.values.map((value, index) => (
+                        <div key={`round-${index}`} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-400 text-xs font-semibold text-slate-950">
+                            {value}
+                          </div>
+                          {index < interactivePreviewModel.values.length - 1 && (
+                            <div className="h-1 w-full rounded bg-white/25" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 px-3 py-2">
+                  {interactivePreviewModel.chips.map((chip) => (
+                    <span key={chip} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {interactiveBindingPresets.length > 0 && (
+              <div
+                className="mb-3 space-y-2 rounded-md border border-border bg-muted/20 p-3"
+                data-testid="editor-interactive-binding-presets"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-foreground">Binding presets</span>
+                  <span className="text-[11px] text-muted-foreground">{interactiveBindingPresets.length} registry presets</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {interactiveBindingPresets.map((preset) => {
+                    const selectedPreset = getInteractiveRecord(element.props.dataBindingPreset);
+                    const isSelected = selectedPreset.id === preset.id
+                      && element.props.dataBindingTargetPath === preset.targetPath;
+
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyInteractiveBindingPreset(preset)}
+                        data-testid={`editor-interactive-binding-preset-${preset.id}`}
+                        className={cn(
+                          'rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted',
+                          isSelected && 'border-primary text-primary'
+                        )}
+                      >
+                        <span className="block font-medium">{preset.label}</span>
+                        <span className="block truncate text-muted-foreground">{preset.scope} {'->'} {preset.targetPath}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {element.props.dataBindingTargetPath ? (
+                  <p className="text-[11px] leading-4 text-muted-foreground" data-testid="editor-interactive-selected-binding-preset">
+                    Selected target: <code className="rounded bg-background px-1 py-0.5">{String(element.props.dataBindingTargetPath)}</code>
+                  </p>
+                ) : null}
+              </div>
+            )}
+            {interactiveControls.length > 0 && (
+              <div
+                className="mb-3 space-y-2 rounded-md border border-border bg-muted/20 p-3"
+                data-testid="editor-interactive-control-schema-preview"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-foreground">Component controls</span>
+                  <span className="text-[11px] text-muted-foreground">{interactiveControls.length} schema fields</span>
+                </div>
+                {interactiveControls.map((control) => {
+                  const controlKey = getInteractiveControlKey(control);
+                  const controlLabel = getInteractiveControlLabel(control);
+                  const controlType = getInteractiveControlType(control);
+                  const controlOptions = getInteractiveControlOptions(control);
+                  const rawValue = getInteractiveControlValue(control, element.props);
+                  const stringValue = rawValue === undefined || rawValue === null ? '' : String(rawValue);
+                  const min = typeof control.min === 'number' || typeof control.min === 'string' ? String(control.min) : undefined;
+                  const max = typeof control.max === 'number' || typeof control.max === 'string' ? String(control.max) : undefined;
+                  const step = typeof control.step === 'number' || typeof control.step === 'string' ? String(control.step) : undefined;
+
+                  return (
+                    <div key={controlKey} className="space-y-1" data-testid={`editor-interactive-control-${controlKey}`}>
+                      <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>{controlLabel}</span>
+                        <code className="rounded bg-background px-1 py-0.5 text-[10px]">{controlKey}</code>
+                      </label>
+                      {controlType === 'select' ? (
+                        <select
+                          value={stringValue}
+                          onChange={(e) => updateInteractiveControlValue(controlKey, e.target.value)}
+                          data-testid={`editor-interactive-control-input-${controlKey}`}
+                          className={cn(
+                            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                            'focus:outline-none focus:ring-2 focus:ring-ring'
+                          )}
+                        >
+                          <option value="">Select value</option>
+                          {controlOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      ) : controlType === 'checkbox' || controlType === 'boolean' || controlType === 'toggle' ? (
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(rawValue)}
+                            onChange={(e) => updateInteractiveControlValue(controlKey, e.target.checked)}
+                            data-testid={`editor-interactive-control-input-${controlKey}`}
+                          />
+                          Enabled
+                        </label>
+                      ) : (
+                        <input
+                          type={controlType === 'range' || controlType === 'number' || controlType === 'color' ? controlType : 'text'}
+                          value={stringValue}
+                          min={min}
+                          max={max}
+                          step={step}
+                          onChange={(e) => {
+                            const nextValue = controlType === 'range' || controlType === 'number'
+                              ? Number(e.target.value)
+                              : e.target.value;
+                            updateInteractiveControlValue(controlKey, Number.isNaN(nextValue) ? e.target.value : nextValue);
+                          }}
+                          data-testid={`editor-interactive-control-input-${controlKey}`}
+                          className={cn(
+                            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                            controlType !== 'color' && 'focus:outline-none focus:ring-2 focus:ring-ring'
+                          )}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Component key
+            </label>
+            <input
+              type="text"
+              value={element.props.componentKey || ''}
+              onChange={(e) => onChange({ componentKey: e.target.value })}
+              data-testid="editor-interactive-component-key"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background font-mono',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder={normalizedType === 'codeComponent' ? 'backy.custom.sandboxed' : 'backy.figure.rounds'}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Version
+              </label>
+              <input
+                type="text"
+                value={element.props.version || ''}
+                onChange={(e) => onChange({ version: e.target.value })}
+                data-testid="editor-interactive-version"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background font-mono',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="1.0.0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Hydration
+              </label>
+              <select
+                value={interactiveRenderCapabilities.hydrationMode || (normalizedType === 'codeComponent' ? 'sandbox-iframe' : 'trusted-component')}
+                onChange={(e) => updateInteractiveRenderCapabilities({
+                  hydrationMode: e.target.value,
+                  requiresSandbox: e.target.value === 'sandbox-iframe',
+                  fallbackRequired: true,
+                  postMessageProtocol: 'backy.interactive-component.v1',
+                })}
+                data-testid="editor-interactive-hydration-mode"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="trusted-component">Trusted component</option>
+                <option value="sandbox-iframe">Sandbox iframe</option>
+                <option value="static-fallback">Static fallback</option>
+              </select>
+            </div>
+          </div>
+          {normalizedType === 'codeComponent' && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Sandbox URL
+              </label>
+              <input
+                type="text"
+                value={element.props.sandboxUrl || ''}
+                onChange={(e) => onChange({ sandboxUrl: e.target.value })}
+                data-testid="editor-interactive-sandbox-url"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background font-mono',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="/api/sites/{siteId}/interactive-components/{componentKey}/{version}/sandbox"
+              />
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Publishing requires Backy's owned sandbox route for the same component key and version.
+              </p>
+            </div>
+          )}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Fallback title
+            </label>
+            <input
+              type="text"
+              value={interactiveFallback.title || element.props.title || ''}
+              onChange={(e) => {
+                onChange({ title: e.target.value });
+                updateInteractiveFallback({ title: e.target.value });
+              }}
+              data-testid="editor-interactive-fallback-title"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Self-correction at work"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Fallback text
+            </label>
+            <textarea
+              value={interactiveFallback.text || element.props.fallbackText || ''}
+              onChange={(e) => {
+                onChange({ fallbackText: e.target.value });
+                updateInteractiveFallback({ text: e.target.value });
+              }}
+              data-testid="editor-interactive-fallback-text"
+              rows={3}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background resize-y',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Static description for crawlers and unsupported clients"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Fallback image
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={interactiveFallback.imageUrl || ''}
+                onChange={(e) => updateInteractiveFallback({ imageUrl: e.target.value })}
+                data-testid="editor-interactive-fallback-image"
+                className={cn(
+                  'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="https://..."
+              />
+              <button
+                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
+                onClick={() => onOpenMedia('interactiveFallbackImage')}
+                data-testid="editor-interactive-select-fallback-image"
+              >
+                Select
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Accessible label
+            </label>
+            <input
+              type="text"
+              value={interactiveFallback.ariaLabel || ''}
+              onChange={(e) => updateInteractiveFallback({ ariaLabel: e.target.value })}
+              data-testid="editor-interactive-aria-label"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Describe the interactive component"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Embed Properties */}
       {element.type === 'embed' && (
         <div className="space-y-2">
@@ -4297,6 +5088,25 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
   if (elementType === 'html' || elementType === 'table') {
     return [
       { value: 'props.html', label: 'HTML content' },
+    ];
+  }
+  if (elementType === 'interactiveFigure') {
+    return [
+      { value: 'props.data', label: 'Figure data' },
+      { value: 'props.series', label: 'Chart/series data' },
+      { value: 'props.title', label: 'Figure title' },
+      { value: 'props.rounds', label: 'Round count' },
+      { value: 'props.fallbackText', label: 'Fallback text' },
+      { value: 'props.controls', label: 'Control values' },
+    ];
+  }
+  if (elementType === 'codeComponent') {
+    return [
+      { value: 'props.data', label: 'Component data' },
+      { value: 'props.input', label: 'Component input' },
+      { value: 'props.config', label: 'Component config' },
+      { value: 'props.title', label: 'Component title' },
+      { value: 'props.fallbackText', label: 'Fallback text' },
     ];
   }
   return [

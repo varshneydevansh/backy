@@ -73,7 +73,9 @@ export type ElementType =
   | 'link'     // For hyperlinks
   | 'quote'    // For blockquotes
   | 'repeater' // For collection-backed repeaters
-  | 'comment'; // For comment/thread blocks
+  | 'comment' // For comment/thread blocks
+  | 'interactiveFigure' // For registry-backed interactive figures/visualizations
+  | 'codeComponent'; // For sandboxed custom code components
 
 /** Base element interface */
 export interface CanvasElement {

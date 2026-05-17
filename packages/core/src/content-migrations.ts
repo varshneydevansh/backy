@@ -16,6 +16,9 @@ import {
   type BackyElementAccessibility,
   type BackyElementAction,
   type BackyElementActionType,
+  type BackyInteractiveControl,
+  type BackyInteractiveFallback,
+  type BackyInteractiveRenderCapabilities,
   type BackyInteractionManifest,
   type BackyJsonObject,
   type BackyJsonValue,
@@ -73,6 +76,11 @@ const RESERVED_ELEMENT_FIELDS = new Set([
   'visible',
   'locked',
   'props',
+  'componentKey',
+  'version',
+  'controls',
+  'fallback',
+  'renderCapabilities',
   'styles',
   'children',
   'parentId',
@@ -479,6 +487,77 @@ const normalizeAccessibility = (
   return Object.keys(accessibility).length > 0 ? accessibility : undefined;
 };
 
+const normalizeInteractiveControls = (value: unknown): BackyInteractiveControl[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const controls = value
+    .filter(isRecord)
+    .map((control, index): BackyInteractiveControl | null => {
+      const key = toString(control.key) || toString(control.id) || `control_${index}`;
+      const type = toString(control.type) || 'text';
+      const next: BackyInteractiveControl = { key, type };
+      const label = toString(control.label);
+      const value = normalizeJsonValue(control.value);
+      const defaultValue = normalizeJsonValue(control.defaultValue);
+      const min = toNumber(control.min);
+      const max = toNumber(control.max);
+      const step = toNumber(control.step);
+      const required = toBoolean(control.required);
+      if (label) next.label = label;
+      if (value !== undefined) next.value = value;
+      if (defaultValue !== undefined) next.defaultValue = defaultValue;
+      if (Array.isArray(control.options)) {
+        next.options = control.options
+          .map(normalizeJsonValue)
+          .filter((item): item is BackyJsonValue => item !== undefined);
+      }
+      if (min !== undefined) next.min = min;
+      if (max !== undefined) next.max = max;
+      if (step !== undefined) next.step = step;
+      if (required !== undefined) next.required = required;
+      return next;
+    })
+    .filter((control): control is BackyInteractiveControl => control !== null);
+  return controls.length > 0 ? controls : undefined;
+};
+
+const normalizeInteractiveFallback = (value: unknown): BackyInteractiveFallback | undefined => {
+  if (typeof value === 'string' && value.trim()) {
+    return { text: value.trim() };
+  }
+  if (!isRecord(value)) return undefined;
+  const fallback: BackyInteractiveFallback = {};
+  const title = toString(value.title);
+  const text = toString(value.text) || toString(value.content);
+  const html = toString(value.html);
+  const imageUrl = toString(value.imageUrl) || toString(value.image);
+  const alt = toString(value.alt);
+  const ariaLabel = toString(value.ariaLabel) || toString(value.label);
+  if (title) fallback.title = title;
+  if (text) fallback.text = text;
+  if (html) fallback.html = html;
+  if (imageUrl) fallback.imageUrl = imageUrl;
+  if (alt) fallback.alt = alt;
+  if (ariaLabel) fallback.ariaLabel = ariaLabel;
+  return Object.keys(fallback).length > 0 ? fallback : undefined;
+};
+
+const normalizeRenderCapabilities = (value: unknown): BackyInteractiveRenderCapabilities | undefined => {
+  if (!isRecord(value)) return undefined;
+  const hydrationMode = toString(value.hydrationMode) || toString(value.mode) || 'static-fallback';
+  const capabilities: BackyInteractiveRenderCapabilities = { hydrationMode };
+  const requiresSandbox = toBoolean(value.requiresSandbox);
+  const requiresSignedBundle = toBoolean(value.requiresSignedBundle);
+  const fallbackRequired = toBoolean(value.fallbackRequired);
+  const postMessageProtocol = toString(value.postMessageProtocol);
+  if (requiresSandbox !== undefined) capabilities.requiresSandbox = requiresSandbox;
+  if (requiresSignedBundle !== undefined) capabilities.requiresSignedBundle = requiresSignedBundle;
+  if (fallbackRequired !== undefined) capabilities.fallbackRequired = fallbackRequired;
+  if (Array.isArray(value.allowedPermissions)) capabilities.allowedPermissions = value.allowedPermissions.filter(isNonEmptyString);
+  if (Array.isArray(value.allowedConnectSrc)) capabilities.allowedConnectSrc = value.allowedConnectSrc.filter(isNonEmptyString);
+  if (postMessageProtocol) capabilities.postMessageProtocol = postMessageProtocol;
+  return capabilities;
+};
+
 const collectAssetIdsFromValue = (value: unknown, key: string | null, assetIds: Set<string>) => {
   if (key && ASSET_ID_FIELDS.has(key) && isNonEmptyString(value)) {
     assetIds.add(value.trim());
@@ -572,6 +651,7 @@ export function normalizeBackyContentElement(
   const usedIds = context.usedIds || new Set<string>();
   const baseId = toString(rawElement.id) || `migrated_${path.replace(/[^a-zA-Z0-9_]+/g, '_')}`;
   const id = uniqueId(baseId, usedIds);
+  const rawProps = isRecord(rawElement.props) ? rawElement.props : {};
   const props = normalizeBackyJsonObject(rawElement.props);
   const styles = normalizeBackyJsonObject(rawElement.styles);
   const rawChildren = Array.isArray(rawElement.children) ? rawElement.children : [];
@@ -589,6 +669,11 @@ export function normalizeBackyContentElement(
   };
 
   const name = toString(rawElement.name);
+  const componentKey = toString(rawElement.componentKey) || toString(rawProps.componentKey);
+  const version = toString(rawElement.version) || toString(rawProps.version);
+  const controls = normalizeInteractiveControls(rawElement.controls ?? rawProps.controls);
+  const fallback = normalizeInteractiveFallback(rawElement.fallback ?? rawProps.fallback);
+  const renderCapabilities = normalizeRenderCapabilities(rawElement.renderCapabilities ?? rawProps.renderCapabilities);
   const x = toNumber(rawElement.x);
   const y = toNumber(rawElement.y);
   const width = toNumber(rawElement.width);
@@ -607,6 +692,11 @@ export function normalizeBackyContentElement(
   const metadata = normalizeElementMetadata(rawElement);
 
   if (name) element.name = name;
+  if (componentKey) element.componentKey = componentKey;
+  if (version) element.version = version;
+  if (controls) element.controls = controls;
+  if (fallback) element.fallback = fallback;
+  if (renderCapabilities) element.renderCapabilities = renderCapabilities;
   if (x !== undefined) element.x = x;
   if (y !== undefined) element.y = y;
   if (width !== undefined) element.width = width;
