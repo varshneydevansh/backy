@@ -247,6 +247,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel list indent/outdent controls clamp active list item indentation between depth 0 and 8 while preserving unselected sibling item depth.
   - Right-panel list move controls can move the active list item up/down while preserving item metadata such as indentation.
   - Rich-text editor list items can be drag-reordered within the same list while preserving item metadata such as indentation.
+  - Deep nested Slate lists normalize into flat list-item metadata in order while clamping rendered indentation at depth 8.
   - Rich-text leaf rendering now merges multiple text-decoration marks (underline + strike) instead of overwrite behavior.
   - Right-panel rich-text controls can toggle blockquote across multiple selected blocks.
   - Right-panel rich-text controls can insert a basic 2x2 table with semantic editor rendering and persisted Slate table nodes.

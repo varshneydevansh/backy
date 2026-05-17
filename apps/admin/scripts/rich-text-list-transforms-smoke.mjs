@@ -148,6 +148,43 @@ const normalizedExplicitRootIndent = helper.normalizeNestedRichTextLists([{
 assert.equal(normalizedExplicitRootIndent[0].children[0].indent, 8);
 assert.equal(normalizedExplicitRootIndent[0].children[1].indent, undefined);
 
+const buildNestedList = (depth, maxDepth) => ({
+  type: 'li',
+  children: [
+    { text: `Depth ${depth}` },
+    ...(depth < maxDepth
+      ? [{
+          type: depth % 2 === 0 ? 'ol' : 'ul',
+          children: [buildNestedList(depth + 1, maxDepth)],
+        }]
+      : []),
+  ],
+});
+const deeplyNestedSlateList = [{
+  type: 'ul',
+  children: [buildNestedList(0, 10)],
+}];
+const normalizedDeeplyNestedSlateList = helper.normalizeNestedRichTextLists(deeplyNestedSlateList);
+const normalizedDeepEntries = normalizedDeeplyNestedSlateList[0].children.map((item) => ({
+  text: item.children.map((child) => child.text || '').join(''),
+  indent: item.indent,
+}));
+assert.equal(normalizedDeepEntries.length, 11);
+assert.deepEqual(normalizedDeepEntries.map((entry) => entry.text), Array.from({ length: 11 }, (_, index) => `Depth ${index}`));
+assert.deepEqual(normalizedDeepEntries.map((entry) => entry.indent), [
+  undefined,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  8,
+  8,
+]);
+
 const objectBackedList = listUtils.buildListContentFromItems([
   { label: 'Parent object' },
   { text: 'Child object', indent: 2 },
@@ -162,5 +199,5 @@ assert.deepEqual(listUtils.extractListItemEntriesFromSlate(objectBackedList), [
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 40,
+  cases: 43,
 }));
