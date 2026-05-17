@@ -78,6 +78,73 @@ assert(
   'Doctor required Commerce mode should report commerce provider group selection failure.',
 );
 
+await assertMissingProvider({
+  label: 'auto Razorpay payment partial credentials',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_PAYMENT: '1',
+    BACKY_RAZORPAY_KEY_ID: 'rzp_key_only',
+  },
+  failure: 'auto payment credentials',
+});
+
+const completeAutoRazorpayPayment = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFY_PAYMENT: '1',
+  RAZORPAY_KEY_ID: 'rzp_alias_key',
+  RAZORPAY_KEY_SECRET: 'rzp_alias_secret',
+});
+assert(
+  completeAutoRazorpayPayment.code === 0,
+  `Doctor auto Razorpay payment mode should accept complete alias credentials, got ${completeAutoRazorpayPayment.code}.`,
+);
+
+await assertMissingProvider({
+  label: 'auto Avalara tax partial credentials',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_TAX: '1',
+    BACKY_AVALARA_ACCOUNT_ID: 'avalara_account_only',
+  },
+  failure: 'auto tax credentials',
+});
+
+const completeAutoAvalaraTax = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFY_TAX: '1',
+  AVALARA_ACCOUNT_ID: 'avalara_alias_account',
+  AVALARA_LICENSE_KEY: 'avalara_alias_license',
+  AVALARA_COMPANY_CODE: 'avalara_alias_company',
+});
+assert(
+  completeAutoAvalaraTax.code === 0,
+  `Doctor auto Avalara tax mode should accept complete alias credentials, got ${completeAutoAvalaraTax.code}.`,
+);
+
+await assertMissingProvider({
+  label: 'auto Shopify catalog partial credentials',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+    BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN: 'shopify_token_only',
+  },
+  failure: 'auto catalog credentials',
+});
+
+const completeAutoShopifyCatalog = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+  SHOPIFY_ADMIN_ACCESS_TOKEN: 'shopify_alias_token',
+  SHOPIFY_ADMIN_API_BASE_URL: 'https://shop.example.test/admin/api/2024-10',
+});
+assert(
+  completeAutoShopifyCatalog.code === 0,
+  `Doctor auto Shopify catalog mode should accept complete alias/base URL credentials, got ${completeAutoShopifyCatalog.code}.`,
+);
+
 const missingS3Storage = await runDoctor({
   BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_SETTINGS_CERTIFY_STORAGE: '1',

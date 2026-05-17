@@ -5,6 +5,7 @@ const env = process.env;
 const value = (name) => (env[name] || '').trim();
 const has = (name) => Boolean(value(name));
 const hasAny = (names) => names.some(has);
+const hasCompleteAlternative = (fields) => fields.every((names) => hasAny(names));
 const selected = (name, fallback = 'auto') => value(name).toLowerCase() || fallback;
 const requested = (name, fallback = false) => (env[name] === undefined ? fallback : env[name] === '1' || env[name] === 'true');
 
@@ -26,6 +27,58 @@ const checkAny = (label, names, enabled = true) => {
     ready,
     missingAnyOf: ready ? [] : names,
   };
+};
+
+const checkCompleteAny = (label, alternatives, enabled = true) => {
+  const ready = !enabled || alternatives.some(hasCompleteAlternative);
+  return {
+    label,
+    enabled,
+    ready,
+    missingAnyOf: ready
+      ? []
+      : alternatives.map((fields) => fields.map((names) => names.join(' | ')).join(' + ')),
+  };
+};
+
+const providerCredentials = {
+  stripe: [[['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']]],
+  paypal: [[['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN']]],
+  paddle: [[['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']]],
+  square: [[['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN']]],
+  adyen: [[['BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY'], ['BACKY_ADYEN_MERCHANT_ACCOUNT', 'ADYEN_MERCHANT_ACCOUNT']]],
+  mollie: [[['BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY']]],
+  razorpay: [[['BACKY_RAZORPAY_KEY_ID', 'RAZORPAY_KEY_ID'], ['BACKY_RAZORPAY_KEY_SECRET', 'RAZORPAY_KEY_SECRET']]],
+  taxjar: [[['BACKY_TAXJAR_API_KEY', 'TAXJAR_API_KEY']]],
+  avalara: [[
+    ['BACKY_AVALARA_ACCOUNT_ID', 'AVALARA_ACCOUNT_ID'],
+    ['BACKY_AVALARA_LICENSE_KEY', 'AVALARA_LICENSE_KEY'],
+    ['BACKY_AVALARA_COMPANY_CODE', 'AVALARA_COMPANY_CODE'],
+  ]],
+  easypost: [[['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY']]],
+  shippo: [[['BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY']]],
+  shopify: [[
+    ['BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_ADMIN_ACCESS_TOKEN'],
+    ['BACKY_SHOPIFY_STORE_DOMAIN', 'SHOPIFY_STORE_DOMAIN', 'BACKY_SHOPIFY_ADMIN_API_BASE_URL', 'SHOPIFY_ADMIN_API_BASE_URL'],
+  ]],
+  bigcommerce: [[
+    ['BACKY_BIGCOMMERCE_ACCESS_TOKEN', 'BIGCOMMERCE_ACCESS_TOKEN'],
+    ['BACKY_BIGCOMMERCE_STORE_HASH', 'BIGCOMMERCE_STORE_HASH', 'BACKY_BIGCOMMERCE_API_BASE_URL', 'BIGCOMMERCE_API_BASE_URL'],
+  ]],
+  woocommerce: [[
+    ['BACKY_WOOCOMMERCE_CONSUMER_KEY', 'WOOCOMMERCE_CONSUMER_KEY'],
+    ['BACKY_WOOCOMMERCE_CONSUMER_SECRET', 'WOOCOMMERCE_CONSUMER_SECRET'],
+    ['BACKY_WOOCOMMERCE_STORE_URL', 'WOOCOMMERCE_STORE_URL', 'BACKY_WOOCOMMERCE_API_BASE_URL', 'WOOCOMMERCE_API_BASE_URL'],
+  ]],
+  etsy: [[
+    ['BACKY_ETSY_ACCESS_TOKEN', 'ETSY_ACCESS_TOKEN'],
+    ['BACKY_ETSY_API_KEY', 'ETSY_API_KEY'],
+    ['BACKY_ETSY_SHOP_ID', 'ETSY_SHOP_ID'],
+  ]],
+  magento: [[
+    ['BACKY_MAGENTO_ACCESS_TOKEN', 'MAGENTO_ACCESS_TOKEN'],
+    ['BACKY_MAGENTO_STORE_URL', 'MAGENTO_STORE_URL', 'BACKY_MAGENTO_API_BASE_URL', 'MAGENTO_API_BASE_URL'],
+  ]],
 };
 
 const storageProvider = selected('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER', selected('BACKY_STORAGE_PROVIDER', 'auto'));
@@ -99,27 +152,56 @@ const settings = {
 };
 
 const commerceChecks = [
-  checkAny('auto payment credentials', ['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN', 'BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY', 'BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN', 'BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY', 'BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY', 'BACKY_RAZORPAY_KEY_ID', 'RAZORPAY_KEY_ID'], requestPayment && paymentProvider === 'auto'),
-  checkAny('auto subscription credentials', ['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN', 'BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY', 'BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN', 'BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY', 'BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY', 'BACKY_RAZORPAY_KEY_ID', 'RAZORPAY_KEY_ID'], requestSubscriptions && subscriptionProvider === 'auto'),
-  checkAny('Stripe payment/refund credentials', ['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY'], (requestPayment && paymentProvider === 'stripe') || (requestSubscriptions && subscriptionProvider === 'stripe')),
-  checkAny('PayPal payment/subscription credentials', ['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN'], (requestPayment && paymentProvider === 'paypal') || (requestSubscriptions && subscriptionProvider === 'paypal')),
-  checkAny('Paddle payment/subscription credentials', ['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY'], (requestPayment && paymentProvider === 'paddle') || (requestSubscriptions && subscriptionProvider === 'paddle')),
-  checkAny('Square payment/subscription credentials', ['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN'], (requestPayment && paymentProvider === 'square') || (requestSubscriptions && subscriptionProvider === 'square')),
-  check('Adyen credentials', ['BACKY_ADYEN_API_KEY', 'BACKY_ADYEN_MERCHANT_ACCOUNT'], (requestPayment && paymentProvider === 'adyen') || (requestSubscriptions && subscriptionProvider === 'adyen')),
-  checkAny('Mollie payment/subscription credentials', ['BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY'], (requestPayment && paymentProvider === 'mollie') || (requestSubscriptions && subscriptionProvider === 'mollie')),
-  check('Razorpay payment/subscription credentials', ['BACKY_RAZORPAY_KEY_ID', 'BACKY_RAZORPAY_KEY_SECRET'], (requestPayment && paymentProvider === 'razorpay') || (requestSubscriptions && subscriptionProvider === 'razorpay')),
-  checkAny('auto tax credentials', ['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_TAXJAR_API_KEY', 'TAXJAR_API_KEY', 'BACKY_AVALARA_ACCOUNT_ID', 'AVALARA_ACCOUNT_ID'], requestTax && taxProvider === 'auto'),
-  checkAny('TaxJar credentials', ['BACKY_TAXJAR_API_KEY', 'TAXJAR_API_KEY'], requestTax && taxProvider === 'taxjar'),
-  check('Avalara credentials', ['BACKY_AVALARA_ACCOUNT_ID', 'BACKY_AVALARA_LICENSE_KEY', 'BACKY_AVALARA_COMPANY_CODE'], requestTax && taxProvider === 'avalara'),
-  checkAny('auto shipping credentials', ['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY', 'BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY'], requestShipping && shippingProvider === 'auto'),
-  checkAny('EasyPost credentials', ['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY'], requestShipping && shippingProvider === 'easypost'),
-  checkAny('Shippo credentials', ['BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY'], requestShipping && shippingProvider === 'shippo'),
-  checkAny('auto catalog credentials', ['BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN', 'BACKY_BIGCOMMERCE_ACCESS_TOKEN', 'BACKY_WOOCOMMERCE_CONSUMER_KEY', 'BACKY_ETSY_ACCESS_TOKEN', 'BACKY_MAGENTO_ACCESS_TOKEN'], requestCatalog && catalogProvider === 'auto'),
-  check('Shopify catalog credentials', ['BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN', 'BACKY_SHOPIFY_STORE_DOMAIN'], requestCatalog && catalogProvider === 'shopify'),
-  check('BigCommerce catalog credentials', ['BACKY_BIGCOMMERCE_ACCESS_TOKEN', 'BACKY_BIGCOMMERCE_STORE_HASH'], requestCatalog && catalogProvider === 'bigcommerce'),
-  check('WooCommerce catalog credentials', ['BACKY_WOOCOMMERCE_CONSUMER_KEY', 'BACKY_WOOCOMMERCE_CONSUMER_SECRET', 'BACKY_WOOCOMMERCE_STORE_URL'], requestCatalog && catalogProvider === 'woocommerce'),
-  check('Etsy catalog credentials', ['BACKY_ETSY_ACCESS_TOKEN', 'BACKY_ETSY_API_KEY', 'BACKY_ETSY_SHOP_ID'], requestCatalog && catalogProvider === 'etsy'),
-  check('Magento catalog credentials', ['BACKY_MAGENTO_ACCESS_TOKEN', 'BACKY_MAGENTO_STORE_URL'], requestCatalog && catalogProvider === 'magento'),
+  checkCompleteAny('auto payment credentials', [
+    ...providerCredentials.stripe,
+    ...providerCredentials.paypal,
+    ...providerCredentials.paddle,
+    ...providerCredentials.square,
+    ...providerCredentials.adyen,
+    ...providerCredentials.mollie,
+    ...providerCredentials.razorpay,
+  ], requestPayment && paymentProvider === 'auto'),
+  checkCompleteAny('auto subscription credentials', [
+    ...providerCredentials.stripe,
+    ...providerCredentials.paypal,
+    ...providerCredentials.paddle,
+    ...providerCredentials.square,
+    ...providerCredentials.adyen,
+    ...providerCredentials.mollie,
+    ...providerCredentials.razorpay,
+  ], requestSubscriptions && subscriptionProvider === 'auto'),
+  checkCompleteAny('Stripe payment/refund credentials', providerCredentials.stripe, (requestPayment && paymentProvider === 'stripe') || (requestSubscriptions && subscriptionProvider === 'stripe')),
+  checkCompleteAny('PayPal payment/subscription credentials', providerCredentials.paypal, (requestPayment && paymentProvider === 'paypal') || (requestSubscriptions && subscriptionProvider === 'paypal')),
+  checkCompleteAny('Paddle payment/subscription credentials', providerCredentials.paddle, (requestPayment && paymentProvider === 'paddle') || (requestSubscriptions && subscriptionProvider === 'paddle')),
+  checkCompleteAny('Square payment/subscription credentials', providerCredentials.square, (requestPayment && paymentProvider === 'square') || (requestSubscriptions && subscriptionProvider === 'square')),
+  checkCompleteAny('Adyen credentials', providerCredentials.adyen, (requestPayment && paymentProvider === 'adyen') || (requestSubscriptions && subscriptionProvider === 'adyen')),
+  checkCompleteAny('Mollie payment/subscription credentials', providerCredentials.mollie, (requestPayment && paymentProvider === 'mollie') || (requestSubscriptions && subscriptionProvider === 'mollie')),
+  checkCompleteAny('Razorpay payment/subscription credentials', providerCredentials.razorpay, (requestPayment && paymentProvider === 'razorpay') || (requestSubscriptions && subscriptionProvider === 'razorpay')),
+  checkCompleteAny('auto tax credentials', [
+    ...providerCredentials.stripe,
+    ...providerCredentials.taxjar,
+    ...providerCredentials.avalara,
+  ], requestTax && taxProvider === 'auto'),
+  checkCompleteAny('TaxJar credentials', providerCredentials.taxjar, requestTax && taxProvider === 'taxjar'),
+  checkCompleteAny('Avalara credentials', providerCredentials.avalara, requestTax && taxProvider === 'avalara'),
+  checkCompleteAny('auto shipping credentials', [
+    ...providerCredentials.easypost,
+    ...providerCredentials.shippo,
+  ], requestShipping && shippingProvider === 'auto'),
+  checkCompleteAny('EasyPost credentials', providerCredentials.easypost, requestShipping && shippingProvider === 'easypost'),
+  checkCompleteAny('Shippo credentials', providerCredentials.shippo, requestShipping && shippingProvider === 'shippo'),
+  checkCompleteAny('auto catalog credentials', [
+    ...providerCredentials.shopify,
+    ...providerCredentials.bigcommerce,
+    ...providerCredentials.woocommerce,
+    ...providerCredentials.etsy,
+    ...providerCredentials.magento,
+  ], requestCatalog && catalogProvider === 'auto'),
+  checkCompleteAny('Shopify catalog credentials', providerCredentials.shopify, requestCatalog && catalogProvider === 'shopify'),
+  checkCompleteAny('BigCommerce catalog credentials', providerCredentials.bigcommerce, requestCatalog && catalogProvider === 'bigcommerce'),
+  checkCompleteAny('WooCommerce catalog credentials', providerCredentials.woocommerce, requestCatalog && catalogProvider === 'woocommerce'),
+  checkCompleteAny('Etsy catalog credentials', providerCredentials.etsy, requestCatalog && catalogProvider === 'etsy'),
+  checkCompleteAny('Magento catalog credentials', providerCredentials.magento, requestCatalog && catalogProvider === 'magento'),
   checkAny('Commerce webhook secret', ['BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'], requestWebhooks && webhookProvider !== 'auto'),
 ];
 
