@@ -33,7 +33,15 @@ This document defines how custom frontends, admin UI, and public renderer intera
 
 ### 2.1 Resolve site and page
 
-- `GET /api/sites/:identifier` (default public route in this repo)
+- `GET /api/sites?identifier=:identifier`
+  - Canonical public bootstrap endpoint for external frontends and SDK clients.
+  - Resolves by published site id, slug, or custom domain and returns `{ success, requestId, data: { site } }`; legacy top-level `site` remains for compatibility.
+  - Without `identifier`, returns `{ success, requestId, data: { sites, pagination } }` for published-site discovery with `limit` capped to 100.
+  - Responses use discovery cache headers, request id headers, and rate-limit headers when public discovery throttling is enabled.
+  - Draft/unpublished sites are hidden from public bootstrap.
+  - The frontend manifest advertises this endpoint as `data.endpoints.site`; the site-scoped OpenAPI document also includes `/api/sites` as `operationId: discoverBackySite`, and `npm run test:frontend-contract --workspace @backy/public` guards that manifest/OpenAPI/SDK parity.
+
+- `GET /api/sites/:identifier` (legacy/default public route shape in older docs)
 - `GET /api/public/sites/:identifier` (optional external contract alias)
   - Resolve by `subdomain`, `siteId`, or `customDomain`.
   - Returns minimal site metadata and theme defaults.
@@ -106,7 +114,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 
 - `GET /api/sites/:siteId/openapi`
   - Site-scoped OpenAPI 3.1 document for public frontend integrations.
-  - Describes discovery, route resolution, render payload, navigation, media list, collection list/records/create, form detail/submission/contact operations, page/blog/site comment operations, comment reports, report reasons, and interaction events for the selected site.
+  - Describes site discovery, route resolution, render payload, navigation, media list, collection list/records/create, form detail/submission/contact operations, page/blog/site comment operations, comment reports, report reasons, and interaction events for the selected site.
   - Form schemas include named field definitions, validation rules, submission records, collection-record links/errors, and contact records so generated SDK clients can type-check both render-time form controls and private submission/contact envelopes.
   - Media detail is exposed as `/api/sites/:siteId/media/{mediaId}` for exact asset lookup by generated/custom frontends.
   - Includes `x-backy` vendor metadata for `siteId`, `siteSlug`, contract version, public collection ids, and form ids.
@@ -681,7 +689,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 ## 6) Custom frontend integration checklist
 
 - Public frontend bootstrap flow:
-  1. Resolve site: `GET /api/sites/:identifier`.
+  1. Resolve site: `GET /api/sites?identifier=:identifier`.
   2. Fetch `GET /api/sites/:siteId/manifest` once to discover schema refs, capabilities, endpoints, route patterns, collections, forms, media/font support, navigation, and the site-scoped OpenAPI URL.
   3. Use `manifest.data.delivery` and `manifest.data.modules.routing.localizedRoutePatterns` to choose the locale strategy, path prefixes, locale domains, and generated page/blog/dynamic route variants before building the frontend router.
   4. Fetch `GET /api/sites/:siteId/interactive-components` when `capabilities.interactiveComponents` is true and cache it with ETag revalidation.

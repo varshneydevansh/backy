@@ -20,6 +20,8 @@ const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const rootPackage = read('../../../package.json');
 const publicPackage = read('../package.json');
+const apiContracts = read('../../../specs/backy-api-contracts.md');
+const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
 
 assert(
   manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
@@ -56,6 +58,21 @@ assert(
   publicPackage.includes('"test:frontend-contract": "node scripts/frontend-contract-smoke.mjs"') &&
     rootPackage.includes('"test:frontend-contract-types": "npm run test:frontend-contract --workspace @backy/public && npm run test:generated-types --workspace @backy/sdk-js"'),
   'Root and public package scripts must wire frontend contract smoke before generated SDK type checks.',
+);
+
+assert(
+  apiContracts.includes('GET /api/sites?identifier=:identifier') &&
+    apiContracts.includes('operationId: discoverBackySite') &&
+    apiContracts.includes('data.endpoints.site') &&
+    apiContracts.includes('npm run test:frontend-contract --workspace @backy/public'),
+  'API contract docs must describe global site discovery as the manifest bootstrap endpoint and OpenAPI operation.',
+);
+
+assert(
+  audit.includes('Frontend discovery contract update') &&
+    audit.includes('GeneratedBackyOpenApiSiteSummary') &&
+    audit.includes('every non-fragment manifest endpoint path is represented in OpenAPI'),
+  'Page completion audit must record frontend discovery contract coverage and remaining evidence.',
 );
 
 console.log(JSON.stringify({
