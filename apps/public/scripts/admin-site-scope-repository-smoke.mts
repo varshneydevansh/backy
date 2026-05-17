@@ -150,6 +150,18 @@ const main = async () => {
     permission: 'pages.view',
   });
 
+  await expectForbiddenSiteScope({
+    userId: 'repo-non-member',
+    path: `/api/admin/sites/${site.id}/settings`,
+    permission: 'settings.view',
+  });
+
+  await expectForbiddenSiteScope({
+    userId: 'repo-non-member',
+    path: `/api/admin/sites/${site.id}/settings`,
+    permission: 'settings.configure',
+  });
+
   await expectAllowed({
     userId: 'repo-viewer',
     path: `/api/admin/sites/${site.slug}/media`,
@@ -172,6 +184,8 @@ const main = async () => {
     ok: true,
     checks: [
       'repository non-member nested site read denied',
+      'repository non-member nested site settings read denied',
+      'repository non-member nested site settings write denied',
       'repository viewer nested site read allowed by slug',
       'repository viewer nested content write denied',
       'repository editor nested content write allowed',
