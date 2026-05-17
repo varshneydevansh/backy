@@ -181,6 +181,7 @@ includesEvery(smoke, repositoryCoverageEvidence, 'Forms Postgres repository work
 if (workflow) {
   includesEvery(workflow, [
     'BACKY_DATABASE_URL',
+    'DATABASE_URL',
     'BACKY_RELEASE_CERTIFY_DATABASE',
     'database_expected_host:',
     'database_expected_name:',
@@ -197,6 +198,7 @@ if (workflow) {
     'expected database configured:',
     'npm run test:forms-postgres-preflight-contract',
     'Require disposable Postgres or Supabase database URL',
+    'BACKY_DATABASE_URL or DATABASE_URL',
     'inputs.disposable_database_confirmed',
     'Confirm disposable_database_confirmed=true',
     'npm run ci:forms-postgres',

@@ -100,6 +100,8 @@ assert(
   rootPackage.includes('"ci:sdk-postgres-smoke": "npm run test:sdk-postgres-preflight-contract && BACKY_SDK_REQUIRE_DATABASE=1 node scripts/sdk-smoke-ci.mjs"') &&
     sdkPostgresWorkflow.includes('Run SDK Postgres preflight contract') &&
     sdkPostgresWorkflow.includes('npm run test:sdk-postgres-preflight-contract') &&
+    sdkPostgresWorkflow.includes('DATABASE_URL') &&
+    sdkPostgresWorkflow.includes('BACKY_DATABASE_URL or DATABASE_URL') &&
     sdkPostgresWorkflow.includes('database_expected_host:') &&
     sdkPostgresWorkflow.includes('database_expected_name:') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&

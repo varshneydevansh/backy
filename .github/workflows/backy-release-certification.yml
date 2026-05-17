@@ -166,6 +166,7 @@ jobs:
     env:
       BACKY_ADMIN_API_KEY: release-cert-${{ github.run_id }}-${{ github.run_attempt }}
       BACKY_DATABASE_URL: ${{ secrets.BACKY_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST: ${{ inputs.database_expected_host }}
       BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE: ${{ inputs.database_expected_name }}
       BACKY_DATA_MODE: ${{ inputs.certify_database && 'database' || 'demo' }}
@@ -330,8 +331,8 @@ jobs:
       - name: Require disposable Postgres or Supabase database URL
         if: ${{ inputs.certify_database }}
         run: |
-          if [ -z "$BACKY_DATABASE_URL" ]; then
-            echo "::error::Set BACKY_DATABASE_URL to a disposable migrated Supabase/Postgres database before running release database certification."
+          if [ -z "${BACKY_DATABASE_URL:-${DATABASE_URL:-}}" ]; then
+            echo "::error::Set BACKY_DATABASE_URL or DATABASE_URL to a disposable migrated Supabase/Postgres database before running release database certification."
             exit 1
           fi
           if [ "${{ inputs.disposable_database_confirmed }}" != "true" ]; then
