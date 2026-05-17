@@ -605,6 +605,15 @@ assert(
   'Doctor Commerce webhook mode should report webhook secret failure.',
 );
 
+await assertProviderAliasReady({
+  label: 'selected commerce webhook',
+  env: {
+    BACKY_COMMERCE_CERTIFY_WEBHOOKS: '1',
+    BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER: 'generic',
+    COMMERCE_WEBHOOK_SECRET: 'commerce_webhook_alias_secret',
+  },
+});
+
 console.log(JSON.stringify({
   ok: true,
   contract: 'backy.release-certification-doctor-contract.v1',

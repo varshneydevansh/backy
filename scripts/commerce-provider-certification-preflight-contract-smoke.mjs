@@ -125,6 +125,8 @@ includesAll(
     'webhook_provider:',
     'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
     'BACKY_ADMIN_API_KEY',
+    'BACKY_COMMERCE_WEBHOOK_SECRET',
+    'COMMERCE_WEBHOOK_SECRET',
     'BACKY_STRIPE_SECRET_KEY',
     'STRIPE_SECRET_KEY',
     'BACKY_TAXJAR_API_KEY',
@@ -167,6 +169,16 @@ includesAll(
     'npm run ci:commerce-provider-certification',
   ],
   'Commerce provider certification workflow',
+);
+
+includesAll(
+  certificationCi,
+  [
+    'process.env.COMMERCE_WEBHOOK_SECRET',
+    'env:COMMERCE_WEBHOOK_SECRET',
+    'env:BACKY_COMMERCE_WEBHOOK_SECRET',
+  ],
+  'Commerce provider certification webhook secret alias selection',
 );
 
 assert(

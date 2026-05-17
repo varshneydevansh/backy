@@ -402,7 +402,11 @@ const prepareLocalCertificationSettings = async (baseUrl, settings) => {
       commercePatch.providerWebhookUrl = `${baseUrl}/api/sites/site-demo/commerce/webhook`;
     }
     if (!stringValue(commerce.providerWebhookSecretId)) {
-      commercePatch.providerWebhookSecretId = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
+      commercePatch.providerWebhookSecretId = process.env.BACKY_COMMERCE_WEBHOOK_SECRET
+        ? 'env:BACKY_COMMERCE_WEBHOOK_SECRET'
+        : process.env.COMMERCE_WEBHOOK_SECRET
+          ? 'env:COMMERCE_WEBHOOK_SECRET'
+          : 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
     }
     if (commerce.webhookEventsEnabled !== true) {
       commercePatch.webhookEventsEnabled = true;

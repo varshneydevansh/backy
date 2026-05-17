@@ -162,6 +162,7 @@ includesAll(
     'RAZORPAY_KEY_ID',
     'BACKY_MAGENTO_ACCESS_TOKEN',
     'MAGENTO_ACCESS_TOKEN',
+    'COMMERCE_WEBHOOK_SECRET',
     'STRIPE_SECRET_KEY',
     'TAXJAR_API_KEY',
     'AVALARA_ACCOUNT_ID',
@@ -239,6 +240,7 @@ includesAll(
     'selected EasyPost shipping',
     'selected BigCommerce catalog',
     'selected Magento catalog',
+    'selected commerce webhook',
   ],
   'Backy release certification doctor behavior contract',
 );
