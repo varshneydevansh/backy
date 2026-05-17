@@ -10,6 +10,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 const BACKY_ADMIN_CONTRACT_VERSION = 'backy.admin.v1';
+const BACKY_ADMIN_SETTINGS_SCHEMA_VERSION = 'backy.admin-settings.v1';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -32,6 +33,7 @@ const isAllowedOrigin = (origin: string | null) => {
 
 const isAdminApiRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/');
 const isAdminAuthRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/auth/');
+const isAdminSettingsRequest = (request: NextRequest) => request.nextUrl.pathname === '/api/admin/settings';
 const isUploadRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/uploads/');
 const hostedSeoMatch = (pathname: string) => pathname.match(/^\/sites\/([^/]+)\/(sitemap\.xml|robots\.txt)$/);
 const isHostedBlogRssRequest = (pathname: string) => /^\/sites\/[^/]+\/blog\/rss\.xml$/.test(pathname);
@@ -69,6 +71,7 @@ const adminAuthError = (
   message: string,
   requestId: string,
   origin: string | null,
+  schemaVersion?: string,
 ) => {
   const response = NextResponse.json(
     {
@@ -83,6 +86,9 @@ const adminAuthError = (
   );
   applyCorsHeaders(response.headers, origin);
   applyAdminHeaders(response.headers);
+  if (schemaVersion) {
+    response.headers.set('x-backy-schema-version', schemaVersion);
+  }
   response.headers.set('x-backy-request-id', requestId);
   return response;
 };
@@ -155,11 +161,19 @@ export function proxy(request: NextRequest) {
         'Admin API key enforcement is enabled but BACKY_ADMIN_API_KEY is not configured.',
         requestId,
         origin,
+        isAdminSettingsRequest(request) ? BACKY_ADMIN_SETTINGS_SCHEMA_VERSION : undefined,
       );
     }
 
     if (getProvidedAdminApiKey(request) !== expectedKey) {
-      return adminAuthError(401, 'UNAUTHORIZED', 'A valid admin API key is required.', requestId, origin);
+      return adminAuthError(
+        401,
+        'UNAUTHORIZED',
+        'A valid admin API key is required.',
+        requestId,
+        origin,
+        isAdminSettingsRequest(request) ? BACKY_ADMIN_SETTINGS_SCHEMA_VERSION : undefined,
+      );
     }
   }
 
@@ -167,6 +181,9 @@ export function proxy(request: NextRequest) {
   applyCorsHeaders(response.headers, origin);
   if (isAdminApiRequest(request)) {
     applyAdminHeaders(response.headers);
+    if (isAdminSettingsRequest(request)) {
+      response.headers.set('x-backy-schema-version', BACKY_ADMIN_SETTINGS_SCHEMA_VERSION);
+    }
   }
   if (isHostedHtmlRequest(request)) {
     applyHostedHtmlHeaders(response.headers, request);

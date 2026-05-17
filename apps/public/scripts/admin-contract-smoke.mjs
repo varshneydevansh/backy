@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
 import { validateAiFrontendManifest, validateAiRenderPayload } from './validate-ai-render-payload.mjs';
 
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
@@ -38,11 +39,176 @@ let capturedTemplatePostId = null;
 let routeConflictCleanupPageId = null;
 let originalDeliveryMode = null;
 let originalSettingsIntegrations = null;
+let createdInteractiveComponentKey = null;
+let createdInteractiveComponentVersion = null;
+let createdInteractiveNewerVersion = null;
+let adminContractEmailDomain = '';
 
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function parseAllowedEmailDomains(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => typeof item === 'string')
+      .map((item) => item.trim().toLowerCase().replace(/^@+/, '').replace(/\.+$/, ''))
+      .filter(Boolean);
+  }
+
+  if (typeof value !== 'string') {
+    return [];
+  }
+
+  return value
+    .split(/[\s,;]+/)
+    .map((item) => item.trim().toLowerCase().replace(/^@+/, '').replace(/\.+$/, ''))
+    .filter(Boolean);
+}
+
+function contractEmail(localPart) {
+  const domain = adminContractEmailDomain || 'backy.test';
+  return `${localPart}@${domain}`;
+}
+
+function assertInteractiveSandboxRouteSource() {
+  const source = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/interactive-components/[componentKey]/[version]/sandbox/route.ts', import.meta.url),
+    'utf8',
+  );
+  assert(source.includes("default-src 'none'"), 'Interactive sandbox route must keep default-src none CSP');
+  assert(source.includes("frame-ancestors 'self'"), 'Interactive sandbox route must restrict frame ancestors');
+  assert(source.includes("base-uri 'none'"), 'Interactive sandbox route must restrict base URI');
+  assert(source.includes("form-action 'none'"), 'Interactive sandbox route must restrict form actions');
+  assert(source.includes("'X-Content-Type-Options': 'nosniff'"), 'Interactive sandbox route must set nosniff');
+  assert(source.includes("'Referrer-Policy': 'no-referrer'"), 'Interactive sandbox route must set no-referrer');
+  assert(source.includes('parent.postMessage'), 'Interactive sandbox route must use postMessage lifecycle communication');
+  assert(!source.includes('/api/admin/'), 'Interactive sandbox route must not call admin APIs');
+  assert(!source.includes('document.cookie'), 'Interactive sandbox route must not read cookies');
+  assert(!source.includes('localStorage') && !source.includes('sessionStorage'), 'Interactive sandbox route must not read browser storage');
+  assert(!source.includes('window.parent.document') && !source.includes('parent.document'), 'Interactive sandbox route must not touch parent DOM');
+  assert(!source.includes('credentials:'), 'Interactive sandbox route must not fetch with credentials');
+}
+
+function assertInteractiveContractSource() {
+  const registrySource = fs.readFileSync(
+    new URL('../src/lib/interactiveComponentRegistry.ts', import.meta.url),
+    'utf8',
+  );
+  const openApiSource = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url),
+    'utf8',
+  );
+  const sdkSource = fs.readFileSync(
+    new URL('../../../packages/sdk-js/src/index.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert(registrySource.includes('responseHeaders'), 'Interactive manifest contract must expose sandbox response headers');
+  assert(registrySource.includes("default-src 'none'"), 'Interactive manifest contract must expose sandbox CSP directives');
+  assert(registrySource.includes('camera=()') && registrySource.includes('microphone=()'), 'Interactive manifest contract must expose denied browser permissions');
+  assert(openApiSource.includes('sandboxResponseHeaders'), 'OpenAPI must declare sandbox response headers');
+  assert(openApiSource.includes("'Content-Security-Policy'"), 'OpenAPI must declare sandbox CSP response header');
+  assert(openApiSource.includes("'Permissions-Policy'"), 'OpenAPI must declare sandbox permissions response header');
+  assert(openApiSource.includes("'403': { description: 'Component disabled', headers: sandboxResponseHeaders }"), 'OpenAPI disabled sandbox response must carry header contract');
+  assert(openApiSource.includes("'404': { description: 'Site or component not found', headers: sandboxResponseHeaders }"), 'OpenAPI missing sandbox response must carry header contract');
+  assert(sdkSource.includes('responseHeaders: {'), 'SDK manifest type must require sandbox response headers');
+  assert(sdkSource.includes('contentSecurityPolicy: string[]'), 'SDK manifest type must expose sandbox CSP directives');
+  assert(sdkSource.includes('permissionsPolicy: string[]'), 'SDK manifest type must expose sandbox permissions policy directives');
+}
+
+function assertSiteSettingsLocalizationSource() {
+  const source = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/settings/route.ts', import.meta.url),
+    'utf8',
+  );
+  const apiContracts = fs.readFileSync(
+    new URL('../../../specs/backy-api-contracts.md', import.meta.url),
+    'utf8',
+  );
+  const includesQuotedLiteral = (literal) => (
+    source.includes(`'${literal}'`) || source.includes(`"${literal}"`)
+  );
+  assert(includesQuotedLiteral('localization'), 'Site settings route must allowlist localization patches');
+  assert(source.includes('normalizeSiteLocalization'), 'Site settings route must normalize localization patches');
+  assert(source.includes('SITE_SETTINGS_SCOPE_SCHEMA'), 'Site settings route must return the scoped settings schema');
+  assert(
+    source.includes("permission: 'sites.view'") || source.includes('permission: "sites.view"'),
+    'Site settings read route must require sites.view',
+  );
+  assert(
+    source.includes("permission: 'sites.configure'") || source.includes('permission: "sites.configure"'),
+    'Site settings update route must require sites.configure',
+  );
+  assert(source.includes('filteredSiteSettingsPatch'), 'Site settings route must filter patches through the site settings allowlist');
+  assert(source.includes('unsupportedSiteSettingsKeys'), 'Site settings route must detect mixed workspace/site settings payloads');
+  assert(source.includes('NO_SITE_SETTINGS_CHANGES'), 'Site settings route must reject unsupported-only patches with a stable error code');
+  assert(source.includes('UNSUPPORTED_SITE_SETTINGS_KEYS'), 'Site settings route must reject mixed unsupported site settings payloads with a stable error code');
+  assert(source.includes('site.settings.updated'), 'Site settings updates must emit a stable audit action');
+  assert(
+    source.includes("workspaceSettingsScope: 'global'") || source.includes('workspaceSettingsScope: "global"'),
+    'Site settings envelope must separate workspace settings scope',
+  );
+  assert(
+    source.includes("siteSettingsScope: 'site'") || source.includes('siteSettingsScope: "site"'),
+    'Site settings envelope must separate site settings scope',
+  );
+  assert(apiContracts.includes('UNSUPPORTED_SITE_SETTINGS_KEYS'), 'API contracts must document mixed site/workspace settings rejection');
+  assert(apiContracts.includes('`localization`'), 'API contracts must document localization as a site-scoped settings section');
+}
+
+function assertAdminSettingsContractSource() {
+  const source = fs.readFileSync(
+    new URL('../src/app/api/admin/settings/route.ts', import.meta.url),
+    'utf8',
+  );
+  const proxySource = fs.readFileSync(
+    new URL('../src/proxy.ts', import.meta.url),
+    'utf8',
+  );
+  const adminAccessSource = fs.readFileSync(
+    new URL('../src/lib/adminAccess.ts', import.meta.url),
+    'utf8',
+  );
+  const apiContracts = fs.readFileSync(
+    new URL('../../../specs/backy-api-contracts.md', import.meta.url),
+    'utf8',
+  );
+  assert(source.includes('runtimeDatabase: getDatabaseRuntimeSummary()'), 'Admin settings response must include database runtime diagnostics');
+  assert(source.includes('runtimeSupabase: getSupabaseRuntimeSummary()'), 'Admin settings response must include Supabase runtime diagnostics');
+  assert(source.includes('runtimeVercel: getVercelRuntimeSummary()'), 'Admin settings response must include Vercel runtime diagnostics');
+  assert(source.includes('runtimeCommerce: getCommerceRuntimeSummary(settings)'), 'Admin settings response must include commerce runtime diagnostics');
+  assert(source.includes('runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary()'), 'Admin settings response must include interactive runtime diagnostics');
+  assert(source.includes('validateSecretReferencePolicy(integrations)'), 'Admin settings route must enforce secret-reference validation');
+  assert(source.includes('SECRET_REFERENCE_REQUIRED'), 'Admin settings route must reject raw secret-like values with a stable error code');
+  assert(source.includes('validateCommerceProviderEndpoints(integrations)'), 'Admin settings route must validate provider endpoint URLs');
+  assert(source.includes('subscriptionActionProvider'), 'Admin settings route must validate subscription lifecycle provider configuration');
+  assert(source.includes('catalogSyncProvider'), 'Admin settings route must validate catalog sync provider configuration');
+  assert(source.includes('validateInfrastructureProviderSettings(integrations)'), 'Admin settings route must validate infrastructure provider settings');
+  assert(source.includes('validateAuthPolicySettings'), 'Admin settings route must validate auth policy bounds');
+  assert(source.includes('sanitizeSettingsAuditSnapshot'), 'Admin settings route must audit settings changes through redacted snapshots');
+  assert(source.includes("ADMIN_SETTINGS_SCHEMA = 'backy.admin-settings.v1'"), 'Admin settings payload must advertise a stable schema version');
+  assert(source.includes("workspaceSettingsScope: 'global'"), 'Admin settings payload must identify the global workspace settings scope');
+  assert(source.includes("siteSettingsEndpointTemplate: '/api/admin/sites/:siteId/settings'"), 'Admin settings payload must point site-owned settings to the site-scoped endpoint');
+  assert(proxySource.includes("BACKY_ADMIN_SETTINGS_SCHEMA_VERSION = 'backy.admin-settings.v1'"), 'Admin settings responses must advertise a stable schema version');
+  assert(proxySource.includes('isAdminSettingsRequest'), 'Admin proxy must detect workspace Settings API requests');
+  assert(proxySource.includes('schemaVersion?: string'), 'Admin proxy auth errors must accept route schema metadata');
+  assert(proxySource.includes('response.headers.set(\'x-backy-schema-version\', schemaVersion)'), 'Admin proxy auth errors must emit route schema metadata');
+  assert(source.includes("body.action === 'issue-admin-api-key'"), 'Admin settings route must expose named service key issuance');
+  assert(source.includes("body.action === 'revoke-admin-api-key'"), 'Admin settings route must expose named service key revocation');
+  assert(source.includes('sanitizeServiceKeyGrant'), 'Admin settings responses must sanitize service key grants');
+  assert(source.includes('keyHash: _keyHash'), 'Admin settings responses must strip service key hashes');
+  assert(source.includes('settings.api_keys.issue'), 'Admin settings route must audit service key issuance');
+  assert(source.includes('settings.api_keys.revoke'), 'Admin settings route must audit service key revocation');
+  assert(adminAccessSource.includes('findActiveServiceAdminKey'), 'Admin access must authenticate stored service keys by hash');
+  assert(adminAccessSource.includes('touchLastUsed'), 'Admin access must update service key last-used metadata');
+  assert(adminAccessSource.includes('Owner-only permissions require an owner admin session'), 'Admin service keys must not satisfy owner-only permissions');
+  assert(apiContracts.includes('"issue-admin-api-key"'), 'API contracts must document service key issuance');
+  assert(apiContracts.includes('"revoke-admin-api-key"'), 'API contracts must document service key revocation');
+  assert(apiContracts.includes('settings.api_keys.issue'), 'API contracts must document service key issue audit events');
+  assert(apiContracts.includes('settings.api_keys.revoke'), 'API contracts must document service key revoke audit events');
 }
 
 async function request(pathOrUrl, init) {
@@ -127,6 +293,9 @@ function assertAdminContract(result) {
   assert(result.response.headers.get('cache-control') === 'no-store', `${result.url} expected admin no-store cache control`);
   assert(result.response.headers.get('x-backy-cache-scope') === 'admin', `${result.url} expected admin cache scope`);
   assert(result.response.headers.get('x-backy-admin-contract-version') === 'backy.admin.v1', `${result.url} missing admin contract version`);
+  if (new URL(result.url).pathname === '/api/admin/settings') {
+    assert(result.response.headers.get('x-backy-schema-version') === 'backy.admin-settings.v1', `${result.url} missing workspace settings schema version`);
+  }
 }
 
 function assertBackyContract(result, scope, label = result.url) {
@@ -146,7 +315,7 @@ async function record(name, fn) {
 async function loginAdminApi() {
   if (adminRequestApiKey) return;
 
-  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${baseUrl}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -154,9 +323,20 @@ async function loginAdminApi() {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const json = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let json = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_ADMIN_CONTRACT_MFA_CODE
+    || process.env.BACKY_SETTINGS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && json.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    json = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || json.success === false || !json.data?.session?.token) {
     throw new Error(`Unable to create admin session for contract smoke: ${JSON.stringify(json).slice(0, 500)}`);
@@ -177,14 +357,27 @@ async function loginAdminApi() {
 }
 
 async function loginAdminCredentials(email, password) {
-  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${baseUrl}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      ...(twoFactorCode ? { twoFactorCode } : {}),
+    }),
   });
-  const json = await response.json().catch(() => ({}));
+  let response = await login();
+  let json = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_ADMIN_CONTRACT_MFA_CODE
+    || process.env.BACKY_SETTINGS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && json.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    json = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || json.success === false || !json.data?.session?.token) {
     throw new Error(`Unable to create admin session for ${email}: ${JSON.stringify(json).slice(0, 500)}`);
@@ -197,6 +390,7 @@ async function ensureOwnerSession() {
   if (contractOwnerSessionToken) return contractOwnerSessionToken;
 
   const unique = Date.now().toString(36);
+  await loginAdminApi();
   const createOwner = await request('/api/admin/users', {
     method: 'POST',
     headers: {
@@ -204,12 +398,12 @@ async function ensureOwnerSession() {
     },
     body: JSON.stringify({
       fullName: `Contract Owner ${unique}`,
-      email: `contract-owner-${unique}@backy.test`,
+      email: contractEmail(`contract-owner-${unique}`),
       role: 'owner',
       status: 'invited',
     }),
   });
-  assert(createOwner.response.status === 201, `${createOwner.url} expected owner create 201, got ${createOwner.response.status}`);
+  assert(createOwner.response.status === 201, `${createOwner.url} expected owner create 201, got ${createOwner.response.status}: ${JSON.stringify(createOwner.json).slice(0, 500)}`);
   contractOwnerUserId = createOwner.json?.data?.user?.id;
   assert(contractOwnerUserId, `${createOwner.url} missing owner user id`);
 
@@ -371,8 +565,22 @@ async function cleanup() {
   }
 }
 
+if (process.env.BACKY_ADMIN_CONTRACT_SOURCE_GUARD === '1') {
+  assertInteractiveSandboxRouteSource();
+  assertInteractiveContractSource();
+  assertSiteSettingsLocalizationSource();
+  assertAdminSettingsContractSource();
+  console.log(JSON.stringify({ ok: true, guard: 'admin-contract-source' }));
+  process.exit(0);
+}
+
 try {
+  assertInteractiveSandboxRouteSource();
+  assertSiteSettingsLocalizationSource();
   await loginAdminApi();
+  const initialSettings = await request('/api/admin/settings');
+  const allowedAdminDomains = parseAllowedEmailDomains(initialSettings.json?.data?.settings?.auth?.allowedEmailDomains);
+  adminContractEmailDomain = allowedAdminDomains[0] || 'backy.test';
   const unique = Date.now().toString();
   const siteSlug = `admin-contract-site-${unique}`;
   const customDomain = `${siteSlug}.example.test`;
@@ -472,6 +680,11 @@ try {
     assert(draftOpenApi.response.status === 404, `${draftOpenApi.url} expected draft site OpenAPI to be hidden`);
     assert(draftOpenApi.json?.success === false, `${draftOpenApi.url} expected error envelope`);
     assert(draftOpenApi.response.headers.get('cache-control') === 'no-store', `${draftOpenApi.url} expected hidden OpenAPI to be no-store`);
+
+    const draftSandbox = await request(`/api/sites/${createdSiteId}/interactive-components/backy.custom.sandboxed/1.0.0/sandbox`);
+    assert(draftSandbox.response.status === 404, `${draftSandbox.url} expected draft site sandbox to be hidden`);
+    assert(draftSandbox.response.headers.get('cache-control') === 'no-store', `${draftSandbox.url} expected hidden sandbox to be no-store`);
+    assert(draftSandbox.response.headers.get('content-security-policy')?.includes("default-src 'none'"), `${draftSandbox.url} missing locked-down sandbox error CSP`);
   });
 
   await record('admin sites duplicate slug is rejected', async () => {
@@ -489,6 +702,133 @@ try {
     assert(response.status === 409, `${url} expected 409, got ${response.status}`);
     assert(json?.success === false, `${url} expected error envelope`);
     assert(json?.error?.code === 'SLUG_CONFLICT', `${url} expected SLUG_CONFLICT`);
+  });
+
+  await record('admin site settings scope read/update persists site-owned settings', async () => {
+    const detail = await request(`/api/admin/sites/${createdSiteId}/settings`);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assertAdminContract(detail);
+    assert(detail.response.headers.get('x-backy-schema-version') === 'backy.site-settings-scope.v1', `${detail.url} missing site settings schema version header`);
+    assert(detail.response.headers.get('x-backy-site-id') === createdSiteId, `${detail.url} missing site id header`);
+    const scopedSettings = detail.json?.data?.settings;
+    assert(scopedSettings?.schemaVersion === 'backy.site-settings-scope.v1', `${detail.url} returned wrong site settings schema`);
+    assert(scopedSettings?.scope?.level === 'site', `${detail.url} missing site scope level`);
+    assert(scopedSettings?.scope?.siteId === createdSiteId, `${detail.url} returned wrong site scope id`);
+    assert(scopedSettings?.scope?.workspaceSettingsScope === 'global', `${detail.url} missing global workspace settings scope`);
+    assert(scopedSettings?.scope?.siteSettingsScope === 'site', `${detail.url} missing site settings scope`);
+    assert(scopedSettings?.workspaceSettings, `${detail.url} missing workspace settings summary`);
+    assert(scopedSettings?.siteSettings, `${detail.url} missing site settings payload`);
+    assert(scopedSettings?.effectiveSettings?.workspace, `${detail.url} missing effective workspace settings`);
+    assert(scopedSettings?.effectiveSettings?.site, `${detail.url} missing effective site settings`);
+    assert(scopedSettings?.endpoints?.workspaceSettings === '/api/admin/settings', `${detail.url} missing workspace settings endpoint`);
+    assert(scopedSettings?.endpoints?.siteSettings === `/api/admin/sites/${createdSiteId}/settings`, `${detail.url} missing site settings endpoint`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          seo: {
+            defaultDescription: 'Scoped settings smoke description',
+          },
+          commentPolicy: {
+            moderationMode: 'auto-approve',
+            blockedTerms: ['scoped-smoke-term'],
+          },
+          localization: {
+            defaultLocale: 'en',
+            localeStrategy: 'path-prefix',
+            locales: [
+              { code: 'en', label: 'English', default: true, direction: 'ltr', pathPrefix: '' },
+              { code: 'fr', label: 'French', direction: 'ltr', pathPrefix: '/fr' },
+              { code: 'ar', label: 'Arabic', direction: 'rtl', pathPrefix: '/ar' },
+            ],
+          },
+        },
+      }),
+    });
+
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assertAdminContract(update);
+    assert(update.response.headers.get('x-backy-schema-version') === 'backy.site-settings-scope.v1', `${update.url} missing site settings schema version header`);
+    assert(update.response.headers.get('x-backy-site-id') === createdSiteId, `${update.url} missing site id header`);
+    assert(update.json?.data?.settings?.schemaVersion === 'backy.site-settings-scope.v1', `${update.url} returned wrong site settings schema`);
+    assert(update.json?.data?.settings?.siteSettings?.seo?.defaultDescription === 'Scoped settings smoke description', `${update.url} did not persist site SEO setting`);
+    assert(update.json?.data?.settings?.siteSettings?.commentPolicy?.moderationMode === 'auto-approve', `${update.url} did not persist comment policy mode`);
+    assert(update.json?.data?.settings?.siteSettings?.commentPolicy?.blockedTerms?.includes('scoped-smoke-term'), `${update.url} did not persist blocked term`);
+    assert(update.json?.data?.settings?.siteSettings?.localization?.defaultLocale === 'en', `${update.url} did not persist default locale`);
+    assert(update.json?.data?.settings?.siteSettings?.localization?.localeStrategy === 'path-prefix', `${update.url} did not persist locale strategy`);
+    assert(update.json?.data?.settings?.siteSettings?.localization?.locales?.some((locale) => (
+      locale.code === 'fr' && locale.label === 'French' && locale.pathPrefix === '/fr' && locale.direction === 'ltr'
+    )), `${update.url} did not persist normalized French locale`);
+    assert(update.json?.data?.settings?.siteSettings?.localization?.locales?.some((locale) => (
+      locale.code === 'ar' && locale.pathPrefix === '/ar' && locale.direction === 'rtl'
+    )), `${update.url} did not persist normalized RTL locale`);
+    assert(update.json?.data?.settings?.effectiveSettings?.site?.localization?.localeStrategy === 'path-prefix', `${update.url} did not expose localization in effective site settings`);
+    assert(update.json?.data?.settings?.siteSettings?.unknownPlatformSetting === undefined, `${update.url} persisted a non-allowlisted setting`);
+
+    const mixedUnsupported = await request(`/api/admin/sites/${createdSiteId}/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          seo: {
+            defaultDescription: 'This mixed unsupported patch must not persist',
+          },
+          apiKeys: {
+            adminKey: 'must-not-be-accepted-through-site-settings',
+          },
+        },
+      }),
+    });
+    assert(mixedUnsupported.response.status === 400, `${mixedUnsupported.url} expected mixed unsupported patch 400, got ${mixedUnsupported.response.status}`);
+    assertAdminContract(mixedUnsupported);
+    assert(mixedUnsupported.response.headers.get('x-backy-schema-version') === 'backy.site-settings-scope.v1', `${mixedUnsupported.url} missing site settings error schema version header`);
+    assert(mixedUnsupported.json?.success === false, `${mixedUnsupported.url} expected error envelope`);
+    assert(mixedUnsupported.json?.error?.code === 'UNSUPPORTED_SITE_SETTINGS_KEYS', `${mixedUnsupported.url} expected UNSUPPORTED_SITE_SETTINGS_KEYS`);
+
+    const unsupportedOnly = await request(`/api/admin/sites/${createdSiteId}/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          unknownPlatformSetting: 'must-be-rejected',
+        },
+      }),
+    });
+    assert(unsupportedOnly.response.status === 400, `${unsupportedOnly.url} expected unsupported-only patch 400, got ${unsupportedOnly.response.status}`);
+    assertAdminContract(unsupportedOnly);
+    assert(unsupportedOnly.response.headers.get('x-backy-schema-version') === 'backy.site-settings-scope.v1', `${unsupportedOnly.url} missing site settings error schema version header`);
+    assert(unsupportedOnly.json?.success === false, `${unsupportedOnly.url} expected error envelope`);
+    assert(unsupportedOnly.json?.error?.code === 'NO_SITE_SETTINGS_CHANGES', `${unsupportedOnly.url} expected NO_SITE_SETTINGS_CHANGES`);
+
+    const readBack = await request(`/api/admin/sites/${createdSiteId}/settings`);
+    assert(readBack.response.status === 200, `${readBack.url} expected readback 200, got ${readBack.response.status}`);
+    assert(readBack.json?.data?.settings?.siteSettings?.seo?.defaultDescription === 'Scoped settings smoke description', `${readBack.url} did not read back site SEO setting`);
+    assert(readBack.json?.data?.settings?.siteSettings?.commentPolicy?.blockedTerms?.includes('scoped-smoke-term'), `${readBack.url} did not read back blocked term`);
+    assert(readBack.json?.data?.settings?.siteSettings?.localization?.locales?.some((locale) => (
+      locale.code === 'fr' && locale.pathPrefix === '/fr'
+    )), `${readBack.url} did not read back site localization setting`);
+
+    const audit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=site&entityId=${createdSiteId}&action=${encodeURIComponent('site.settings.updated')}&requestId=${update.json.requestId}`);
+    assert(audit.response.status === 200, `${audit.url} expected site settings audit readback`);
+    assert(audit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'site' &&
+      entry.entityId === createdSiteId &&
+      entry.action === 'site.settings.updated' &&
+      entry.requestId === update.json.requestId &&
+      entry.metadata?.source === 'admin-site-settings-api' &&
+      entry.metadata?.changedKeys?.includes('seo') &&
+      entry.metadata?.changedKeys?.includes('commentPolicy') &&
+      entry.metadata?.changedKeys?.includes('localization') &&
+      !entry.metadata?.changedKeys?.includes('unknownPlatformSetting')
+    )), `${audit.url} missing site settings update audit metadata`);
   });
 
   await record('admin sites detail and update return edited site', async () => {
@@ -557,6 +897,479 @@ try {
       pagedPublicSiteList.json?.data?.pagination?.total >= pagedPublicSiteList.json.data.sites.length,
       `${pagedPublicSiteList.url} expected pagination total to cover returned sites`,
     );
+  });
+
+  await record('admin interactive component registry create/review/list/update works for temporary site', async () => {
+    createdInteractiveComponentKey = `contract.custom.figure.${unique}`;
+    createdInteractiveComponentVersion = '1.0.0';
+    const componentPath = `/api/admin/sites/${createdSiteId}/interactive-components/${createdInteractiveComponentKey}/${createdInteractiveComponentVersion}`;
+    const sandboxUrl = `/api/sites/${createdSiteId}/interactive-components/${createdInteractiveComponentKey}/${createdInteractiveComponentVersion}/sandbox`;
+
+    const unauth = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/interactive-components`);
+    const unauthJson = await unauth.json().catch(() => ({}));
+    assert(unauth.status === 401, `Interactive component admin API should reject missing auth, got ${unauth.status}`);
+    assert(unauthJson?.success === false && unauthJson?.error?.code === 'UNAUTHORIZED', `Interactive component admin API missing auth envelope: ${JSON.stringify(unauthJson).slice(0, 500)}`);
+
+    const create = await request(`/api/admin/sites/${createdSiteId}/interactive-components`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        componentKey: createdInteractiveComponentKey,
+        version: createdInteractiveComponentVersion,
+        displayName: 'Contract custom figure',
+        type: 'codeComponent',
+        status: 'disabled',
+        reviewStatus: 'draft',
+        renderMode: 'sandbox-iframe',
+        source: 'custom',
+        description: 'Smoke-test sandboxed component registry record.',
+        allowedDataScopes: ['collections', 'page', 'blog'],
+        requiredFields: ['componentKey', 'version', 'fallback', 'runtime.sandboxUrl'],
+        fallback: {
+          required: true,
+          supported: ['title', 'text', 'html', 'alt', 'ariaLabel'],
+        },
+        runtime: {
+          sandboxUrl,
+          iframeSandbox: 'allow-scripts allow-forms',
+          allowedPermissions: [],
+          postMessageProtocol: 'backy.interactive-component.v1',
+        },
+        integrity: {
+          signed: false,
+          signatureRequiredForCustomCode: true,
+        },
+        dependencyMetadata: {
+          packageManager: 'none',
+          dependencies: [],
+        },
+        changelog: 'Initial registry smoke version.',
+      }),
+    });
+    assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
+    assert(create.json?.data?.component?.componentKey === createdInteractiveComponentKey, `${create.url} returned wrong component key`);
+    assert(create.json?.data?.component?.reviewStatus === 'draft', `${create.url} expected draft review status`);
+    assert(create.json?.data?.component?.security?.adminApiAccess === false, `${create.url} must force admin API access off`);
+
+    const duplicate = await request(`/api/admin/sites/${createdSiteId}/interactive-components`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        componentKey: createdInteractiveComponentKey,
+        version: createdInteractiveComponentVersion,
+        displayName: 'Duplicate contract custom figure',
+      }),
+    });
+    assert(duplicate.response.status === 409, `${duplicate.url} expected duplicate version conflict`);
+    assert(duplicate.json?.error?.code === 'INTERACTIVE_COMPONENT_VERSION_CONFLICT', `${duplicate.url} expected interactive component conflict code`);
+
+    const list = await request(`/api/admin/sites/${createdSiteId}/interactive-components?status=all&reviewStatus=all&type=codeComponent`);
+    assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+    assert(list.json?.data?.components?.some((component) => component.componentKey === createdInteractiveComponentKey), `${list.url} missing created registry component`);
+
+    const detail = await request(componentPath);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assert(detail.json?.data?.component?.runtime?.sandboxUrl === sandboxUrl, `${detail.url} expected sandbox runtime URL`);
+
+    const submitReview = await request(`${componentPath}/review`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'submit',
+        updatedBy: 'contract-smoke',
+        changelog: 'Submitted by contract smoke.',
+      }),
+    });
+    assert(submitReview.response.status === 200, `${submitReview.url} expected review submit 200, got ${submitReview.response.status}`);
+    assert(submitReview.json?.data?.component?.reviewStatus === 'in_review', `${submitReview.url} expected in_review status`);
+    assert(submitReview.json?.data?.component?.status === 'disabled', `${submitReview.url} expected submitted component to remain disabled`);
+
+    const unsafeApprove = await request(`${componentPath}/review`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve',
+        status: 'active',
+        reviewStatus: 'approved',
+        runtime: {
+          sandboxUrl,
+          iframeSandbox: 'allow-scripts allow-same-origin',
+        },
+        integrity: {
+          signed: false,
+          signatureRequiredForCustomCode: true,
+        },
+      }),
+    });
+    assert(unsafeApprove.response.status === 400, `${unsafeApprove.url} expected unsafe approval validation failure`);
+    assert(unsafeApprove.json?.error?.code === 'INTERACTIVE_COMPONENT_VALIDATION_FAILED', `${unsafeApprove.url} expected interactive component validation code`);
+    assert(
+      unsafeApprove.json?.error?.issues?.some((issue) => issue.includes('allow-same-origin')) &&
+      unsafeApprove.json?.error?.issues?.some((issue) => issue.includes('signed integrity')),
+      `${unsafeApprove.url} expected sandbox and signature validation issues`,
+    );
+
+    const remoteSandboxApprove = await request(`${componentPath}/review`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve',
+        status: 'active',
+        reviewStatus: 'approved',
+        runtime: {
+          sandboxUrl: 'https://components.example.com/backy/remote.html',
+          iframeSandbox: 'allow-scripts allow-forms',
+          allowedPermissions: [],
+          postMessageProtocol: 'backy.interactive-component.v1',
+        },
+        integrity: {
+          signed: true,
+          signatureRequiredForCustomCode: true,
+        },
+      }),
+    });
+    assert(remoteSandboxApprove.response.status === 400, `${remoteSandboxApprove.url} expected remote sandbox URL validation failure`);
+    assert(remoteSandboxApprove.json?.error?.code === 'INTERACTIVE_COMPONENT_VALIDATION_FAILED', `${remoteSandboxApprove.url} expected interactive component validation code`);
+    assert(
+      remoteSandboxApprove.json?.error?.issues?.some((issue) => issue.includes('/api/sites/:siteId/interactive-components/:componentKey/:version/sandbox')),
+      `${remoteSandboxApprove.url} expected Backy sandbox route validation issue`,
+    );
+
+    const wrongVersionSandboxApprove = await request(`${componentPath}/review`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve',
+        status: 'active',
+        reviewStatus: 'approved',
+        runtime: {
+          sandboxUrl: `/api/sites/${createdSiteId}/interactive-components/${createdInteractiveComponentKey}/9.9.9/sandbox`,
+          iframeSandbox: 'allow-scripts allow-forms',
+          allowedPermissions: [],
+          postMessageProtocol: 'backy.interactive-component.v1',
+        },
+        integrity: {
+          signed: true,
+          signatureRequiredForCustomCode: true,
+        },
+      }),
+    });
+    assert(wrongVersionSandboxApprove.response.status === 400, `${wrongVersionSandboxApprove.url} expected mismatched sandbox version validation failure`);
+    assert(wrongVersionSandboxApprove.json?.error?.code === 'INTERACTIVE_COMPONENT_VALIDATION_FAILED', `${wrongVersionSandboxApprove.url} expected interactive component validation code`);
+    assert(
+      wrongVersionSandboxApprove.json?.error?.issues?.some((issue) => issue.includes('match the component site, key, and version')),
+      `${wrongVersionSandboxApprove.url} expected sandbox identity validation issue`,
+    );
+
+    const approve = await request(`${componentPath}/review`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve',
+        reviewedBy: 'contract-smoke',
+        runtime: {
+          sandboxUrl,
+          iframeSandbox: 'allow-scripts allow-forms',
+          allowedPermissions: [],
+          postMessageProtocol: 'backy.interactive-component.v1',
+        },
+        integrity: {
+          signed: true,
+          signatureRequiredForCustomCode: true,
+        },
+        dependencyMetadata: {
+          packageManager: 'none',
+          dependencies: [],
+          verifiedAt: new Date().toISOString(),
+          verifiedBy: 'contract-smoke',
+        },
+        changelog: 'Approved by contract smoke.',
+      }),
+    });
+    assert(approve.response.status === 200, `${approve.url} expected 200, got ${approve.response.status}`);
+    assert(approve.json?.data?.component?.status === 'active', `${approve.url} expected active component`);
+    assert(approve.json?.data?.component?.reviewStatus === 'approved', `${approve.url} expected approved component`);
+    assert(approve.json?.data?.component?.reviewedBy === 'contract-smoke', `${approve.url} expected review actor`);
+    const approvalAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=interactiveComponent&entityId=${approve.json.data.component.id}&action=interactiveComponent.review.approve&requestId=${approve.json.requestId}`);
+    assert(approvalAudit.response.status === 200, `${approvalAudit.url} expected approval audit readback`);
+    assert(approvalAudit.json?.data?.logs?.some((entry) => entry.metadata?.action === 'approve' && entry.metadata?.reviewStatus === 'approved'), `${approvalAudit.url} missing approval workflow audit metadata`);
+
+    const bundleSource = 'export default function mount() { return "contract-smoke"; }';
+    const bundleUpload = await request(`${componentPath}/bundle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'index.js',
+        contentType: 'application/javascript',
+        contentBase64: Buffer.from(bundleSource, 'utf8').toString('base64'),
+        signature: 'sha256=contract-smoke-signature',
+        signedBy: 'contract-smoke',
+        changelog: 'Stored signed bundle through contract smoke.',
+      }),
+    });
+    assert(bundleUpload.response.status === 200, `${bundleUpload.url} expected bundle upload 200, got ${bundleUpload.response.status}`);
+    assert(bundleUpload.json?.data?.bundle?.sha256?.length === 64, `${bundleUpload.url} missing SHA-256 bundle metadata`);
+    assert(bundleUpload.json?.data?.bundle?.bundleUrl?.includes('/uploads/sites/'), `${bundleUpload.url} expected stored bundle URL`);
+    assert(bundleUpload.json?.data?.component?.runtime?.bundleUrl === bundleUpload.json?.data?.bundle?.bundleUrl, `${bundleUpload.url} did not attach bundle URL to runtime`);
+    assert(bundleUpload.json?.data?.component?.integrity?.signed === true, `${bundleUpload.url} expected signed integrity`);
+    assert(bundleUpload.json?.data?.component?.integrity?.sha256 === bundleUpload.json?.data?.bundle?.sha256, `${bundleUpload.url} did not persist integrity hash`);
+    assert(bundleUpload.json?.data?.component?.dependencyMetadata?.bundle?.storagePath === bundleUpload.json?.data?.bundle?.storagePath, `${bundleUpload.url} missing bundle storage metadata`);
+    const bundleAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=interactiveComponent&entityId=${bundleUpload.json.data.component.id}&action=interactiveComponent.bundle.upload&requestId=${bundleUpload.json.requestId}`);
+    assert(bundleAudit.response.status === 200, `${bundleAudit.url} expected bundle audit readback`);
+    assert(bundleAudit.json?.data?.logs?.some((entry) => entry.metadata?.sha256 === bundleUpload.json.data.bundle.sha256), `${bundleAudit.url} missing bundle upload audit metadata`);
+
+    const exportedComponent = await request(`${componentPath}/export`);
+    assert(exportedComponent.response.status === 200, `${exportedComponent.url} expected export package 200, got ${exportedComponent.response.status}`);
+    assert(exportedComponent.json?.data?.exportPackage?.schemaVersion === 'backy.interactive-component-export.v1', `${exportedComponent.url} missing export schema`);
+    assert(exportedComponent.json?.data?.exportPackage?.component?.componentKey === createdInteractiveComponentKey, `${exportedComponent.url} exported wrong component key`);
+    assert(exportedComponent.json?.data?.exportPackage?.import?.targetEndpoint === '/api/admin/sites/{siteId}/interactive-components', `${exportedComponent.url} missing import target metadata`);
+    assert(exportedComponent.json?.data?.exportPackage?.bundle?.sandboxUrl === sandboxUrl, `${exportedComponent.url} missing bundle sandbox metadata`);
+    assert(exportedComponent.json?.data?.exportPackage?.usageInventoryEndpoint?.endsWith(`/interactive-components/${createdInteractiveComponentKey}/${createdInteractiveComponentVersion}/usage`), `${exportedComponent.url} missing usage inventory link`);
+
+    const importedComponentKey = `${createdInteractiveComponentKey}.imported`;
+    const importComponent = await request(`/api/admin/sites/${createdSiteId}/interactive-components`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        exportPackage: exportedComponent.json.data.exportPackage,
+        componentKey: importedComponentKey,
+        displayName: 'Imported contract custom figure',
+      }),
+    });
+    assert(importComponent.response.status === 201, `${importComponent.url} expected import create 201, got ${importComponent.response.status}`);
+    assert(importComponent.json?.data?.component?.componentKey === importedComponentKey, `${importComponent.url} returned wrong imported key`);
+    assert(importComponent.json?.data?.component?.status === 'disabled', `${importComponent.url} expected imported component to reset to disabled`);
+    assert(importComponent.json?.data?.component?.reviewStatus === 'draft', `${importComponent.url} expected imported component to reset to draft`);
+    assert(importComponent.json?.data?.component?.dependencyMetadata?.importExport?.sourceComponentKey === createdInteractiveComponentKey, `${importComponent.url} missing source import metadata`);
+    assert(importComponent.json?.data?.component?.dependencyMetadata?.importExport?.importedAt, `${importComponent.url} missing imported timestamp`);
+    const removeImportedComponent = await request(`/api/admin/sites/${createdSiteId}/interactive-components/${importedComponentKey}/${createdInteractiveComponentVersion}`, { method: 'DELETE' });
+    assert(removeImportedComponent.response.status === 200, `${removeImportedComponent.url} expected imported component cleanup 200`);
+
+    let interactiveUsagePageId = null;
+    let interactiveUsagePostId = null;
+    try {
+      const createUsagePage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Interactive component usage page',
+          slug: `interactive-component-usage-${unique}`,
+          status: 'draft',
+          content: {
+            canvasSize: { width: 1200, height: 900 },
+            elements: [
+              {
+                id: 'usage-page-component',
+                type: 'codeComponent',
+                componentKey: createdInteractiveComponentKey,
+                version: createdInteractiveComponentVersion,
+                renderCapabilities: { hydrationMode: 'sandbox-iframe' },
+                fallback: {
+                  title: 'Usage fallback',
+                  text: 'Static fallback for usage inventory smoke.',
+                },
+              },
+            ],
+          },
+        }),
+      });
+      assert(createUsagePage.response.status === 201, `${createUsagePage.url} expected usage page create 201`);
+      interactiveUsagePageId = createUsagePage.json?.data?.page?.id;
+
+      const createUsagePost = await request(`/api/admin/sites/${createdSiteId}/blog`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Interactive component usage post',
+          slug: `interactive-component-usage-post-${unique}`,
+          status: 'draft',
+          excerpt: 'Smoke post for interactive component usage inventory.',
+          content: {
+            elements: [
+              {
+                id: 'usage-post-component',
+                type: 'codeComponent',
+                componentKey: createdInteractiveComponentKey,
+                version: createdInteractiveComponentVersion,
+                renderCapabilities: { hydrationMode: 'sandbox-iframe' },
+                fallback: {
+                  title: 'Usage post fallback',
+                  text: 'Static blog fallback for usage inventory smoke.',
+                },
+              },
+            ],
+          },
+        }),
+      });
+      assert(createUsagePost.response.status === 201, `${createUsagePost.url} expected usage post create 201`);
+      interactiveUsagePostId = createUsagePost.json?.data?.post?.id;
+
+      const usage = await request(`${componentPath}/usage`);
+      assert(usage.response.status === 200, `${usage.url} expected usage inventory 200, got ${usage.response.status}`);
+      assert(usage.json?.data?.componentKey === createdInteractiveComponentKey, `${usage.url} returned wrong component key`);
+      assert(usage.json?.data?.version === createdInteractiveComponentVersion, `${usage.url} returned wrong component version`);
+      assert(usage.json?.data?.summary?.total >= 2, `${usage.url} expected page and post usage entries`);
+      assert(usage.json?.data?.usage?.some((entry) => (
+        entry.targetType === 'page' &&
+        entry.targetId === interactiveUsagePageId &&
+        entry.elementId === 'usage-page-component' &&
+        entry.fallbackConfigured === true
+      )), `${usage.url} missing interactive usage page entry`);
+      assert(usage.json?.data?.usage?.some((entry) => (
+        entry.targetType === 'post' &&
+        entry.targetId === interactiveUsagePostId &&
+        entry.elementId === 'usage-post-component' &&
+        entry.renderMode === 'sandbox-iframe'
+      )), `${usage.url} missing interactive usage blog post entry`);
+    } finally {
+      if (interactiveUsagePageId) {
+        await request(`/api/admin/sites/${createdSiteId}/pages/${interactiveUsagePageId}`, { method: 'DELETE' }).catch(() => {});
+      }
+      if (interactiveUsagePostId) {
+        await request(`/api/admin/sites/${createdSiteId}/blog/${interactiveUsagePostId}`, { method: 'DELETE' }).catch(() => {});
+      }
+    }
+
+    createdInteractiveNewerVersion = '2.0.0';
+    const createNewerVersion = await request(`/api/admin/sites/${createdSiteId}/interactive-components`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        componentKey: createdInteractiveComponentKey,
+        version: createdInteractiveNewerVersion,
+        displayName: 'Contract custom figure v2',
+        type: 'codeComponent',
+        status: 'active',
+        reviewStatus: 'approved',
+        renderMode: 'sandbox-iframe',
+        source: 'custom',
+        description: 'Smoke-test newer sandboxed component version.',
+        allowedDataScopes: ['collections', 'page', 'blog'],
+        requiredFields: ['componentKey', 'version', 'fallback', 'runtime.sandboxUrl'],
+        fallback: {
+          required: true,
+          supported: ['title', 'text', 'html', 'alt', 'ariaLabel'],
+        },
+        runtime: {
+          sandboxUrl: `/api/sites/${createdSiteId}/interactive-components/${createdInteractiveComponentKey}/${createdInteractiveNewerVersion}/sandbox`,
+          iframeSandbox: 'allow-scripts allow-forms',
+          allowedPermissions: [],
+          postMessageProtocol: 'backy.interactive-component.v1',
+        },
+        integrity: {
+          signed: true,
+          signatureRequiredForCustomCode: true,
+        },
+        dependencyMetadata: {
+          packageManager: 'none',
+          dependencies: [],
+          verifiedAt: new Date().toISOString(),
+          verifiedBy: 'contract-smoke',
+        },
+        changelog: 'Newer registry smoke version.',
+      }),
+    });
+    assert(createNewerVersion.response.status === 201, `${createNewerVersion.url} expected newer version 201`);
+    assert(createNewerVersion.json?.data?.component?.version === createdInteractiveNewerVersion, `${createNewerVersion.url} returned wrong newer version`);
+
+    let migrationPageId = null;
+    try {
+      const createMigrationPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Interactive component migration page',
+          slug: `interactive-component-migration-${unique}`,
+          status: 'draft',
+          content: {
+            canvasSize: { width: 1200, height: 900 },
+            elements: [
+              {
+                id: 'migration-code-component',
+                type: 'codeComponent',
+                componentKey: createdInteractiveComponentKey,
+                version: createdInteractiveComponentVersion,
+                renderCapabilities: { hydrationMode: 'sandbox-iframe' },
+                sandboxUrl,
+                fallback: {
+                  title: 'Migration fallback',
+                  text: 'Static fallback before migration.',
+                },
+              },
+            ],
+          },
+        }),
+      });
+      assert(createMigrationPage.response.status === 201, `${createMigrationPage.url} expected migration page create 201`);
+      migrationPageId = createMigrationPage.json?.data?.page?.id;
+
+      const migrationDryRun = await request(`${componentPath}/migrate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          targetVersion: createdInteractiveNewerVersion,
+          dryRun: true,
+        }),
+      });
+      assert(migrationDryRun.response.status === 200, `${migrationDryRun.url} expected migration dry-run 200, got ${migrationDryRun.response.status}`);
+      assert(migrationDryRun.json?.data?.dryRun === true, `${migrationDryRun.url} expected dryRun true`);
+      assert(migrationDryRun.json?.data?.summary?.elements >= 1, `${migrationDryRun.url} expected at least one migrated element preview`);
+      assert(migrationDryRun.json?.data?.migratedTargets?.some((target) => (
+        target.targetType === 'page' &&
+        target.targetId === migrationPageId &&
+        target.elementPaths?.some((path) => path.includes('migration-code-component') || path.includes('elements[0]'))
+      )), `${migrationDryRun.url} missing migration page dry-run target`);
+
+      const migrationApply = await request(`${componentPath}/migrate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          targetVersion: createdInteractiveNewerVersion,
+          dryRun: false,
+          updatedBy: 'contract-smoke',
+        }),
+      });
+      assert(migrationApply.response.status === 200, `${migrationApply.url} expected migration apply 200, got ${migrationApply.response.status}`);
+      assert(migrationApply.json?.data?.dryRun === false, `${migrationApply.url} expected dryRun false`);
+      assert(migrationApply.json?.data?.summary?.elements >= 1, `${migrationApply.url} expected applied migrated elements`);
+
+      const migratedPage = await request(`/api/admin/sites/${createdSiteId}/pages/${migrationPageId}`);
+      const migratedElement = migratedPage.json?.data?.page?.content?.elements?.find((element) => element.id === 'migration-code-component');
+      assert(migratedPage.response.status === 200, `${migratedPage.url} expected migrated page readback 200`);
+      assert(migratedElement?.componentKey === createdInteractiveComponentKey, `${migratedPage.url} changed component key unexpectedly`);
+      assert(migratedElement?.version === createdInteractiveNewerVersion, `${migratedPage.url} did not migrate component version`);
+      assert(migratedElement?.renderCapabilities?.hydrationMode === 'sandbox-iframe', `${migratedPage.url} did not preserve sandbox hydration mode`);
+
+      const migrationAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=interactiveComponent&entityId=${createNewerVersion.json.data.component.id}&action=interactiveComponent.migrate&requestId=${migrationApply.json.requestId}`);
+      assert(migrationAudit.response.status === 200, `${migrationAudit.url} expected migration audit readback`);
+      assert(migrationAudit.json?.data?.logs?.some((entry) => (
+        entry.action === 'interactiveComponent.migrate' &&
+        entry.metadata?.sourceVersion === createdInteractiveComponentVersion &&
+        entry.metadata?.targetVersion === createdInteractiveNewerVersion
+      )), `${migrationAudit.url} missing migration audit metadata`);
+    } finally {
+      if (migrationPageId) {
+        await request(`/api/admin/sites/${createdSiteId}/pages/${migrationPageId}`, { method: 'DELETE' }).catch(() => {});
+      }
+    }
+
+    const rollback = await request(`${componentPath}/rollback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        rollbackBy: 'contract-smoke',
+        changelog: 'Rolled back to initial registry smoke version.',
+      }),
+    });
+    assert(rollback.response.status === 200, `${rollback.url} expected rollback 200, got ${rollback.response.status}`);
+    assert(rollback.json?.data?.rolledBack === true, `${rollback.url} expected rolledBack true`);
+    assert(rollback.json?.data?.component?.version === createdInteractiveComponentVersion, `${rollback.url} restored wrong version`);
+    assert(rollback.json?.data?.component?.status === 'active', `${rollback.url} did not reactivate target version`);
+    assert(rollback.json?.data?.component?.rollbackFromVersion === createdInteractiveNewerVersion, `${rollback.url} missing rollback source version`);
+    assert(rollback.json?.data?.disabledVersions?.some((component) => component.version === createdInteractiveNewerVersion && component.status === 'disabled'), `${rollback.url} did not disable newer active version`);
+    const rollbackAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=interactiveComponent&entityId=${rollback.json.data.component.id}&action=interactiveComponent.rollback&requestId=${rollback.json.requestId}`);
+    assert(rollbackAudit.response.status === 200, `${rollbackAudit.url} expected interactive component rollback audit readback`);
+    assert(rollbackAudit.json?.data?.logs?.[0]?.metadata?.restoredFromVersion === createdInteractiveNewerVersion, `${rollbackAudit.url} missing rollback source metadata`);
   });
 
   await record('admin frontend design import connects external template', async () => {
@@ -1062,7 +1875,7 @@ try {
     assert(list.json?.data?.folders?.some((folder) => folder.id === createdMediaFolderId), `${list.url} missing created folder`);
 
     const invalidFolderUploadForm = new FormData();
-    invalidFolderUploadForm.set('file', new Blob(['invalid-folder-upload'], { type: 'text/plain' }), 'invalid-folder.txt');
+    invalidFolderUploadForm.set('file', new Blob(['invalid-folder-upload'], { type: 'font/woff2' }), 'invalid-folder.woff2');
     invalidFolderUploadForm.set('folderId', 'missing_media_folder');
     const invalidFolderUpload = await request(`/api/admin/sites/${createdSiteId}/media`, {
       method: 'POST',
@@ -4833,8 +5646,22 @@ try {
       assert(frontendManifest.json?.data?.admin?.auth?.mode === 'anonymous', `${frontendManifest.url} should expose anonymous admin mode by default`);
       assert(frontendManifest.json?.data?.admin?.permissions?.['sites.configure'] === false, `${frontendManifest.url} should not expose configure permission anonymously`);
       assert(frontendManifest.json?.data?.admin?.capabilities?.frontendDesignWrite === false, `${frontendManifest.url} should not expose frontend design write anonymously`);
-      assert(frontendManifest.json?.data?.delivery?.defaultLocale === 'en', `${frontendManifest.url} missing default locale discovery`);
-      assert(frontendManifest.json?.data?.delivery?.localeStrategy === 'none', `${frontendManifest.url} missing locale strategy discovery`);
+      const manifestDelivery = frontendManifest.json?.data?.delivery;
+      const manifestLocalizedRoutes = frontendManifest.json?.data?.modules?.routing?.localizedRoutePatterns || [];
+      assert(manifestDelivery?.defaultLocale === 'en', `${frontendManifest.url} missing default locale discovery`);
+      assert(manifestDelivery?.localeStrategy === 'path-prefix', `${frontendManifest.url} missing locale strategy discovery`);
+      assert(manifestDelivery?.locales?.some((locale) => locale.code === 'fr' && locale.pathPrefix === '/fr'), `${frontendManifest.url} missing French locale discovery`);
+      assert(manifestDelivery?.locales?.some((locale) => locale.code === 'ar' && locale.direction === 'rtl' && locale.pathPrefix === '/ar'), `${frontendManifest.url} missing RTL locale discovery`);
+      assert(manifestLocalizedRoutes.some((group) => (
+        group.locale === 'fr' &&
+        group.pathPrefix === '/fr' &&
+        group.patterns?.some((pattern) => pattern.basePattern === '/:pageSlug' && pattern.pattern === '/fr/:pageSlug')
+      )), `${frontendManifest.url} missing French localized route patterns`);
+      assert(manifestLocalizedRoutes.some((group) => (
+        group.locale === 'ar' &&
+        group.pathPrefix === '/ar' &&
+        group.patterns?.some((pattern) => pattern.basePattern === '/blog/:postSlug' && pattern.pattern === '/ar/blog/:postSlug')
+      )), `${frontendManifest.url} missing RTL localized route patterns`);
       assert(frontendManifest.json?.data?.delivery?.domains?.some((domain) => domain.type === 'managed' && domain.baseUrl.endsWith(`/sites/${siteSlug}`)), `${frontendManifest.url} missing managed domain discovery`);
       assert(frontendManifest.json?.data?.delivery?.domains?.some((domain) => domain.type === 'custom' && domain.host === customDomain && domain.primary === true), `${frontendManifest.url} missing custom domain discovery`);
       assert(frontendManifest.json?.data?.delivery?.urls?.sitemap === `https://${customDomain}/sitemap.xml`, `${frontendManifest.url} missing custom-domain sitemap discovery`);
@@ -4853,12 +5680,16 @@ try {
       assert(frontendManifest.json?.data?.capabilities?.redirectRoutes === true, `${frontendManifest.url} missing redirect route capability`);
       assert(frontendManifest.json?.data?.capabilities?.reusableSections === true, `${frontendManifest.url} missing reusable sections capability`);
       assert(frontendManifest.json?.data?.capabilities?.frontendDesignContract === true, `${frontendManifest.url} missing frontend design contract capability`);
+      assert(frontendManifest.json?.data?.capabilities?.interactiveComponents === true, `${frontendManifest.url} missing interactive component capability`);
       assert(frontendManifest.json?.data?.contract?.schemas?.renderPayload?.includes('content-payload.schema.json'), `${frontendManifest.url} missing render schema reference`);
       assert(frontendManifest.json?.data?.endpoints?.openapi === `/api/sites/${createdSiteId}/openapi`, `${frontendManifest.url} missing OpenAPI endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.seo === `/api/sites/${createdSiteId}/seo`, `${frontendManifest.url} missing SEO endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.sitemap === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${frontendManifest.url} missing sitemap endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.frontendDesign === `/api/sites/${createdSiteId}/frontend-design`, `${frontendManifest.url} missing frontend design endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.frontendDesignInManifest === `/api/sites/${createdSiteId}/manifest#data.site.frontendDesign`, `${frontendManifest.url} missing frontend design contract pointer`);
+      assert(frontendManifest.json?.data?.endpoints?.interactiveComponents === `/api/sites/${createdSiteId}/interactive-components`, `${frontendManifest.url} missing interactive component registry endpoint`);
+      assert(frontendManifest.json?.data?.endpoints?.interactiveRuntimeEvents === `/api/sites/${createdSiteId}/interactive-components/runtime-events`, `${frontendManifest.url} missing interactive runtime event endpoint`);
+      assert(frontendManifest.json?.data?.endpoints?.interactiveComponentsInManifest === `/api/sites/${createdSiteId}/manifest#data.modules.interactiveComponents`, `${frontendManifest.url} missing interactive component manifest pointer`);
       assert(Object.prototype.hasOwnProperty.call(frontendManifest.json?.data?.site || {}, 'frontendDesign'), `${frontendManifest.url} missing site frontend design field`);
       assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-page-template' && template.type === 'page'), `${frontendManifest.url} missing captured page frontend template`);
       assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-form-template' && template.type === 'form'), `${frontendManifest.url} missing captured form frontend template`);
@@ -4872,6 +5703,121 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.formContacts === `/api/sites/${createdSiteId}/forms/{formId}/contacts`, `${frontendManifest.url} missing form contacts endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.commentReport === `/api/sites/${createdSiteId}/comments/{commentId}/report`, `${frontendManifest.url} missing comment report endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.events === `/api/sites/${createdSiteId}/events`, `${frontendManifest.url} missing events endpoint`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.schemaVersion === 'backy.interactive-components.v1', `${frontendManifest.url} missing interactive component contract`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.elementTypes?.includes('interactiveFigure'), `${frontendManifest.url} missing interactiveFigure element type`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.elementTypes?.includes('codeComponent'), `${frontendManifest.url} missing codeComponent element type`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.renderContract?.fallbackRequired === true, `${frontendManifest.url} missing interactive fallback requirement`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.security?.adminApiAccess === false, `${frontendManifest.url} interactive contract must deny admin API access`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("default-src 'none'"), `${frontendManifest.url} missing interactive sandbox CSP contract`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.sandbox?.responseHeaders?.permissionsPolicy?.includes('camera=()'), `${frontendManifest.url} missing interactive sandbox permissions contract`);
+      const publicInteractiveComponents = await request(`/api/sites/${createdSiteId}/interactive-components`);
+      assert(publicInteractiveComponents.response.status === 200, `${publicInteractiveComponents.url} expected 200, got ${publicInteractiveComponents.response.status}`);
+      assert(publicInteractiveComponents.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicInteractiveComponents.url} missing discovery cache scope`);
+      assert(publicInteractiveComponents.response.headers.get('x-backy-schema-version') === 'backy.interactive-component-registry.v1', `${publicInteractiveComponents.url} missing registry schema header`);
+      assert(publicInteractiveComponents.json?.data?.schemaVersion === 'backy.interactive-component-registry.v1', `${publicInteractiveComponents.url} missing registry schema`);
+      assert(publicInteractiveComponents.json?.data?.contract?.schemaVersion === 'backy.interactive-components.v1', `${publicInteractiveComponents.url} missing interactive component contract`);
+      assert(publicInteractiveComponents.json?.data?.contract?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("object-src 'none'"), `${publicInteractiveComponents.url} missing sandbox CSP response header contract`);
+      assert(publicInteractiveComponents.json?.data?.contract?.sandbox?.responseHeaders?.permissionsPolicy?.includes('microphone=()'), `${publicInteractiveComponents.url} missing sandbox permissions response header contract`);
+      assert(publicInteractiveComponents.json?.data?.components?.some((component) => component.componentKey === 'backy.figure.rounds' && component.type === 'interactiveFigure'), `${publicInteractiveComponents.url} missing communication rounds figure component`);
+      for (const componentKey of ['backy.figure.timeline', 'backy.simulation.parameter', 'backy.data.explorer', 'backy.canvas.sandboxed']) {
+        assert(publicInteractiveComponents.json?.data?.components?.some((component) => component.componentKey === componentKey), `${publicInteractiveComponents.url} missing ${componentKey} registry component`);
+      }
+      const timelineInteractiveComponent = publicInteractiveComponents.json?.data?.components?.find((component) => component.componentKey === 'backy.figure.timeline');
+      assert(timelineInteractiveComponent?.controls?.some((control) => control.key === 'density'), `${publicInteractiveComponents.url} missing timeline density control`);
+      const explorerInteractiveComponent = publicInteractiveComponents.json?.data?.components?.find((component) => component.componentKey === 'backy.data.explorer');
+      assert(explorerInteractiveComponent?.allowedDataScopes?.includes('collections'), `${publicInteractiveComponents.url} missing data explorer collection scope`);
+      const canvasInteractiveComponent = publicInteractiveComponents.json?.data?.components?.find((component) => component.componentKey === 'backy.canvas.sandboxed');
+      assert(canvasInteractiveComponent?.runtime?.sandboxUrl?.includes('/interactive-components/backy.canvas.sandboxed/1.0.0/sandbox'), `${publicInteractiveComponents.url} missing canvas sandbox runtime URL`);
+      const sandboxedInteractiveComponent = publicInteractiveComponents.json?.data?.components?.find((component) => component.componentKey === 'backy.custom.sandboxed');
+      assert(sandboxedInteractiveComponent?.renderMode === 'sandbox-iframe', `${publicInteractiveComponents.url} missing sandboxed code component render mode`);
+      assert(sandboxedInteractiveComponent?.runtime?.sandboxUrl?.includes('/interactive-components/backy.custom.sandboxed/1.0.0/sandbox'), `${publicInteractiveComponents.url} missing sandbox runtime URL`);
+      assert(sandboxedInteractiveComponent?.runtime?.postMessageProtocol === 'backy.interactive-component.v1', `${publicInteractiveComponents.url} missing sandbox postMessage protocol`);
+      assert(publicInteractiveComponents.json?.data?.components?.every((component) => component.security?.adminApiAccess === false), `${publicInteractiveComponents.url} interactive registry must deny admin API access`);
+      const contractRegistryComponent = publicInteractiveComponents.json?.data?.components?.find((component) => component.componentKey === createdInteractiveComponentKey);
+      assert(contractRegistryComponent?.source === 'custom', `${publicInteractiveComponents.url} missing approved admin-created custom component`);
+      assert(contractRegistryComponent?.status === 'active', `${publicInteractiveComponents.url} expected approved admin-created component to be active`);
+      assert(contractRegistryComponent?.reviewStatus === undefined, `${publicInteractiveComponents.url} public registry must not expose admin review state`);
+      assert(contractRegistryComponent?.runtime?.sandboxUrl?.includes(`/interactive-components/${createdInteractiveComponentKey}/${createdInteractiveComponentVersion}/sandbox`), `${publicInteractiveComponents.url} missing admin-created sandbox URL`);
+      const sandboxRuntime = await request(sandboxedInteractiveComponent.runtime.sandboxUrl);
+      const sandboxCsp = sandboxRuntime.response.headers.get('content-security-policy') || '';
+      const sandboxPermissionsPolicy = sandboxRuntime.response.headers.get('permissions-policy') || '';
+      const expectedSandboxStatus = sandboxedInteractiveComponent.status === 'active' ? 200 : 403;
+      assert(sandboxRuntime.response.status === expectedSandboxStatus, `${sandboxRuntime.url} expected sandbox status ${expectedSandboxStatus}, got ${sandboxRuntime.response.status}`);
+      assert(sandboxRuntime.response.headers.get('content-type')?.includes('text/html'), `${sandboxRuntime.url} expected HTML sandbox response`);
+      assert(sandboxRuntime.response.headers.get('referrer-policy') === 'no-referrer', `${sandboxRuntime.url} missing no-referrer policy`);
+      assert(sandboxRuntime.response.headers.get('x-content-type-options') === 'nosniff', `${sandboxRuntime.url} missing nosniff header`);
+      assert(sandboxCsp.includes("default-src 'none'"), `${sandboxRuntime.url} missing default-src none CSP`);
+      assert(sandboxCsp.includes("frame-ancestors 'self'"), `${sandboxRuntime.url} missing frame ancestor restriction`);
+      assert(sandboxCsp.includes("base-uri 'none'") && sandboxCsp.includes("form-action 'none'"), `${sandboxRuntime.url} missing CSP base/form restrictions`);
+      assert(sandboxCsp.includes("object-src 'none'") && sandboxCsp.includes("frame-src 'none'") && sandboxCsp.includes("worker-src 'none'"), `${sandboxRuntime.url} missing CSP execution boundary restrictions`);
+      for (const directive of ['camera=()', 'microphone=()', 'geolocation=()', 'payment=()', 'usb=()', 'serial=()', 'clipboard-read=()', 'clipboard-write=()']) {
+        assert(sandboxPermissionsPolicy.includes(directive), `${sandboxRuntime.url} missing sandbox permissions policy directive ${directive}`);
+      }
+      if (sandboxedInteractiveComponent.status === 'active') {
+        assert(sandboxCsp.includes("script-src 'unsafe-inline'"), `${sandboxRuntime.url} missing bootstrap script CSP`);
+        assert(sandboxRuntime.text.includes('backy.interactive-component.ready'), `${sandboxRuntime.url} missing ready lifecycle bootstrap`);
+        assert(sandboxRuntime.text.includes('backy.interactive-component.init'), `${sandboxRuntime.url} missing init lifecycle bootstrap`);
+        assert(sandboxRuntime.text.includes('backy.interactive-component.error'), `${sandboxRuntime.url} missing error lifecycle bootstrap`);
+        assert(sandboxRuntime.text.includes('Waiting for Backy component payload'), `${sandboxRuntime.url} missing safe waiting shell`);
+      } else {
+        assert(sandboxRuntime.response.headers.get('cache-control') === 'no-store', `${sandboxRuntime.url} expected disabled sandbox to be no-store`);
+        assert(!sandboxRuntime.text.includes('backy.interactive-component.init'), `${sandboxRuntime.url} disabled sandbox should not include runtime bootstrap`);
+      }
+      const missingSandboxRuntime = await request(`/api/sites/${createdSiteId}/interactive-components/backy.custom.sandboxed/9.9.9/sandbox`);
+      assert(missingSandboxRuntime.response.status === 404, `${missingSandboxRuntime.url} expected unknown sandbox version 404`);
+      assert(missingSandboxRuntime.response.headers.get('cache-control') === 'no-store', `${missingSandboxRuntime.url} expected unknown sandbox to be no-store`);
+      assert(missingSandboxRuntime.response.headers.get('content-security-policy')?.includes("default-src 'none'"), `${missingSandboxRuntime.url} missing unknown sandbox CSP`);
+      assert(missingSandboxRuntime.response.headers.get('permissions-policy')?.includes('camera=()'), `${missingSandboxRuntime.url} missing unknown sandbox permissions policy`);
+      const contractRegistrySandbox = await request(contractRegistryComponent.runtime.sandboxUrl);
+      assert(contractRegistrySandbox.response.status === 200, `${contractRegistrySandbox.url} expected admin-created sandbox 200, got ${contractRegistrySandbox.response.status}`);
+      assert(contractRegistrySandbox.response.headers.get('content-security-policy')?.includes("default-src 'none'"), `${contractRegistrySandbox.url} missing admin-created sandbox CSP`);
+      assert(contractRegistrySandbox.response.headers.get('permissions-policy')?.includes('microphone=()'), `${contractRegistrySandbox.url} missing admin-created sandbox permissions policy`);
+      assert(contractRegistrySandbox.text.includes('Contract custom figure'), `${contractRegistrySandbox.url} missing admin-created sandbox display name`);
+      const interactiveRuntimeRequestId = 'contract-interactive-runtime-error';
+      const interactiveRuntimeEvent = await request(`/api/sites/${createdSiteId}/interactive-components/runtime-events`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          componentKey: 'backy.custom.sandboxed',
+          version: '1.0.0',
+          elementId: 'contract-code-component',
+          pageId: createdPageId,
+          type: 'backy.interactive-component.error',
+          message: 'Contract smoke sandbox runtime failure',
+          requestId: interactiveRuntimeRequestId,
+        }),
+      });
+      assert(interactiveRuntimeEvent.response.status === 202, `${interactiveRuntimeEvent.url} expected 202, got ${interactiveRuntimeEvent.response.status}`);
+      assert(interactiveRuntimeEvent.json?.data?.recorded === true, `${interactiveRuntimeEvent.url} missing runtime event recorded flag`);
+      const invalidInteractiveRuntimeType = await request(`/api/sites/${createdSiteId}/interactive-components/runtime-events`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          componentKey: 'backy.custom.sandboxed',
+          version: '1.0.0',
+          type: 'backy.interactive-component.unbounded',
+          message: 'Unbounded runtime event must not be stored.',
+        }),
+      });
+      assert(invalidInteractiveRuntimeType.response.status === 400, `${invalidInteractiveRuntimeType.url} expected invalid runtime event type 400`);
+      assert(invalidInteractiveRuntimeType.json?.error?.code === 'INVALID_EVENT_TYPE', `${invalidInteractiveRuntimeType.url} missing invalid runtime event type code`);
+      const unknownInteractiveRuntimeComponent = await request(`/api/sites/${createdSiteId}/interactive-components/runtime-events`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          componentKey: 'backy.unknown.sandboxed',
+          version: '1.0.0',
+          type: 'error',
+          message: 'Unknown runtime component must not be stored.',
+        }),
+      });
+      assert(unknownInteractiveRuntimeComponent.response.status === 404, `${unknownInteractiveRuntimeComponent.url} expected unknown runtime component 404`);
+      assert(unknownInteractiveRuntimeComponent.json?.error?.code === 'COMPONENT_NOT_FOUND', `${unknownInteractiveRuntimeComponent.url} missing unknown runtime component code`);
+      const interactiveRuntimeEvents = await request(`/api/sites/${createdSiteId}/events?kind=interactive-runtime&requestId=${interactiveRuntimeRequestId}`, {
+        headers: withAdminAuth(),
+      });
+      assert(interactiveRuntimeEvents.response.status === 200, `${interactiveRuntimeEvents.url} expected interactive runtime event readback`);
+      assert(interactiveRuntimeEvents.json?.data?.events?.some((event) => event.metadata?.componentKey === 'backy.custom.sandboxed' && event.error === 'Contract smoke sandbox runtime failure'), `${interactiveRuntimeEvents.url} missing interactive runtime event`);
       assert(frontendManifest.json?.data?.modules?.routing?.supportedRouteTypes?.includes('redirect'), `${frontendManifest.url} missing redirect route type support`);
       assert(frontendManifest.json?.data?.modules?.routing?.supportedRouteTypes?.includes('gone'), `${frontendManifest.url} missing gone route type support`);
       assert(frontendManifest.json?.data?.modules?.routing?.redirectRules?.items?.some((rule) => (
@@ -4998,6 +5944,11 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/rss`]?.get?.['x-backy-feed']?.endpoint === `/api/sites/${createdSiteId}/blog/rss`, `${publicOpenApi.url} missing blog RSS feed discovery extension`);
       assert(publicOpenApi.json?.['x-backy']?.delivery?.defaultLocale === 'en', `${publicOpenApi.url} missing delivery locale discovery extension`);
       assert(publicOpenApi.json?.['x-backy']?.delivery?.domains?.some((domain) => domain.type === 'custom' && domain.host === customDomain), `${publicOpenApi.url} missing custom domain discovery extension`);
+      const openApiSandboxOperation = publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/interactive-components/{componentKey}/{version}/sandbox`]?.get;
+      assert(openApiSandboxOperation?.responses?.['200']?.headers?.['Content-Security-Policy'], `${publicOpenApi.url} missing sandbox CSP response header contract`);
+      assert(openApiSandboxOperation?.responses?.['200']?.headers?.['Permissions-Policy'], `${publicOpenApi.url} missing sandbox permissions response header contract`);
+      assert(openApiSandboxOperation?.responses?.['403']?.headers?.['Content-Security-Policy'], `${publicOpenApi.url} missing disabled sandbox CSP response header contract`);
+      assert(publicOpenApi.json?.components?.schemas?.InteractiveComponentManifestContract?.properties?.sandbox?.properties?.responseHeaders?.properties?.contentSecurityPolicy, `${publicOpenApi.url} missing sandbox response header schema`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.get, `${publicOpenApi.url} missing comment blocklist operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.delete, `${publicOpenApi.url} missing comment blocklist delete operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/{commentId}/report`]?.post, `${publicOpenApi.url} missing comment report operation`);
@@ -5936,6 +6887,27 @@ try {
     createdCollectionId = null;
   });
 
+  await record('admin interactive component registry delete removes temporary version', async () => {
+    if (!createdInteractiveComponentKey || !createdInteractiveComponentVersion) {
+      throw new Error('Interactive component registry delete test missing created component');
+    }
+    const componentPath = `/api/admin/sites/${createdSiteId}/interactive-components/${createdInteractiveComponentKey}/${createdInteractiveComponentVersion}`;
+    const removeComponent = await request(componentPath, { method: 'DELETE' });
+    assert(removeComponent.response.status === 200, `${removeComponent.url} expected 200, got ${removeComponent.response.status}`);
+    assert(removeComponent.json?.data?.deleted === true, `${removeComponent.url} expected deleted registry component`);
+    const missingComponent = await request(componentPath);
+    assert(missingComponent.response.status === 404, `${missingComponent.url} expected deleted component to be missing`);
+    const componentDeleteAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=interactiveComponent&entityId=${removeComponent.json?.data?.componentId || ''}&action=interactiveComponent.delete&requestId=${removeComponent.json.requestId}`);
+    assert(componentDeleteAudit.response.status === 200, `${componentDeleteAudit.url} expected interactive component delete audit readback`);
+    if (createdInteractiveNewerVersion) {
+      const removeNewerComponent = await request(`/api/admin/sites/${createdSiteId}/interactive-components/${createdInteractiveComponentKey}/${createdInteractiveNewerVersion}`, { method: 'DELETE' });
+      assert(removeNewerComponent.response.status === 200, `${removeNewerComponent.url} expected newer version delete 200`);
+      createdInteractiveNewerVersion = null;
+    }
+    createdInteractiveComponentKey = null;
+    createdInteractiveComponentVersion = null;
+  });
+
   await record('admin sites delete removes temporary site', async () => {
     const { response, json, url } = await requestOwnerOnly(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' });
     assert(response.status === 200, `${url} expected 200, got ${response.status}`);
@@ -5951,7 +6923,7 @@ try {
     assert(Array.isArray(json?.data?.users), `${url} expected users array`);
   });
 
-  const email = `admin-contract-${Date.now()}@backy.test`;
+  const email = contractEmail(`admin-contract-${Date.now()}`);
   await record('admin users create validates and persists user', async () => {
     const { response, json, url } = await request('/api/admin/users', {
       method: 'POST',
@@ -6003,14 +6975,13 @@ try {
       },
       body: JSON.stringify({
         role: 'editor',
-        status: 'active',
       }),
     });
 
-    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}: ${JSON.stringify(update.json).slice(0, 500)}`);
     assert(update.json?.success === true, `${update.url} expected success envelope`);
     assert(update.json?.data?.user?.role === 'editor', `${update.url} expected editor role`);
-    assert(update.json?.data?.user?.status === 'active', `${update.url} expected active status`);
+    assert(update.json?.data?.user?.status === 'invited', `${update.url} expected invited status to remain under invite-only policy`);
   });
 
   await record('admin users protect last active admin authority', async () => {
@@ -6024,7 +6995,7 @@ try {
       return;
     }
 
-    const safeguardEmail = `admin-safeguard-${Date.now()}@backy.test`;
+    const safeguardEmail = contractEmail(`admin-safeguard-${Date.now()}`);
     const createSafeguard = await request('/api/admin/users', {
       method: 'POST',
       headers: {
@@ -6034,12 +7005,31 @@ try {
         fullName: 'Safeguard Admin',
         email: safeguardEmail,
         role: 'admin',
-        status: 'active',
+        status: 'invited',
       }),
     });
-    assert(createSafeguard.response.status === 201, `${createSafeguard.url} expected 201, got ${createSafeguard.response.status}`);
+    assert(createSafeguard.response.status === 201, `${createSafeguard.url} expected 201, got ${createSafeguard.response.status}: ${JSON.stringify(createSafeguard.json).slice(0, 500)}`);
     createdSafeguardUserId = createSafeguard.json?.data?.user?.id;
     assert(createdSafeguardUserId, `${createSafeguard.url} missing safeguard user id`);
+    const safeguardInvite = await request(`/api/admin/users/${createdSafeguardUserId}/invite-link`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ expiresInMinutes: 60 }),
+    });
+    assert(safeguardInvite.response.status === 200, `${safeguardInvite.url} expected safeguard invite 200, got ${safeguardInvite.response.status}`);
+    const safeguardToken = safeguardInvite.json?.data?.invite?.token;
+    assert(safeguardToken, `${safeguardInvite.url} missing safeguard invite token`);
+    const acceptSafeguard = await fetch(`${baseUrl}/api/admin/auth/accept-invite`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ token: safeguardToken }),
+    });
+    const acceptSafeguardJson = await acceptSafeguard.json().catch(() => ({}));
+    assert(acceptSafeguard.ok && acceptSafeguardJson?.data?.user?.status === 'active', `Safeguard invite accept failed: ${JSON.stringify(acceptSafeguardJson).slice(0, 500)}`);
 
     const adminDetail = await request('/api/admin/users/user-admin');
     originalUserAdminRole = adminDetail.json?.data?.user?.role;
@@ -6122,6 +7112,12 @@ try {
     const { response, json, url } = await request('/api/admin/settings');
     assert(response.status === 200, `${url} expected 200, got ${response.status}`);
     assert(json?.success === true, `${url} expected success envelope`);
+    assert(json?.data?.settings?.schemaVersion === 'backy.admin-settings.v1', `${url} missing workspace settings payload schema version`);
+    assert(json?.data?.settings?.scope?.workspaceSettingsScope === 'global', `${url} missing global workspace settings scope`);
+    assert(json?.data?.settings?.scope?.siteSettingsScope === 'site', `${url} missing site settings scope pointer`);
+    assert(json?.data?.settings?.scope?.siteSettingsEndpointTemplate === '/api/admin/sites/:siteId/settings', `${url} missing site settings endpoint template`);
+    assert(json?.data?.settings?.endpoints?.workspaceSettings === '/api/admin/settings', `${url} missing workspace settings endpoint`);
+    assert(json?.data?.settings?.endpoints?.siteSettings === '/api/admin/sites/:siteId/settings', `${url} missing site settings endpoint`);
     assert(json?.data?.settings?.deliveryMode, `${url} missing deliveryMode`);
     assert(json?.data?.settings?.apiKeys?.publicApiKey, `${url} missing publicApiKey`);
     assert(json?.data?.settings?.apiKeys?.adminApiKey === '', `${url} should not expose adminApiKey to non-owner sessions`);
@@ -6138,6 +7134,130 @@ try {
     assert(!JSON.stringify(json.data.settings.runtimeSupabase).includes('SERVICE_ROLE'), `${url} exposed Supabase secret env names or values`);
     originalDeliveryMode = json.data.settings.deliveryMode;
     originalSettingsIntegrations = json.data.settings.integrations || null;
+  });
+
+  await record('admin settings contract exposes runtime diagnostics and rejects unsafe provider config', async () => {
+    const initial = await request('/api/admin/settings');
+    const settings = initial.json?.data?.settings || {};
+    const integrations = settings.integrations || {};
+    const commerce = integrations.commerce || {};
+    const storage = integrations.storage || {};
+
+    assert(settings.runtimeCommerce, `${initial.url} missing commerce runtime diagnostics`);
+    assert(typeof settings.runtimeCommerce.stripeSecretConfigured === 'boolean', `${initial.url} missing Stripe secret readiness`);
+    assert(settings.runtimeCommerce.stripeApiBaseUrl, `${initial.url} missing Stripe API base URL`);
+    assert(settings.runtimeCommerce.taxJarApiBaseUrl, `${initial.url} missing TaxJar API base URL`);
+    assert(settings.runtimeCommerce.avalaraApiBaseUrl, `${initial.url} missing Avalara API base URL`);
+    assert(settings.runtimeCommerce.easyPostApiBaseUrl, `${initial.url} missing EasyPost API base URL`);
+    assert(settings.runtimeCommerce.shippoApiBaseUrl, `${initial.url} missing Shippo API base URL`);
+    assert(settings.runtimeCommerce.etsyApiBaseUrl, `${initial.url} missing Etsy API base URL`);
+    assert(typeof settings.runtimeCommerce.etsyAccessTokenConfigured === 'boolean', `${initial.url} missing Etsy access token readiness`);
+    assert(typeof settings.runtimeCommerce.etsyApiKeyConfigured === 'boolean', `${initial.url} missing Etsy API key readiness`);
+    assert(typeof settings.runtimeCommerce.etsyShopConfigured === 'boolean', `${initial.url} missing Etsy shop readiness`);
+    assert(settings.runtimeCommerce.paymentProvider, `${initial.url} missing payment provider summary`);
+    assert(settings.runtimeCommerce.taxProvider, `${initial.url} missing tax provider summary`);
+    assert(settings.runtimeCommerce.shippingProvider, `${initial.url} missing shipping provider summary`);
+    assert(settings.runtimeCommerce.discountProvider, `${initial.url} missing discount provider summary`);
+    assert(Array.isArray(settings.runtimeCommerce.missing), `${initial.url} missing commerce runtime missing list`);
+    assert(!JSON.stringify(settings.runtimeCommerce).includes('whsec_'), `${initial.url} exposed raw webhook secret material`);
+    assert(settings.runtimeInteractiveComponents, `${initial.url} missing interactive component runtime diagnostics`);
+    assert(typeof settings.runtimeInteractiveComponents.registryConfigured === 'boolean', `${initial.url} missing interactive registry readiness`);
+    assert(typeof settings.runtimeInteractiveComponents.configured === 'boolean', `${initial.url} missing interactive runtime configured flag`);
+    assert(Array.isArray(settings.runtimeInteractiveComponents.missing), `${initial.url} missing interactive runtime missing list`);
+
+    const rawCommerceSecret = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        integrations: {
+          ...integrations,
+          commerce: {
+            ...commerce,
+            providerWebhookSecretId: 'whsec_contract_raw_secret_should_not_persist',
+          },
+        },
+      }),
+    });
+    assert(rawCommerceSecret.response.status === 400, `${rawCommerceSecret.url} expected raw commerce secret rejection`);
+    assert(rawCommerceSecret.json?.error?.code === 'SECRET_REFERENCE_REQUIRED', `${rawCommerceSecret.url} expected SECRET_REFERENCE_REQUIRED`);
+
+    const rawStorageSecret = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        integrations: {
+          ...integrations,
+          storage: {
+            ...storage,
+            supabaseKeySecretRef: 'sk_live_contract_storage_secret_should_not_persist',
+          },
+        },
+      }),
+    });
+    assert(rawStorageSecret.response.status === 400, `${rawStorageSecret.url} expected raw storage secret rejection`);
+    assert(rawStorageSecret.json?.error?.code === 'SECRET_REFERENCE_REQUIRED', `${rawStorageSecret.url} expected SECRET_REFERENCE_REQUIRED`);
+
+    const invalidCatalogEndpoint = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        integrations: {
+          ...integrations,
+          commerce: {
+            ...commerce,
+            catalogSyncProvider: 'http',
+            catalogSyncProviderUrl: 'not-a-valid-url',
+          },
+        },
+      }),
+    });
+    assert(invalidCatalogEndpoint.response.status === 400, `${invalidCatalogEndpoint.url} expected invalid catalog endpoint rejection`);
+    assert(invalidCatalogEndpoint.json?.error?.code === 'VALIDATION_ERROR', `${invalidCatalogEndpoint.url} expected VALIDATION_ERROR`);
+
+    const invalidSubscriptionEndpoint = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        integrations: {
+          ...integrations,
+          commerce: {
+            ...commerce,
+            subscriptionActionProvider: 'http',
+            subscriptionActionProviderUrl: 'not-a-valid-url',
+          },
+        },
+      }),
+    });
+    assert(invalidSubscriptionEndpoint.response.status === 400, `${invalidSubscriptionEndpoint.url} expected invalid subscription endpoint rejection`);
+    assert(invalidSubscriptionEndpoint.json?.error?.code === 'VALIDATION_ERROR', `${invalidSubscriptionEndpoint.url} expected VALIDATION_ERROR`);
+
+    const invalidAuthPolicy = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        auth: {
+          minPasswordLength: 4,
+        },
+      }),
+    });
+    assert(invalidAuthPolicy.response.status === 400, `${invalidAuthPolicy.url} expected invalid auth policy rejection`);
+    assert(invalidAuthPolicy.json?.error?.code === 'VALIDATION_ERROR', `${invalidAuthPolicy.url} expected VALIDATION_ERROR`);
+
+    const after = await request('/api/admin/settings');
+    assert(after.json?.data?.settings?.integrations?.commerce?.providerWebhookSecretId === commerce.providerWebhookSecretId, `${after.url} raw commerce secret rejection mutated saved settings`);
+    assert(after.json?.data?.settings?.integrations?.storage?.supabaseKeySecretRef === storage.supabaseKeySecretRef, `${after.url} raw storage secret rejection mutated saved settings`);
+    assert(after.json?.data?.settings?.integrations?.commerce?.catalogSyncProviderUrl === commerce.catalogSyncProviderUrl, `${after.url} invalid catalog endpoint rejection mutated saved settings`);
+    assert(after.json?.data?.settings?.integrations?.commerce?.subscriptionActionProviderUrl === commerce.subscriptionActionProviderUrl, `${after.url} invalid subscription endpoint rejection mutated saved settings`);
   });
 
   await record('admin settings update validates delivery mode', async () => {
@@ -6316,6 +7436,103 @@ try {
     assert(auditEntry?.metadata?.scope === 'all', `${audit.url} missing key regeneration audit scope`);
     assert(auditEntry?.before?.apiKeys?.redacted === true, `${audit.url} expected key audit api keys to be redacted`);
     assert(auditEntry?.after?.apiKeys?.adminApiKey === undefined, `${audit.url} leaked regenerated admin api key in audit snapshot`);
+  });
+
+  await record('admin settings service keys issue authenticate and revoke without exposing hashes', async () => {
+    const issue = await requestOwnerOnly('/api/admin/settings', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'issue-admin-api-key',
+        label: `Contract service key ${unique}`,
+      }),
+    });
+    assert(issue.response.status === 200, `${issue.url} expected service key issue 200, got ${issue.response.status}`);
+    const issued = issue.json?.data?.issuedKey;
+    assert(issued?.id, `${issue.url} missing issued service key id`);
+    assert(typeof issued?.adminApiKey === 'string' && issued.adminApiKey.startsWith('sk_srv_'), `${issue.url} missing one-time raw service key`);
+    assert(issue.text.includes(issued.adminApiKey), `${issue.url} should expose the raw service key only in the issue response`);
+    assert(!JSON.stringify(issue.json?.data?.settings || {}).includes(issued.adminApiKey), `${issue.url} leaked raw service key in persisted settings payload`);
+    assert(!JSON.stringify(issue.json?.data?.settings || {}).includes('"keyHash"'), `${issue.url} leaked service key hash in settings payload`);
+
+    const issueAudit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=${encodeURIComponent('settings.api_keys.issue')}&requestId=${issue.json.requestId}`);
+    assert(issueAudit.response.status === 200, `${issueAudit.url} expected service key issue audit read`);
+    const issueAuditEntry = issueAudit.json?.data?.logs?.find((entry) => (
+      entry.entity === 'settings' &&
+      entry.entityId === 'platform' &&
+      entry.action === 'settings.api_keys.issue' &&
+      entry.requestId === issue.json.requestId
+    ));
+    assert(issueAuditEntry?.metadata?.keyId === issued.id, `${issueAudit.url} missing service key issue audit key id`);
+    assert(!JSON.stringify(issueAuditEntry || {}).includes(issued.adminApiKey), `${issueAudit.url} leaked raw service key in issue audit`);
+    assert(!JSON.stringify(issueAuditEntry || {}).includes('"keyHash"'), `${issueAudit.url} leaked service key hash in issue audit`);
+
+    const serviceRead = await request('/api/admin/settings', {
+      headers: {
+        'x-backy-admin-key': issued.adminApiKey,
+      },
+    });
+    assert(serviceRead.response.status === 200, `${serviceRead.url} expected issued service key to authenticate settings read`);
+    assert(serviceRead.json?.data?.settings?.apiKeys?.adminApiKey === '', `${serviceRead.url} service key must not expose owner admin key`);
+
+    const ownerReadAfterUse = await requestOwnerOnly('/api/admin/settings');
+    const activeGrant = ownerReadAfterUse.json?.data?.settings?.auth?.apiKeyServiceKeys?.find((grant) => grant.id === issued.id);
+    assert(activeGrant?.status === 'active', `${ownerReadAfterUse.url} missing active service key grant`);
+    assert(activeGrant?.lastUsedAt, `${ownerReadAfterUse.url} did not persist service key last-used metadata`);
+    assert(activeGrant?.keyHash === undefined, `${ownerReadAfterUse.url} exposed service key hash after use`);
+    assert(!JSON.stringify(ownerReadAfterUse.json?.data?.settings || {}).includes(issued.adminApiKey), `${ownerReadAfterUse.url} leaked raw service key after use`);
+
+    const ownerOnlyDenied = await request('/api/admin/settings', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-backy-admin-key': issued.adminApiKey,
+      },
+      body: JSON.stringify({
+        action: 'regenerate-api-keys',
+        scope: 'admin',
+      }),
+    });
+    assert(ownerOnlyDenied.response.status === 403, `${ownerOnlyDenied.url} expected service key owner-only denial`);
+    assert(ownerOnlyDenied.json?.error?.code === 'FORBIDDEN_PERMISSION', `${ownerOnlyDenied.url} expected FORBIDDEN_PERMISSION`);
+
+    const revoke = await requestOwnerOnly('/api/admin/settings', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'revoke-admin-api-key',
+        keyId: issued.id,
+      }),
+    });
+    assert(revoke.response.status === 200, `${revoke.url} expected service key revoke 200, got ${revoke.response.status}`);
+    const revokedGrant = revoke.json?.data?.settings?.auth?.apiKeyServiceKeys?.find((grant) => grant.id === issued.id);
+    assert(revokedGrant?.status === 'revoked' && revokedGrant?.revokedAt, `${revoke.url} did not mark service key revoked`);
+    assert(revokedGrant?.keyHash === undefined, `${revoke.url} exposed service key hash after revoke`);
+    assert(!JSON.stringify(revoke.json?.data?.settings || {}).includes(issued.adminApiKey), `${revoke.url} leaked raw service key after revoke`);
+
+    const revokeAudit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=${encodeURIComponent('settings.api_keys.revoke')}&requestId=${revoke.json.requestId}`);
+    assert(revokeAudit.response.status === 200, `${revokeAudit.url} expected service key revoke audit read`);
+    const revokeAuditEntry = revokeAudit.json?.data?.logs?.find((entry) => (
+      entry.entity === 'settings' &&
+      entry.entityId === 'platform' &&
+      entry.action === 'settings.api_keys.revoke' &&
+      entry.requestId === revoke.json.requestId
+    ));
+    assert(revokeAuditEntry?.metadata?.keyId === issued.id, `${revokeAudit.url} missing service key revoke audit key id`);
+    assert(!JSON.stringify(revokeAuditEntry || {}).includes(issued.adminApiKey), `${revokeAudit.url} leaked raw service key in revoke audit`);
+    assert(!JSON.stringify(revokeAuditEntry || {}).includes('"keyHash"'), `${revokeAudit.url} leaked service key hash in revoke audit`);
+
+    const rejectedAfterRevoke = await request('/api/admin/settings', {
+      headers: {
+        'x-backy-admin-key': issued.adminApiKey,
+      },
+    });
+    assert(rejectedAfterRevoke.response.status === 401, `${rejectedAfterRevoke.url} expected revoked service key rejection`);
+    assert(rejectedAfterRevoke.json?.error?.code === 'UNAUTHORIZED', `${rejectedAfterRevoke.url} expected UNAUTHORIZED after revoke`);
   });
 
   await cleanup();
