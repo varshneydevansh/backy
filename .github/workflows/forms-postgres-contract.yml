@@ -60,7 +60,7 @@ jobs:
       - name: Require disposable Postgres or Supabase database URL
         run: |
           if [ -z "${BACKY_DATABASE_URL:-${DATABASE_URL:-}}" ]; then
-            echo "::error::Set the BACKY_DATABASE_URL or DATABASE_URL repository secret to a disposable Supabase/Postgres database before running this workflow."
+            echo "::error::Set the BACKY_DATABASE_URL or DATABASE_URL repository secret to a disposable migrated Supabase/Postgres database before running this workflow."
             exit 1
           fi
           if [ "${{ inputs.disposable_database_confirmed }}" != "true" ]; then

@@ -201,6 +201,7 @@ if (workflow) {
     'Require disposable Postgres or Supabase database URL',
     'BACKY_DATABASE_URL or DATABASE_URL',
     'I confirm BACKY_DATABASE_URL or DATABASE_URL points to a disposable migrated Supabase/Postgres database.',
+    'Set the BACKY_DATABASE_URL or DATABASE_URL repository secret to a disposable migrated Supabase/Postgres database before running this workflow.',
     'inputs.disposable_database_confirmed',
     'Confirm disposable_database_confirmed=true',
     'npm run ci:forms-postgres',
