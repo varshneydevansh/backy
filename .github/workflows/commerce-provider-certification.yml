@@ -89,6 +89,7 @@ on:
           - square
           - adyen
           - mollie
+          - razorpay
           - http
       certify_webhooks:
         description: Verify commerce webhook secret resolution is ready.

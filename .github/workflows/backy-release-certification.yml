@@ -142,6 +142,7 @@ on:
           - square
           - adyen
           - mollie
+          - razorpay
           - http
       webhook_provider:
         description: Expected provider-managed webhook family for Commerce certification.
