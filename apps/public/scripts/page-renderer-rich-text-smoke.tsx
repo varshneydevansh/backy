@@ -1,5 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   PageRenderer,
   applyResponsiveOverrides,
@@ -15,6 +18,9 @@ const assert = (condition: unknown, message: string) => {
     throw new Error(message);
   }
 };
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pageRendererSource = fs.readFileSync(path.resolve(__dirname, '../src/components/PageRenderer.tsx'), 'utf8');
 
 const content: PageContent = {
   canvasSize: { width: 900, height: 360 },
@@ -939,6 +945,13 @@ assert(html.includes('data-backy-render-scale="1.000"'), `Initial renderer scale
 assert(resolveRendererBreakpoint(390) === 'mobile', '390px did not resolve to mobile breakpoint');
 assert(resolveRendererBreakpoint(768) === 'tablet', '768px did not resolve to tablet breakpoint');
 assert(resolveRendererBreakpoint(1200) === 'desktop', '1200px did not resolve to desktop breakpoint');
+assert(pageRendererSource.includes('const RENDER_BREAKPOINT_CANVAS_SIZE'), 'PageRenderer must define public breakpoint canvas sizes');
+assert(pageRendererSource.includes("tablet: { width: 768, height: 1024 }"), 'PageRenderer tablet canvas size must match editor tablet canvas');
+assert(pageRendererSource.includes("mobile: { width: 375, height: 812 }"), 'PageRenderer mobile canvas size must match editor mobile canvas');
+assert(pageRendererSource.includes('const activeCanvasSize = activeBreakpoint ==='), 'PageRenderer must derive active canvas size from the active breakpoint');
+assert(pageRendererSource.includes('const nextCanvasSize = nextBreakpoint ==='), 'PageRenderer scale calculation must use the next breakpoint canvas size');
+assert(pageRendererSource.includes('width: activeCanvasSize.width'), 'PageRenderer canvas width must use the active breakpoint canvas size');
+assert(pageRendererSource.includes('minHeight: activeCanvasSize.height'), 'PageRenderer canvas height must use the active breakpoint canvas size');
 const responsiveElements = applyResponsiveOverrides([
   {
     id: 'responsive-root',
@@ -1238,6 +1251,7 @@ console.log(JSON.stringify({
     styledForm: true,
     styledRepeater: true,
     responsiveBreakpoints: true,
+    responsiveBreakpointCanvasSize: true,
     authoredDynamicTemplate: true,
   },
 }, null, 2));

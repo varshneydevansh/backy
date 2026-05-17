@@ -285,7 +285,7 @@ const requestRaw = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -293,9 +293,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_EDITOR_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -1160,6 +1170,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
 }))});
 `;
 
+const seedBrowserSessionCookie = async (client) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: apiAdminSessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
+
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -1319,6 +1341,7 @@ const openAuthenticatedEditorTab = async (parentClient, url) => {
   await client.send('Page.enable');
   await client.send('DOM.enable');
   await client.send('Log.enable');
+  await seedBrowserSessionCookie(client);
   await client.send('Page.addScriptToEvaluateOnNewDocument', {
     source: authStorageScript(),
   });
@@ -1536,6 +1559,35 @@ const scrollElementIntoView = async (client, elementId) => {
         left: 0,
         behavior: 'instant',
       });
+    }
+  })()`);
+  await sleep(120);
+};
+
+const scrollPublicElementIntoVerticalView = async (client, elementId) => {
+  await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!node) return;
+
+    const rect = node.getBoundingClientRect();
+    const nextTop = Math.max(0, window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2);
+    window.scrollTo({ top: nextTop, left: 0, behavior: 'instant' });
+
+    const pageScroller = document.scrollingElement || document.documentElement;
+    if (pageScroller) {
+      pageScroller.scrollLeft = 0;
+    }
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollLeft = 0;
+
+    let scroller = node.parentElement;
+    while (scroller) {
+      const style = window.getComputedStyle(scroller);
+      const canScrollX = scroller.scrollWidth > scroller.clientWidth && /(auto|scroll)/.test(style.overflowX);
+      if (canScrollX) {
+        scroller.scrollLeft = 0;
+      }
+      scroller = scroller.parentElement;
     }
   })()`);
   await sleep(120);
@@ -2192,6 +2244,30 @@ ${interactiveButtonPredicate}
   }
 
   throw new Error(`Unable to click enabled button with aria-label ${ariaLabel}: ${JSON.stringify(lastState)}`);
+};
+
+const waitForEditorBreakpoint = async (client, breakpoint) => {
+  const label = `${breakpoint.charAt(0).toUpperCase()}${breakpoint.slice(1)} canvas`;
+  let lastState = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const labels = Array.from(document.querySelectorAll('span'))
+        .map((node) => (node.textContent || '').trim())
+        .filter(Boolean);
+      return {
+        active: labels.includes(${JSON.stringify(label)}),
+        labels: labels.filter((text) => /^(Desktop|Tablet|Mobile) canvas$/.test(text)),
+      };
+    })()`);
+
+    if (lastState?.active) {
+      return lastState;
+    }
+
+    await sleep(100);
+  }
+
+  throw new Error(`Editor did not switch to ${breakpoint} breakpoint: ${JSON.stringify(lastState)}`);
 };
 
 const setLayoutNumberInput = async (client, label, value) => {
@@ -3212,8 +3288,53 @@ const requestPagePreview = async (pageId) => {
 };
 
 const assertPublicResponsiveVisualGeometry = async (client, elementId, expected, label) => {
-  await scrollElementIntoView(client, elementId);
-  const box = await getPublicElementBox(client, elementId);
+  await scrollPublicElementIntoVerticalView(client, elementId);
+  let box = null;
+  let hitTest = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    box = await getPublicElementBox(client, elementId);
+    hitTest = await evaluate(client, `(() => {
+      const node = document.querySelector('[data-element-id="${elementId}"]');
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const hit = document.elementFromPoint(centerX, centerY);
+      const owner = hit?.closest?.('[data-element-id]');
+      return {
+        centerX,
+        centerY,
+        hitElementId: owner?.getAttribute('data-element-id') || null,
+        hitInsideElement: Boolean(hit && node.contains(hit)),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        visible: rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight,
+        breakpoint: window.innerWidth <= 639 ? 'mobile' : window.innerWidth <= 1023 ? 'tablet' : 'desktop',
+        renderBreakpoint: document.querySelector('[data-backy-render-breakpoint]')?.getAttribute('data-backy-render-breakpoint') || '',
+        renderScale: document.querySelector('[data-backy-render-scale]')?.getAttribute('data-backy-render-scale') || '',
+        canvasScale: document.querySelector('[data-backy-canvas-scale]')?.getAttribute('data-backy-canvas-scale') || '',
+      };
+    })()`);
+    if (box) {
+      const cssX = parseCssPixel(box.left);
+      const cssWidth = parseCssPixel(box.cssWidth);
+      if (
+        cssX !== null &&
+        cssWidth !== null &&
+        Math.abs(cssX - expected.x) <= 1 &&
+        Math.abs(cssWidth - expected.width) <= 1 &&
+        hitTest?.visible === true &&
+        hitTest.centerX >= 0 &&
+        hitTest.centerY >= 0 &&
+        hitTest.centerX <= hitTest.viewportWidth &&
+        hitTest.centerY <= hitTest.viewportHeight &&
+        hitTest.hitInsideElement === true
+      ) {
+        break;
+      }
+    }
+    await sleep(100);
+  }
   assert(box, `${label}: missing public rendered element ${elementId}`);
 
   const cssX = parseCssPixel(box.left);
@@ -3221,25 +3342,6 @@ const assertPublicResponsiveVisualGeometry = async (client, elementId, expected,
   const scaleX = getVisualScale(box, 'x');
   const visualCanvasX = getCanvasVisualX(box);
   const visualCanvasWidth = scaleX ? box.width / scaleX : box.width;
-  const hitTest = await evaluate(client, `(() => {
-    const node = document.querySelector('[data-element-id="${elementId}"]');
-    if (!node) return null;
-    const rect = node.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const hit = document.elementFromPoint(centerX, centerY);
-    const owner = hit?.closest?.('[data-element-id]');
-    return {
-      centerX,
-      centerY,
-      hitElementId: owner?.getAttribute('data-element-id') || null,
-      hitInsideElement: Boolean(hit && node.contains(hit)),
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      visible: rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight,
-      breakpoint: window.innerWidth <= 639 ? 'mobile' : window.innerWidth <= 1023 ? 'tablet' : 'desktop',
-    };
-  })()`);
 
   assert(
     cssX !== null &&
@@ -3407,10 +3509,12 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
 
   await selectLayerById(client, elementId);
   await clickButtonByAriaLabel(client, 'Desktop canvas');
+  await waitForEditorBreakpoint(client, 'desktop');
   await selectLayerById(client, elementId);
   const desktopBefore = (await readEditorElementState(client, [elementId]))[elementId];
   assert(desktopBefore, `Unable to read current desktop editor state before responsive edit: ${elementId}`);
   await clickButtonByAriaLabel(client, breakpointCanvasLabel);
+  await waitForEditorBreakpoint(client, breakpoint);
   await selectLayerById(client, elementId);
   await setLayoutNumberInput(client, 'X', expectedBreakpointX);
   await setLayoutNumberInput(client, 'Width', expectedBreakpointWidth);
@@ -3527,7 +3631,14 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   );
 
   await clickButtonByAriaLabel(client, 'Desktop canvas');
-  const desktopAfter = await readEditorElementState(client, [elementId]);
+  await waitForEditorBreakpoint(client, 'desktop');
+  const desktopAfterForElement = await waitForElementState(
+    client,
+    elementId,
+    (state) => state.x === Math.round(desktopBefore.x) && state.width === Math.round(desktopBefore.width),
+    `Desktop canvas did not retain base layout after ${breakpoint} override`,
+  );
+  const desktopAfter = { [elementId]: desktopAfterForElement };
   assert(
     desktopAfter[elementId].x === Math.round(desktopBefore.x) &&
       desktopAfter[elementId].width === Math.round(desktopBefore.width),
@@ -3541,6 +3652,7 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   );
 
   await clickButtonByAriaLabel(client, breakpointCanvasLabel);
+  await waitForEditorBreakpoint(client, breakpoint);
   const breakpointLayerAfter = await readLayerActionState(client, elementId);
   if (testLayerOverride) {
     assert(
@@ -13420,6 +13532,7 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await seedBrowserSessionCookie(client);
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(),
     });
@@ -13732,13 +13845,25 @@ const main = async () => {
           expectedWidth: 320,
           testLayerOverride: false,
         }),
+        columnsMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-columns', {
+          breakpoint: 'mobile',
+          expectedX: 18,
+          expectedWidth: 330,
+          testLayerOverride: false,
+        }),
+        columnsTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-columns', {
+          breakpoint: 'tablet',
+          expectedX: 72,
+          expectedWidth: 420,
+          testLayerOverride: false,
+        }),
       };
 
       let reloadClient = null;
       let reloadedResponsiveEditing = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image', 'smoke-box']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-columns']);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
             reloadClient,
@@ -13806,6 +13931,28 @@ const main = async () => {
               testLayerOverride: false,
             },
           ),
+          columnsMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-columns',
+            {
+              breakpoint: 'mobile',
+              expectedX: 18,
+              expectedWidth: 330,
+              testLayerOverride: false,
+            },
+          ),
+          columnsTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-columns',
+            {
+              breakpoint: 'tablet',
+              expectedX: 72,
+              expectedWidth: 420,
+              testLayerOverride: false,
+            },
+          ),
         };
       } finally {
         if (reloadClient) {
@@ -13830,7 +13977,11 @@ const main = async () => {
           reloadedResponsiveEditing.boxMobile.breakpointAfter.x === responsiveEditing.boxMobile.breakpointAfter.x &&
           reloadedResponsiveEditing.boxMobile.breakpointAfter.width === responsiveEditing.boxMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.boxTablet.breakpointAfter.x === responsiveEditing.boxTablet.breakpointAfter.x &&
-          reloadedResponsiveEditing.boxTablet.breakpointAfter.width === responsiveEditing.boxTablet.breakpointAfter.width,
+          reloadedResponsiveEditing.boxTablet.breakpointAfter.width === responsiveEditing.boxTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.columnsMobile.breakpointAfter.x === responsiveEditing.columnsMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.columnsMobile.breakpointAfter.width === responsiveEditing.columnsMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.columnsTablet.breakpointAfter.x === responsiveEditing.columnsTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.columnsTablet.breakpointAfter.width === responsiveEditing.columnsTablet.breakpointAfter.width,
         `Responsive smoke reload did not hydrate saved overrides: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
       );
 
@@ -13849,6 +14000,22 @@ const main = async () => {
           elementId: 'smoke-box',
           expectedX: 118,
           expectedWidth: 320,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'columnsMobile',
+          label: 'Public mobile columns responsive geometry',
+          elementId: 'smoke-columns',
+          expectedX: 18,
+          expectedWidth: 330,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'columnsTablet',
+          label: 'Public tablet columns responsive geometry',
+          elementId: 'smoke-columns',
+          expectedX: 72,
+          expectedWidth: 420,
           viewport: { width: 820, height: 1024 },
         },
       ]);

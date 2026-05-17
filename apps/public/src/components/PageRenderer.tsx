@@ -90,6 +90,12 @@ export interface CanvasElement {
 
 type RenderBreakpoint = 'desktop' | 'tablet' | 'mobile';
 
+const RENDER_BREAKPOINT_CANVAS_SIZE: Record<RenderBreakpoint, { width: number; height: number }> = {
+  desktop: { width: 1200, height: 800 },
+  tablet: { width: 768, height: 1024 },
+  mobile: { width: 375, height: 812 },
+};
+
 interface ResponsiveElementOverride {
   x?: number;
   y?: number;
@@ -4648,6 +4654,9 @@ export function PageRenderer({
     () => applyResponsiveOverrides(sourceElements, activeBreakpoint),
     [activeBreakpoint, sourceElements],
   );
+  const activeCanvasSize = activeBreakpoint === 'desktop'
+    ? canvasSize
+    : RENDER_BREAKPOINT_CANVAS_SIZE[activeBreakpoint];
 
   useEffect(() => {
     const container = viewportRef.current;
@@ -4660,8 +4669,12 @@ export function PageRenderer({
       const windowViewportWidth = window.innerWidth || Number.POSITIVE_INFINITY;
       const viewportWidth = Math.floor(Math.min(visualViewportWidth, windowViewportWidth, container.clientWidth));
       const availableWidth = Math.max(320, Math.min(container.clientWidth, viewportWidth) - 24);
-      setActiveBreakpoint(resolveRendererBreakpoint(availableWidth));
-      const ratio = availableWidth / Math.max(canvasSize.width, 1);
+      const nextBreakpoint = resolveRendererBreakpoint(availableWidth);
+      const nextCanvasSize = nextBreakpoint === 'desktop'
+        ? canvasSize
+        : RENDER_BREAKPOINT_CANVAS_SIZE[nextBreakpoint];
+      setActiveBreakpoint(nextBreakpoint);
+      const ratio = availableWidth / Math.max(nextCanvasSize.width, 1);
       const nextScale = Math.max(0.32, Math.min(1, ratio));
       setScale(nextScale);
     };
@@ -4681,7 +4694,7 @@ export function PageRenderer({
     };
   }, [canvasSize.width]);
 
-  const styleHeight = Math.round(canvasSize.height * scale);
+  const styleHeight = Math.round(activeCanvasSize.height * scale);
 
   const viewportStyle: React.CSSProperties = {
     width: '100%',
@@ -4695,15 +4708,15 @@ export function PageRenderer({
 
   const canvasFrameStyle: React.CSSProperties = {
     position: 'relative',
-    width: Math.round(canvasSize.width * scale),
-    minHeight: Math.round(canvasSize.height * scale),
+    width: Math.round(activeCanvasSize.width * scale),
+    minHeight: Math.round(activeCanvasSize.height * scale),
     flex: '0 0 auto',
   };
 
   const canvasStyle: React.CSSProperties = {
     position: 'relative',
-    width: canvasSize.width,
-    minHeight: canvasSize.height,
+    width: activeCanvasSize.width,
+    minHeight: activeCanvasSize.height,
     transform: `scale(${scale})`,
     transformOrigin: 'top left',
     transition: 'transform 140ms ease',

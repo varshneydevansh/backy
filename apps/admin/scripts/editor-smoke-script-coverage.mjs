@@ -93,6 +93,33 @@ const missingTableRangeSmokeSnippets = collectMissingSnippets(smokeSource, [
   'Persisted multi-cell table border color missing',
   'Persisted multi-cell table vertical alignment missing',
 ]);
+const missingResponsiveSmokeSnippets = collectMissingSnippets(smokeSource, [
+  'const waitForEditorBreakpoint = async (client, breakpoint) => {',
+  "await waitForEditorBreakpoint(client, 'desktop');",
+  'await waitForEditorBreakpoint(client, breakpoint);',
+  "await clickButtonByAriaLabel(client, 'Desktop canvas');",
+  'await clickButtonByAriaLabel(client, breakpointCanvasLabel);',
+  "columnsMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-columns'",
+  "columnsTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-columns'",
+  "await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-columns']);",
+  'reloadedResponsiveEditing.columnsMobile.breakpointAfter.x === responsiveEditing.columnsMobile.breakpointAfter.x',
+  'reloadedResponsiveEditing.columnsTablet.breakpointAfter.width === responsiveEditing.columnsTablet.breakpointAfter.width',
+  "key: 'columnsMobile'",
+  "label: 'Public mobile columns responsive geometry'",
+  "key: 'columnsTablet'",
+  "label: 'Public tablet columns responsive geometry'",
+]);
+const missingEditorMfaLoginSnippets = collectMissingSnippets(smokeSource, [
+  'const login = (twoFactorCode) => fetch',
+  'BACKY_EDITOR_SMOKE_MFA_CODE',
+  'BACKY_ADMIN_MFA_CODE',
+  'BACKY_ADMIN_2FA_CODE',
+  "payload.error?.code === 'MFA_REQUIRED'",
+  'response = await login(smokeMfaCode);',
+  'const seedBrowserSessionCookie = async (client) => {',
+  "name: 'backy_admin_session'",
+  'await seedBrowserSessionCookie(client);',
+]);
 const tableCellPathReaderCount = countOccurrences(activeEditorContextSource, 'const cellPaths = getSelectedTableCellPaths(editor);');
 const tableCellPathLoopCount = countOccurrences(activeEditorContextSource, 'for (const cellPath of cellPaths) {');
 const missingTableStyleSetterGuards = [
@@ -106,6 +133,8 @@ if (
   missingComponentScripts.length ||
   missingTableRangeSourceSnippets.length ||
   missingTableRangeSmokeSnippets.length ||
+  missingResponsiveSmokeSnippets.length ||
+  missingEditorMfaLoginSnippets.length ||
   missingTableStyleSetterGuards.length
 ) {
   console.error(JSON.stringify({
@@ -115,6 +144,8 @@ if (
     missingComponentScripts,
     missingTableRangeSourceSnippets,
     missingTableRangeSmokeSnippets,
+    missingResponsiveSmokeSnippets,
+    missingEditorMfaLoginSnippets,
     missingTableStyleSetterGuards,
   }, null, 2));
   process.exit(1);
@@ -127,4 +158,6 @@ console.log(JSON.stringify({
   editorWorkflowScriptCount: editorScripts.length - workflowExclusions.size,
   tableRangeSourceSnippets: 14,
   tableRangeSmokeSnippets: 10,
+  responsiveSmokeSnippets: 14,
+  editorMfaLoginSnippets: 9,
 }, null, 2));
