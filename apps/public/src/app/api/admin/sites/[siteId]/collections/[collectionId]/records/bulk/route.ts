@@ -4,22 +4,26 @@
  * POST /api/admin/sites/[siteId]/collections/[collectionId]/records/bulk
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import type { BackyJsonObject, PublishStatus } from '@backy-cms/core';
+import { NextRequest, NextResponse } from "next/server";
+import type { BackyJsonObject, PublishStatus, Site } from "@backy-cms/core";
 import {
   deleteAdminCollectionRecord,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
   updateAdminCollectionRecord,
-} from '@/lib/backyStore';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+} from "@/lib/backyStore";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { requireCommerceCollectionAccess } from "@/lib/adminCommerceCollectionAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -44,40 +48,58 @@ interface CollectionRecordAuditSource {
   publishedAt?: string | null;
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
-  NextResponse.json({ success: false, requestId, error: { code, message, details } }, { status })
-);
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: unknown,
+) =>
+  NextResponse.json(
+    { success: false, requestId, error: { code, message, details } },
+    { status },
+  );
 
-const toRecord = (value: unknown): Record<string, unknown> => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-);
+const toRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const parseRecordIds = (value: unknown): string[] => (
+const parseRecordIds = (value: unknown): string[] =>
   Array.isArray(value)
-    ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0))]
-    : []
-);
+    ? [
+        ...new Set(
+          value.filter(
+            (item): item is string =>
+              typeof item === "string" && item.trim().length > 0,
+          ),
+        ),
+      ]
+    : [];
 
-const parseRecordStatus = (value: unknown): PublishStatus | null => (
-  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+const parseRecordStatus = (value: unknown): PublishStatus | null =>
+  value === "draft" ||
+  value === "published" ||
+  value === "scheduled" ||
+  value === "archived"
     ? value
-    : null
-);
+    : null;
 
 const collectionRecordAuditMetadata = (
   collection: CollectionAuditSource,
@@ -117,11 +139,76 @@ const bulkRecordAuditMetadata = (
   changedFields: input.changedFields || [],
 });
 
+const deliverCollectionRecordBulkWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  collection: CollectionAuditSource;
+  action:
+    | "collectionRecord.bulk.deleted"
+    | "collectionRecord.bulk.statusUpdated";
+  before?: CollectionRecordAuditSource[];
+  after?: CollectionRecordAuditSource[];
+  requestedRecordIds: string[];
+  deleted: number;
+  updated: number;
+  skipped: number;
+  changedFields?: string[];
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: params.action,
+    data: {
+      resourceType: "collectionRecordBulk",
+      collection: {
+        id: params.collection.id,
+        name: params.collection.name,
+        slug: params.collection.slug,
+      },
+      before: (params.before || []).map((record) =>
+        collectionRecordAuditMetadata(params.collection, record),
+      ),
+      after: (params.after || []).map((record) =>
+        collectionRecordAuditMetadata(params.collection, record),
+      ),
+      summary: {
+        requestedCount: params.requestedRecordIds.length,
+        deleted: params.deleted,
+        updated: params.updated,
+        skipped: params.skipped,
+      },
+    },
+    metadata: {
+      action: params.action,
+      changedKeys: ["content", "collections"],
+      source: "admin-collection-record-bulk-api",
+      resourceType: "collectionRecordBulk",
+      collectionId: params.collection.id,
+      collectionName: params.collection.name,
+      collectionSlug: params.collection.slug,
+      requestedRecordIds: params.requestedRecordIds,
+      requestedCount: params.requestedRecordIds.length,
+      deleted: params.deleted,
+      updated: params.updated,
+      skipped: params.skipped,
+      changedFields: params.changedFields || [],
+    },
+  });
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
   const body = await parseJsonBody(request);
-  const action = typeof body.action === 'string' ? body.action : '';
-  const access = await requireAdminAccess(request, requestId, { permission: action === 'delete' ? 'collections.delete' : 'collections.edit' });
+  const action = typeof body.action === "string" ? body.action : "";
+  const access = await requireAdminAccess(request, requestId, {
+    permission: action === "delete" ? "collections.delete" : "collections.edit",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -130,22 +217,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { siteId, collectionId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const collection = await repositories.collections.getById(site.id, collectionId)
-        || await repositories.collections.getBySlug(site.id, collectionId);
+      const collection =
+        (await repositories.collections.getById(site.id, collectionId)) ||
+        (await repositories.collections.getBySlug(site.id, collectionId));
       if (!collection) {
-        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+        return errorResponse(
+          404,
+          "COLLECTION_NOT_FOUND",
+          "Collection not found",
+          requestId,
+        );
       }
       const commerceAccess = await requireCommerceCollectionAccess(
         request,
         requestId,
         collection.slug,
-        action === 'delete' ? 'delete' : 'edit',
+        action === "delete" ? "delete" : "edit",
       );
       if (commerceAccess) {
         return commerceAccess;
@@ -154,23 +254,43 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const recordIds = parseRecordIds(body.recordIds);
 
       if (recordIds.length === 0) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'At least one collection record must be selected', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "At least one collection record must be selected",
+          requestId,
+        );
       }
 
-      if (action === 'delete') {
+      if (action === "delete") {
         let deleted = 0;
         let skipped = 0;
         const deletedRecords: CollectionRecordAuditSource[] = [];
 
         for (const recordId of recordIds) {
-          const record = await repositories.collections.getRecordById(site.id, collection.id, recordId)
-            || await repositories.collections.getRecordBySlug(site.id, collection.id, recordId);
+          const record =
+            (await repositories.collections.getRecordById(
+              site.id,
+              collection.id,
+              recordId,
+            )) ||
+            (await repositories.collections.getRecordBySlug(
+              site.id,
+              collection.id,
+              recordId,
+            ));
           if (!record) {
             skipped += 1;
             continue;
           }
 
-          if (await repositories.collections.deleteRecord(site.id, collection.id, record.id)) {
+          if (
+            await repositories.collections.deleteRecord(
+              site.id,
+              collection.id,
+              record.id,
+            )
+          ) {
             deletedRecords.push(record);
             deleted += 1;
           } else {
@@ -182,9 +302,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           await recordAdminAudit({
             repositories,
             siteId: site.id,
-            entity: 'collectionRecord',
+            entity: "collectionRecord",
             entityId: record.id,
-            action: 'delete',
+            action: "delete",
             before: collectionRecordAuditMetadata(collection, record),
             metadata: bulkRecordAuditMetadata(collection, record, {
               action,
@@ -195,16 +315,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           });
         }
 
-        const cacheInvalidation = deleted > 0
-          ? await recordSiteCacheInvalidation(repositories, {
-              siteId: site.id,
-              scope: 'content',
-              entity: 'collection',
-              entityId: collection.id,
-              reason: 'collection-records-deleted',
-              requestId,
-            })
-          : undefined;
+        const cacheInvalidation =
+          deleted > 0
+            ? await recordSiteCacheInvalidation(repositories, {
+                siteId: site.id,
+                scope: "content",
+                entity: "collection",
+                entityId: collection.id,
+                reason: "collection-records-deleted",
+                requestId,
+              })
+            : undefined;
+        if (deleted > 0) {
+          await deliverCollectionRecordBulkWebhook({
+            repositories,
+            site,
+            collection,
+            action: "collectionRecord.bulk.deleted",
+            before: deletedRecords,
+            requestedRecordIds: recordIds,
+            deleted,
+            updated: 0,
+            skipped,
+            requestId,
+            actor: access.session?.user.id,
+          });
+        }
 
         return NextResponse.json({
           success: true,
@@ -220,10 +356,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
       }
 
-      if (action === 'updateStatus') {
+      if (action === "updateStatus") {
         const status = parseRecordStatus(body.status);
         if (!status) {
-          return errorResponse(400, 'VALIDATION_ERROR', 'A valid status is required for bulk status updates', requestId);
+          return errorResponse(
+            400,
+            "VALIDATION_ERROR",
+            "A valid status is required for bulk status updates",
+            requestId,
+          );
         }
 
         const records = [];
@@ -235,14 +376,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         let skipped = 0;
 
         for (const recordId of recordIds) {
-          const record = await repositories.collections.getRecordById(site.id, collection.id, recordId)
-            || await repositories.collections.getRecordBySlug(site.id, collection.id, recordId);
+          const record =
+            (await repositories.collections.getRecordById(
+              site.id,
+              collection.id,
+              recordId,
+            )) ||
+            (await repositories.collections.getRecordBySlug(
+              site.id,
+              collection.id,
+              recordId,
+            ));
           if (!record) {
             skipped += 1;
             continue;
           }
 
-          const saved = (await repositories.collections.updateRecord(site.id, collection.id, record.id, { status })).item;
+          const saved = (
+            await repositories.collections.updateRecord(
+              site.id,
+              collection.id,
+              record.id,
+              { status },
+            )
+          ).item;
           records.push(saved);
           updatedRecords.push({ before: record, after: saved });
           updated += 1;
@@ -252,31 +409,49 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           await recordAdminAudit({
             repositories,
             siteId: site.id,
-            entity: 'collectionRecord',
+            entity: "collectionRecord",
             entityId: after.id,
-            action: 'update',
+            action: "update",
             before: collectionRecordAuditMetadata(collection, before),
             after: collectionRecordAuditMetadata(collection, after),
             metadata: bulkRecordAuditMetadata(collection, after, {
               action,
               requestedRecordIds: recordIds,
               matchedCount: updated,
-              changedFields: ['status'],
+              changedFields: ["status"],
             }),
             requestId,
           });
         }
 
-        const cacheInvalidation = updated > 0
-          ? await recordSiteCacheInvalidation(repositories, {
-              siteId: site.id,
-              scope: 'content',
-              entity: 'collection',
-              entityId: collection.id,
-              reason: 'collection-records-status-updated',
-              requestId,
-            })
-          : undefined;
+        const cacheInvalidation =
+          updated > 0
+            ? await recordSiteCacheInvalidation(repositories, {
+                siteId: site.id,
+                scope: "content",
+                entity: "collection",
+                entityId: collection.id,
+                reason: "collection-records-status-updated",
+                requestId,
+              })
+            : undefined;
+        if (updated > 0) {
+          await deliverCollectionRecordBulkWebhook({
+            repositories,
+            site,
+            collection,
+            action: "collectionRecord.bulk.statusUpdated",
+            before: updatedRecords.map(({ before }) => before),
+            after: updatedRecords.map(({ after }) => after),
+            requestedRecordIds: recordIds,
+            deleted: 0,
+            updated,
+            skipped,
+            changedFields: ["status"],
+            requestId,
+            actor: access.session?.user.id,
+          });
+        }
 
         return NextResponse.json({
           success: true,
@@ -292,24 +467,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
       }
 
-      return errorResponse(400, 'VALIDATION_ERROR', 'Unsupported bulk collection record action', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Unsupported bulk collection record action",
+        requestId,
+      );
     }
 
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
+    const collection = getCollectionByIdOrSlug(site.id, collectionId, {
+      includeUnpublished: true,
+    });
     if (!collection) {
-      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      return errorResponse(
+        404,
+        "COLLECTION_NOT_FOUND",
+        "Collection not found",
+        requestId,
+      );
     }
     const commerceAccess = await requireCommerceCollectionAccess(
       request,
       requestId,
       collection.slug,
-      action === 'delete' ? 'delete' : 'edit',
+      action === "delete" ? "delete" : "edit",
     );
     if (commerceAccess) {
       return commerceAccess;
@@ -318,16 +505,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const recordIds = parseRecordIds(body.recordIds);
 
     if (recordIds.length === 0) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'At least one collection record must be selected', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "At least one collection record must be selected",
+        requestId,
+      );
     }
 
-    if (action === 'delete') {
+    if (action === "delete") {
       let deleted = 0;
       let skipped = 0;
       const deletedRecords: CollectionRecordAuditSource[] = [];
 
       for (const recordId of recordIds) {
-        const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordId, { includeUnpublished: true });
+        const record = getCollectionRecordByIdOrSlug(
+          site.id,
+          collection.id,
+          recordId,
+          { includeUnpublished: true },
+        );
         if (!record) {
           skipped += 1;
           continue;
@@ -344,9 +541,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       for (const record of deletedRecords) {
         await recordAdminAudit({
           siteId: site.id,
-          entity: 'collectionRecord',
+          entity: "collectionRecord",
           entityId: record.id,
-          action: 'delete',
+          action: "delete",
           before: collectionRecordAuditMetadata(collection, record),
           metadata: bulkRecordAuditMetadata(collection, record, {
             action,
@@ -354,6 +551,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             matchedCount: deleted,
           }),
           requestId,
+        });
+      }
+      if (deleted > 0) {
+        await deliverCollectionRecordBulkWebhook({
+          site: site as unknown as Site,
+          collection,
+          action: "collectionRecord.bulk.deleted",
+          before: deletedRecords,
+          requestedRecordIds: recordIds,
+          deleted,
+          updated: 0,
+          skipped,
+          requestId,
+          actor: access.session?.user.id,
         });
       }
 
@@ -370,10 +581,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    if (action === 'updateStatus') {
+    if (action === "updateStatus") {
       const status = parseRecordStatus(body.status);
       if (!status) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'A valid status is required for bulk status updates', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "A valid status is required for bulk status updates",
+          requestId,
+        );
       }
 
       const records = [];
@@ -385,13 +601,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       let skipped = 0;
 
       for (const recordId of recordIds) {
-        const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordId, { includeUnpublished: true });
+        const record = getCollectionRecordByIdOrSlug(
+          site.id,
+          collection.id,
+          recordId,
+          { includeUnpublished: true },
+        );
         if (!record) {
           skipped += 1;
           continue;
         }
 
-        const saved = updateAdminCollectionRecord(site.id, collection.id, record.id, { status });
+        const saved = updateAdminCollectionRecord(
+          site.id,
+          collection.id,
+          record.id,
+          { status },
+        );
         if (saved) {
           records.push(saved);
           updatedRecords.push({ before: record, after: saved });
@@ -404,18 +630,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       for (const { before, after } of updatedRecords) {
         await recordAdminAudit({
           siteId: site.id,
-          entity: 'collectionRecord',
+          entity: "collectionRecord",
           entityId: after.id,
-          action: 'update',
+          action: "update",
           before: collectionRecordAuditMetadata(collection, before),
           after: collectionRecordAuditMetadata(collection, after),
           metadata: bulkRecordAuditMetadata(collection, after, {
             action,
             requestedRecordIds: recordIds,
             matchedCount: updated,
-            changedFields: ['status'],
+            changedFields: ["status"],
           }),
           requestId,
+        });
+      }
+      if (updated > 0) {
+        await deliverCollectionRecordBulkWebhook({
+          site: site as unknown as Site,
+          collection,
+          action: "collectionRecord.bulk.statusUpdated",
+          before: updatedRecords.map(({ before }) => before),
+          after: updatedRecords.map(({ after }) => after),
+          requestedRecordIds: recordIds,
+          deleted: 0,
+          updated,
+          skipped,
+          changedFields: ["status"],
+          requestId,
+          actor: access.session?.user.id,
         });
       }
 
@@ -432,9 +674,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    return errorResponse(400, 'VALIDATION_ERROR', 'Unsupported bulk collection record action', requestId);
+    return errorResponse(
+      400,
+      "VALIDATION_ERROR",
+      "Unsupported bulk collection record action",
+      requestId,
+    );
   } catch (error) {
-    console.error('Admin collection record bulk API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin collection record bulk API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

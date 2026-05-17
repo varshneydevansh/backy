@@ -37,7 +37,7 @@ import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPerm
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type BlogPost, type ContentStatus } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
-import { CanvasEditor } from '@/components/editor/CanvasEditor';
+import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { useAuthStore, type User } from '@/stores/authStore';
@@ -507,6 +507,14 @@ function EditBlogPostPage() {
 
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(savedCanvasSize);
+    const interactiveReadinessIssues = useMemo(
+      () => collectInteractiveReadinessIssues(canvasElements),
+      [canvasElements],
+    );
+    const interactivePublishDisabledReason = interactiveReadinessIssues.length
+      ? `Resolve interactive block readiness before publishing: ${interactiveReadinessIssues[0]}`
+      : null;
+    const interactivePublishReady = interactiveReadinessIssues.length === 0;
 
     const loadPostReadiness = useCallback(async () => {
       if (!canViewBlog) {
@@ -674,6 +682,8 @@ function EditBlogPostPage() {
                             ? `The ${publicPath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
                             : !canonicalValid
                                 ? 'Canonical path must start with / before saving.'
+                                : (status === 'published' || status === 'scheduled') && interactivePublishDisabledReason
+                                    ? interactivePublishDisabledReason
                                 : status === 'scheduled' && !scheduledAt
                                     ? 'Choose a publish date before scheduling changes.'
                                     : 'Add a title and URL slug before saving.',
@@ -805,7 +815,7 @@ function EditBlogPostPage() {
     };
 
     const applyWorkflow = async (action: 'publish' | 'archive') => {
-        if (editorActionBusy || (action === 'publish' && (readinessBlocked || routeBlocked || status === 'published')) || (action === 'archive' && status === 'archived')) {
+        if (editorActionBusy || (action === 'publish' && (readinessBlocked || routeBlocked || !interactivePublishReady || status === 'published')) || (action === 'archive' && status === 'archived')) {
             return;
         }
         if (action === 'publish' && !canPublishBlog) {
@@ -841,6 +851,11 @@ function EditBlogPostPage() {
                         : routeConflict
                             ? `The ${publicPath} route is already used by "${routeConflict.title}". Choose another slug before publishing.`
                             : 'Backy is still checking route availability. Wait for the route check before publishing.');
+                    return;
+                }
+
+                if (interactivePublishDisabledReason) {
+                    setSaveWarning(interactivePublishDisabledReason);
                     return;
                 }
 
@@ -1147,10 +1162,16 @@ function EditBlogPostPage() {
         { label: 'Featured image', complete: Boolean(featuredImageId) },
         { label: 'Comments', complete: commentsModerated },
         { label: 'Design', complete: canvasElements.length > 0 },
+        { label: 'Interactive blocks', complete: interactivePublishReady },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
-    const canSave = title.trim().length > 0 && normalizedSlug.length > 0 && !routeBlocked && canonicalValid && (status !== 'scheduled' || Boolean(scheduledAt));
+    const canSave = title.trim().length > 0
+        && normalizedSlug.length > 0
+        && !routeBlocked
+        && canonicalValid
+        && ((status !== 'published' && status !== 'scheduled') || interactivePublishReady)
+        && (status !== 'scheduled' || Boolean(scheduledAt));
     const editorBusy = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;
     const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
     const editorFormDisabled = editorBusy || !canEditBlog || isUsingLocalPostCopy;
@@ -2162,10 +2183,10 @@ function EditBlogPostPage() {
                                         </Button>
                                         <Button
                                             onClick={() => void applyWorkflow('publish')}
-                                            disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || readinessBlocked || routeBlocked || status === 'published' || !canPublishBlog}
+                                            disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || readinessBlocked || routeBlocked || !interactivePublishReady || status === 'published' || !canPublishBlog}
                                             variant="secondary"
                                             iconStart={<CheckCircle2 className="size-4" />}
-                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save this post before publishing.' : routeBlocked ? 'Verify route availability before publishing' : readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
+                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save this post before publishing.' : routeBlocked ? 'Verify route availability before publishing' : interactivePublishDisabledReason || (readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post')}
                                         >
                                             Publish
                                         </Button>

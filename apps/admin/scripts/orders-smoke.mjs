@@ -21,6 +21,10 @@ const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
 const ORDER_REQUIRED_FIELD_COUNT = 57;
 const STRIPE_TAX_MOCK_PORT = Number(process.env.BACKY_STRIPE_TAX_MOCK_PORT || 45679);
 const STRIPE_TAX_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_TAX_MOCK_PORT}`;
+const TAXJAR_MOCK_PORT = Number(process.env.BACKY_TAXJAR_MOCK_PORT || 45689);
+const TAXJAR_MOCK_BASE_URL = `http://127.0.0.1:${TAXJAR_MOCK_PORT}/v2`;
+const AVALARA_MOCK_PORT = Number(process.env.BACKY_AVALARA_MOCK_PORT || 45690);
+const AVALARA_MOCK_BASE_URL = `http://127.0.0.1:${AVALARA_MOCK_PORT}`;
 const STRIPE_REFUND_MOCK_PORT = Number(process.env.BACKY_STRIPE_REFUND_MOCK_PORT || 45680);
 const STRIPE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_REFUND_MOCK_PORT}`;
 const PAYPAL_REFUND_MOCK_PORT = Number(process.env.BACKY_PAYPAL_REFUND_MOCK_PORT || 45685);
@@ -31,6 +35,8 @@ const ADYEN_REFUND_MOCK_PORT = Number(process.env.BACKY_ADYEN_REFUND_MOCK_PORT |
 const ADYEN_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${ADYEN_REFUND_MOCK_PORT}`;
 const MOLLIE_REFUND_MOCK_PORT = Number(process.env.BACKY_MOLLIE_REFUND_MOCK_PORT || 45688);
 const MOLLIE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${MOLLIE_REFUND_MOCK_PORT}`;
+const RAZORPAY_REFUND_MOCK_PORT = Number(process.env.BACKY_RAZORPAY_REFUND_MOCK_PORT || 45691);
+const RAZORPAY_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${RAZORPAY_REFUND_MOCK_PORT}`;
 const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681);
 const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
 const SHIPPO_MOCK_PORT = Number(process.env.BACKY_SHIPPO_MOCK_PORT || 45682);
@@ -126,6 +132,27 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('updatedOrders.length === 0'), 'Orders bulk workflow must distinguish total failure from partial success');
   assert(source.includes('could not be updated'), 'Orders bulk workflow must report partial failures to admins');
   assert(!source.includes('const updatedOrders = await Promise.all(selectedOrders.map((order) => ('), 'Orders bulk workflow must not collapse all selected updates into one generic Promise.all failure');
+  assert(source.includes('providerAnalytics: orderAnalytics?.providerOperations || null'), 'Orders handoff manifest must expose provider analytics for custom admin frontends');
+  assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
+  for (const schemaVersion of [
+    'backy.order-analytics.v1',
+    'backy.order-quote.v1',
+    'backy.shipping-label.v1',
+    'backy.fulfillment-dispatch.v1',
+    'backy.tracking.v1',
+    'backy.provider-refund.v1',
+    'backy.commerce-webhook.v1',
+    'backy.commerce-reconciliation.v1',
+    'backy.commerce-reconciliation-batch.v1',
+    'backy.commerce-reconciliation-readiness.v1',
+  ]) {
+    assert(source.includes(schemaVersion), `Orders API contract handoff must include ${schemaVersion}`);
+  }
+  const apiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
+  assert(
+    apiSource.includes("provider: 'http' | 'stripe' | 'taxjar' | 'avalara' | 'easypost' | 'shippo'"),
+    'Admin order quote type must expose every first-class quote provider adjustment',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -160,7 +187,7 @@ const createQuoteProviderServer = async () => {
         headers: request.headers,
         body,
       });
-      const kind = body.kind || String(request.url || '').replace('/', '');
+      const kind = body.kind || new URL(request.url || '/', 'http://orders-smoke.local').pathname.replace(/^\/+/, '');
       const payload = kind === 'tax'
         ? { taxAmount: 12.34, lines: [{ provider: 'orders-smoke-tax', amount: 12.34, jurisdiction: 'CA' }], reference: 'tax-smoke-quote' }
         : kind === 'shipping'
@@ -220,6 +247,117 @@ const stripeTaxExecutionEnabled = () => {
   return Boolean(secret && apiBaseUrl === STRIPE_TAX_MOCK_BASE_URL);
 };
 
+const stripeDiscountExecutionEnabled = () => {
+  const secret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '';
+  const apiBaseUrl = process.env.BACKY_STRIPE_DISCOUNT_API_BASE_URL || process.env.BACKY_STRIPE_API_BASE_URL || process.env.STRIPE_API_BASE_URL || '';
+  return Boolean(secret && apiBaseUrl === STRIPE_TAX_MOCK_BASE_URL);
+};
+
+const taxJarExecutionEnabled = () => {
+  const secret = process.env.BACKY_TAXJAR_API_KEY || process.env.TAXJAR_API_KEY || '';
+  const apiBaseUrl = process.env.BACKY_TAXJAR_API_BASE_URL || process.env.TAXJAR_API_BASE_URL || '';
+  return Boolean(secret && apiBaseUrl === TAXJAR_MOCK_BASE_URL);
+};
+
+const createTaxJarMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      if (request.method === 'POST' && request.url === '/v2/taxes') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          tax: {
+            order_total_amount: body.amount,
+            shipping: body.shipping,
+            taxable_amount: 80,
+            amount_to_collect: 10.12,
+            rate: 0.1265,
+            has_nexus: true,
+            tax_source: 'destination',
+            breakdown: {
+              line_items: [{
+                id: body.line_items?.[0]?.id || 'orders-smoke-line',
+                taxable_amount: 80,
+                tax_collectable: 10.12,
+                combined_tax_rate: 0.1265,
+              }],
+            },
+          },
+        }));
+        return;
+      }
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: `Unhandled TaxJar mock path ${request.method} ${request.url}` }));
+    });
+  });
+  await new Promise((resolve) => server.listen(TAXJAR_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const avalaraExecutionEnabled = () => {
+  const accountId = process.env.BACKY_AVALARA_ACCOUNT_ID || process.env.AVALARA_ACCOUNT_ID || '';
+  const licenseKey = process.env.BACKY_AVALARA_LICENSE_KEY || process.env.AVALARA_LICENSE_KEY || '';
+  const companyCode = process.env.BACKY_AVALARA_COMPANY_CODE || process.env.AVALARA_COMPANY_CODE || '';
+  const apiBaseUrl = process.env.BACKY_AVALARA_API_BASE_URL || process.env.AVALARA_API_BASE_URL || '';
+  return Boolean(accountId && licenseKey && companyCode && apiBaseUrl === AVALARA_MOCK_BASE_URL);
+};
+
+const createAvalaraMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      if (request.method === 'POST' && request.url === '/api/v2/transactions/create') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          id: 123,
+          code: body.code || 'backy-smoke',
+          totalAmount: body.lines?.reduce((sum, line) => sum + Number(line.amount || 0), 0) || 80,
+          totalTax: 10.45,
+          totalTaxCalculated: 10.45,
+          lines: [{
+            lineNumber: body.lines?.[0]?.number || 'line-1',
+            itemCode: body.lines?.[0]?.itemCode || 'orders-smoke-line',
+            taxableAmount: 80,
+            taxCalculated: 10.45,
+            rate: 0.130625,
+          }],
+        }));
+        return;
+      }
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: `Unhandled Avalara mock path ${request.method} ${request.url}` } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(AVALARA_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
 const createStripeTaxMockServer = async () => {
   const requests = [];
   const server = http.createServer((request, response) => {
@@ -227,10 +365,37 @@ const createStripeTaxMockServer = async () => {
     request.on('data', (chunk) => chunks.push(chunk));
     request.on('end', () => {
       const bodyText = Buffer.concat(chunks).toString('utf8');
+      const url = new URL(request.url || '/', STRIPE_TAX_MOCK_BASE_URL);
+      if (request.method === 'GET' && url.pathname === '/v1/promotion_codes') {
+        requests.push({
+          method: request.method,
+          url: url.pathname,
+          search: Object.fromEntries(url.searchParams.entries()),
+          headers: request.headers,
+        });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          object: 'list',
+          data: [{
+            id: `promo_smoke_${requests.length}`,
+            object: 'promotion_code',
+            active: true,
+            code: url.searchParams.get('code') || 'STRIPESMOKE',
+            coupon: {
+              id: `coupon_smoke_${requests.length}`,
+              object: 'coupon',
+              valid: true,
+              percent_off: 10,
+            },
+            restrictions: {},
+          }],
+        }));
+        return;
+      }
       const form = Object.fromEntries(new URLSearchParams(bodyText).entries());
       requests.push({
         method: request.method,
-        url: request.url,
+        url: url.pathname,
         headers: request.headers,
         form,
       });
@@ -519,6 +684,66 @@ const createMollieRefundMockServer = async () => {
   };
 };
 
+const razorpayRefundExecutionEnabled = () => {
+  const keyId = process.env.BACKY_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
+  const keySecret = process.env.BACKY_RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '';
+  const apiBaseUrl = process.env.BACKY_RAZORPAY_API_BASE_URL || process.env.RAZORPAY_API_BASE_URL || '';
+  return Boolean(keyId && keySecret && apiBaseUrl === RAZORPAY_REFUND_MOCK_BASE_URL);
+};
+
+const createRazorpayRefundMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.method === 'GET') {
+        response.end(JSON.stringify({
+          id: String(request.url || '').split('/').pop() || `rfnd_razorpay_smoke_${requests.length}`,
+          entity: 'refund',
+          payment_id: `pay_refresh_${Date.now()}`,
+          amount: 1234,
+          currency: 'INR',
+          status: 'processed',
+          speed_processed: 'normal',
+          speed_requested: 'normal',
+          receipt: 'refresh',
+          notes: {},
+          created_at: 1710000000 + requests.length,
+        }));
+        return;
+      }
+      response.end(JSON.stringify({
+        id: `rfnd_razorpay_smoke_${requests.length}`,
+        entity: 'refund',
+        payment_id: String(request.url || '').split('/')[3] || '',
+        amount: body.amount || 0,
+        currency: 'INR',
+        status: 'created',
+        speed_processed: 'normal',
+        speed_requested: body.speed || 'normal',
+        receipt: body.receipt || '',
+        notes: body.notes || {},
+        created_at: 1710000000 + requests.length,
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(RAZORPAY_REFUND_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
 const easyPostExecutionEnabled = () => {
   const secret = process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY || '';
   const apiBaseUrl = process.env.BACKY_EASYPOST_API_BASE_URL || process.env.EASYPOST_API_BASE_URL || '';
@@ -689,6 +914,29 @@ const createShippoMockServer = async () => {
         }));
         return;
       }
+      if (request.method === 'GET' && request.url?.startsWith('/tracks/USPS/')) {
+        const trackingNumber = decodeURIComponent(String(request.url).split('/').pop() || 'SHIPPO1');
+        response.end(JSON.stringify({
+          carrier: 'USPS',
+          tracking_number: trackingNumber,
+          eta: '2026-05-16T12:00:00Z',
+          servicelevel: {
+            token: 'usps_priority',
+            name: 'Priority Mail',
+          },
+          tracking_status: {
+            status: 'DELIVERED',
+            status_details: 'Delivered to destination address',
+            status_date: '2026-05-16T10:00:00Z',
+          },
+          tracking_history: [{
+            status: 'TRANSIT',
+            status_details: 'In transit',
+            status_date: '2026-05-15T10:00:00Z',
+          }],
+        }));
+        return;
+      }
       response.writeHead(404, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ message: `Unhandled Shippo mock path ${request.method} ${request.url}` }));
     });
@@ -784,6 +1032,14 @@ const enableCommerceWebhookSettings = async (settings) => {
 
 const enableCommerceQuoteProviders = async (settings, providerBaseUrl, options = {}) => {
   const next = JSON.parse(JSON.stringify(settings));
+  const taxProvider = options.stripeTax
+    ? 'stripe'
+    : options.taxJarTax
+      ? 'taxjar'
+      : options.avalaraTax
+        ? 'avalara'
+        : 'http';
+  const needsStructuredOrigin = options.easyPostShipping || options.shippoShipping || options.taxJarTax || options.avalaraTax;
   next.integrations = {
     ...(next.integrations || {}),
     commerce: {
@@ -791,12 +1047,31 @@ const enableCommerceQuoteProviders = async (settings, providerBaseUrl, options =
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: true,
-      taxProvider: options.stripeTax ? 'stripe' : 'http',
-      taxProviderUrl: options.stripeTax ? '' : `${providerBaseUrl}/tax`,
-      shippingProvider: 'http',
-      shippingProviderUrl: `${providerBaseUrl}/shipping`,
-      discountProvider: 'http',
-      discountProviderUrl: `${providerBaseUrl}/discount`,
+      taxProvider,
+      taxProviderUrl: taxProvider === 'http' ? `${providerBaseUrl}/tax` : '',
+      shippingProvider: options.easyPostShipping ? 'easypost' : options.shippoShipping ? 'shippo' : 'http',
+      shippingProviderUrl: options.easyPostShipping || options.shippoShipping ? '' : `${providerBaseUrl}/shipping`,
+      discountProvider: options.stripeDiscount ? 'stripe' : 'http',
+      discountProviderUrl: options.stripeDiscount ? '' : `${providerBaseUrl}/discount`,
+      ...(needsStructuredOrigin
+        ? {
+          shippingOriginAddress: JSON.stringify({
+            name: 'Backy Warehouse',
+            street1: '100 Fulfillment Way',
+            city: 'Austin',
+            state: 'TX',
+            zip: '78701',
+            country: 'US',
+            phone: '5555550100',
+          }),
+          shippingDefaultParcel: JSON.stringify({
+            length: 8,
+            width: 6,
+            height: 2,
+            weight: 16,
+          }),
+        }
+        : {}),
     },
   };
   return patchSettingsFromSnapshot(next);
@@ -864,7 +1139,7 @@ const issueScheduledReconciliationServiceKey = async (suffix) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -872,9 +1147,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_ORDERS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -1228,18 +1513,26 @@ const setBrowserSession = async (client, sessionToken) => {
   });
 };
 
-const navigateToOrders = async (client) => {
-  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/orders?siteId=${encodeURIComponent(SITE_ID)}` });
+const navigateToOrders = async (client, options = {}) => {
+  const url = new URL(`${ADMIN_BASE_URL}/orders`);
+  url.searchParams.set('siteId', SITE_ID);
+  if (options.orderId) {
+    url.searchParams.set('orderId', options.orderId);
+  }
+  const expectedUrl = url.toString();
+  await client.send('Page.navigate', { url: url.toString() });
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const state = await evaluate(client, `(() => ({
+      url: window.location.href,
+      locationReady: window.location.href === ${JSON.stringify(expectedUrl)},
       ready: Boolean(document.querySelector('[data-testid="orders-command-center"]')) &&
         document.body?.innerText?.includes('Order command center'),
       command: Boolean(document.querySelector('[data-testid="orders-command-center"]')),
       text: document.body?.innerText?.slice(0, 600) || '',
     }))()`);
 
-    if (state.ready) {
+    if (state.locationReady && state.ready) {
       return state;
     }
 
@@ -1254,23 +1547,38 @@ const navigateToOrders = async (client) => {
 };
 
 const clickByText = async (client, text, options = {}) => {
-  const result = await evaluate(client, `(() => {
-    const text = ${JSON.stringify(text)};
-    const exact = ${JSON.stringify(Boolean(options.exact))};
-    const rootSelector = ${JSON.stringify(options.rootSelector || '')};
-    const root = rootSelector ? document.querySelector(rootSelector) : document;
-    const candidates = Array.from((root || document).querySelectorAll('button, a'));
-    const target = candidates.find((candidate) => {
-      const label = (candidate.textContent || '').replace(/\\s+/g, ' ').trim();
-      return exact ? label === text : label.includes(text);
-    });
-    if (!(target instanceof HTMLElement) || target.getAttribute('aria-disabled') === 'true' || target.disabled) {
-      return { ok: false, text, disabled: target instanceof HTMLButtonElement ? target.disabled : false };
-    }
-    target.click();
-    return { ok: true, text: target.textContent || '', tag: target.tagName };
-  })()`);
-  assert(result.ok, `Unable to click control with text ${text}: ${JSON.stringify(result)}`);
+  let result = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const text = ${JSON.stringify(text)};
+      const exact = ${JSON.stringify(Boolean(options.exact))};
+      const rootSelector = ${JSON.stringify(options.rootSelector || '')};
+      const root = rootSelector ? document.querySelector(rootSelector) : document;
+      const candidates = Array.from((root || document).querySelectorAll('button, a'));
+      const matches = candidates.filter((candidate) => {
+        const label = (candidate.textContent || '').replace(/\\s+/g, ' ').trim();
+        return exact ? label === text : label.includes(text);
+      });
+      const target = matches.find((candidate) => (
+        candidate instanceof HTMLElement &&
+        candidate.getAttribute('aria-disabled') !== 'true' &&
+        !candidate.disabled
+      ));
+      if (!(target instanceof HTMLElement) || target.getAttribute('aria-disabled') === 'true' || target.disabled) {
+        return {
+          ok: false,
+          text,
+          matches: matches.length,
+          disabledMatches: matches.map((candidate) => candidate instanceof HTMLButtonElement ? candidate.disabled : candidate.getAttribute('aria-disabled') === 'true'),
+        };
+      }
+      target.click();
+      return { ok: true, text: target.textContent || '', tag: target.tagName };
+    })()`);
+    if (result.ok) break;
+    await sleep(250);
+  }
+  assert(result?.ok, `Unable to click control with text ${text}: ${JSON.stringify(result)}`);
   await sleep(250);
   return result;
 };
@@ -1464,6 +1772,38 @@ const assertOrdersLayout = async (client) => {
       api: Boolean(document.querySelector('#orders-api')),
       metrics: Boolean(document.querySelector('#orders-metrics')),
       analytics: Boolean(document.querySelector('[data-testid="orders-analytics-panel"]')),
+      providerAnalyticsPanel: Boolean(document.querySelector('[data-testid="orders-provider-analytics"]')),
+      providerAnalyticsLabels: {
+        heading: document.body?.innerText?.includes('Provider execution analytics') || false,
+        payment: document.body?.innerText?.includes('Payment providers') || false,
+        refund: document.body?.innerText?.includes('Refund providers') || false,
+        fulfillment: document.body?.innerText?.includes('Fulfillment providers') || false,
+        shipping: document.body?.innerText?.includes('Shipping labels') || false,
+      },
+      providerAnalytics: Boolean(document.querySelector('[data-testid="orders-provider-analytics"]')),
+      analyticsError: Array.from(document.querySelectorAll('[data-testid="orders-analytics-panel"] .text-amber-900'))
+        .map((node) => (node.textContent || '').replace(/\\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join(' '),
+      refreshedAnalytics: (() => {
+        if (document.querySelector('[data-testid="orders-provider-analytics"]')) {
+          return false;
+        }
+        const refresh = Array.from(document.querySelectorAll('[data-testid="orders-analytics-panel"] button'))
+          .find((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Refresh analytics');
+        if (!(refresh instanceof HTMLButtonElement) || refresh.disabled) {
+          return false;
+        }
+        refresh.click();
+        return true;
+      })(),
+      apiContracts: Boolean(document.querySelector('[data-testid="orders-api-contracts"]')) &&
+        document.body?.innerText?.includes('Order API response contracts') &&
+        document.body?.innerText?.includes('backy.order-quote.v1') &&
+        document.body?.innerText?.includes('backy.shipping-label.v1') &&
+        document.body?.innerText?.includes('backy.provider-refund.v1') &&
+        document.body?.innerText?.includes('backy.commerce-webhook.v1') &&
+        document.body?.innerText?.includes('backy.commerce-reconciliation-readiness.v1'),
       notificationDelivery: Boolean(document.querySelector('[data-testid="orders-notification-delivery"]')),
       queue: Boolean(document.querySelector('#orders-queue')),
       editor: Boolean(document.querySelector('#orders-editor')),
@@ -1474,6 +1814,13 @@ const assertOrdersLayout = async (client) => {
         document.body?.innerText?.includes('Stripe checkout/refund') &&
         document.body?.innerText?.includes('Payment refund providers') &&
         document.body?.innerText?.includes('Tax quote') &&
+        document.body?.innerText?.includes('TaxJar') &&
+        document.body?.innerText?.includes('Avalara') &&
+        document.body?.innerText?.includes('Shipping quote') &&
+        document.body?.innerText?.includes('EasyPost rates') &&
+        document.body?.innerText?.includes('Shippo rates') &&
+        document.body?.innerText?.includes('Discount quote') &&
+        document.body?.innerText?.includes('Stripe promotion codes') &&
         document.body?.innerText?.includes('Carrier labels/tracking') &&
         document.body?.innerText?.includes('Fulfillment dispatch') &&
         document.body?.innerText?.includes('Webhook settlement'),
@@ -1495,7 +1842,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
@@ -1721,6 +2068,17 @@ const fillOrderEditor = async (client, suffix, customerRecord) => {
   await setAriaControl(client, 'Line item price', '40');
   await setAriaControl(client, 'Line item SKU', `ORDER-SMOKE-${suffix.toUpperCase()}`);
   await clickByText(client, 'Add', { exact: true, rootSelector: '#orders-editor' });
+  await setLabeledControl(client, 'Raw item payload', JSON.stringify([{
+    productId: `prod_orders_${suffix}`,
+    title: `Orders Smoke Product ${suffix}`,
+    quantity: 2,
+    price: 40,
+    lineTotal: 80,
+    sku: `ORDER-SMOKE-${suffix.toUpperCase()}`,
+    taxable: true,
+    shippingRequired: true,
+    discountCode: 'STRIPESMOKE',
+  }]), { exact: true });
 
   await setLabeledControl(client, 'Shipping address', JSON.stringify({
     name: 'Orders Smoke Customer',
@@ -1886,10 +2244,12 @@ const assertOrderCardButtonEnabled = async (client, orderNumber, buttonText) => 
         (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === buttonText
       ));
       return {
+        url: window.location.href,
         hasCard: Boolean(card),
         hasButton: button instanceof HTMLButtonElement,
         disabled: button instanceof HTMLButtonElement ? button.disabled : null,
         cardText: (card?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 900),
+        bodyText: document.body?.innerText?.replace(/\\s+/g, ' ').trim().slice(0, 1200) || '',
       };
     })()`);
     if (result.hasCard && result.hasButton && result.disabled === false) return result;
@@ -2057,6 +2417,30 @@ const prepareMollieProviderRefundThroughUi = async (client, orderNumber, suffix)
     }
     if (attempt === 79) {
       throw new Error(`Mollie provider refund preparation did not save: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const prepareRazorpayProviderRefundThroughUi = async (client, orderNumber, suffix) => {
+  await clickOrderCardButton(client, orderNumber, 'Edit');
+  await setLabeledControl(client, 'Provider', 'razorpay', { exact: true });
+  await setLabeledControl(client, 'Payment ref', `pay_refund_${suffix}`, { exact: true });
+  await clickByText(client, 'Save Order', { exact: true });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updated: document.body?.innerText?.includes('Order updated.') || false,
+      providerVisible: document.body?.innerText?.includes('razorpay') && document.body?.innerText?.includes(${JSON.stringify(`pay_refund_${suffix}`)}),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.updated || state.providerVisible) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Razorpay provider refund preparation did not save: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -2251,6 +2635,32 @@ const verifyShippoProviderExecution = async (collectionId, slug, shippoMockServe
     (values) => values.shippinglabelstatus === 'voided' && values.shippinglabelid === 'shippo_tx_smoke_1',
     'Shippo label void did not persist voided label fields',
   );
+
+  const trackingResponse = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${purchasedRecord.id}/tracking`, {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'shippo',
+      executionProvider: 'shippo',
+      carrier: 'USPS',
+      trackingNumber: 'SHIPPO1',
+      trackingUrl: 'https://track.shippo.test/SHIPPO1',
+    }),
+  });
+  assert(trackingResponse.data?.tracking?.status === 'delivered', `Shippo tracking did not return delivered status: ${JSON.stringify(trackingResponse)}`);
+  assert(trackingResponse.data?.tracking?.providerPayload?.executionMode === 'shippo-api', `Shippo tracking did not expose execution metadata: ${JSON.stringify(trackingResponse.data?.tracking)}`);
+  const trackingRequest = shippoMockServer.requests.find((request) => request.url === '/tracks/USPS/SHIPPO1');
+  assert(trackingRequest?.headers.authorization === `ShippoToken ${expectedSecret}`, `Shippo tracking did not receive token auth: ${JSON.stringify(trackingRequest?.headers)}`);
+  await waitForOrderValue(
+    collectionId,
+    slug,
+    (values) => (
+      values.trackingnumber === 'SHIPPO1' &&
+      values.trackingstatus === 'delivered' &&
+      values.trackingurl === 'https://track.shippo.test/SHIPPO1' &&
+      Boolean(values.trackinglastcheckedat)
+    ),
+    'Shippo tracking did not persist delivered tracking fields',
+  );
 };
 
 const clickReconcileProvider = async (client) => {
@@ -2416,11 +2826,14 @@ const main = async () => {
   let customerFixture;
   let quoteProviderServer;
   let stripeTaxMockServer;
+  let taxJarMockServer;
+  let avalaraMockServer;
   let stripeRefundMockServer;
   let paypalRefundMockServer;
   let squareRefundMockServer;
   let adyenRefundMockServer;
   let mollieRefundMockServer;
+  let razorpayRefundMockServer;
   let easyPostMockServer;
   let shippoMockServer;
   let fulfillmentProviderServer;
@@ -2492,6 +2905,10 @@ const main = async () => {
     assert(initialAnalytics.orderCount >= 1, `Order analytics did not count the created order: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
     assert(initialAnalytics.payment?.pending?.count >= 1, `Order analytics did not report pending payment state: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
     assert(initialAnalytics.operations?.manualOrderCount >= 1, `Order analytics did not report manual orders: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
+    assert(initialAnalytics.providerOperations?.paymentProviders?.some((provider) => provider.provider === 'manual' && provider.statuses.pending >= 1), `Order analytics did not report payment provider mix: ${JSON.stringify(initialAnalytics.providerOperations).slice(0, 500)}`);
+    assert(initialAnalytics.providerOperations?.refundProviders?.some((provider) => provider.provider === 'manual' && provider.statuses.none >= 1), `Order analytics did not report provider refund pipeline: ${JSON.stringify(initialAnalytics.providerOperations).slice(0, 500)}`);
+    assert(initialAnalytics.providerOperations?.fulfillmentProviders?.some((provider) => provider.statuses.none >= 1), `Order analytics did not report fulfillment dispatch provider pipeline: ${JSON.stringify(initialAnalytics.providerOperations).slice(0, 500)}`);
+    assert(initialAnalytics.providerOperations?.shippingLabelProviders?.some((provider) => provider.statuses.none >= 1), `Order analytics did not report shipping-label provider pipeline: ${JSON.stringify(initialAnalytics.providerOperations).slice(0, 500)}`);
 
     await assertOrderCustomerProfileManagement(client, customerFixture.collection, customerFixture.record);
 
@@ -2535,8 +2952,142 @@ const main = async () => {
     const providerQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${providerQuotedOrder.id}/quote`);
     const providerQuote = providerQuotePayload.data?.quote;
     assert(providerQuote?.providerAdjustments?.length === 3, `Quote endpoint did not expose provider adjustments: ${JSON.stringify(providerQuotePayload).slice(0, 500)}`);
-    assert(providerQuote.providerAdjustments.every((item) => item.status === 'succeeded'), `Quote provider adjustments were not all successful: ${JSON.stringify(providerQuote).slice(0, 500)}`);
+    assert(providerQuote.providerAdjustments.every((item) => item.status === 'succeeded'), `Quote provider adjustments were not all successful: ${JSON.stringify(providerQuote.providerAdjustments).slice(0, 1200)}`);
     assert(quoteProviderServer.requests.length >= 6, `Quote provider server did not receive tax/shipping/discount calls from POST and GET: ${quoteProviderServer.requests.length}`);
+
+    if (taxJarExecutionEnabled()) {
+      taxJarMockServer = await createTaxJarMockServer();
+      const taxJarQuoteSettings = await getSettings();
+      await enableCommerceQuoteProviders(taxJarQuoteSettings, quoteProviderServer.baseUrl, { taxJarTax: true });
+      await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+      expectedProviderTotal = 91.47;
+      const taxJarQuoteOrder = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.subtotal === 80 &&
+          values.discountamount === 6.54 &&
+          values.taxamount === 10.12 &&
+          values.shippingamount === 7.89 &&
+          values.total === expectedProviderTotal &&
+          /Provider adjustments: tax:succeeded, shipping:succeeded, discount:succeeded/.test(String(values.notes || ''))
+        ),
+        'Refresh Quote did not persist TaxJar provider totals',
+      );
+      const taxJarQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${taxJarQuoteOrder.id}/quote`);
+      const taxJarQuote = taxJarQuotePayload.data?.quote;
+      const taxJarAdjustment = taxJarQuote?.providerAdjustments?.find((item) => item.kind === 'tax');
+      assert(taxJarAdjustment?.provider === 'taxjar' && taxJarAdjustment.status === 'succeeded' && taxJarAdjustment.amount === 10.12, `Quote endpoint did not expose the TaxJar adjustment: ${JSON.stringify(taxJarQuote).slice(0, 500)}`);
+      const taxJarRequests = taxJarMockServer.requests.filter((request) => request.url === '/v2/taxes');
+      assert(taxJarRequests.length >= 2, `TaxJar mock did not receive POST and GET tax calls: ${JSON.stringify(taxJarMockServer.requests)}`);
+      assert(taxJarRequests[0]?.headers.authorization === `Bearer ${process.env.BACKY_TAXJAR_API_KEY || process.env.TAXJAR_API_KEY}`, `TaxJar mock did not receive bearer auth: ${JSON.stringify(taxJarRequests[0]?.headers)}`);
+      assert(taxJarRequests[0]?.headers['x-api-version'] === '2022-01-24', `TaxJar mock did not receive API version header: ${JSON.stringify(taxJarRequests[0]?.headers)}`);
+      assert(taxJarRequests[0]?.body?.from_zip === '78701', `TaxJar request did not include Settings origin ZIP: ${JSON.stringify(taxJarRequests[0]?.body)}`);
+      assert(taxJarRequests[0]?.body?.to_zip === '94105', `TaxJar request did not include order destination ZIP: ${JSON.stringify(taxJarRequests[0]?.body)}`);
+      assert(Number(taxJarRequests[0]?.body?.shipping) === 8, `TaxJar request did not include the local shipping amount used for parallel provider quotes: ${JSON.stringify(taxJarRequests[0]?.body)}`);
+      assert(taxJarRequests[0]?.body?.line_items?.[0]?.id, `TaxJar request did not include taxable line items: ${JSON.stringify(taxJarRequests[0]?.body)}`);
+    }
+
+    if (avalaraExecutionEnabled()) {
+      avalaraMockServer = await createAvalaraMockServer();
+      const avalaraQuoteSettings = await getSettings();
+      await enableCommerceQuoteProviders(avalaraQuoteSettings, quoteProviderServer.baseUrl, { avalaraTax: true });
+      await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+      expectedProviderTotal = 91.8;
+      const avalaraQuoteOrder = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.subtotal === 80 &&
+          values.discountamount === 6.54 &&
+          values.taxamount === 10.45 &&
+          values.shippingamount === 7.89 &&
+          values.total === expectedProviderTotal &&
+          /Provider adjustments: tax:succeeded, shipping:succeeded, discount:succeeded/.test(String(values.notes || ''))
+        ),
+        'Refresh Quote did not persist Avalara provider totals',
+      );
+      const avalaraQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${avalaraQuoteOrder.id}/quote`);
+      const avalaraQuote = avalaraQuotePayload.data?.quote;
+      const avalaraAdjustment = avalaraQuote?.providerAdjustments?.find((item) => item.kind === 'tax');
+      assert(avalaraAdjustment?.provider === 'avalara' && avalaraAdjustment.status === 'succeeded' && avalaraAdjustment.amount === 10.45, `Quote endpoint did not expose the Avalara adjustment: ${JSON.stringify(avalaraQuote).slice(0, 500)}`);
+      const avalaraRequests = avalaraMockServer.requests.filter((request) => request.url === '/api/v2/transactions/create');
+      assert(avalaraRequests.length >= 2, `Avalara mock did not receive POST and GET transaction calls: ${JSON.stringify(avalaraMockServer.requests)}`);
+      const expectedAvalaraAuth = `Basic ${Buffer.from(`${process.env.BACKY_AVALARA_ACCOUNT_ID || process.env.AVALARA_ACCOUNT_ID}:${process.env.BACKY_AVALARA_LICENSE_KEY || process.env.AVALARA_LICENSE_KEY}`).toString('base64')}`;
+      assert(avalaraRequests[0]?.headers.authorization === expectedAvalaraAuth, `Avalara mock did not receive basic auth: ${JSON.stringify(avalaraRequests[0]?.headers)}`);
+      assert(avalaraRequests[0]?.body?.companyCode === (process.env.BACKY_AVALARA_COMPANY_CODE || process.env.AVALARA_COMPANY_CODE), `Avalara request did not include company code: ${JSON.stringify(avalaraRequests[0]?.body)}`);
+      assert(avalaraRequests[0]?.body?.commit === false, `Avalara request should create an uncommitted SalesOrder: ${JSON.stringify(avalaraRequests[0]?.body)}`);
+      assert(avalaraRequests[0]?.body?.addresses?.shipFrom?.postalCode === '78701', `Avalara request did not include Settings ship-from ZIP: ${JSON.stringify(avalaraRequests[0]?.body)}`);
+      assert(avalaraRequests[0]?.body?.addresses?.shipTo?.postalCode === '94105', `Avalara request did not include order ship-to ZIP: ${JSON.stringify(avalaraRequests[0]?.body)}`);
+      assert(avalaraRequests[0]?.body?.lines?.some((line) => line.itemCode === 'shipping'), `Avalara request did not include shipping as a taxable line: ${JSON.stringify(avalaraRequests[0]?.body)}`);
+    }
+
+    if (easyPostExecutionEnabled()) {
+      if (!easyPostMockServer) {
+        easyPostMockServer = await createEasyPostMockServer();
+      }
+      const easyPostQuoteSettings = await getSettings();
+      await enableCommerceQuoteProviders(easyPostQuoteSettings, quoteProviderServer.baseUrl, { easyPostShipping: true });
+      await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+      expectedProviderTotal = 93.05;
+      const easyPostQuoteOrder = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.subtotal === 80 &&
+          values.discountamount === 6.54 &&
+          values.taxamount === 12.34 &&
+          values.shippingamount === 7.25 &&
+          values.total === expectedProviderTotal &&
+          /Provider adjustments: tax:succeeded, shipping:succeeded, discount:succeeded/.test(String(values.notes || ''))
+        ),
+        'Refresh Quote did not persist EasyPost shipping-rate totals',
+      );
+      const easyPostQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${easyPostQuoteOrder.id}/quote`);
+      const easyPostQuote = easyPostQuotePayload.data?.quote;
+      const easyPostShippingAdjustment = easyPostQuote?.providerAdjustments?.find((item) => item.kind === 'shipping');
+      assert(easyPostShippingAdjustment?.provider === 'easypost' && easyPostShippingAdjustment.status === 'succeeded' && easyPostShippingAdjustment.amount === 7.25, `Quote endpoint did not expose the EasyPost shipping adjustment: ${JSON.stringify(easyPostQuote).slice(0, 500)}`);
+      const easyPostQuoteRequests = easyPostMockServer.requests.filter((request) => request.url === '/v2/shipments');
+      assert(easyPostQuoteRequests.length >= 2, `EasyPost quote mock did not receive POST and GET shipment rate calls: ${JSON.stringify(easyPostMockServer.requests)}`);
+      const expectedEasyPostAuth = `Basic ${Buffer.from(`${process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY}:`).toString('base64')}`;
+      assert(easyPostQuoteRequests[0]?.headers.authorization === expectedEasyPostAuth, `EasyPost quote mock did not receive basic auth: ${JSON.stringify(easyPostQuoteRequests[0]?.headers)}`);
+      assert(easyPostQuoteRequests[0]?.body?.shipment?.from_address?.zip === '78701', `EasyPost quote request did not include Settings origin address: ${JSON.stringify(easyPostQuoteRequests[0]?.body)}`);
+      assert(easyPostQuoteRequests[0]?.body?.shipment?.to_address?.zip === '94105', `EasyPost quote request did not include order destination address: ${JSON.stringify(easyPostQuoteRequests[0]?.body)}`);
+      assert(Number(easyPostQuoteRequests[0]?.body?.shipment?.parcel?.weight) === 16, `EasyPost quote request did not include Settings default parcel: ${JSON.stringify(easyPostQuoteRequests[0]?.body)}`);
+    }
+
+    if (shippoExecutionEnabled()) {
+      if (!shippoMockServer) {
+        shippoMockServer = await createShippoMockServer();
+      }
+      const shippoQuoteSettings = await getSettings();
+      await enableCommerceQuoteProviders(shippoQuoteSettings, quoteProviderServer.baseUrl, { shippoShipping: true });
+      await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+      expectedProviderTotal = 94.35;
+      const shippoQuoteOrder = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.subtotal === 80 &&
+          values.discountamount === 6.54 &&
+          values.taxamount === 12.34 &&
+          values.shippingamount === 8.55 &&
+          values.total === expectedProviderTotal &&
+          /Provider adjustments: tax:succeeded, shipping:succeeded, discount:succeeded/.test(String(values.notes || ''))
+        ),
+        'Refresh Quote did not persist Shippo shipping-rate totals',
+      );
+      const shippoQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${shippoQuoteOrder.id}/quote`);
+      const shippoQuote = shippoQuotePayload.data?.quote;
+      const shippoShippingAdjustment = shippoQuote?.providerAdjustments?.find((item) => item.kind === 'shipping');
+      assert(shippoShippingAdjustment?.provider === 'shippo' && shippoShippingAdjustment.status === 'succeeded' && shippoShippingAdjustment.amount === 8.55, `Quote endpoint did not expose the Shippo shipping adjustment: ${JSON.stringify(shippoQuote).slice(0, 500)}`);
+      const shippoQuoteRequests = shippoMockServer.requests.filter((request) => request.url === '/shipments/');
+      assert(shippoQuoteRequests.length >= 2, `Shippo quote mock did not receive POST and GET shipment rate calls: ${JSON.stringify(shippoMockServer.requests)}`);
+      assert(shippoQuoteRequests[0]?.headers.authorization === `ShippoToken ${process.env.BACKY_SHIPPO_API_KEY || process.env.SHIPPO_API_KEY}`, `Shippo quote mock did not receive token auth: ${JSON.stringify(shippoQuoteRequests[0]?.headers)}`);
+      assert(shippoQuoteRequests[0]?.body?.address_from?.zip === '78701', `Shippo quote request did not include Settings origin address: ${JSON.stringify(shippoQuoteRequests[0]?.body)}`);
+      assert(shippoQuoteRequests[0]?.body?.address_to?.zip === '94105', `Shippo quote request did not include order destination address: ${JSON.stringify(shippoQuoteRequests[0]?.body)}`);
+      assert(Number(shippoQuoteRequests[0]?.body?.parcels?.[0]?.weight) === 16, `Shippo quote request did not include Settings default parcel: ${JSON.stringify(shippoQuoteRequests[0]?.body)}`);
+    }
 
     if (stripeTaxExecutionEnabled()) {
       stripeTaxMockServer = await createStripeTaxMockServer();
@@ -2567,6 +3118,41 @@ const main = async () => {
       assert(stripeTaxMockServer.requests[0]?.headers.authorization === `Bearer ${expectedSecret}`, `Stripe Tax mock did not receive bearer auth: ${JSON.stringify(stripeTaxMockServer.requests[0]?.headers)}`);
       assert(stripeTaxMockServer.requests[0]?.form.currency === 'usd', `Stripe Tax calculation did not send quote currency: ${JSON.stringify(stripeTaxMockServer.requests[0]?.form)}`);
       assert(stripeTaxMockServer.requests[0]?.form['customer_details[address][country]'] === 'US', `Stripe Tax calculation did not send customer country: ${JSON.stringify(stripeTaxMockServer.requests[0]?.form)}`);
+    }
+
+    if (stripeDiscountExecutionEnabled()) {
+      if (!stripeTaxMockServer) {
+        stripeTaxMockServer = await createStripeTaxMockServer();
+      }
+      const discountProviderSettings = await getSettings();
+      const useStripeTax = stripeTaxExecutionEnabled();
+      await enableCommerceQuoteProviders(discountProviderSettings, quoteProviderServer.baseUrl, { stripeTax: useStripeTax, stripeDiscount: true });
+      await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+      const expectedTaxAmount = useStripeTax ? 11.11 : 12.34;
+      expectedProviderTotal = Number((80 - 8 + expectedTaxAmount + 7.89).toFixed(2));
+      const stripeDiscountQuotedOrder = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.subtotal === 80 &&
+          values.discountamount === 8 &&
+          values.taxamount === expectedTaxAmount &&
+          values.shippingamount === 7.89 &&
+          values.total === expectedProviderTotal &&
+          /Provider adjustments: tax:succeeded, shipping:succeeded, discount:succeeded/.test(String(values.notes || ''))
+        ),
+        'Refresh Quote did not persist Stripe promotion-code discount totals',
+      );
+      const stripeDiscountQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${stripeDiscountQuotedOrder.id}/quote`);
+      const stripeDiscountQuote = stripeDiscountQuotePayload.data?.quote;
+      const stripeDiscountAdjustment = stripeDiscountQuote?.providerAdjustments?.find((item) => item.kind === 'discount');
+      assert(stripeDiscountAdjustment?.provider === 'stripe' && stripeDiscountAdjustment.status === 'succeeded' && stripeDiscountAdjustment.amount === 8, `Quote endpoint did not expose the Stripe discount adjustment: ${JSON.stringify(stripeDiscountQuote).slice(0, 500)}`);
+      const promotionRequests = stripeTaxMockServer.requests.filter((request) => request.url === '/v1/promotion_codes');
+      assert(promotionRequests.length >= 2, `Stripe discount mock did not receive POST and GET promotion-code lookups: ${JSON.stringify(stripeTaxMockServer.requests)}`);
+      const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+      assert(promotionRequests[0]?.headers.authorization === `Bearer ${expectedSecret}`, `Stripe discount mock did not receive bearer auth: ${JSON.stringify(promotionRequests[0]?.headers)}`);
+      assert(promotionRequests[0]?.search.code === 'STRIPESMOKE', `Stripe discount lookup did not send the order discount code: ${JSON.stringify(promotionRequests[0])}`);
+      assert(promotionRequests[0]?.search.active === 'true', `Stripe discount lookup did not restrict promotion codes to active values: ${JSON.stringify(promotionRequests[0])}`);
     }
 
     await selectOrderForBulk(client, orderNumber);
@@ -2622,8 +3208,10 @@ const main = async () => {
     assert(fulfillmentProviderServer.requests[0]?.url === '/dispatch', `Fulfillment provider server received unexpected path: ${JSON.stringify(fulfillmentProviderServer.requests)}`);
     assert(fulfillmentProviderServer.requests[0]?.body?.fulfillment?.schemaVersion === 'backy.fulfillment-dispatch.v1', `Fulfillment provider request did not include dispatch payload: ${JSON.stringify(fulfillmentProviderServer.requests[0]?.body).slice(0, 500)}`);
 
-    if (easyPostExecutionEnabled() && !easyPostMockServer) {
-      easyPostMockServer = await createEasyPostMockServer();
+    if (easyPostExecutionEnabled()) {
+      if (!easyPostMockServer) {
+        easyPostMockServer = await createEasyPostMockServer();
+      }
       const preEasyPostSettings = await getSettings();
       await enableCommerceEasyPostLabelSettings(preEasyPostSettings);
     }
@@ -2735,7 +3323,9 @@ const main = async () => {
       await verifyEasyPostProviderExecution(collectionId, slug, suffix, easyPostMockServer);
     }
     if (shippoExecutionEnabled()) {
-      shippoMockServer = await createShippoMockServer();
+      if (!shippoMockServer) {
+        shippoMockServer = await createShippoMockServer();
+      }
       await verifyShippoProviderExecution(collectionId, slug, shippoMockServer);
     }
 
@@ -2763,9 +3353,11 @@ const main = async () => {
           ? 'adyen'
           : mollieRefundExecutionEnabled()
             ? 'mollie'
-            : stripeRefundExecutionEnabled()
-              ? 'stripe'
-              : 'manual';
+            : razorpayRefundExecutionEnabled()
+              ? 'razorpay'
+              : stripeRefundExecutionEnabled()
+                ? 'stripe'
+                : 'manual';
 
     if (providerRefundExecutionProvider === 'paypal') {
       paypalRefundMockServer = await createPayPalRefundMockServer();
@@ -2779,6 +3371,9 @@ const main = async () => {
     } else if (providerRefundExecutionProvider === 'mollie') {
       mollieRefundMockServer = await createMollieRefundMockServer();
       await prepareMollieProviderRefundThroughUi(client, orderNumber, suffix);
+    } else if (providerRefundExecutionProvider === 'razorpay') {
+      razorpayRefundMockServer = await createRazorpayRefundMockServer();
+      await prepareRazorpayProviderRefundThroughUi(client, orderNumber, suffix);
     } else if (providerRefundExecutionProvider === 'stripe') {
       stripeRefundMockServer = await createStripeRefundMockServer();
       await prepareStripeProviderRefundThroughUi(client, orderNumber, suffix);
@@ -2791,17 +3386,23 @@ const main = async () => {
         values.orderstatus === 'refunded' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        values.providerrefundstatus === (providerRefundExecutionProvider === 'manual' ? 'requires_action' : 'succeeded') &&
+        values.providerrefundstatus === (
+          providerRefundExecutionProvider === 'manual'
+            ? 'requires_action'
+            : providerRefundExecutionProvider === 'razorpay'
+              ? 'requested'
+              : 'succeeded'
+        ) &&
         values.providerrefundprovider === providerRefundExecutionProvider &&
         Boolean(values.providerrefundid) &&
         String(values.providerrefundreference || '').includes(String(values.providerrefundid || '')) &&
         Number(values.providerrefundamount) === expectedProviderTotal &&
         values.providerrefundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         Boolean(values.providerrefundrequestedat) &&
-        (providerRefundExecutionProvider === 'manual' || Boolean(values.providerrefundcompletedat)) &&
+        (providerRefundExecutionProvider === 'manual' || providerRefundExecutionProvider === 'razorpay' || Boolean(values.providerrefundcompletedat)) &&
         String(values.providerrefundpayload || '').includes('backy.provider-refund.v1') &&
         (providerRefundExecutionProvider !== 'manual'
-          ? /Provider refund executed succeeded/.test(String(values.notes || '')) && String(values.providerrefundpayload || '').includes(`${providerRefundExecutionProvider}-api`)
+          ? new RegExp(`Provider refund executed ${providerRefundExecutionProvider === 'razorpay' ? 'requested' : 'succeeded'}`).test(String(values.notes || '')) && String(values.providerrefundpayload || '').includes(`${providerRefundExecutionProvider}-api`)
           : /Provider refund handoff/.test(String(values.notes || '')))
       ),
       'Provider Refund did not persist provider refund fields',
@@ -2878,6 +3479,23 @@ const main = async () => {
       assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Mollie execution: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Mollie refund id: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.executionMode === 'mollie-api', `Provider refund payload did not persist Mollie execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    } else if (providerRefundExecutionProvider === 'razorpay') {
+      const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
+      assert(razorpayRefundMockServer.requests.length >= 1, `Razorpay refund mock did not receive a refund request: ${razorpayRefundMockServer.requests.length}`);
+      const razorpayRefundRequest = razorpayRefundMockServer.requests[0];
+      const expectedKeyId = process.env.BACKY_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
+      const expectedKeySecret = process.env.BACKY_RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET;
+      const expectedAuth = `Basic ${Buffer.from(`${expectedKeyId}:${expectedKeySecret}`).toString('base64')}`;
+      assert(razorpayRefundRequest.url === `/v1/payments/pay_refund_${suffix}/refund`, `Razorpay refund mock received unexpected URL: ${JSON.stringify(razorpayRefundMockServer.requests)}`);
+      assert(razorpayRefundRequest.headers.authorization === expectedAuth, `Razorpay refund mock did not receive basic auth: ${JSON.stringify(razorpayRefundRequest.headers)}`);
+      assert(Number(razorpayRefundRequest.body.amount) === Math.round(expectedProviderTotal * 100), `Razorpay refund body amount did not match order total: ${JSON.stringify(razorpayRefundRequest.body)}`);
+      assert(/^rf_/.test(String(razorpayRefundRequest.body.receipt || '')), `Razorpay refund body did not include receipt idempotency: ${JSON.stringify(razorpayRefundRequest.body)}`);
+      assert(/^rf_/.test(String(razorpayRefundRequest.body.notes?.backyRefundId || '')), `Razorpay refund body did not include internal refund metadata: ${JSON.stringify(razorpayRefundRequest.body)}`);
+      assert(String(providerRefundRecord.values.providerrefundid || '').startsWith('rfnd_razorpay_smoke_'), `Provider refund did not persist the Razorpay refund id: ${JSON.stringify(providerRefundRecord.values)}`);
+      assert(persistedProviderPayload.action === 'payments.refund', `Provider refund payload did not persist the Razorpay refund action: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Razorpay execution: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Razorpay refund id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.executionMode === 'razorpay-api', `Provider refund payload did not persist Razorpay execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     } else if (providerRefundExecutionProvider === 'stripe') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
       assert(stripeRefundMockServer.requests.length >= 1, `Stripe refund mock did not receive a refund request: ${stripeRefundMockServer.requests.length}`);
@@ -2894,36 +3512,40 @@ const main = async () => {
       assert(persistedProviderPayload.executionMode === 'stripe-api', `Provider refund payload did not persist Stripe execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     }
 
-    if (['paypal', 'square', 'mollie', 'stripe'].includes(providerRefundExecutionProvider)) {
-      const pendingRefundId = `${providerRefundExecutionProvider}_refresh_${suffix}`;
-      const latestOrder = await getCollectionRecordBySlug(collectionId, slug);
-      await updateCollectionRecord(collectionId, latestOrder.id, {
-        status: 'published',
-        values: {
-          ...latestOrder.values,
-          providerrefundstatus: 'requested',
-          providerrefundprovider: providerRefundExecutionProvider,
-          providerrefundid: pendingRefundId,
-          providerrefundreference: `${providerRefundExecutionProvider}:${pendingRefundId}`,
-          providerrefundcompletedat: '',
-          providerrefundpayload: JSON.stringify({
-            schemaVersion: 'backy.provider-refund.v1',
-            action: 'provider.refund.refresh.smoke',
-            provider: providerRefundExecutionProvider,
-            executionMode: `${providerRefundExecutionProvider}-api`,
-            idempotencyKey: pendingRefundId,
-          }),
-          notes: 'Order smoke reset to pending provider refund before refresh.',
-        },
-      });
-      await waitForOrderValue(
-        collectionId,
-        slug,
-        (values) => values.providerrefundstatus === 'requested' && values.providerrefundid === pendingRefundId,
-        'Provider refund pending refresh setup did not persist',
-      );
-      await navigateToOrders(client);
-      await waitUntilIdle(client, '/orders provider refund refresh setup');
+    if (['paypal', 'square', 'mollie', 'razorpay', 'stripe'].includes(providerRefundExecutionProvider)) {
+      let pendingRefundId = String(providerRefundRecord.values.providerrefundid || '');
+      if (providerRefundExecutionProvider !== 'razorpay') {
+        pendingRefundId = `${providerRefundExecutionProvider}_refresh_${suffix}`;
+        const latestOrder = await getCollectionRecordBySlug(collectionId, slug);
+        await updateCollectionRecord(collectionId, latestOrder.id, {
+          status: 'published',
+          values: {
+            ...latestOrder.values,
+            providerrefundstatus: 'requested',
+            providerrefundprovider: providerRefundExecutionProvider,
+            providerrefundid: pendingRefundId,
+            providerrefundreference: `${providerRefundExecutionProvider}:${pendingRefundId}`,
+            providerrefundcompletedat: '',
+            providerrefundpayload: JSON.stringify({
+              schemaVersion: 'backy.provider-refund.v1',
+              action: 'provider.refund.refresh.smoke',
+              provider: providerRefundExecutionProvider,
+              executionMode: `${providerRefundExecutionProvider}-api`,
+              idempotencyKey: pendingRefundId,
+            }),
+            notes: 'Order smoke reset to pending provider refund before refresh.',
+          },
+        });
+        await waitForOrderValue(
+          collectionId,
+          slug,
+          (values) => values.providerrefundstatus === 'requested' && values.providerrefundid === pendingRefundId,
+          'Provider refund pending refresh setup did not persist',
+        );
+        await navigateToOrders(client, { orderId: latestOrder.id });
+        await clickByText(client, 'Refresh', { exact: true });
+        await waitUntilIdle(client, '/orders provider refund refresh setup');
+      }
       await assertOrderCardButtonEnabled(client, orderNumber, 'Refresh Provider Refund');
       await clickOrderCardButton(client, orderNumber, 'Refresh Provider Refund');
       const refreshedProviderRefundRecord = await waitForOrderValue(
@@ -2947,7 +3569,9 @@ const main = async () => {
           ? squareRefundMockServer
           : providerRefundExecutionProvider === 'mollie'
             ? mollieRefundMockServer
-            : stripeRefundMockServer;
+            : providerRefundExecutionProvider === 'razorpay'
+              ? razorpayRefundMockServer
+              : stripeRefundMockServer;
       const refreshRequest = providerRefundMockServer.requests.find((request) => request.method === 'GET' && String(request.url || '').includes(pendingRefundId));
       assert(refreshRequest, `Provider refund refresh did not query the ${providerRefundExecutionProvider} mock: ${JSON.stringify(providerRefundMockServer.requests)}`);
     } else if (providerRefundExecutionProvider === 'manual') {
@@ -3216,6 +3840,8 @@ const main = async () => {
     assert(reconciledAnalytics.payment?.paid?.count >= 1, `Order analytics did not report paid orders after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
     assert(reconciledAnalytics.revenue?.paidTotal >= expectedProviderTotal, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
     assert(reconciledAnalytics.operations?.fulfillmentBacklogCount >= 1, `Order analytics did not report fulfillment backlog after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
+    assert(reconciledAnalytics.providerOperations?.attention?.providerRefundRequiresActionCount >= 0, `Order analytics did not expose provider attention counters: ${JSON.stringify(reconciledAnalytics.providerOperations).slice(0, 500)}`);
+    assert(reconciledAnalytics.providerOperations?.paymentProviders?.some((provider) => provider.statuses.paid >= 1), `Order analytics did not update payment provider status mix after reconciliation: ${JSON.stringify(reconciledAnalytics.providerOperations).slice(0, 500)}`);
 
     await clickReconcileProvider(client);
     await waitForReconciliationPanel(client);
@@ -3254,6 +3880,12 @@ const main = async () => {
     if (stripeTaxMockServer) {
       await stripeTaxMockServer.close().catch(() => {});
     }
+    if (taxJarMockServer) {
+      await taxJarMockServer.close().catch(() => {});
+    }
+    if (avalaraMockServer) {
+      await avalaraMockServer.close().catch(() => {});
+    }
     if (stripeRefundMockServer) {
       await stripeRefundMockServer.close().catch(() => {});
     }
@@ -3268,6 +3900,9 @@ const main = async () => {
     }
     if (mollieRefundMockServer) {
       await mollieRefundMockServer.close().catch(() => {});
+    }
+    if (razorpayRefundMockServer) {
+      await razorpayRefundMockServer.close().catch(() => {});
     }
     if (easyPostMockServer) {
       await easyPostMockServer.close().catch(() => {});

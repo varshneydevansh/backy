@@ -5,9 +5,9 @@
  * POST /api/admin/sites/[siteId]/reusable-sections/[sectionId]/instances
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
 import {
   getAdminBlogPostById,
   getAdminPageById,
@@ -17,17 +17,21 @@ import {
   getPageSummary,
   updateAdminBlogPost,
   updateAdminPage,
-} from '@/lib/backyStore';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+} from "@/lib/backyStore";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import {
   listReusableSectionInstancesInContent,
   refreshReusableSectionInstancesInContent,
   type ReusableSectionInstance,
-} from '@/lib/reusableSectionInstances';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import type { BackyContentDocument } from '@backy-cms/core';
+} from "@/lib/reusableSectionInstances";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import type { BackyContentDocument, Site } from "@backy-cms/core";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -36,7 +40,7 @@ interface RouteParams {
   }>;
 }
 
-type InstanceTargetType = 'page' | 'post';
+type InstanceTargetType = "page" | "post";
 
 type ContentTarget = {
   type: InstanceTargetType;
@@ -50,7 +54,9 @@ type ContentTarget = {
 
 type AdminPage = NonNullable<ReturnType<typeof getAdminPageById>>;
 
-const isAdminPage = (value: ReturnType<typeof getAdminPageById>): value is AdminPage => Boolean(value);
+const isAdminPage = (
+  value: ReturnType<typeof getAdminPageById>,
+): value is AdminPage => Boolean(value);
 
 type InstanceTargetReport = {
   type: InstanceTargetType;
@@ -62,93 +68,204 @@ type InstanceTargetReport = {
   instances: ReusableSectionInstance[];
 };
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
-);
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
+  NextResponse.json(
+    { success: false, requestId, error: { code, message } },
+    { status },
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const targetTypeFilter = (value: string | null | undefined): InstanceTargetType | 'all' => (
-  value === 'page' || value === 'post' ? value : 'all'
-);
+const targetTypeFilter = (
+  value: string | null | undefined,
+): InstanceTargetType | "all" =>
+  value === "page" || value === "post" ? value : "all";
 
 const targetMatches = (
   target: ContentTarget,
   filter: {
-    targetType: InstanceTargetType | 'all';
+    targetType: InstanceTargetType | "all";
     targetId?: string;
   },
 ): boolean => {
-  if (filter.targetType !== 'all' && target.type !== filter.targetType) return false;
-  if (filter.targetId && target.id !== filter.targetId && target.slug !== filter.targetId) return false;
+  if (filter.targetType !== "all" && target.type !== filter.targetType)
+    return false;
+  if (
+    filter.targetId &&
+    target.id !== filter.targetId &&
+    target.slug !== filter.targetId
+  )
+    return false;
   return true;
 };
 
 const reportInstances = (
   targets: ContentTarget[],
   section: Parameters<typeof listReusableSectionInstancesInContent>[1],
-): InstanceTargetReport[] => (
+): InstanceTargetReport[] =>
   targets.flatMap((target) => {
-    const instances = listReusableSectionInstancesInContent(target.content, section);
+    const instances = listReusableSectionInstancesInContent(
+      target.content,
+      section,
+    );
     return instances.length > 0
-      ? [{
-          type: target.type,
-          id: target.id,
-          title: target.title,
-          slug: target.slug,
-          status: target.status,
-          updatedAt: target.updatedAt,
-          instances,
-        }]
+      ? [
+          {
+            type: target.type,
+            id: target.id,
+            title: target.title,
+            slug: target.slug,
+            status: target.status,
+            updatedAt: target.updatedAt,
+            instances,
+          },
+        ]
       : [];
-  })
-);
+  });
+
+const deliverReusableSectionInstancesWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  section: { id: string; name: string; slug: string; updatedAt?: string };
+  refreshedTargets: Array<{
+    type: InstanceTargetType;
+    id: string;
+    title: string;
+    slug: string;
+    refreshed: number;
+  }>;
+  targetType: InstanceTargetType | "all";
+  targetId?: string | null;
+  updatedBy: string;
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: "reusableSection.instances.refreshed",
+    data: {
+      resourceType: "reusableSectionInstances",
+      section: {
+        id: params.section.id,
+        name: params.section.name,
+        slug: params.section.slug,
+        updatedAt: params.section.updatedAt || null,
+      },
+      targets: params.refreshedTargets,
+      totals: {
+        targets: params.refreshedTargets.length,
+        instances: params.refreshedTargets.reduce(
+          (total, target) => total + target.refreshed,
+          0,
+        ),
+      },
+    },
+    metadata: {
+      action: "reusableSection.instances.refreshed",
+      changedKeys: ["content"],
+      source: "admin-reusable-section-instances-api",
+      resourceType: "reusableSectionInstances",
+      resourceId: params.section.id,
+      slug: params.section.slug,
+      targetType: params.targetType,
+      targetId: params.targetId || null,
+      updatedBy: params.updatedBy,
+      targets: params.refreshedTargets.length,
+      instances: params.refreshedTargets.reduce(
+        (total, target) => total + target.refreshed,
+        0,
+      ),
+    },
+  });
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.view",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, sectionId } = await params;
     const { searchParams } = new URL(request.url);
-    const targetType = targetTypeFilter(searchParams.get('targetType') || searchParams.get('type'));
-    const targetId = searchParams.get('targetId') || undefined;
+    const targetType = targetTypeFilter(
+      searchParams.get("targetType") || searchParams.get("type"),
+    );
+    const targetId = searchParams.get("targetId") || undefined;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
-      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
-        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      const section =
+        (await repositories.reusableSections.getById(site.id, sectionId)) ||
+        (await repositories.reusableSections.getBySlug(site.id, sectionId));
       if (!section) {
-        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+        return errorResponse(
+          404,
+          "REUSABLE_SECTION_NOT_FOUND",
+          "Reusable section not found",
+          requestId,
+        );
       }
 
       const [pages, posts] = await Promise.all([
-        targetType === 'post'
+        targetType === "post"
           ? Promise.resolve({ items: [] })
-          : repositories.pages.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000, offset: 0 }),
-        targetType === 'page'
+          : repositories.pages.list({
+              siteId: site.id,
+              includeUnpublished: true,
+              status: "all",
+              limit: 1000,
+              offset: 0,
+            }),
+        targetType === "page"
           ? Promise.resolve({ items: [] })
-          : repositories.posts.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000, offset: 0 }),
+          : repositories.posts.list({
+              siteId: site.id,
+              includeUnpublished: true,
+              status: "all",
+              limit: 1000,
+              offset: 0,
+            }),
       ]);
       const targets: ContentTarget[] = [
         ...pages.items.map((page) => ({
-          type: 'page' as const,
+          type: "page" as const,
           id: page.id,
           title: page.title,
           slug: page.slug,
@@ -157,7 +274,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           content: page.content,
         })),
         ...posts.items.map((post) => ({
-          type: 'post' as const,
+          type: "post" as const,
           id: post.id,
           title: post.title,
           slug: post.slug,
@@ -177,8 +294,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           targets: targetReports,
           totals: {
             targets: targetReports.length,
-            instances: targetReports.reduce((total, target) => total + target.instances.length, 0),
-            stale: targetReports.reduce((total, target) => total + target.instances.filter((instance) => instance.stale).length, 0),
+            instances: targetReports.reduce(
+              (total, target) => total + target.instances.length,
+              0,
+            ),
+            stale: targetReports.reduce(
+              (total, target) =>
+                total +
+                target.instances.filter((instance) => instance.stale).length,
+              0,
+            ),
           },
         },
       });
@@ -186,40 +311,53 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
     const section = getReusableSectionByIdOrSlug(site.id, sectionId);
     if (!section) {
-      return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      return errorResponse(
+        404,
+        "REUSABLE_SECTION_NOT_FOUND",
+        "Reusable section not found",
+        requestId,
+      );
     }
 
-    const pageTargets: ContentTarget[] = targetType === 'post'
-      ? []
-      : getPageSummary(site.id, { includeUnpublished: true })
-          .map((page) => getAdminPageById(site.id, page.id))
-          .filter(isAdminPage)
-          .map((page) => ({
-            type: 'page' as const,
-            id: page.id,
-            title: page.title,
-            slug: page.slug,
-            status: page.status,
-            updatedAt: page.updatedAt,
-            content: page.content,
+    const pageTargets: ContentTarget[] =
+      targetType === "post"
+        ? []
+        : getPageSummary(site.id, { includeUnpublished: true })
+            .map((page) => getAdminPageById(site.id, page.id))
+            .filter(isAdminPage)
+            .map((page) => ({
+              type: "page" as const,
+              id: page.id,
+              title: page.title,
+              slug: page.slug,
+              status: page.status,
+              updatedAt: page.updatedAt,
+              content: page.content,
+            }));
+    const postTargets: ContentTarget[] =
+      targetType === "page"
+        ? []
+        : getBlogPosts(site.id, {
+            includeUnpublished: true,
+            limit: 1000,
+            offset: 0,
+          }).posts.map((post) => ({
+            type: "post" as const,
+            id: post.id,
+            title: post.title,
+            slug: post.slug,
+            status: post.status,
+            updatedAt: post.updatedAt,
+            content: post.content,
           }));
-    const postTargets: ContentTarget[] = targetType === 'page'
-      ? []
-      : getBlogPosts(site.id, { includeUnpublished: true, limit: 1000, offset: 0 }).posts.map((post) => ({
-          type: 'post' as const,
-          id: post.id,
-          title: post.title,
-          slug: post.slug,
-          status: post.status,
-          updatedAt: post.updatedAt,
-          content: post.content,
-        }));
     const targetReports = reportInstances(
-      [...pageTargets, ...postTargets].filter((target) => targetMatches(target, { targetType, targetId })),
+      [...pageTargets, ...postTargets].filter((target) =>
+        targetMatches(target, { targetType, targetId }),
+      ),
       section,
     );
 
@@ -232,53 +370,101 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         targets: targetReports,
         totals: {
           targets: targetReports.length,
-          instances: targetReports.reduce((total, target) => total + target.instances.length, 0),
-          stale: targetReports.reduce((total, target) => total + target.instances.filter((instance) => instance.stale).length, 0),
+          instances: targetReports.reduce(
+            (total, target) => total + target.instances.length,
+            0,
+          ),
+          stale: targetReports.reduce(
+            (total, target) =>
+              total +
+              target.instances.filter((instance) => instance.stale).length,
+            0,
+          ),
         },
       },
     });
   } catch (error) {
-    console.error('Admin reusable section instances API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin reusable section instances API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.edit",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, sectionId } = await params;
     const body = await parseJsonBody(request);
-    const targetType = targetTypeFilter(typeof body.targetType === 'string' ? body.targetType : undefined);
-    const targetId = typeof body.targetId === 'string' && body.targetId.trim() ? body.targetId.trim() : undefined;
+    const targetType = targetTypeFilter(
+      typeof body.targetType === "string" ? body.targetType : undefined,
+    );
+    const targetId =
+      typeof body.targetId === "string" && body.targetId.trim()
+        ? body.targetId.trim()
+        : undefined;
     const dryRun = body.dryRun === true;
-    const updatedBy = typeof body.updatedBy === 'string' && body.updatedBy.trim() ? body.updatedBy.trim() : 'admin';
+    const updatedBy =
+      typeof body.updatedBy === "string" && body.updatedBy.trim()
+        ? body.updatedBy.trim()
+        : "admin";
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
-      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
-        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      const section =
+        (await repositories.reusableSections.getById(site.id, sectionId)) ||
+        (await repositories.reusableSections.getBySlug(site.id, sectionId));
       if (!section) {
-        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+        return errorResponse(
+          404,
+          "REUSABLE_SECTION_NOT_FOUND",
+          "Reusable section not found",
+          requestId,
+        );
       }
 
       const [pages, posts] = await Promise.all([
-        targetType === 'post'
+        targetType === "post"
           ? Promise.resolve({ items: [] })
-          : repositories.pages.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000, offset: 0 }),
-        targetType === 'page'
+          : repositories.pages.list({
+              siteId: site.id,
+              includeUnpublished: true,
+              status: "all",
+              limit: 1000,
+              offset: 0,
+            }),
+        targetType === "page"
           ? Promise.resolve({ items: [] })
-          : repositories.posts.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000, offset: 0 }),
+          : repositories.posts.list({
+              siteId: site.id,
+              includeUnpublished: true,
+              status: "all",
+              limit: 1000,
+              offset: 0,
+            }),
       ]);
       const targets: ContentTarget[] = [
         ...pages.items.map((page) => ({
-          type: 'page' as const,
+          type: "page" as const,
           id: page.id,
           title: page.title,
           slug: page.slug,
@@ -287,7 +473,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           content: page.content,
         })),
         ...posts.items.map((post) => ({
-          type: 'post' as const,
+          type: "post" as const,
           id: post.id,
           title: post.title,
           slug: post.slug,
@@ -298,7 +484,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ].filter((target) => targetMatches(target, { targetType, targetId }));
       const refreshedTargets = [];
       for (const target of targets) {
-        const result = refreshReusableSectionInstancesInContent(target.content, section);
+        const result = refreshReusableSectionInstancesInContent(
+          target.content,
+          section,
+        );
         if (result.refreshed === 0) continue;
         refreshedTargets.push({
           type: target.type,
@@ -308,7 +497,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           refreshed: result.refreshed,
         });
         if (dryRun) continue;
-        if (target.type === 'page') {
+        if (target.type === "page") {
           await repositories.pages.update(site.id, target.id, {
             content: result.content as BackyContentDocument,
             revisionNote: `Refresh reusable section ${section.name}`,
@@ -320,21 +509,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           });
         }
       }
-      const cacheInvalidation = dryRun ? null : await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'reusableSection',
-        entityId: section.id,
-        reason: 'reusable-section-instances-refreshed',
-        requestId,
-      });
+      const cacheInvalidation = dryRun
+        ? null
+        : await recordSiteCacheInvalidation(repositories, {
+            siteId: site.id,
+            scope: "content",
+            entity: "reusableSection",
+            entityId: section.id,
+            reason: "reusable-section-instances-refreshed",
+            requestId,
+          });
       if (!dryRun) {
         await recordAdminAudit({
           repositories,
           siteId: site.id,
-          entity: 'reusableSection',
+          entity: "reusableSection",
           entityId: section.id,
-          action: 'reusableSection.instances.refresh',
+          action: "reusableSection.instances.refresh",
           after: {
             refreshedTargets,
           },
@@ -343,10 +534,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             targetId: targetId || null,
             updatedBy,
             targets: refreshedTargets.length,
-            instances: refreshedTargets.reduce((total, target) => total + target.refreshed, 0),
+            instances: refreshedTargets.reduce(
+              (total, target) => total + target.refreshed,
+              0,
+            ),
           },
           requestId,
         });
+        if (refreshedTargets.length > 0) {
+          await deliverReusableSectionInstancesWebhook({
+            repositories,
+            site,
+            section,
+            refreshedTargets,
+            targetType,
+            targetId,
+            updatedBy,
+            requestId,
+            actor: access.session?.user.id,
+          });
+        }
       }
 
       return NextResponse.json({
@@ -359,7 +566,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           refreshedTargets,
           totals: {
             targets: refreshedTargets.length,
-            instances: refreshedTargets.reduce((total, target) => total + target.refreshed, 0),
+            instances: refreshedTargets.reduce(
+              (total, target) => total + target.refreshed,
+              0,
+            ),
           },
           cacheInvalidation,
         },
@@ -368,42 +578,58 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
     const section = getReusableSectionByIdOrSlug(site.id, sectionId);
     if (!section) {
-      return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      return errorResponse(
+        404,
+        "REUSABLE_SECTION_NOT_FOUND",
+        "Reusable section not found",
+        requestId,
+      );
     }
 
-    const pageTargets: ContentTarget[] = targetType === 'post'
-      ? []
-      : getPageSummary(site.id, { includeUnpublished: true })
-          .map((page) => getAdminPageById(site.id, page.id))
-          .filter(isAdminPage)
-          .map((page) => ({
-            type: 'page' as const,
-            id: page.id,
-            title: page.title,
-            slug: page.slug,
-            status: page.status,
-            updatedAt: page.updatedAt,
-            content: page.content,
+    const pageTargets: ContentTarget[] =
+      targetType === "post"
+        ? []
+        : getPageSummary(site.id, { includeUnpublished: true })
+            .map((page) => getAdminPageById(site.id, page.id))
+            .filter(isAdminPage)
+            .map((page) => ({
+              type: "page" as const,
+              id: page.id,
+              title: page.title,
+              slug: page.slug,
+              status: page.status,
+              updatedAt: page.updatedAt,
+              content: page.content,
+            }));
+    const postTargets: ContentTarget[] =
+      targetType === "page"
+        ? []
+        : getBlogPosts(site.id, {
+            includeUnpublished: true,
+            limit: 1000,
+            offset: 0,
+          }).posts.map((post) => ({
+            type: "post" as const,
+            id: post.id,
+            title: post.title,
+            slug: post.slug,
+            status: post.status,
+            updatedAt: post.updatedAt,
+            content: post.content,
           }));
-    const postTargets: ContentTarget[] = targetType === 'page'
-      ? []
-      : getBlogPosts(site.id, { includeUnpublished: true, limit: 1000, offset: 0 }).posts.map((post) => ({
-          type: 'post' as const,
-          id: post.id,
-          title: post.title,
-          slug: post.slug,
-          status: post.status,
-          updatedAt: post.updatedAt,
-          content: post.content,
-        }));
-    const targets = [...pageTargets, ...postTargets].filter((target) => targetMatches(target, { targetType, targetId }));
+    const targets = [...pageTargets, ...postTargets].filter((target) =>
+      targetMatches(target, { targetType, targetId }),
+    );
     const refreshedTargets = [];
     for (const target of targets) {
-      const result = refreshReusableSectionInstancesInContent(target.content, section);
+      const result = refreshReusableSectionInstancesInContent(
+        target.content,
+        section,
+      );
       if (result.refreshed === 0) continue;
       refreshedTargets.push({
         type: target.type,
@@ -413,7 +639,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         refreshed: result.refreshed,
       });
       if (dryRun) continue;
-      if (target.type === 'page') {
+      if (target.type === "page") {
         updateAdminPage(site.id, target.id, {
           content: result.content,
           updatedBy,
@@ -430,9 +656,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!dryRun) {
       await recordAdminAudit({
         siteId: site.id,
-        entity: 'reusableSection',
+        entity: "reusableSection",
         entityId: section.id,
-        action: 'reusableSection.instances.refresh',
+        action: "reusableSection.instances.refresh",
         after: {
           refreshedTargets,
         },
@@ -441,10 +667,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           targetId: targetId || null,
           updatedBy,
           targets: refreshedTargets.length,
-          instances: refreshedTargets.reduce((total, target) => total + target.refreshed, 0),
+          instances: refreshedTargets.reduce(
+            (total, target) => total + target.refreshed,
+            0,
+          ),
         },
         requestId,
       });
+      if (refreshedTargets.length > 0) {
+        await deliverReusableSectionInstancesWebhook({
+          site: site as unknown as Site,
+          section,
+          refreshedTargets,
+          targetType,
+          targetId,
+          updatedBy,
+          requestId,
+          actor: access.session?.user.id,
+        });
+      }
     }
 
     return NextResponse.json({
@@ -457,12 +698,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         refreshedTargets,
         totals: {
           targets: refreshedTargets.length,
-          instances: refreshedTargets.reduce((total, target) => total + target.refreshed, 0),
+          instances: refreshedTargets.reduce(
+            (total, target) => total + target.refreshed,
+            0,
+          ),
         },
       },
     });
   } catch (error) {
-    console.error('Admin reusable section instances refresh API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin reusable section instances refresh API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

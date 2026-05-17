@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { getCollectionByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -29,6 +30,10 @@ interface Bucket {
   total: number;
 }
 
+interface ProviderStatusBucket extends Bucket {
+  statuses: Record<string, number>;
+}
+
 const ORDERS_COLLECTION_SLUG = 'orders';
 const ORDER_ANALYTICS_SCHEMA_VERSION = 'backy.order-analytics.v1';
 const ORDER_ANALYTICS_LIMIT = 1000;
@@ -40,7 +45,24 @@ const FULFILLMENT_STATUSES: FulfillmentStatus[] = ['unfulfilled', 'processing', 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
+  publicContractJson(
+    { success: false, requestId, error: { code, message }, errorMessage: message },
+    {
+      status,
+      requestId,
+      cache: 'error',
+      schemaVersion: ORDER_ANALYTICS_SCHEMA_VERSION,
+    },
+  )
+);
+
+const privateAnalyticsResponse = (body: Record<string, unknown>, requestId: string, siteId: string) => (
+  publicContractJson(body, {
+    requestId,
+    cache: 'private',
+    schemaVersion: ORDER_ANALYTICS_SCHEMA_VERSION,
+    siteId,
+  })
 );
 
 const textValue = (value: unknown): string => (
@@ -56,6 +78,8 @@ const roundMoney = (value: number): number => Math.round(value * 100) / 100;
 
 const bucket = (): Bucket => ({ count: 0, total: 0 });
 
+const providerStatusBucket = (): ProviderStatusBucket => ({ count: 0, total: 0, statuses: {} });
+
 const normalizePaymentStatus = (value: unknown): PaymentStatus => {
   const status = textValue(value).toLowerCase();
   return PAYMENT_STATUSES.includes(status as PaymentStatus) ? status as PaymentStatus : 'pending';
@@ -70,6 +94,38 @@ const normalizeCurrency = (value: unknown): string => {
   const currency = textValue(value).toUpperCase();
   return /^[A-Z]{3}$/.test(currency) ? currency : 'USD';
 };
+
+const normalizeProviderKey = (value: unknown, fallback = 'manual'): string => {
+  const provider = textValue(value).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return provider || fallback;
+};
+
+const normalizeStatusKey = (value: unknown, fallback = 'none'): string => {
+  const status = textValue(value).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return status || fallback;
+};
+
+const addProviderBucket = (
+  buckets: Map<string, ProviderStatusBucket>,
+  providerValue: unknown,
+  statusValue: unknown,
+  total: number,
+  fallbackProvider = 'manual',
+) => {
+  const provider = normalizeProviderKey(providerValue, fallbackProvider);
+  const status = normalizeStatusKey(statusValue);
+  const current = buckets.get(provider) || providerStatusBucket();
+  current.count += 1;
+  current.total = roundMoney(current.total + total);
+  current.statuses[status] = (current.statuses[status] || 0) + 1;
+  buckets.set(provider, current);
+};
+
+const providerBucketsToArray = (buckets: Map<string, ProviderStatusBucket>) => (
+  Array.from(buckets.entries())
+    .map(([provider, stats]) => ({ provider, ...stats }))
+    .sort((left, right) => right.count - left.count || right.total - left.total || left.provider.localeCompare(right.provider))
+);
 
 const timestampValue = (record: OrderAnalyticsRecord): number => {
   const timestamp = Date.parse(record.updatedAt || record.createdAt || '');
@@ -104,6 +160,10 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
   const fulfillment = Object.fromEntries(FULFILLMENT_STATUSES.map((status) => [status, bucket()])) as Record<FulfillmentStatus, Bucket>;
   const sourceBuckets = new Map<string, Bucket>();
   const currencyBuckets = new Map<string, Bucket>();
+  const paymentProviderBuckets = new Map<string, ProviderStatusBucket>();
+  const providerRefundBuckets = new Map<string, ProviderStatusBucket>();
+  const fulfillmentProviderBuckets = new Map<string, ProviderStatusBucket>();
+  const shippingLabelProviderBuckets = new Map<string, ProviderStatusBucket>();
   const trend = trendSeed();
   const trendByDate = new Map(trend.map((point) => [point.date, point]));
   let grossTotal = 0;
@@ -122,6 +182,12 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
   let subscriptionPausedCount = 0;
   let subscriptionResumedCount = 0;
   let subscriptionTrialEndingCount = 0;
+  let providerRefundPendingCount = 0;
+  let providerRefundFailureCount = 0;
+  let providerRefundRequiresActionCount = 0;
+  let fulfillmentDispatchPendingCount = 0;
+  let fulfillmentDispatchFailureCount = 0;
+  let shippingLabelIssueCount = 0;
 
   records.forEach((record) => {
     const values = record.values || {};
@@ -130,6 +196,9 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
     const fulfillmentStatus = normalizeFulfillmentStatus(values.fulfillmentstatus);
     const source = textValue(values.ordersource).toLowerCase() || 'unknown';
     const currency = normalizeCurrency(values.currency);
+    const providerRefundStatus = normalizeStatusKey(values.providerrefundstatus);
+    const fulfillmentDispatchStatus = normalizeStatusKey(values.fulfillmentdispatchstatus);
+    const shippingLabelStatus = normalizeStatusKey(values.shippinglabelstatus);
     const paymentReference = textValue(values.paymentreference);
     const notes = textValue(values.notes).toLowerCase();
     const isSubscriptionOrder = paymentReference.startsWith('sub_') || notes.includes('customer.subscription.') || notes.includes('invoice.payment_');
@@ -156,11 +225,21 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
       if (notes.includes('customer.subscription.resumed')) subscriptionResumedCount += 1;
       if (notes.includes('customer.subscription.trial_will_end')) subscriptionTrialEndingCount += 1;
     }
+    if (providerRefundStatus === 'requested') providerRefundPendingCount += 1;
+    if (providerRefundStatus === 'failed') providerRefundFailureCount += 1;
+    if (providerRefundStatus === 'requires_action') providerRefundRequiresActionCount += 1;
+    if (fulfillmentDispatchStatus === 'requested') fulfillmentDispatchPendingCount += 1;
+    if (fulfillmentDispatchStatus === 'failed') fulfillmentDispatchFailureCount += 1;
+    if (shippingLabelStatus === 'failed' || shippingLabelStatus === 'requires_action') shippingLabelIssueCount += 1;
 
     payment[paymentStatus].count += 1;
     payment[paymentStatus].total = roundMoney(payment[paymentStatus].total + total);
     fulfillment[fulfillmentStatus].count += 1;
     fulfillment[fulfillmentStatus].total = roundMoney(fulfillment[fulfillmentStatus].total + total);
+    addProviderBucket(paymentProviderBuckets, values.paymentprovider, paymentStatus, total, 'manual');
+    addProviderBucket(providerRefundBuckets, values.providerrefundprovider, providerRefundStatus, numberValue(values.providerrefundamount), 'manual');
+    addProviderBucket(fulfillmentProviderBuckets, values.fulfillmentprovider, fulfillmentDispatchStatus, total, 'manual');
+    addProviderBucket(shippingLabelProviderBuckets, values.shippinglabelprovider, shippingLabelStatus, numberValue(values.shippinglabelcost), 'manual');
 
     const sourceBucket = sourceBuckets.get(source) || bucket();
     sourceBucket.count += 1;
@@ -226,6 +305,26 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
       subscriptionPausedCount,
       subscriptionResumedCount,
       subscriptionTrialEndingCount,
+      providerRefundPendingCount,
+      providerRefundFailureCount,
+      providerRefundRequiresActionCount,
+      fulfillmentDispatchPendingCount,
+      fulfillmentDispatchFailureCount,
+      shippingLabelIssueCount,
+    },
+    providerOperations: {
+      paymentProviders: providerBucketsToArray(paymentProviderBuckets),
+      refundProviders: providerBucketsToArray(providerRefundBuckets),
+      fulfillmentProviders: providerBucketsToArray(fulfillmentProviderBuckets),
+      shippingLabelProviders: providerBucketsToArray(shippingLabelProviderBuckets),
+      attention: {
+        providerRefundPendingCount,
+        providerRefundFailureCount,
+        providerRefundRequiresActionCount,
+        fulfillmentDispatchPendingCount,
+        fulfillmentDispatchFailureCount,
+        shippingLabelIssueCount,
+      },
     },
     sources,
     currencies,
@@ -277,7 +376,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
       const analytics = buildOrderAnalytics(result.items);
 
-      return NextResponse.json({
+      return privateAnalyticsResponse({
         success: true,
         requestId,
         data: {
@@ -285,7 +384,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           collection: { id: ordersCollection.id, slug: ordersCollection.slug, name: ordersCollection.name },
           analytics,
         },
-      });
+      }, requestId, site.id);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -301,7 +400,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }).records;
     const analytics = buildOrderAnalytics(records);
 
-    return NextResponse.json({
+    return privateAnalyticsResponse({
       success: true,
       requestId,
       data: {
@@ -309,7 +408,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         collection: { id: ordersCollection.id, slug: ordersCollection.slug, name: ordersCollection.name },
         analytics,
       },
-    });
+    }, requestId, site.id);
   } catch (error) {
     console.error('Admin order analytics API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

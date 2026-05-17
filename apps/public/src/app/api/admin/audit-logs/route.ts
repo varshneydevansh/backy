@@ -57,8 +57,11 @@ const parseEntity = (value: string | null): BackyRepositoryEntity | undefined =>
     value === 'form' ||
     value === 'formSubmission' ||
     value === 'reusableSection' ||
+    value === 'interactiveComponent' ||
     value === 'contact' ||
     value === 'comment' ||
+    value === 'team' ||
+    value === 'teamMember' ||
     value === 'user' ||
     value === 'settings' ||
     value === 'auditLog' ||

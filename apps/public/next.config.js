@@ -12,7 +12,7 @@ const nextConfig = {
             // Handle subdomain routing for sites
             beforeFiles: [
                 {
-                    source: '/:path((?!api(?:/|$)|_next(?:/|$)|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$).*)',
+                    source: '/:path((?!api(?:/|$)|_next(?:/|$)|sites(?:/|$)|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$).*)',
                     has: [
                         {
                             type: 'host',

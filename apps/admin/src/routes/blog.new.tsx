@@ -25,7 +25,7 @@ import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPerm
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type BlogPost } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
-import { CanvasEditor } from '@/components/editor/CanvasEditor';
+import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { useAuthStore, type User } from '@/stores/authStore';
@@ -913,6 +913,14 @@ function NewBlogPostPage() {
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(initialCanvasSize);
     const [canvasSeedKey, setCanvasSeedKey] = useState('default-blog-template');
+    const interactiveReadinessIssues = useMemo(
+        () => collectInteractiveReadinessIssues(canvasElements),
+        [canvasElements],
+    );
+    const interactivePublishDisabledReason = interactiveReadinessIssues.length
+        ? `Resolve interactive block readiness before publishing: ${interactiveReadinessIssues[0]}`
+        : null;
+    const interactivePublishReady = interactiveReadinessIssues.length === 0;
     const appliedSearchTemplateRef = useRef<string | null>(null);
     const frontendBlogTemplates = useMemo(
         () => (frontendDesign?.templates || []).filter((template) => template.type === 'blogPost'),
@@ -1096,9 +1104,11 @@ function NewBlogPostPage() {
         && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
-        && canonicalValid;
+        && canonicalValid
+        && interactivePublishReady;
     const canSubmit = canCreateDraft
         && (status === 'draft' || canPublishBlog)
+        && (status === 'draft' || interactivePublishReady)
         && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
     const createPayloadPreview = useMemo(() => ({
@@ -1613,25 +1623,20 @@ function NewBlogPostPage() {
         };
     };
 
-    const getCreateBlockedMessage = (mode: 'save' | 'preview') => (
-        !canEditBlog
-            ? editBlogDeniedMessage
-            : mode === 'preview' && !canPublishBlog
-                ? publishBlogDeniedMessage
-                : mode === 'save' && status !== 'draft' && !canPublishBlog
-                    ? publishBlogDeniedMessage
-                    : isCheckingPosts
-            ? 'Checking existing blog routes before saving'
-            : routeCheckError
-                ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
-                : routeConflict
-                    ? `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
-                    : !canonicalValid
-                        ? 'Canonical path must start with / before saving'
-                        : mode === 'save' && status === 'scheduled' && !scheduledAt
-                            ? 'Choose a publish date before scheduling'
-                            : 'Add a title and URL slug before saving'
-    );
+    const getCreateBlockedMessage = (mode: 'save' | 'preview') => {
+        if (!canEditBlog) return editBlogDeniedMessage;
+        if (mode === 'preview' && !canPublishBlog) return publishBlogDeniedMessage;
+        if (mode === 'save' && status !== 'draft' && !canPublishBlog) return publishBlogDeniedMessage;
+        if ((mode === 'preview' || (mode === 'save' && status !== 'draft')) && interactivePublishDisabledReason) {
+            return interactivePublishDisabledReason;
+        }
+        if (isCheckingPosts) return 'Checking existing blog routes before saving';
+        if (routeCheckError) return 'Backy could not verify existing blog routes for this site. Retry the route check before saving.';
+        if (routeConflict) return `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`;
+        if (!canonicalValid) return 'Canonical path must start with / before saving';
+        if (mode === 'save' && status === 'scheduled' && !scheduledAt) return 'Choose a publish date before scheduling';
+        return 'Add a title and URL slug before saving';
+    };
 
     const handleCreatePreview = async () => {
         if (isLoading || isPreviewAfterCreateBusy) return;
@@ -2339,6 +2344,12 @@ function NewBlogPostPage() {
                                     canViewMedia={canViewMedia}
                                     canCreateMedia={canCreateMedia}
                                     canViewCollections={canViewCollections}
+                                    mediaContext={{
+                                      siteId: activeSiteId,
+                                      scope: 'post',
+                                      targetId: 'new-post',
+                                      targetLabel: title.trim() || 'New blog post',
+                                    }}
                                     editDisabledReason={editBlogPermissionTitle}
                                     publishDisabledReason={publishBlogPermissionTitle}
                                     mediaViewDisabledReason={viewMediaDeniedMessage}

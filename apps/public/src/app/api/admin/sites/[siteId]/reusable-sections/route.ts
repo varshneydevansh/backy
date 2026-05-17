@@ -5,22 +5,26 @@
  * POST /api/admin/sites/[siteId]/reusable-sections
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
 import {
   createReusableSection,
   getReusableSectionByIdOrSlug,
   getSiteByIdOrSlug,
   listReusableSections,
-} from '@/lib/backyStore';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { buildInitialReusableSectionMetadata } from '@/lib/reusableSectionVersions';
-import { seedSectionInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
-import type { BackyJsonObject } from '@backy-cms/core';
+} from "@/lib/backyStore";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import { buildInitialReusableSectionMetadata } from "@/lib/reusableSectionVersions";
+import { seedSectionInputFromFrontendDesignTemplate } from "@/lib/frontendDesignContract";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import type { BackyJsonObject, Site } from "@backy-cms/core";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -28,58 +32,138 @@ interface RouteParams {
   }>;
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
-);
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
+  NextResponse.json(
+    { success: false, requestId, error: { code, message } },
+    { status },
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const normalizeSlug = (value: unknown): string => (
-  typeof value === 'string'
-    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    : ''
-);
+const normalizeSlug = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    : "";
 
-const hasElements = (value: unknown): boolean => (
+const hasElements = (value: unknown): boolean =>
   !!value &&
-  typeof value === 'object' &&
+  typeof value === "object" &&
   !Array.isArray(value) &&
   Array.isArray((value as { elements?: unknown }).elements) &&
-  ((value as { elements: unknown[] }).elements.length > 0)
-);
+  (value as { elements: unknown[] }).elements.length > 0;
 
-const parseContent = (value: unknown): BackyJsonObject => (
-  value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : {}
-);
+const parseContent = (value: unknown): BackyJsonObject =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as BackyJsonObject)
+    : {};
 
-const parseMetadata = (value: unknown): BackyJsonObject | undefined => (
-  value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : undefined
-);
+const parseMetadata = (value: unknown): BackyJsonObject | undefined =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as BackyJsonObject)
+    : undefined;
 
 const parseTags = (value: unknown): string[] => {
   if (Array.isArray(value)) {
-    return Array.from(new Set(value.map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean)));
+    return Array.from(
+      new Set(
+        value
+          .map((tag) => (typeof tag === "string" ? tag.trim() : ""))
+          .filter(Boolean),
+      ),
+    );
   }
-  if (typeof value === 'string') {
-    return Array.from(new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean)));
+  if (typeof value === "string") {
+    return Array.from(
+      new Set(
+        value
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      ),
+    );
   }
   return [];
 };
 
+const reusableSectionWebhookSnapshot = (section: {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  category?: string | null;
+  tags?: string[];
+  updatedAt?: string;
+}) => ({
+  id: section.id,
+  name: section.name,
+  slug: section.slug,
+  status: section.status,
+  category: section.category || null,
+  tags: Array.isArray(section.tags) ? section.tags : [],
+  updatedAt: section.updatedAt || null,
+});
+
+const deliverReusableSectionWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  action: "reusableSection.created";
+  after: Parameters<typeof reusableSectionWebhookSnapshot>[0];
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: params.action,
+    data: {
+      resourceType: "reusableSection",
+      after: reusableSectionWebhookSnapshot(params.after),
+    },
+    metadata: {
+      action: params.action,
+      changedKeys: ["content"],
+      source: "admin-reusable-sections-api",
+      resourceType: "reusableSection",
+      resourceId: params.after.id,
+      slug: params.after.slug,
+      status: params.after.status,
+      category: params.after.category || null,
+    },
+  });
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.view",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -88,21 +172,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const statusParam = searchParams.get('status');
-      const status = statusParam === 'active' || statusParam === 'archived' || statusParam === 'all'
-        ? statusParam
-        : 'active';
+      const statusParam = searchParams.get("status");
+      const status =
+        statusParam === "active" ||
+        statusParam === "archived" ||
+        statusParam === "all"
+          ? statusParam
+          : "active";
       const result = await repositories.reusableSections.list({
         siteId: site.id,
         status,
-        category: searchParams.get('category') || undefined,
-        tag: searchParams.get('tag') || undefined,
-        search: searchParams.get('search') || undefined,
+        category: searchParams.get("category") || undefined,
+        tag: searchParams.get("tag") || undefined,
+        search: searchParams.get("search") || undefined,
         limit: 100,
         offset: 0,
       });
@@ -120,19 +214,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const statusParam = searchParams.get('status');
-    const status = statusParam === 'active' || statusParam === 'archived' || statusParam === 'all'
-      ? statusParam
-      : 'active';
+    const statusParam = searchParams.get("status");
+    const status =
+      statusParam === "active" ||
+      statusParam === "archived" ||
+      statusParam === "all"
+        ? statusParam
+        : "active";
 
     const sections = listReusableSections(site.id, {
       status,
-      category: searchParams.get('category') || undefined,
-      tag: searchParams.get('tag') || undefined,
-      search: searchParams.get('search') || undefined,
+      category: searchParams.get("category") || undefined,
+      tag: searchParams.get("tag") || undefined,
+      search: searchParams.get("search") || undefined,
     });
 
     return NextResponse.json({
@@ -143,14 +240,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin reusable sections list API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin reusable sections list API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.edit",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -158,70 +262,123 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       const rawBody = await parseJsonBody(request);
-      const seeded = seedSectionInputFromFrontendDesignTemplate({ siteSettings: site.settings, body: rawBody });
+      const seeded = seedSectionInputFromFrontendDesignTemplate({
+        siteSettings: site.settings,
+        body: rawBody,
+      });
       if (!seeded.ok) {
         return errorResponse(400, seeded.code, seeded.message, requestId);
       }
       const body = seeded.body;
-      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const name = typeof body.name === "string" ? body.name.trim() : "";
       const slug = normalizeSlug(body.slug || name);
 
       if (!name) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section name is required', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Reusable section name is required",
+          requestId,
+        );
       }
 
       if (!slug) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section slug is required', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Reusable section slug is required",
+          requestId,
+        );
       }
 
       if (!hasElements(body.content)) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section content must include at least one element', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Reusable section content must include at least one element",
+          requestId,
+        );
       }
 
       if (await repositories.reusableSections.getBySlug(site.id, slug)) {
-        return errorResponse(409, 'SLUG_CONFLICT', 'A reusable section with this slug already exists', requestId);
+        return errorResponse(
+          409,
+          "SLUG_CONFLICT",
+          "A reusable section with this slug already exists",
+          requestId,
+        );
       }
 
-      const createdBy = typeof body.createdBy === 'string' ? body.createdBy.trim() || 'admin' : 'admin';
-      const updatedBy = typeof body.updatedBy === 'string' ? body.updatedBy.trim() || createdBy : createdBy;
-      const metadata = buildInitialReusableSectionMetadata(parseMetadata(body.metadata), {
-        actor: updatedBy,
-        requestId,
-      }) as BackyJsonObject;
-      const section = (await repositories.reusableSections.create({
-        siteId: site.id,
-        name,
-        slug,
-        description: typeof body.description === 'string' ? body.description.trim() || null : null,
-        category: typeof body.category === 'string' && body.category.trim() ? body.category.trim() : 'general',
-        status: body.status === 'archived' ? 'archived' : 'active',
-        tags: parseTags(body.tags),
-        content: parseContent(body.content),
-        metadata,
-        sourceElementId: typeof body.sourceElementId === 'string' ? body.sourceElementId.trim() || null : null,
-        createdBy,
-        updatedBy,
-      })).item;
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'reusableSection',
-        entityId: section.id,
-        reason: 'reusable-section-created',
-        requestId,
-      });
+      const createdBy =
+        typeof body.createdBy === "string"
+          ? body.createdBy.trim() || "admin"
+          : "admin";
+      const updatedBy =
+        typeof body.updatedBy === "string"
+          ? body.updatedBy.trim() || createdBy
+          : createdBy;
+      const metadata = buildInitialReusableSectionMetadata(
+        parseMetadata(body.metadata),
+        {
+          actor: updatedBy,
+          requestId,
+        },
+      ) as BackyJsonObject;
+      const section = (
+        await repositories.reusableSections.create({
+          siteId: site.id,
+          name,
+          slug,
+          description:
+            typeof body.description === "string"
+              ? body.description.trim() || null
+              : null,
+          category:
+            typeof body.category === "string" && body.category.trim()
+              ? body.category.trim()
+              : "general",
+          status: body.status === "archived" ? "archived" : "active",
+          tags: parseTags(body.tags),
+          content: parseContent(body.content),
+          metadata,
+          sourceElementId:
+            typeof body.sourceElementId === "string"
+              ? body.sourceElementId.trim() || null
+              : null,
+          createdBy,
+          updatedBy,
+        })
+      ).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "reusableSection",
+          entityId: section.id,
+          reason: "reusable-section-created",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'reusableSection',
+        entity: "reusableSection",
         entityId: section.id,
-        action: 'reusableSection.create',
+        action: "reusableSection.create",
         after: section,
         metadata: {
           slug: section.slug,
@@ -229,6 +386,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           status: section.status,
         },
         requestId,
+      });
+      await deliverReusableSectionWebhook({
+        repositories,
+        site,
+        action: "reusableSection.created",
+        after: section,
+        requestId,
+        actor: access.session?.user.id,
       });
 
       return NextResponse.json(
@@ -240,52 +405,84 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const rawBody = await parseJsonBody(request);
-    const seeded = seedSectionInputFromFrontendDesignTemplate({ siteSettings: site.settings, body: rawBody });
+    const seeded = seedSectionInputFromFrontendDesignTemplate({
+      siteSettings: site.settings,
+      body: rawBody,
+    });
     if (!seeded.ok) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
     const body = seeded.body;
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const name = typeof body.name === "string" ? body.name.trim() : "";
     const slug = normalizeSlug(body.slug || name);
 
     if (!name) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section name is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Reusable section name is required",
+        requestId,
+      );
     }
 
     if (!slug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section slug is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Reusable section slug is required",
+        requestId,
+      );
     }
 
     if (!hasElements(body.content)) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section content must include at least one element', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Reusable section content must include at least one element",
+        requestId,
+      );
     }
 
     if (getReusableSectionByIdOrSlug(site.id, slug)) {
-      return errorResponse(409, 'SLUG_CONFLICT', 'A reusable section with this slug already exists', requestId);
+      return errorResponse(
+        409,
+        "SLUG_CONFLICT",
+        "A reusable section with this slug already exists",
+        requestId,
+      );
     }
 
-    const createdBy = typeof body.createdBy === 'string' ? body.createdBy.trim() || 'admin' : 'admin';
-    const updatedBy = typeof body.updatedBy === 'string' ? body.updatedBy.trim() || createdBy : createdBy;
+    const createdBy =
+      typeof body.createdBy === "string"
+        ? body.createdBy.trim() || "admin"
+        : "admin";
+    const updatedBy =
+      typeof body.updatedBy === "string"
+        ? body.updatedBy.trim() || createdBy
+        : createdBy;
     const section = createReusableSection(site.id, {
       ...body,
       name,
       slug,
-      metadata: buildInitialReusableSectionMetadata(parseMetadata(body.metadata), {
-        actor: updatedBy,
-        requestId,
-      }),
+      metadata: buildInitialReusableSectionMetadata(
+        parseMetadata(body.metadata),
+        {
+          actor: updatedBy,
+          requestId,
+        },
+      ),
       createdBy,
       updatedBy,
     });
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'reusableSection',
+      entity: "reusableSection",
       entityId: section.id,
-      action: 'reusableSection.create',
+      action: "reusableSection.create",
       after: section,
       metadata: {
         slug: section.slug,
@@ -294,13 +491,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
       requestId,
     });
+    await deliverReusableSectionWebhook({
+      site: site as unknown as Site,
+      action: "reusableSection.created",
+      after: section,
+      requestId,
+      actor: access.session?.user.id,
+    });
 
     return NextResponse.json(
       { success: true, requestId, data: { section } },
       { status: 201 },
     );
   } catch (error) {
-    console.error('Admin reusable section create API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin reusable section create API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

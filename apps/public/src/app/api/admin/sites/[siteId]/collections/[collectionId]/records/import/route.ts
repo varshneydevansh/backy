@@ -5,8 +5,15 @@
  * POST /api/admin/sites/[siteId]/collections/[collectionId]/records/import?upsert=true
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollection, BackyCollectionField, BackyJsonValue, PublishStatus } from '@backy-cms/core';
+import { NextRequest, NextResponse } from "next/server";
+import type {
+  BackyCollection,
+  BackyCollectionField,
+  BackyJsonObject,
+  BackyJsonValue,
+  PublishStatus,
+  Site,
+} from "@backy-cms/core";
 import {
   createAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -15,14 +22,18 @@ import {
   updateAdminCollectionRecord,
   validateCollectionRecordValues,
   type StoreCollection,
-} from '@/lib/backyStore';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+} from "@/lib/backyStore";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { requireCommerceCollectionAccess } from "@/lib/adminCommerceCollectionAccess";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import { validateRepositoryCollectionRecordValues } from "@/lib/collectionRecordValidation";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -38,42 +49,71 @@ interface ImportError {
   details?: unknown;
 }
 
+interface CollectionAuditSource {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 const RESERVED_COLUMNS = new Set([
-  'id',
-  'slug',
-  'status',
-  'createdAt',
-  'updatedAt',
-  'publishedAt',
-  'scheduledAt',
+  "id",
+  "slug",
+  "status",
+  "createdAt",
+  "updatedAt",
+  "publishedAt",
+  "scheduledAt",
 ]);
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
-  NextResponse.json({ success: false, requestId, error: { code, message, details } }, { status })
-);
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: unknown,
+) =>
+  NextResponse.json(
+    { success: false, requestId, error: { code, message, details } },
+    { status },
+  );
+
+const toRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
 const normalizeSlug = (value: unknown, fallback: string): string => {
-  const raw = typeof value === 'string' ? value : String(value || '');
-  const slug = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const raw = typeof value === "string" ? value : String(value || "");
+  const slug = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return slug || fallback;
 };
 
-const normalizeFieldKey = (value: unknown): string => (
-  String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-);
+const normalizeFieldKey = (value: unknown): string =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
-const parseStatus = (value: unknown): PublishStatus => (
-  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+const parseStatus = (value: unknown): PublishStatus =>
+  value === "draft" ||
+  value === "published" ||
+  value === "scheduled" ||
+  value === "archived"
     ? value
-    : 'draft'
-);
+    : "draft";
 
 const parseCsvRows = (source: string): string[][] => {
   const rows: string[][] = [];
   let row: string[] = [];
-  let cell = '';
+  let cell = "";
   let quoted = false;
 
   for (let index = 0; index < source.length; index += 1) {
@@ -97,21 +137,21 @@ const parseCsvRows = (source: string): string[][] => {
       continue;
     }
 
-    if (char === ',') {
+    if (char === ",") {
       row.push(cell);
-      cell = '';
+      cell = "";
       continue;
     }
 
-    if (char === '\n') {
+    if (char === "\n") {
       row.push(cell);
       rows.push(row);
       row = [];
-      cell = '';
+      cell = "";
       continue;
     }
 
-    if (char !== '\r') {
+    if (char !== "\r") {
       cell += char;
     }
   }
@@ -125,27 +165,30 @@ const parseCsvRows = (source: string): string[][] => {
 };
 
 const parseImportedValue = (
-  field: BackyCollectionField | NonNullable<ReturnType<typeof getCollectionByIdOrSlug>>['fields'][number] | undefined,
+  field:
+    | BackyCollectionField
+    | NonNullable<ReturnType<typeof getCollectionByIdOrSlug>>["fields"][number]
+    | undefined,
   value: string,
 ): unknown => {
   if (!field) {
     return value;
   }
 
-  if (field.type === 'number') {
+  if (field.type === "number") {
     if (!value.trim()) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : value;
   }
 
-  if (field.type === 'boolean') {
+  if (field.type === "boolean") {
     const normalized = value.trim().toLowerCase();
-    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
-    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false;
+    if (["true", "1", "yes", "y", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "n", "off"].includes(normalized)) return false;
     return false;
   }
 
-  if (field.type === 'tags' || field.type === 'multiReference') {
+  if (field.type === "tags" || field.type === "multiReference") {
     if (!value.trim()) return [];
     try {
       const parsed = JSON.parse(value);
@@ -155,10 +198,13 @@ const parseImportedValue = (
     } catch {
       // Fall through to the legacy comma-separated format.
     }
-    return value.split(',').map((item) => item.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 
-  if (field.type !== 'json') {
+  if (field.type !== "json") {
     return value;
   }
 
@@ -173,33 +219,120 @@ const parseImportedValue = (
   }
 };
 
-const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
-  value as Record<string, BackyJsonValue>
-);
+const toJsonRecord = (
+  value: Record<string, unknown>,
+): Record<string, BackyJsonValue> => value as Record<string, BackyJsonValue>;
 
-const importRows = async (
-  input: {
-    siteId: string;
-    collection: BackyCollection;
-    rows: string[][];
-    headers: string[];
-    upsert: boolean;
-    validate: (
-      slug: string,
-      values: Record<string, unknown>,
-    ) => Promise<unknown[]>;
-    save: (
-      slug: string,
-      values: Record<string, unknown>,
-      status: PublishStatus,
-      scheduledAt: string | null,
-    ) => Promise<{ record: unknown | null; existing: boolean }>;
-  },
-) => {
-  const fieldsByKey = new Map(input.collection.fields.flatMap((field) => [
-    [field.key, field] as const,
-    [normalizeFieldKey(field.key), field] as const,
-  ]));
+const importedRecordSnapshot = (
+  collection: CollectionAuditSource,
+  record: unknown,
+): BackyJsonObject | null => {
+  const source = toRecord(record);
+  const recordId = typeof source.id === "string" ? source.id : "";
+  const slug = typeof source.slug === "string" ? source.slug : "";
+  const status = typeof source.status === "string" ? source.status : "";
+
+  if (!recordId || !slug || !status) {
+    return null;
+  }
+
+  const values = toRecord(source.values);
+  const valueKeys = Object.keys(values).sort();
+  return {
+    collectionId: collection.id,
+    collectionName: collection.name,
+    collectionSlug: collection.slug,
+    recordId,
+    slug,
+    status,
+    valueKeys,
+    valueCount: valueKeys.length,
+    scheduledAt:
+      typeof source.scheduledAt === "string" ? source.scheduledAt : null,
+    publishedAt:
+      typeof source.publishedAt === "string" ? source.publishedAt : null,
+  };
+};
+
+const deliverCollectionRecordImportWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  collection: CollectionAuditSource;
+  records: unknown[];
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: ImportError[];
+  upsert: boolean;
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: "collectionRecord.imported",
+    data: {
+      resourceType: "collectionRecordImport",
+      collection: {
+        id: params.collection.id,
+        name: params.collection.name,
+        slug: params.collection.slug,
+      },
+      after: params.records
+        .map((record) => importedRecordSnapshot(params.collection, record))
+        .filter((record): record is BackyJsonObject => Boolean(record)),
+      summary: {
+        created: params.created,
+        updated: params.updated,
+        skipped: params.skipped,
+        errorCount: params.errors.length,
+        upsert: params.upsert,
+      },
+    },
+    metadata: {
+      action: "collectionRecord.imported",
+      changedKeys: ["content", "collections"],
+      source: "admin-collection-record-import-api",
+      resourceType: "collectionRecordImport",
+      collectionId: params.collection.id,
+      collectionName: params.collection.name,
+      collectionSlug: params.collection.slug,
+      created: params.created,
+      updated: params.updated,
+      skipped: params.skipped,
+      errorCount: params.errors.length,
+      upsert: params.upsert,
+    },
+  });
+
+const importRows = async (input: {
+  siteId: string;
+  collection: BackyCollection;
+  rows: string[][];
+  headers: string[];
+  upsert: boolean;
+  validate: (
+    slug: string,
+    values: Record<string, unknown>,
+  ) => Promise<unknown[]>;
+  save: (
+    slug: string,
+    values: Record<string, unknown>,
+    status: PublishStatus,
+    scheduledAt: string | null,
+  ) => Promise<{ record: unknown | null; existing: boolean }>;
+}) => {
+  const fieldsByKey = new Map(
+    input.collection.fields.flatMap((field) => [
+      [field.key, field] as const,
+      [normalizeFieldKey(field.key), field] as const,
+    ]),
+  );
   const records = [];
   const errors: ImportError[] = [];
   let created = 0;
@@ -208,13 +341,25 @@ const importRows = async (
 
   for (const [rowIndex, cells] of input.rows.slice(1).entries()) {
     const rowNumber = rowIndex + 2;
-    const rowData = Object.fromEntries(input.headers.map((header, index) => [header, cells[index] ?? '']));
+    const rowData = Object.fromEntries(
+      input.headers.map((header, index) => [header, cells[index] ?? ""]),
+    );
     const values = Object.fromEntries(
       input.headers
         .filter((header) => !RESERVED_COLUMNS.has(header))
-        .map((header) => [header, parseImportedValue(fieldsByKey.get(header) || fieldsByKey.get(normalizeFieldKey(header)), rowData[header] ?? '')]),
+        .map((header) => [
+          header,
+          parseImportedValue(
+            fieldsByKey.get(header) ||
+              fieldsByKey.get(normalizeFieldKey(header)),
+            rowData[header] ?? "",
+          ),
+        ]),
     );
-    const slug = normalizeSlug(rowData.slug || values.title || values.name || `record-${rowNumber}`, `record-${rowNumber}`);
+    const slug = normalizeSlug(
+      rowData.slug || values.title || values.name || `record-${rowNumber}`,
+      `record-${rowNumber}`,
+    );
     const status = parseStatus(rowData.status);
     const scheduledAt = rowData.scheduledAt || null;
     const validationErrors = await input.validate(slug, values);
@@ -224,7 +369,7 @@ const importRows = async (
       errors.push({
         row: rowNumber,
         slug,
-        message: 'Collection record values are invalid.',
+        message: "Collection record values are invalid.",
         details: validationErrors,
       });
       continue;
@@ -233,7 +378,11 @@ const importRows = async (
     const saved = await input.save(slug, values, status, scheduledAt);
     if (!saved.record) {
       skipped += 1;
-      errors.push({ row: rowNumber, slug, message: 'Unable to save imported record.' });
+      errors.push({
+        row: rowNumber,
+        slug,
+        message: "Unable to save imported record.",
+      });
       continue;
     }
 
@@ -257,8 +406,10 @@ const importRows = async (
 };
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "collections.edit",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -266,21 +417,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, collectionId } = await params;
     const { searchParams } = new URL(request.url);
-    const upsert = searchParams.get('upsert') === 'true';
+    const upsert = searchParams.get("upsert") === "true";
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const collection = await repositories.collections.getById(site.id, collectionId)
-        || await repositories.collections.getBySlug(site.id, collectionId);
+      const collection =
+        (await repositories.collections.getById(site.id, collectionId)) ||
+        (await repositories.collections.getBySlug(site.id, collectionId));
       if (!collection) {
-        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+        return errorResponse(
+          404,
+          "COLLECTION_NOT_FOUND",
+          "Collection not found",
+          requestId,
+        );
       }
-      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      const commerceAccess = await requireCommerceCollectionAccess(
+        request,
+        requestId,
+        collection.slug,
+        "edit",
+      );
       if (commerceAccess) {
         return commerceAccess;
       }
@@ -289,12 +458,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const rows = parseCsvRows(csv);
 
       if (rows.length < 2) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'CSV import requires a header row and at least one record row', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "CSV import requires a header row and at least one record row",
+          requestId,
+        );
       }
 
       const headers = rows[0].map((header) => header.trim()).filter(Boolean);
       if (headers.length === 0) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'CSV import requires at least one column header', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "CSV import requires at least one column header",
+          requestId,
+        );
       }
 
       const result = await importRows({
@@ -304,7 +483,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         headers,
         upsert,
         validate: async (slug, values) => {
-          const existing = await repositories.collections.getRecordBySlug(site.id, collection.id, slug);
+          const existing = await repositories.collections.getRecordBySlug(
+            site.id,
+            collection.id,
+            slug,
+          );
           return validateRepositoryCollectionRecordValues({
             repository: repositories.collections,
             siteId: site.id,
@@ -315,40 +498,69 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           });
         },
         save: async (slug, values, status, scheduledAt) => {
-          const existing = await repositories.collections.getRecordBySlug(site.id, collection.id, slug);
+          const existing = await repositories.collections.getRecordBySlug(
+            site.id,
+            collection.id,
+            slug,
+          );
           if (existing && !upsert) {
             return { record: null, existing: true };
           }
 
           const record = existing
-            ? (await repositories.collections.updateRecord(site.id, collection.id, existing.id, {
-                slug,
-                status,
-                scheduledAt,
-                values: toJsonRecord(values),
-              })).item
-            : (await repositories.collections.createRecord({
-                siteId: site.id,
-                collectionId: collection.id,
-                slug,
-                status,
-                scheduledAt,
-                values: toJsonRecord(values),
-              })).item;
+            ? (
+                await repositories.collections.updateRecord(
+                  site.id,
+                  collection.id,
+                  existing.id,
+                  {
+                    slug,
+                    status,
+                    scheduledAt,
+                    values: toJsonRecord(values),
+                  },
+                )
+              ).item
+            : (
+                await repositories.collections.createRecord({
+                  siteId: site.id,
+                  collectionId: collection.id,
+                  slug,
+                  status,
+                  scheduledAt,
+                  values: toJsonRecord(values),
+                })
+              ).item;
 
           return { record, existing: Boolean(existing) };
         },
       });
-      const cacheInvalidation = result.import.created + result.import.updated > 0
-        ? await recordSiteCacheInvalidation(repositories, {
-            siteId: site.id,
-            scope: 'content',
-            entity: 'collection',
-            entityId: collection.id,
-            reason: 'collection-records-imported',
-            requestId,
-          })
-        : undefined;
+      const cacheInvalidation =
+        result.import.created + result.import.updated > 0
+          ? await recordSiteCacheInvalidation(repositories, {
+              siteId: site.id,
+              scope: "content",
+              entity: "collection",
+              entityId: collection.id,
+              reason: "collection-records-imported",
+              requestId,
+            })
+          : undefined;
+      if (result.import.created + result.import.updated > 0) {
+        await deliverCollectionRecordImportWebhook({
+          repositories,
+          site,
+          collection,
+          records: result.records,
+          created: result.import.created,
+          updated: result.import.updated,
+          skipped: result.import.skipped,
+          errors: result.import.errors,
+          upsert,
+          requestId,
+          actor: access.session?.user.id,
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -365,14 +577,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
+    const collection = getCollectionByIdOrSlug(site.id, collectionId, {
+      includeUnpublished: true,
+    });
     if (!collection) {
-      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      return errorResponse(
+        404,
+        "COLLECTION_NOT_FOUND",
+        "Collection not found",
+        requestId,
+      );
     }
-    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    const commerceAccess = await requireCommerceCollectionAccess(
+      request,
+      requestId,
+      collection.slug,
+      "edit",
+    );
     if (commerceAccess) {
       return commerceAccess;
     }
@@ -381,18 +605,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const rows = parseCsvRows(csv);
 
     if (rows.length < 2) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'CSV import requires a header row and at least one record row', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "CSV import requires a header row and at least one record row",
+        requestId,
+      );
     }
 
     const headers = rows[0].map((header) => header.trim()).filter(Boolean);
     if (headers.length === 0) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'CSV import requires at least one column header', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "CSV import requires at least one column header",
+        requestId,
+      );
     }
 
-    const fieldsByKey = new Map(collection.fields.flatMap((field) => [
-      [field.key, field] as const,
-      [normalizeFieldKey(field.key), field] as const,
-    ]));
+    const fieldsByKey = new Map(
+      collection.fields.flatMap((field) => [
+        [field.key, field] as const,
+        [normalizeFieldKey(field.key), field] as const,
+      ]),
+    );
     const records = [];
     const errors: ImportError[] = [];
     let created = 0;
@@ -401,32 +637,57 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     for (const [rowIndex, cells] of rows.slice(1).entries()) {
       const rowNumber = rowIndex + 2;
-      const rowData = Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? '']));
+      const rowData = Object.fromEntries(
+        headers.map((header, index) => [header, cells[index] ?? ""]),
+      );
       const values = Object.fromEntries(
         headers
           .filter((header) => !RESERVED_COLUMNS.has(header))
-          .map((header) => [header, parseImportedValue(fieldsByKey.get(header) || fieldsByKey.get(normalizeFieldKey(header)), rowData[header] ?? '')]),
+          .map((header) => [
+            header,
+            parseImportedValue(
+              fieldsByKey.get(header) ||
+                fieldsByKey.get(normalizeFieldKey(header)),
+              rowData[header] ?? "",
+            ),
+          ]),
       );
-      const slug = normalizeSlug(rowData.slug || values.title || values.name || `record-${rowNumber}`, `record-${rowNumber}`);
-      const existing = getCollectionRecordByIdOrSlug(site.id, collection.id, slug, { includeUnpublished: true });
+      const slug = normalizeSlug(
+        rowData.slug || values.title || values.name || `record-${rowNumber}`,
+        `record-${rowNumber}`,
+      );
+      const existing = getCollectionRecordByIdOrSlug(
+        site.id,
+        collection.id,
+        slug,
+        { includeUnpublished: true },
+      );
 
       if (existing && !upsert) {
         skipped += 1;
-        errors.push({ row: rowNumber, slug, message: 'A record with this slug already exists.' });
+        errors.push({
+          row: rowNumber,
+          slug,
+          message: "A record with this slug already exists.",
+        });
         continue;
       }
 
-      const validationErrors = validateCollectionRecordValues(collection, values, {
-        existingValues: existing?.values,
-        excludeRecordId: existing?.id,
-      });
+      const validationErrors = validateCollectionRecordValues(
+        collection,
+        values,
+        {
+          existingValues: existing?.values,
+          excludeRecordId: existing?.id,
+        },
+      );
 
       if (validationErrors.length > 0) {
         skipped += 1;
         errors.push({
           row: rowNumber,
           slug,
-          message: 'Collection record values are invalid.',
+          message: "Collection record values are invalid.",
           details: validationErrors,
         });
         continue;
@@ -434,17 +695,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const input = {
         slug,
-        status: rowData.status || 'draft',
+        status: rowData.status || "draft",
         scheduledAt: rowData.scheduledAt || null,
         values,
       };
       const saved = existing
-        ? updateAdminCollectionRecord(site.id, collection.id, existing.id, input)
+        ? updateAdminCollectionRecord(
+            site.id,
+            collection.id,
+            existing.id,
+            input,
+          )
         : createAdminCollectionRecord(site.id, collection.id, input);
 
       if (!saved) {
         skipped += 1;
-        errors.push({ row: rowNumber, slug, message: 'Unable to save imported record.' });
+        errors.push({
+          row: rowNumber,
+          slug,
+          message: "Unable to save imported record.",
+        });
         continue;
       }
 
@@ -454,6 +724,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       } else {
         created += 1;
       }
+    }
+
+    if (created + updated > 0) {
+      await deliverCollectionRecordImportWebhook({
+        site: site as unknown as Site,
+        collection,
+        records,
+        created,
+        updated,
+        skipped,
+        errors,
+        upsert,
+        requestId,
+        actor: access.session?.user.id,
+      });
     }
 
     return NextResponse.json({
@@ -471,7 +756,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin collection record import API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin collection record import API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

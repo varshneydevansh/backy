@@ -5,19 +5,24 @@
  * POST /api/admin/sites/[siteId]/blog/categories
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAccess } from "@/lib/adminAccess";
 import {
   createAdminBlogCategory,
   getBlogCategoryByIdOrSlug,
   getSiteByIdOrSlug,
   listBlogCategories,
-} from '@/lib/backyStore';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+} from "@/lib/backyStore";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { resolveRepositorySite } from "@/lib/repositoryContentWorkflow";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import type { BackyJsonObject, Site } from "@backy-cms/core";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -25,9 +30,15 @@ interface RouteParams {
   }>;
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
   NextResponse.json(
     {
       success: false,
@@ -38,29 +49,83 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
     },
     { status },
-  )
-);
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const normalizeSlug = (value: unknown): string => (
-  typeof value === 'string'
-    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    : ''
-);
+const normalizeSlug = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    : "";
+
+const blogCategoryWebhookSnapshot = (category: {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  color?: string | null;
+  sortOrder?: number | null;
+}): BackyJsonObject => ({
+  categoryId: category.id,
+  name: category.name,
+  slug: category.slug,
+  description: category.description || null,
+  color: category.color || null,
+  sortOrder: category.sortOrder ?? null,
+});
+
+const deliverBlogCategoryWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  action: "blog.category.created";
+  after: Parameters<typeof blogCategoryWebhookSnapshot>[0];
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: params.action,
+    data: {
+      resourceType: "blogCategory",
+      after: blogCategoryWebhookSnapshot(params.after),
+    },
+    metadata: {
+      action: params.action,
+      changedKeys: ["content"],
+      source: "admin-blog-categories-api",
+      resourceType: "blogCategory",
+      resourceId: params.after.id,
+      slug: params.after.slug,
+      name: params.after.name,
+    },
+  });
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.view",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -70,7 +135,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const site = await resolveRepositorySite(repositories, siteId);
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       return NextResponse.json({
@@ -85,7 +155,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     return NextResponse.json({
@@ -96,28 +166,45 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin blog categories list API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin blog categories list API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.edit",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
     const body = await parseJsonBody(request);
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const name = typeof body.name === "string" ? body.name.trim() : "";
     const slug = normalizeSlug(body.slug || name);
 
     if (!name) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Category name is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Category name is required",
+        requestId,
+      );
     }
 
     if (!slug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Category slug is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Category slug is required",
+        requestId,
+      );
     }
 
     if (!shouldUseDemoStoreFallback()) {
@@ -125,28 +212,58 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const site = await resolveRepositorySite(repositories, siteId);
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      if (await repositories.blogTaxonomy.getCategoryByIdOrSlug(site.id, slug)) {
-        return errorResponse(409, 'SLUG_CONFLICT', 'A category with this slug already exists', requestId);
+      if (
+        await repositories.blogTaxonomy.getCategoryByIdOrSlug(site.id, slug)
+      ) {
+        return errorResponse(
+          409,
+          "SLUG_CONFLICT",
+          "A category with this slug already exists",
+          requestId,
+        );
       }
 
       const created = await repositories.blogTaxonomy.createCategory({
         siteId: site.id,
         name,
         slug,
-        description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
-        color: typeof body.color === 'string' || body.color === null ? body.color : undefined,
-        sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : undefined,
+        description:
+          typeof body.description === "string" || body.description === null
+            ? body.description
+            : undefined,
+        color:
+          typeof body.color === "string" || body.color === null
+            ? body.color
+            : undefined,
+        sortOrder:
+          typeof body.sortOrder === "number" ? body.sortOrder : undefined,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'blogCategory',
-        entityId: created.item.id,
-        reason: 'blog-category-created',
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "blogCategory",
+          entityId: created.item.id,
+          reason: "blog-category-created",
+          requestId,
+        },
+      );
+      await deliverBlogCategoryWebhook({
+        repositories,
+        site,
+        action: "blog.category.created",
+        after: created.item,
         requestId,
+        actor: access.session?.user.id,
       });
 
       return NextResponse.json(
@@ -165,17 +282,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     if (getBlogCategoryByIdOrSlug(site.id, slug)) {
-      return errorResponse(409, 'SLUG_CONFLICT', 'A category with this slug already exists', requestId);
+      return errorResponse(
+        409,
+        "SLUG_CONFLICT",
+        "A category with this slug already exists",
+        requestId,
+      );
     }
 
     const category = createAdminBlogCategory(site.id, {
       ...body,
       name,
       slug,
+    });
+    await deliverBlogCategoryWebhook({
+      site: site as unknown as Site,
+      action: "blog.category.created",
+      after: category,
+      requestId,
+      actor: access.session?.user.id,
     });
 
     return NextResponse.json(
@@ -189,7 +318,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { status: 201 },
     );
   } catch (error) {
-    console.error('Admin blog category create API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin blog category create API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

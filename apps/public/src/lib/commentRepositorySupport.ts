@@ -1,17 +1,29 @@
-import type { BackyRepositoryEntity, Comment, CommentReportReason, CommentStatus } from '@backy-cms/core';
-import type { getRequiredDatabaseRepositories } from '@/lib/repositoryRuntime';
-import { getCommentReportReasons } from '@/lib/backyStore';
+import type {
+  BackyRepositoryEntity,
+  Comment,
+  CommentReportReason,
+  CommentStatus,
+} from "@backy-cms/core";
+import type { getRequiredDatabaseRepositories } from "@/lib/repositoryRuntime";
+import { getCommentReportReasons } from "@/lib/backyStore";
 
-export type PublicCommentRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
+export type PublicCommentRepositories = Awaited<
+  ReturnType<typeof getRequiredDatabaseRepositories>
+>;
 
 export async function resolveRepositorySite(
   repositories: PublicCommentRepositories,
   siteIdOrSlug: string,
 ) {
-  return await repositories.sites.getById(siteIdOrSlug) || await repositories.sites.getBySlug(siteIdOrSlug);
+  return (
+    (await repositories.sites.getById(siteIdOrSlug)) ||
+    (await repositories.sites.getBySlug(siteIdOrSlug))
+  );
 }
 
-export function normalizeRepositoryReportReason(raw: string | null | undefined): CommentReportReason | null {
+export function normalizeRepositoryReportReason(
+  raw: string | null | undefined,
+): CommentReportReason | null {
   const value = raw?.trim();
   if (!value) {
     return null;
@@ -24,14 +36,28 @@ export function normalizeRepositoryReportReason(raw: string | null | undefined):
 export async function recordRepositoryInteractionEvent(
   repositories: PublicCommentRepositories,
   event: {
-    kind: 'form-submission' | 'contact-shared' | 'contact-sync' | 'contact-status' | 'commerce-order' | 'commerce-product' | 'comment-submitted' | 'comment-status' | 'comment-reported';
+    kind:
+      | "site-created"
+      | "site-updated"
+      | "site-deleted"
+      | "form-submission"
+      | "contact-shared"
+      | "contact-sync"
+      | "contact-status"
+      | "commerce-order"
+      | "commerce-product"
+      | "commerce-webhook"
+      | "comment-submitted"
+      | "comment-status"
+      | "comment-reported"
+      | "interactive-runtime";
     siteId: string;
     formId?: string | null;
     commentId?: string | null;
     contactId?: string | null;
     submissionId?: string | null;
     target: string;
-    status: 'queued' | 'succeeded' | 'failed' | 'received';
+    status: "queued" | "succeeded" | "failed" | "received";
     statusCode?: number;
     requestId?: string | null;
     reason?: string | null;
@@ -41,15 +67,20 @@ export async function recordRepositoryInteractionEvent(
   },
 ) {
   const entity: BackyRepositoryEntity = event.commentId
-    ? 'comment'
+    ? "comment"
     : event.contactId
-      ? 'contact'
+      ? "contact"
       : event.submissionId
-        ? 'formSubmission'
+        ? "formSubmission"
         : event.formId
-          ? 'form'
-          : 'auditLog';
-  const entityId = event.commentId || event.contactId || event.submissionId || event.formId || event.target;
+          ? "form"
+          : "auditLog";
+  const entityId =
+    event.commentId ||
+    event.contactId ||
+    event.submissionId ||
+    event.formId ||
+    event.target;
 
   const metadata = {
     ...(event.metadata || {}),
@@ -90,7 +121,8 @@ export async function updateRepositoryCommentStatus(
     clearReports?: boolean;
   },
 ): Promise<Comment> {
-  const reviewedBy = input.actor || input.reviewedBy || input.defaultReviewer || null;
+  const reviewedBy =
+    input.actor || input.reviewedBy || input.defaultReviewer || null;
   const reviewedAt = new Date().toISOString();
   const resolvedRequestId = input.requestId || comment.requestId || undefined;
   const update = {
@@ -105,9 +137,12 @@ export async function updateRepositoryCommentStatus(
     ...(input.clearReports ? { reportCount: 0, reportReasons: [] } : {}),
   };
 
-  if (input.status === 'blocked') {
-    const normalizedBlockReason = normalizeRepositoryReportReason(input.blockReason || null);
-    update.blockReason = normalizedBlockReason || input.blockReason || 'manual-block';
+  if (input.status === "blocked") {
+    const normalizedBlockReason = normalizeRepositoryReportReason(
+      input.blockReason || null,
+    );
+    update.blockReason =
+      normalizedBlockReason || input.blockReason || "manual-block";
     update.blockedBy = reviewedBy;
     update.blockedAt = reviewedAt;
 
@@ -119,20 +154,22 @@ export async function updateRepositoryCommentStatus(
       email: comment.authorEmail,
       ipHash: comment.ipHash,
     });
-  } else if (input.status !== 'rejected' && input.status !== 'spam') {
+  } else if (input.status !== "rejected" && input.status !== "spam") {
     update.blockReason = null;
     update.blockedBy = null;
     update.blockedAt = null;
     update.rejectionReason = null;
   }
 
-  const nextComment = (await repositories.comments.update(siteId, comment.id, update)).item;
+  const nextComment = (
+    await repositories.comments.update(siteId, comment.id, update)
+  ).item;
   await recordRepositoryInteractionEvent(repositories, {
-    kind: 'comment-status',
+    kind: "comment-status",
     siteId,
     commentId: nextComment.id,
     target: `comment:${nextComment.id}`,
-    status: 'succeeded',
+    status: "succeeded",
     requestId: resolvedRequestId,
     reason: input.status,
     actor: reviewedBy,
@@ -158,25 +195,28 @@ export async function clearRepositoryCommentReports(
     defaultReviewer?: string | null;
   },
 ): Promise<Comment> {
-  const reviewedBy = input.actor || input.reviewedBy || input.defaultReviewer || null;
+  const reviewedBy =
+    input.actor || input.reviewedBy || input.defaultReviewer || null;
   const reviewedAt = new Date().toISOString();
   const resolvedRequestId = input.requestId || comment.requestId || undefined;
-  const nextComment = (await repositories.comments.update(siteId, comment.id, {
-    reviewedBy,
-    reviewedAt,
-    reportCount: 0,
-    reportReasons: [],
-    requestId: resolvedRequestId || null,
-  })).item;
+  const nextComment = (
+    await repositories.comments.update(siteId, comment.id, {
+      reviewedBy,
+      reviewedAt,
+      reportCount: 0,
+      reportReasons: [],
+      requestId: resolvedRequestId || null,
+    })
+  ).item;
 
   await recordRepositoryInteractionEvent(repositories, {
-    kind: 'comment-status',
+    kind: "comment-status",
     siteId,
     commentId: nextComment.id,
     target: `comment:${nextComment.id}`,
-    status: 'succeeded',
+    status: "succeeded",
     requestId: resolvedRequestId,
-    reason: 'reports-cleared',
+    reason: "reports-cleared",
     actor: reviewedBy,
     metadata: {
       targetType: nextComment.targetType,
@@ -204,22 +244,24 @@ export async function updateRepositoryCommentThread(
   const reviewedBy = input.actor || input.defaultReviewer || null;
   const reviewedAt = new Date().toISOString();
   const resolvedRequestId = input.requestId || comment.requestId || undefined;
-  const nextComment = (await repositories.comments.update(siteId, comment.id, {
-    parentId: input.parentId,
-    commentThreadId: input.commentThreadId || null,
-    reviewedBy,
-    reviewedAt,
-    requestId: resolvedRequestId || null,
-  })).item;
+  const nextComment = (
+    await repositories.comments.update(siteId, comment.id, {
+      parentId: input.parentId,
+      commentThreadId: input.commentThreadId || null,
+      reviewedBy,
+      reviewedAt,
+      requestId: resolvedRequestId || null,
+    })
+  ).item;
 
   await recordRepositoryInteractionEvent(repositories, {
-    kind: 'comment-status',
+    kind: "comment-status",
     siteId,
     commentId: nextComment.id,
     target: `comment:${nextComment.id}`,
-    status: 'succeeded',
+    status: "succeeded",
     requestId: resolvedRequestId,
-    reason: 'thread-updated',
+    reason: "thread-updated",
     actor: reviewedBy,
     metadata: {
       targetType: nextComment.targetType,
@@ -244,32 +286,39 @@ export async function reportRepositoryComment(
     requestId?: string;
   },
 ): Promise<Comment> {
-  const normalizedReason = normalizeRepositoryReportReason(input.reason || null);
-  const reportReasons = new Set<CommentReportReason>(comment.reportReasons || []);
+  const normalizedReason = normalizeRepositoryReportReason(
+    input.reason || null,
+  );
+  const reportReasons = new Set<CommentReportReason>(
+    comment.reportReasons || [],
+  );
   if (normalizedReason) {
     reportReasons.add(normalizedReason);
   }
 
   const reportCount = (comment.reportCount || 0) + 1;
   const reviewedAt = new Date().toISOString();
-  const nextStatus = reportCount >= 3 && comment.status === 'approved' ? 'spam' : comment.status;
+  const nextStatus =
+    reportCount >= 3 && comment.status === "approved" ? "spam" : comment.status;
 
-  const nextComment = (await repositories.comments.update(siteId, comment.id, {
-    status: nextStatus,
-    reviewedBy: input.actor || null,
-    reviewedAt,
-    reportCount,
-    reportReasons: Array.from(reportReasons),
-    requestId: input.requestId || comment.requestId || null,
-  })).item;
+  const nextComment = (
+    await repositories.comments.update(siteId, comment.id, {
+      status: nextStatus,
+      reviewedBy: input.actor || null,
+      reviewedAt,
+      reportCount,
+      reportReasons: Array.from(reportReasons),
+      requestId: input.requestId || comment.requestId || null,
+    })
+  ).item;
   await recordRepositoryInteractionEvent(repositories, {
-    kind: 'comment-reported',
+    kind: "comment-reported",
     siteId,
     commentId: nextComment.id,
     target: `comment:${nextComment.id}`,
-    status: 'succeeded',
+    status: "succeeded",
     requestId: input.requestId,
-    reason: normalizedReason || 'other',
+    reason: normalizedReason || "other",
     actor: input.actor,
     metadata: {
       authorName: nextComment.authorName,

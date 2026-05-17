@@ -3,6 +3,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { PRODUCT_COLLECTION_SLUG, productRecordToCommerceProduct, type CommerceSourceRecord } from '@/lib/commerceCatalog';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { getAdminSettings, getCollectionByIdOrSlug, getCollectionRecordByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -28,12 +29,29 @@ interface SourceRecord {
 const ORDERS_COLLECTION_SLUG = 'orders';
 const SCHEMA_VERSION = 'backy.product-subscription-lifecycle.v1';
 const ORDER_LIMIT = 1000;
-type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'http-api' | 'handoff';
+type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
+  publicContractJson(
+    { success: false, requestId, error: { code, message }, errorMessage: message },
+    {
+      status,
+      requestId,
+      cache: 'error',
+      schemaVersion: SCHEMA_VERSION,
+    },
+  )
+);
+
+const lifecycleResponse = (body: Record<string, unknown>, requestId: string, siteId: string) => (
+  publicContractJson(body, {
+    requestId,
+    cache: 'private',
+    schemaVersion: SCHEMA_VERSION,
+    siteId,
+  })
 );
 
 const textValue = (value: unknown): string => (
@@ -180,6 +198,13 @@ const paddleApiKeyConfigured = () => Boolean(envValue(['BACKY_PADDLE_API_KEY', '
 
 const squareAccessTokenConfigured = () => Boolean(envValue(['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN']));
 
+const adyenSubscriptionConfigured = () => (
+  Boolean(envValue(['BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY'])) &&
+  Boolean(envValue(['BACKY_ADYEN_MERCHANT_ACCOUNT', 'ADYEN_MERCHANT_ACCOUNT']))
+);
+
+const mollieApiKeyConfigured = () => Boolean(envValue(['BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY']));
+
 const subscriptionActionProviderUrl = (): string => {
   const commerce = toRecord(toRecord(getAdminSettings().integrations).commerce);
   const configuredUrl = envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'])
@@ -199,10 +224,44 @@ const inferSubscriptionProvider = (values: Record<string, unknown>, subscription
   if (configuredProvider) return configuredProvider;
   if (subscriptionReference.startsWith('sub_')) return 'stripe';
   if (subscriptionReference.startsWith('I-')) return 'paypal';
+  if (subscriptionReference.startsWith('cst_')) return 'mollie';
   return 'manual';
 };
 
-const subscriptionActionExecutionMode = (provider: string, subscriptionReference: string): SubscriptionActionExecutionMode => {
+const splitProviderReference = (value: string): [string, string] | null => {
+  const separators = ['::', ':', '/', '|'];
+  for (const separator of separators) {
+    const parts = value.split(separator).map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) return [parts[0], parts.slice(1).join(separator)];
+  }
+  return null;
+};
+
+const providerCustomerReference = (values: Record<string, unknown>): string => (
+  textValue(values.providercustomerid)
+  || textValue(values.providerCustomerId)
+  || textValue(values.paymentcustomerid)
+  || textValue(values.paymentCustomerId)
+  || textValue(values.molliecustomerid)
+  || textValue(values.mollieCustomerId)
+  || textValue(values.adyenshopperreference)
+  || textValue(values.adyenShopperReference)
+);
+
+const adyenTargetReady = (values: Record<string, unknown>, subscriptionReference: string): boolean => {
+  const split = splitProviderReference(subscriptionReference);
+  return Boolean(providerCustomerReference(values) || split?.[0] || subscriptionReference);
+};
+
+const mollieTargetReady = (values: Record<string, unknown>, subscriptionReference: string): boolean => {
+  const split = splitProviderReference(subscriptionReference);
+  const splitCustomer = split?.[0]?.startsWith('cst_') ? split[0] : '';
+  const customerId = providerCustomerReference(values) || splitCustomer;
+  const subscriptionId = splitCustomer ? split?.[1] || '' : subscriptionReference;
+  return Boolean(customerId && subscriptionId);
+};
+
+const subscriptionActionExecutionMode = (provider: string, subscriptionReference: string, values: Record<string, unknown>): SubscriptionActionExecutionMode => {
   const normalizedProvider = provider.toLowerCase();
   if (normalizedProvider === 'stripe' && stripeSecretConfigured() && subscriptionReference.startsWith('sub_')) {
     return 'stripe-api';
@@ -215,6 +274,12 @@ const subscriptionActionExecutionMode = (provider: string, subscriptionReference
   }
   if (normalizedProvider === 'square' && squareAccessTokenConfigured() && subscriptionReference) {
     return 'square-api';
+  }
+  if (normalizedProvider === 'adyen' && adyenSubscriptionConfigured() && adyenTargetReady(values, subscriptionReference)) {
+    return 'adyen-api';
+  }
+  if (normalizedProvider === 'mollie' && mollieApiKeyConfigured() && mollieTargetReady(values, subscriptionReference)) {
+    return 'mollie-api';
   }
   if (['http', 'generic-http', 'custom-http'].includes(normalizedProvider) && subscriptionActionProviderUrl()) {
     return 'http-api';
@@ -275,7 +340,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
 
       const subscriptionReference = textValue(values.paymentreference);
       const paymentProvider = inferSubscriptionProvider(values, subscriptionReference);
-      const actionExecutionMode = subscriptionActionExecutionMode(paymentProvider, subscriptionReference);
+      const actionExecutionMode = subscriptionActionExecutionMode(paymentProvider, subscriptionReference, values);
       const actionHistory = subscriptionActionHistory(values.subscriptionactionhistory, subscriptionReference);
 
       return {
@@ -345,6 +410,22 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         referencePattern: 'Square subscription id',
         executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'square-api').length,
         blocker: squareAccessTokenConfigured() ? '' : 'Configure BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN for direct Square subscription actions.',
+      },
+      {
+        provider: 'adyen',
+        executionMode: 'adyen-api',
+        configured: adyenSubscriptionConfigured(),
+        referencePattern: 'shopperReference or shopperReference:recurringDetailReference',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'adyen-api').length,
+        blocker: adyenSubscriptionConfigured() ? 'Adyen direct subscription execution supports cancellation through Recurring disable; pause/resume remain handoff actions.' : 'Configure BACKY_ADYEN_API_KEY/ADYEN_API_KEY and BACKY_ADYEN_MERCHANT_ACCOUNT/ADYEN_MERCHANT_ACCOUNT for Adyen cancellation actions.',
+      },
+      {
+        provider: 'mollie',
+        executionMode: 'mollie-api',
+        configured: mollieApiKeyConfigured(),
+        referencePattern: 'customerId:subscriptionId or customerId/subscriptionId',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'mollie-api').length,
+        blocker: mollieApiKeyConfigured() ? 'Mollie direct subscription execution supports cancellation; pause/resume remain handoff actions.' : 'Configure BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY for Mollie cancellation actions.',
       },
       {
         provider: 'http',
@@ -435,15 +516,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
       const lifecycle = buildLifecycle(product, orders.items);
 
-      return NextResponse.json({
+      return lifecycleResponse({
         success: true,
         requestId,
+        schemaVersion: SCHEMA_VERSION,
         data: {
           lifecycle,
           collection: { id: ordersCollection.id, slug: ordersCollection.slug, name: ordersCollection.name },
         },
         lifecycle,
-      });
+      }, requestId, site.id);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -464,15 +546,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
     const lifecycle = buildLifecycle(product, orders.records);
 
-    return NextResponse.json({
+    return lifecycleResponse({
       success: true,
       requestId,
+      schemaVersion: SCHEMA_VERSION,
       data: {
         lifecycle,
         collection: { id: ordersCollection.id, slug: ordersCollection.slug, name: ordersCollection.name },
       },
       lifecycle,
-    });
+    }, requestId, site.id);
   } catch (error) {
     console.error('Admin product subscription lifecycle API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

@@ -38,6 +38,11 @@ interface RenderElement extends JsonObject {
   type: string;
   children: RenderElement[];
   props: JsonObject;
+  componentKey?: string;
+  version?: string;
+  controls?: JsonObject[];
+  fallback?: JsonObject | string;
+  renderCapabilities?: JsonObject;
   styles?: JsonObject;
   actions?: JsonObject[];
   dataBindings?: JsonObject[];

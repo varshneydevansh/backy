@@ -1,22 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
-import { getAdminSettings, getMediaById, getMediaList, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
+import {
+  getAdminSettings,
+  getMediaById,
+  getMediaList,
+  getSiteByIdOrSlug,
+  updateMediaItem,
+} from "@/lib/backyStore";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import {
   DEFAULT_IMAGE_VARIANT_QUALITY,
   DEFAULT_IMAGE_VARIANT_WIDTHS,
-} from '@/lib/mediaResponsive';
+} from "@/lib/mediaResponsive";
 import {
   deleteGeneratedTransformFiles,
   generatedTransformBytes,
   generateImageTransformManifest,
   MediaTransformGenerationError,
-} from '@/lib/mediaTransformGeneration';
-import { mediaQuotaPayload, readMediaBillingLimit, resolveMediaUploadPolicy } from '@/lib/mediaUploadPolicy';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+} from "@/lib/mediaTransformGeneration";
+import {
+  mediaQuotaPayload,
+  readMediaBillingLimit,
+  resolveMediaUploadPolicy,
+} from "@/lib/mediaUploadPolicy";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import type { BackyJsonObject, MediaItem, Site } from "@backy-cms/core";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -25,9 +40,16 @@ interface RouteParams {
   }>;
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string, details?: Record<string, unknown>) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: Record<string, unknown>,
+) =>
   NextResponse.json(
     {
       success: false,
@@ -39,14 +61,15 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
     },
     { status },
-  )
-);
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
@@ -60,7 +83,9 @@ const normalizeWidths = (value: unknown): number[] => {
     .filter((item) => Number.isFinite(item))
     .map((item) => Math.max(16, Math.min(3840, Math.floor(item))));
 
-  return Array.from(new Set(widths)).slice(0, 10).sort((a, b) => a - b);
+  return Array.from(new Set(widths))
+    .slice(0, 10)
+    .sort((a, b) => a - b);
 };
 
 const normalizeQuality = (value: unknown): number => {
@@ -73,32 +98,115 @@ const normalizeQuality = (value: unknown): number => {
 };
 
 const replacementVersionBytes = (metadata: unknown): number => {
-  const record = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-    ? metadata as Record<string, unknown>
-    : null;
-  const versions = Array.isArray(record?.replacementVersions) ? record.replacementVersions : [];
+  const record =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : null;
+  const versions = Array.isArray(record?.replacementVersions)
+    ? record.replacementVersions
+    : [];
 
   return versions.reduce((total, version) => {
-    if (!version || typeof version !== 'object' || Array.isArray(version)) {
+    if (!version || typeof version !== "object" || Array.isArray(version)) {
       return total;
     }
 
-    return total + Math.max(0, Number((version as Record<string, unknown>).sizeBytes) || 0);
+    return (
+      total +
+      Math.max(0, Number((version as Record<string, unknown>).sizeBytes) || 0)
+    );
   }, 0);
 };
 
-const mediaUsageBytes = (items: Array<{ sizeBytes?: number; metadata?: unknown }>) => (
-  items.reduce((total, item) => (
-    total
-    + Math.max(0, Number(item.sizeBytes) || 0)
-    + replacementVersionBytes(item.metadata)
-    + generatedTransformBytes(item.metadata)
-  ), 0)
-);
+const mediaUsageBytes = (
+  items: Array<{ sizeBytes?: number; metadata?: unknown }>,
+) =>
+  items.reduce(
+    (total, item) =>
+      total +
+      Math.max(0, Number(item.sizeBytes) || 0) +
+      replacementVersionBytes(item.metadata) +
+      generatedTransformBytes(item.metadata),
+    0,
+  );
+
+const mediaTransformWebhookSnapshot = (media: MediaItem): BackyJsonObject => ({
+  mediaId: media.id,
+  filename: media.filename,
+  originalName: media.originalName || null,
+  mimeType: media.mimeType,
+  type: media.type,
+  url: media.url,
+  thumbnailUrl: media.thumbnailUrl || null,
+  sizeBytes: media.sizeBytes,
+  visibility: media.visibility || "public",
+  folderId: media.folderId || null,
+  generatedTransformBytes: generatedTransformBytes(media.metadata),
+  updatedAt: media.updatedAt,
+});
+
+const deliverMediaTransformWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  before: MediaItem;
+  after: MediaItem;
+  widths: number[];
+  quality: number;
+  sizes: string;
+  preparedBy: string;
+  generatedBytes: number;
+  storageProvider?: string | null;
+  format?: string | null;
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: "media.transforms.prepared",
+    data: {
+      resourceType: "media",
+      before: mediaTransformWebhookSnapshot(params.before),
+      after: mediaTransformWebhookSnapshot(params.after),
+      responsive: {
+        widths: params.widths,
+        quality: params.quality,
+        sizes: params.sizes,
+        generatedBytes: params.generatedBytes,
+        storageProvider: params.storageProvider || null,
+        format: params.format || null,
+      },
+    },
+    metadata: {
+      action: "media.transforms.prepared",
+      changedKeys: ["media"],
+      source: "admin-media-transforms-api",
+      resourceType: "media",
+      resourceId: params.after.id,
+      filename: params.after.originalName || params.after.filename,
+      mimeType: params.after.mimeType,
+      type: params.after.type,
+      visibility: params.after.visibility || "public",
+      folderId: params.after.folderId || null,
+      widths: params.widths,
+      quality: params.quality,
+      generatedBytes: params.generatedBytes,
+      storageProvider: params.storageProvider || null,
+      format: params.format || null,
+      preparedBy: params.preparedBy,
+    },
+  });
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'media.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "media.edit",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -106,12 +214,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, mediaId } = await params;
     const body = await parseJsonBody(request);
-    const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
-    const repositorySite = repositories ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId) : null;
+    const repositories = !shouldUseDemoStoreFallback()
+      ? await getRequiredDatabaseRepositories()
+      : null;
+    const repositorySite = repositories
+      ? (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId))
+      : null;
     const site = repositorySite || getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const beforeMedia = repositories
@@ -119,30 +232,55 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       : getMediaById(site.id, mediaId);
 
     if (!beforeMedia) {
-      return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
+      return errorResponse(
+        404,
+        "MEDIA_NOT_FOUND",
+        "Media item not found",
+        requestId,
+      );
     }
 
-    if (beforeMedia.visibility !== 'public') {
-      return errorResponse(400, 'MEDIA_TRANSFORM_PRIVATE', 'Only public images can prepare responsive variants.', requestId);
+    if (beforeMedia.visibility !== "public") {
+      return errorResponse(
+        400,
+        "MEDIA_TRANSFORM_PRIVATE",
+        "Only public images can prepare responsive variants.",
+        requestId,
+      );
     }
 
-    if (beforeMedia.type !== 'image' || !beforeMedia.mimeType.startsWith('image/')) {
-      return errorResponse(400, 'MEDIA_TRANSFORM_UNSUPPORTED', 'Only image media can prepare responsive variants.', requestId);
+    if (
+      beforeMedia.type !== "image" ||
+      !beforeMedia.mimeType.startsWith("image/")
+    ) {
+      return errorResponse(
+        400,
+        "MEDIA_TRANSFORM_UNSUPPORTED",
+        "Only image media can prepare responsive variants.",
+        requestId,
+      );
     }
 
     const widths = normalizeWidths(body.widths);
     if (widths.length === 0) {
-      return errorResponse(400, 'INVALID_TRANSFORM_WIDTHS', 'At least one valid width is required.', requestId);
+      return errorResponse(
+        400,
+        "INVALID_TRANSFORM_WIDTHS",
+        "At least one valid width is required.",
+        requestId,
+      );
     }
 
     const quality = normalizeQuality(body.quality);
-    const sizes = typeof body.sizes === 'string' && body.sizes.trim().length > 0
-      ? body.sizes.trim()
-      : '(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px';
+    const sizes =
+      typeof body.sizes === "string" && body.sizes.trim().length > 0
+        ? body.sizes.trim()
+        : "(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px";
     const preparedAt = new Date().toISOString();
-    const preparedBy = typeof body.preparedBy === 'string' && body.preparedBy.trim().length > 0
-      ? body.preparedBy.trim()
-      : 'admin';
+    const preparedBy =
+      typeof body.preparedBy === "string" && body.preparedBy.trim().length > 0
+        ? body.preparedBy.trim()
+        : "admin";
     const generatedTransforms = await generateImageTransformManifest({
       siteId: site.id,
       media: beforeMedia,
@@ -152,32 +290,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       preparedAt,
       preparedBy,
     });
-    const settings = repositories ? await repositories.settings.get() : getAdminSettings();
+    const settings = repositories
+      ? await repositories.settings.get()
+      : getAdminSettings();
     const uploadPolicy = resolveMediaUploadPolicy(settings);
     const siteMediaQuotaBytes = uploadPolicy.quotaBytes;
     const currentMedia = repositories
-      ? (await repositories.media.list({
-          siteId: site.id,
-          type: 'all',
-          visibility: 'all',
-          limit: 10000,
-          offset: 0,
-        })).items
+      ? (
+          await repositories.media.list({
+            siteId: site.id,
+            type: "all",
+            visibility: "all",
+            limit: 10000,
+            offset: 0,
+          })
+        ).items
       : getMediaList(site.id, {
           limit: 10000,
           offset: 0,
         }).media;
     const currentUsageBytes = mediaUsageBytes(currentMedia);
-    const nextUsageBytes = currentUsageBytes
-      - generatedTransformBytes(beforeMedia.metadata)
-      + generatedTransformBytes({ generatedTransforms });
-    const billingLimit = readMediaBillingLimit(site.settings, settings, nextUsageBytes);
+    const nextUsageBytes =
+      currentUsageBytes -
+      generatedTransformBytes(beforeMedia.metadata) +
+      generatedTransformBytes({ generatedTransforms });
+    const billingLimit = readMediaBillingLimit(
+      site.settings,
+      settings,
+      nextUsageBytes,
+    );
 
     if (billingLimit.blocked) {
       await deleteGeneratedTransformFiles({ generatedTransforms });
       return errorResponse(
         402,
-        'BILLING_MEDIA_LIMIT',
+        "BILLING_MEDIA_LIMIT",
         `The ${billingLimit.policy.billingPlan} site plan allows ${billingLimit.policy.mediaLimitGb} GB of media storage. Update the site billing quota before preparing responsive variants.`,
         requestId,
         mediaQuotaPayload(billingLimit.limitBytes, currentUsageBytes),
@@ -188,8 +335,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       await deleteGeneratedTransformFiles({ generatedTransforms });
       return errorResponse(
         413,
-        'SITE_MEDIA_QUOTA_EXCEEDED',
-        'Preparing responsive variants would exceed the site media storage quota.',
+        "SITE_MEDIA_QUOTA_EXCEEDED",
+        "Preparing responsive variants would exceed the site media storage quota.",
         requestId,
         mediaQuotaPayload(siteMediaQuotaBytes, currentUsageBytes, uploadPolicy),
       );
@@ -202,19 +349,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       generatedTransforms,
     };
     const updated = repositories
-      ? (await repositories.media.update(site.id, beforeMedia.id, { metadata })).item
+      ? (await repositories.media.update(site.id, beforeMedia.id, { metadata }))
+          .item
       : updateMediaItem(site.id, beforeMedia.id, { metadata });
 
     if (!updated) {
-      return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
+      return errorResponse(
+        404,
+        "MEDIA_NOT_FOUND",
+        "Media item not found",
+        requestId,
+      );
     }
 
     await recordAdminAudit({
       repositories,
       siteId: site.id,
-      entity: 'media',
+      entity: "media",
       entityId: updated.id,
-      action: 'media.transforms.prepare',
+      action: "media.transforms.prepare",
       before: beforeMedia,
       after: updated,
       metadata: {
@@ -231,13 +384,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const cacheInvalidation = repositories
       ? await recordSiteCacheInvalidation(repositories, {
           siteId: site.id,
-          scope: 'media',
-          entity: 'media',
+          scope: "media",
+          entity: "media",
           entityId: updated.id,
-          reason: 'media-transforms-prepared',
+          reason: "media-transforms-prepared",
           requestId,
         })
       : undefined;
+    await deliverMediaTransformWebhook({
+      repositories,
+      site: site as Site,
+      before: beforeMedia,
+      after: updated,
+      widths,
+      quality,
+      sizes,
+      preparedBy,
+      generatedBytes: generatedTransforms.generatedBytes,
+      storageProvider: generatedTransforms.storageProvider,
+      format: generatedTransforms.format,
+      requestId,
+      actor: access.session?.user.id,
+    });
 
     return NextResponse.json({
       success: true,
@@ -251,10 +419,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     if (error instanceof MediaTransformGenerationError) {
-      return errorResponse(422, error.code, error.message, requestId, error.details);
+      return errorResponse(
+        422,
+        error.code,
+        error.message,
+        requestId,
+        error.details,
+      );
     }
 
-    console.error('Admin media transform preparation API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin media transform preparation API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

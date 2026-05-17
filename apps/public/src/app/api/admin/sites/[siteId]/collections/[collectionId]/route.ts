@@ -6,33 +6,42 @@
  * DELETE /api/admin/sites/[siteId]/collections/[collectionId]
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
+import { NextRequest, NextResponse } from "next/server";
+import type {
+  BackyCollectionPermissions,
+  BackyJsonObject,
+  PublishStatus,
+  Site,
+} from "@backy-cms/core";
 import {
   deleteAdminCollection,
   getCollectionByIdOrSlug,
   getPageSummary,
   getSiteByIdOrSlug,
   updateAdminCollection,
-} from '@/lib/backyStore';
-import { requireAdminAccess } from '@/lib/adminAccess';
+} from "@/lib/backyStore";
+import { requireAdminAccess } from "@/lib/adminAccess";
 import {
   requireCommerceCollectionAccess,
   requireCommerceCollectionSlugAccess,
-} from '@/lib/adminCommerceCollectionAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+} from "@/lib/adminCommerceCollectionAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
 import {
   isValidCollectionListRoutePattern,
   isValidCollectionRoutePattern,
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
-} from '@/lib/collectionRoutes';
-import { findCollectionRouteConflict } from '@/lib/routeConflicts';
-import { parseAdminCollectionFields } from '@/lib/adminCollectionFields';
+} from "@/lib/collectionRoutes";
+import { findCollectionRouteConflict } from "@/lib/routeConflicts";
+import { parseAdminCollectionFields } from "@/lib/adminCollectionFields";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -52,50 +61,65 @@ interface CollectionAuditSource {
   permissions?: Partial<BackyCollectionPermissions> | null;
 }
 
-type CollectionSchemaStatus = Exclude<PublishStatus, 'scheduled'>;
+type CollectionSchemaStatus = Exclude<PublishStatus, "scheduled">;
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
-);
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
+  NextResponse.json(
+    { success: false, requestId, error: { code, message } },
+    { status },
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const normalizeSlug = (value: unknown): string => (
-  typeof value === 'string'
-    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    : ''
-);
-
-const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Partial<BackyCollectionPermissions>
-    : undefined
-);
-
-const toCollectionMetadata = (value: unknown): BackyJsonObject | undefined => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as BackyJsonObject
-    : undefined
-);
-
-const parseStatus = (value: unknown): CollectionSchemaStatus | undefined => (
-  value === 'draft' || value === 'published' || value === 'archived'
+const normalizeSlug = (value: unknown): string =>
+  typeof value === "string"
     ? value
-    : undefined
-);
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    : "";
 
-const parseRoutePattern = (value: unknown, slug: string): string | undefined | null => {
+const toCollectionPermissions = (
+  value: unknown,
+): Partial<BackyCollectionPermissions> | undefined =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Partial<BackyCollectionPermissions>)
+    : undefined;
+
+const toCollectionMetadata = (value: unknown): BackyJsonObject | undefined =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as BackyJsonObject)
+    : undefined;
+
+const parseStatus = (value: unknown): CollectionSchemaStatus | undefined =>
+  value === "draft" || value === "published" || value === "archived"
+    ? value
+    : undefined;
+
+const parseRoutePattern = (
+  value: unknown,
+  slug: string,
+): string | undefined | null => {
   if (value === undefined) {
     return undefined;
   }
@@ -107,7 +131,10 @@ const parseRoutePattern = (value: unknown, slug: string): string | undefined | n
   return normalizeCollectionRoutePattern(value, slug);
 };
 
-const parseListRoutePattern = (value: unknown, slug: string): string | undefined | null => {
+const parseListRoutePattern = (
+  value: unknown,
+  slug: string,
+): string | undefined | null => {
   if (value === undefined) {
     return undefined;
   }
@@ -119,7 +146,9 @@ const parseListRoutePattern = (value: unknown, slug: string): string | undefined
   return normalizeCollectionListRoutePattern(value, slug);
 };
 
-const collectionAuditMetadata = (collection: CollectionAuditSource): BackyJsonObject => ({
+const collectionAuditMetadata = (
+  collection: CollectionAuditSource,
+): BackyJsonObject => ({
   collectionId: collection.id,
   name: collection.name,
   slug: collection.slug,
@@ -139,9 +168,52 @@ const updateAuditMetadata = (
   changedFields: Object.keys(body),
 });
 
+const deliverCollectionSchemaWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  action: "collection.updated" | "collection.deleted";
+  before?: CollectionAuditSource;
+  after?: CollectionAuditSource;
+  changedFields?: string[];
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: params.action,
+    data: {
+      resourceType: "collection",
+      ...(params.before
+        ? { before: collectionAuditMetadata(params.before) }
+        : {}),
+      ...(params.after ? { after: collectionAuditMetadata(params.after) } : {}),
+    },
+    metadata: {
+      action: params.action,
+      changedKeys: ["content", "collections"],
+      source: "admin-collection-detail-api",
+      resourceType: "collection",
+      resourceId: (params.after || params.before)?.id || null,
+      slug: (params.after || params.before)?.slug || null,
+      status: (params.after || params.before)?.status || null,
+      fieldCount: Array.isArray((params.after || params.before)?.fields)
+        ? (params.after || params.before)?.fields?.length
+        : 0,
+      changedFields: params.changedFields || [],
+    },
+  });
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'collections.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "collections.view",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -150,50 +222,95 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { siteId, collectionId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const collection = await repositories.collections.getById(site.id, collectionId)
-        || await repositories.collections.getBySlug(site.id, collectionId);
+      const collection =
+        (await repositories.collections.getById(site.id, collectionId)) ||
+        (await repositories.collections.getBySlug(site.id, collectionId));
       if (!collection) {
-        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+        return errorResponse(
+          404,
+          "COLLECTION_NOT_FOUND",
+          "Collection not found",
+          requestId,
+        );
       }
-      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+      const commerceAccess = await requireCommerceCollectionAccess(
+        request,
+        requestId,
+        collection.slug,
+        "view",
+      );
       if (commerceAccess) {
         return commerceAccess;
       }
 
-      return NextResponse.json({ success: true, requestId, data: { collection } });
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: { collection },
+      });
     }
 
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
+    const collection = getCollectionByIdOrSlug(site.id, collectionId, {
+      includeUnpublished: true,
+    });
     if (!collection) {
-      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      return errorResponse(
+        404,
+        "COLLECTION_NOT_FOUND",
+        "Collection not found",
+        requestId,
+      );
     }
-    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+    const commerceAccess = await requireCommerceCollectionAccess(
+      request,
+      requestId,
+      collection.slug,
+      "view",
+    );
     if (commerceAccess) {
       return commerceAccess;
     }
 
-    return NextResponse.json({ success: true, requestId, data: { collection } });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: { collection },
+    });
   } catch (error) {
-    console.error('Admin collection detail API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin collection detail API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "collections.edit",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -202,204 +319,390 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { siteId, collectionId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const collection = await repositories.collections.getById(site.id, collectionId)
-        || await repositories.collections.getBySlug(site.id, collectionId);
+      const collection =
+        (await repositories.collections.getById(site.id, collectionId)) ||
+        (await repositories.collections.getBySlug(site.id, collectionId));
       if (!collection) {
-        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+        return errorResponse(
+          404,
+          "COLLECTION_NOT_FOUND",
+          "Collection not found",
+          requestId,
+        );
       }
 
       const body = await parseJsonBody(request);
-      const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+      const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
       const commerceAccess = await requireCommerceCollectionSlugAccess(
         request,
         requestId,
         [collection.slug, nextSlug].filter(Boolean),
-        'configure',
+        "configure",
       );
       if (commerceAccess) {
         return commerceAccess;
       }
 
       if (body.slug !== undefined && !nextSlug) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Collection slug is required",
+          requestId,
+        );
       }
       const status = parseStatus(body.status);
       if (body.status !== undefined && !status) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Collection status must be draft, published, or archived",
+          requestId,
+        );
       }
 
       if (nextSlug && nextSlug !== collection.slug) {
-        const conflict = await repositories.collections.getBySlug(site.id, nextSlug);
+        const conflict = await repositories.collections.getBySlug(
+          site.id,
+          nextSlug,
+        );
         if (conflict && conflict.id !== collection.id) {
-          return errorResponse(409, 'SLUG_CONFLICT', 'A collection with this slug already exists', requestId);
+          return errorResponse(
+            409,
+            "SLUG_CONFLICT",
+            "A collection with this slug already exists",
+            requestId,
+          );
         }
       }
 
-      const parsedFields = parseAdminCollectionFields(body.fields, { allowUndefined: true });
+      const parsedFields = parseAdminCollectionFields(body.fields, {
+        allowUndefined: true,
+      });
       if (!parsedFields.ok) {
-        return errorResponse(400, 'VALIDATION_ERROR', parsedFields.message, requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          parsedFields.message,
+          requestId,
+        );
       }
-      const routePattern = parseRoutePattern(body.routePattern, nextSlug || collection.slug);
+      const routePattern = parseRoutePattern(
+        body.routePattern,
+        nextSlug || collection.slug,
+      );
       if (body.routePattern !== undefined && routePattern === null) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Collection route pattern must include :recordSlug",
+          requestId,
+        );
       }
-      const listRoutePattern = parseListRoutePattern(body.listRoutePattern, nextSlug || collection.slug);
+      const listRoutePattern = parseListRoutePattern(
+        body.listRoutePattern,
+        nextSlug || collection.slug,
+      );
       if (body.listRoutePattern !== undefined && listRoutePattern === null) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Collection list route pattern cannot include :recordSlug",
+          requestId,
+        );
       }
 
       const pages = await repositories.pages.list({
         siteId: site.id,
         includeUnpublished: true,
-        status: 'all',
+        status: "all",
         limit: 100,
         offset: 0,
       });
-      const routeConflict = findCollectionRouteConflict({
-        id: collection.id,
-        slug: nextSlug || collection.slug,
-        name: typeof body.name === 'string' ? body.name.trim() : collection.name,
-        routePattern: routePattern === undefined ? collection.routePattern : routePattern,
-        listRoutePattern: listRoutePattern === undefined ? collection.listRoutePattern : listRoutePattern,
-      }, pages.items);
+      const routeConflict = findCollectionRouteConflict(
+        {
+          id: collection.id,
+          slug: nextSlug || collection.slug,
+          name:
+            typeof body.name === "string" ? body.name.trim() : collection.name,
+          routePattern:
+            routePattern === undefined ? collection.routePattern : routePattern,
+          listRoutePattern:
+            listRoutePattern === undefined
+              ? collection.listRoutePattern
+              : listRoutePattern,
+        },
+        pages.items,
+      );
       if (routeConflict) {
-        return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+        return errorResponse(
+          409,
+          "ROUTE_CONFLICT",
+          routeConflict.message,
+          requestId,
+        );
       }
 
-      const updated = (await repositories.collections.update(site.id, collection.id, {
-        ...(typeof body.name === 'string' ? { name: body.name.trim() } : {}),
-        ...(body.description === undefined ? {} : { description: typeof body.description === 'string' ? body.description : null }),
-        ...(status ? { status } : {}),
-        ...(parsedFields.fields === undefined ? {} : { fields: parsedFields.fields }),
-        ...(body.permissions === undefined ? {} : { permissions: toCollectionPermissions(body.permissions) }),
-        ...(body.metadata === undefined ? {} : { metadata: toCollectionMetadata(body.metadata) || {} }),
-        ...(nextSlug ? { slug: nextSlug } : {}),
-        ...(routePattern === undefined ? {} : { routePattern }),
-        ...(listRoutePattern === undefined ? {} : { listRoutePattern }),
-      })).item;
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'collection',
-        entityId: updated.id,
-        reason: 'collection-updated',
-        requestId,
-      });
+      const updated = (
+        await repositories.collections.update(site.id, collection.id, {
+          ...(typeof body.name === "string" ? { name: body.name.trim() } : {}),
+          ...(body.description === undefined
+            ? {}
+            : {
+                description:
+                  typeof body.description === "string"
+                    ? body.description
+                    : null,
+              }),
+          ...(status ? { status } : {}),
+          ...(parsedFields.fields === undefined
+            ? {}
+            : { fields: parsedFields.fields }),
+          ...(body.permissions === undefined
+            ? {}
+            : { permissions: toCollectionPermissions(body.permissions) }),
+          ...(body.metadata === undefined
+            ? {}
+            : { metadata: toCollectionMetadata(body.metadata) || {} }),
+          ...(nextSlug ? { slug: nextSlug } : {}),
+          ...(routePattern === undefined ? {} : { routePattern }),
+          ...(listRoutePattern === undefined ? {} : { listRoutePattern }),
+        })
+      ).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "collection",
+          entityId: updated.id,
+          reason: "collection-updated",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'collection',
+        entity: "collection",
         entityId: updated.id,
-        action: 'update',
+        action: "update",
         before: collectionAuditMetadata(collection),
         after: collectionAuditMetadata(updated),
         metadata: updateAuditMetadata(updated, body),
         requestId,
       });
+      await deliverCollectionSchemaWebhook({
+        repositories,
+        site,
+        action: "collection.updated",
+        before: collection,
+        after: updated,
+        changedFields: Object.keys(body),
+        requestId,
+        actor: access.session?.user.id,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { collection: updated, cacheInvalidation } });
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: { collection: updated, cacheInvalidation },
+      });
     }
 
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
+    const collection = getCollectionByIdOrSlug(site.id, collectionId, {
+      includeUnpublished: true,
+    });
     if (!collection) {
-      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      return errorResponse(
+        404,
+        "COLLECTION_NOT_FOUND",
+        "Collection not found",
+        requestId,
+      );
     }
 
     const body = await parseJsonBody(request);
-    const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+    const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
     const commerceAccess = await requireCommerceCollectionSlugAccess(
       request,
       requestId,
       [collection.slug, nextSlug].filter(Boolean),
-      'configure',
+      "configure",
     );
     if (commerceAccess) {
       return commerceAccess;
     }
 
     if (body.slug !== undefined && !nextSlug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Collection slug is required",
+        requestId,
+      );
     }
     const status = parseStatus(body.status);
     if (body.status !== undefined && !status) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Collection status must be draft, published, or archived",
+        requestId,
+      );
     }
 
     if (nextSlug && nextSlug !== collection.slug) {
-      const conflict = getCollectionByIdOrSlug(site.id, nextSlug, { includeUnpublished: true });
+      const conflict = getCollectionByIdOrSlug(site.id, nextSlug, {
+        includeUnpublished: true,
+      });
       if (conflict && conflict.id !== collection.id) {
-        return errorResponse(409, 'SLUG_CONFLICT', 'A collection with this slug already exists', requestId);
+        return errorResponse(
+          409,
+          "SLUG_CONFLICT",
+          "A collection with this slug already exists",
+          requestId,
+        );
       }
     }
 
-    const routePattern = parseRoutePattern(body.routePattern, nextSlug || collection.slug);
+    const routePattern = parseRoutePattern(
+      body.routePattern,
+      nextSlug || collection.slug,
+    );
     if (body.routePattern !== undefined && routePattern === null) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Collection route pattern must include :recordSlug",
+        requestId,
+      );
     }
-    const listRoutePattern = parseListRoutePattern(body.listRoutePattern, nextSlug || collection.slug);
+    const listRoutePattern = parseListRoutePattern(
+      body.listRoutePattern,
+      nextSlug || collection.slug,
+    );
     if (body.listRoutePattern !== undefined && listRoutePattern === null) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Collection list route pattern cannot include :recordSlug",
+        requestId,
+      );
     }
-    const parsedFields = parseAdminCollectionFields(body.fields, { allowUndefined: true });
+    const parsedFields = parseAdminCollectionFields(body.fields, {
+      allowUndefined: true,
+    });
     if (!parsedFields.ok) {
-      return errorResponse(400, 'VALIDATION_ERROR', parsedFields.message, requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        parsedFields.message,
+        requestId,
+      );
     }
 
-    const routeConflict = findCollectionRouteConflict({
-      id: collection.id,
-      slug: nextSlug || collection.slug,
-      name: typeof body.name === 'string' ? body.name.trim() : collection.name,
-      routePattern: routePattern === undefined ? collection.routePattern : routePattern,
-      listRoutePattern: listRoutePattern === undefined ? collection.listRoutePattern : listRoutePattern,
-    }, getPageSummary(site.id, { includeUnpublished: true }));
+    const routeConflict = findCollectionRouteConflict(
+      {
+        id: collection.id,
+        slug: nextSlug || collection.slug,
+        name:
+          typeof body.name === "string" ? body.name.trim() : collection.name,
+        routePattern:
+          routePattern === undefined ? collection.routePattern : routePattern,
+        listRoutePattern:
+          listRoutePattern === undefined
+            ? collection.listRoutePattern
+            : listRoutePattern,
+      },
+      getPageSummary(site.id, { includeUnpublished: true }),
+    );
     if (routeConflict) {
-      return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+      return errorResponse(
+        409,
+        "ROUTE_CONFLICT",
+        routeConflict.message,
+        requestId,
+      );
     }
 
     const updated = updateAdminCollection(site.id, collection.id, {
       ...body,
       ...(nextSlug ? { slug: nextSlug } : {}),
-      ...(parsedFields.fields === undefined ? {} : { fields: parsedFields.fields }),
+      ...(parsedFields.fields === undefined
+        ? {}
+        : { fields: parsedFields.fields }),
       ...(routePattern === undefined ? {} : { routePattern }),
       ...(listRoutePattern === undefined ? {} : { listRoutePattern }),
     });
 
     if (!updated) {
-      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      return errorResponse(
+        404,
+        "COLLECTION_NOT_FOUND",
+        "Collection not found",
+        requestId,
+      );
     }
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'collection',
+      entity: "collection",
       entityId: updated.id,
-      action: 'update',
+      action: "update",
       before: collectionAuditMetadata(collection),
       after: collectionAuditMetadata(updated),
       metadata: updateAuditMetadata(updated, body),
       requestId,
     });
+    await deliverCollectionSchemaWebhook({
+      site: site as unknown as Site,
+      action: "collection.updated",
+      before: collection,
+      after: updated,
+      changedFields: Object.keys(body),
+      requestId,
+      actor: access.session?.user.id,
+    });
 
-    return NextResponse.json({ success: true, requestId, data: { collection: updated } });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: { collection: updated },
+    });
   } catch (error) {
-    console.error('Admin collection update API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin collection update API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'collections.delete' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "collections.delete",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -408,43 +711,80 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { siteId, collectionId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const collection = await repositories.collections.getById(site.id, collectionId)
-        || await repositories.collections.getBySlug(site.id, collectionId);
+      const collection =
+        (await repositories.collections.getById(site.id, collectionId)) ||
+        (await repositories.collections.getBySlug(site.id, collectionId));
       if (!collection) {
-        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+        return errorResponse(
+          404,
+          "COLLECTION_NOT_FOUND",
+          "Collection not found",
+          requestId,
+        );
       }
-      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'delete');
+      const commerceAccess = await requireCommerceCollectionAccess(
+        request,
+        requestId,
+        collection.slug,
+        "delete",
+      );
       if (commerceAccess) {
         return commerceAccess;
       }
 
-      const deleted = await repositories.collections.delete(site.id, collection.id);
+      const deleted = await repositories.collections.delete(
+        site.id,
+        collection.id,
+      );
       if (!deleted) {
-        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+        return errorResponse(
+          404,
+          "COLLECTION_NOT_FOUND",
+          "Collection not found",
+          requestId,
+        );
       }
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'collection',
-        entityId: collection.id,
-        reason: 'collection-deleted',
-        requestId,
-      });
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "collection",
+          entityId: collection.id,
+          reason: "collection-deleted",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'collection',
+        entity: "collection",
         entityId: collection.id,
-        action: 'delete',
+        action: "delete",
         before: collectionAuditMetadata(collection),
         metadata: collectionAuditMetadata(collection),
         requestId,
+      });
+      await deliverCollectionSchemaWebhook({
+        repositories,
+        site,
+        action: "collection.deleted",
+        before: collection,
+        requestId,
+        actor: access.session?.user.id,
       });
 
       return NextResponse.json({
@@ -461,30 +801,54 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
+    const collection = getCollectionByIdOrSlug(site.id, collectionId, {
+      includeUnpublished: true,
+    });
     if (!collection) {
-      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      return errorResponse(
+        404,
+        "COLLECTION_NOT_FOUND",
+        "Collection not found",
+        requestId,
+      );
     }
-    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'delete');
+    const commerceAccess = await requireCommerceCollectionAccess(
+      request,
+      requestId,
+      collection.slug,
+      "delete",
+    );
     if (commerceAccess) {
       return commerceAccess;
     }
 
     const deleted = deleteAdminCollection(site.id, collection.id);
     if (!deleted) {
-      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      return errorResponse(
+        404,
+        "COLLECTION_NOT_FOUND",
+        "Collection not found",
+        requestId,
+      );
     }
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'collection',
+      entity: "collection",
       entityId: collection.id,
-      action: 'delete',
+      action: "delete",
       before: collectionAuditMetadata(collection),
       metadata: collectionAuditMetadata(collection),
       requestId,
+    });
+    await deliverCollectionSchemaWebhook({
+      site: site as unknown as Site,
+      action: "collection.deleted",
+      before: collection,
+      requestId,
+      actor: access.session?.user.id,
     });
 
     return NextResponse.json({
@@ -496,7 +860,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin collection delete API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin collection delete API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

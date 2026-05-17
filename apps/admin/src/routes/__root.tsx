@@ -12,7 +12,7 @@
  */
 
 import { useNavigate, createRootRoute, Outlet, useRouterState } from '@tanstack/react-router';
-import { Suspense, useEffect, useRef } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { useAuthStore } from '@/stores/authStore';
@@ -42,16 +42,28 @@ function RootComponent() {
   const isAuthenticated = useAuthStore((state) => Boolean(state.user && state.session));
   const refreshSession = useAuthStore((state) => state.refreshSession);
   const validatedSessionRef = useRef(false);
+  const [authHydrated, setAuthHydrated] = useState(() => useAuthStore.persist.hasHydrated());
 
   // Routes that should NOT have the main layout
   const publicRoutes = ['/login', '/forgot-password', '/reset-password', '/accept-invite'];
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
   useEffect(() => {
-    if (!isPublicRoute && !isAuthenticated) {
+    if (authHydrated) return undefined;
+    const unsubscribe = useAuthStore.persist.onFinishHydration(() => {
+      setAuthHydrated(true);
+    });
+    if (useAuthStore.persist.hasHydrated()) {
+      setAuthHydrated(true);
+    }
+    return unsubscribe;
+  }, [authHydrated]);
+
+  useEffect(() => {
+    if (authHydrated && !isPublicRoute && !isAuthenticated) {
       navigate({ to: '/login', replace: true });
     }
-  }, [isAuthenticated, isPublicRoute, navigate]);
+  }, [authHydrated, isAuthenticated, isPublicRoute, navigate]);
 
   useEffect(() => {
     if (isPublicRoute || !isAuthenticated || validatedSessionRef.current) {
@@ -71,7 +83,7 @@ function RootComponent() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!authHydrated || !isAuthenticated) {
     return (
       <Suspense fallback={<LoadingScreen />}>
         <LoadingScreen />

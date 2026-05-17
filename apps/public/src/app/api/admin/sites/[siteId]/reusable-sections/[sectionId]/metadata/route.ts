@@ -5,28 +5,32 @@
  * PATCH /api/admin/sites/[siteId]/reusable-sections/[sectionId]/metadata
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
 import {
   getReusableSectionByIdOrSlug,
   getSiteByIdOrSlug,
   updateReusableSection,
-} from '@/lib/backyStore';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+} from "@/lib/backyStore";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
 import {
   buildReusableSectionMetadataPatch,
   reusableSectionLibraryMetadata,
-} from '@/lib/reusableSectionMetadata';
+} from "@/lib/reusableSectionMetadata";
 import {
   buildReusableSectionUpdateMetadata,
   reusableSectionConflict,
   reusableSectionVersionFromMetadata,
-} from '@/lib/reusableSectionVersions';
-import type { BackyJsonObject } from '@backy-cms/core';
+} from "@/lib/reusableSectionVersions";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import type { BackyJsonObject, Site } from "@backy-cms/core";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -35,7 +39,8 @@ interface RouteParams {
   }>;
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (
   status: number,
@@ -43,24 +48,90 @@ const errorResponse = (
   message: string,
   requestId: string,
   details?: Record<string, unknown>,
-) => (
-  NextResponse.json({ success: false, requestId, error: { code, message, ...(details ? { details } : {}) } }, { status })
-);
+) =>
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: { code, message, ...(details ? { details } : {}) },
+    },
+    { status },
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
+const reusableSectionMetadataWebhookSnapshot = (section: {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  category?: string | null;
+  tags?: string[] | null;
+  metadata?: unknown;
+  updatedAt?: string;
+}): BackyJsonObject => ({
+  sectionId: section.id,
+  name: section.name,
+  slug: section.slug,
+  status: section.status,
+  category: section.category || null,
+  tags: Array.isArray(section.tags) ? section.tags : [],
+  version: reusableSectionVersionFromMetadata(section.metadata),
+  updatedAt: section.updatedAt || null,
+});
+
+const deliverReusableSectionMetadataWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  before: Parameters<typeof reusableSectionMetadataWebhookSnapshot>[0];
+  after: Parameters<typeof reusableSectionMetadataWebhookSnapshot>[0];
+  changedFields: string[];
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: "reusableSection.metadata.updated",
+    data: {
+      resourceType: "reusableSection",
+      before: reusableSectionMetadataWebhookSnapshot(params.before),
+      after: reusableSectionMetadataWebhookSnapshot(params.after),
+    },
+    metadata: {
+      action: "reusableSection.metadata.updated",
+      changedKeys: ["content"],
+      source: "admin-reusable-section-metadata-api",
+      resourceType: "reusableSection",
+      resourceId: params.after.id,
+      slug: params.after.slug,
+      status: params.after.status,
+      changedFields: params.changedFields,
+      version: reusableSectionVersionFromMetadata(params.after.metadata),
+    },
+  });
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.view",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -68,15 +139,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
-        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      const section =
+        (await repositories.reusableSections.getById(site.id, sectionId)) ||
+        (await repositories.reusableSections.getBySlug(site.id, sectionId));
       if (!section) {
-        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+        return errorResponse(
+          404,
+          "REUSABLE_SECTION_NOT_FOUND",
+          "Reusable section not found",
+          requestId,
+        );
       }
 
       return NextResponse.json({
@@ -93,12 +177,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const section = getReusableSectionByIdOrSlug(site.id, sectionId);
     if (!section) {
-      return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      return errorResponse(
+        404,
+        "REUSABLE_SECTION_NOT_FOUND",
+        "Reusable section not found",
+        requestId,
+      );
     }
 
     return NextResponse.json({
@@ -112,14 +201,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin reusable section metadata API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin reusable section metadata API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.edit",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -128,57 +224,92 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
-        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      const section =
+        (await repositories.reusableSections.getById(site.id, sectionId)) ||
+        (await repositories.reusableSections.getBySlug(site.id, sectionId));
       if (!section) {
-        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+        return errorResponse(
+          404,
+          "REUSABLE_SECTION_NOT_FOUND",
+          "Reusable section not found",
+          requestId,
+        );
       }
 
       const versionConflict = reusableSectionConflict(section, body);
       if (versionConflict) {
-        return errorResponse(409, 'REUSABLE_SECTION_VERSION_CONFLICT', 'Reusable section has changed since the client loaded it', requestId, {
-          ...versionConflict,
-          section,
-        });
+        return errorResponse(
+          409,
+          "REUSABLE_SECTION_VERSION_CONFLICT",
+          "Reusable section has changed since the client loaded it",
+          requestId,
+          {
+            ...versionConflict,
+            section,
+          },
+        );
       }
 
       const patch = buildReusableSectionMetadataPatch(section.metadata, body);
       if (patch.errors.length > 0) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section metadata is invalid', requestId, {
-          errors: patch.errors,
-        });
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Reusable section metadata is invalid",
+          requestId,
+          {
+            errors: patch.errors,
+          },
+        );
       }
 
-      const updatedBy = typeof body.updatedBy === 'string' && body.updatedBy.trim()
-        ? body.updatedBy.trim()
-        : section.updatedBy || null;
-      const metadata = buildReusableSectionUpdateMetadata(section, patch.metadata, {
-        actor: updatedBy,
-        requestId,
-      }) as BackyJsonObject;
-      const updated = (await repositories.reusableSections.update(site.id, section.id, {
-        metadata,
-        updatedBy,
-      })).item;
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'reusableSection',
-        entityId: updated.id,
-        reason: 'reusable-section-metadata-updated',
-        requestId,
-      });
+      const updatedBy =
+        typeof body.updatedBy === "string" && body.updatedBy.trim()
+          ? body.updatedBy.trim()
+          : section.updatedBy || null;
+      const metadata = buildReusableSectionUpdateMetadata(
+        section,
+        patch.metadata,
+        {
+          actor: updatedBy,
+          requestId,
+        },
+      ) as BackyJsonObject;
+      const updated = (
+        await repositories.reusableSections.update(site.id, section.id, {
+          metadata,
+          updatedBy,
+        })
+      ).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "reusableSection",
+          entityId: updated.id,
+          reason: "reusable-section-metadata-updated",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'reusableSection',
+        entity: "reusableSection",
         entityId: updated.id,
-        action: 'reusableSection.metadata.update',
+        action: "reusableSection.metadata.update",
         before: section,
         after: updated,
         metadata: {
@@ -186,6 +317,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           version: reusableSectionVersionFromMetadata(updated.metadata),
         },
         requestId,
+      });
+      await deliverReusableSectionMetadataWebhook({
+        repositories,
+        site,
+        before: section,
+        after: updated,
+        changedFields: patch.changedKeys,
+        requestId,
+        actor: access.session?.user.id,
       });
 
       return NextResponse.json({
@@ -203,32 +343,50 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const section = getReusableSectionByIdOrSlug(site.id, sectionId);
     if (!section) {
-      return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      return errorResponse(
+        404,
+        "REUSABLE_SECTION_NOT_FOUND",
+        "Reusable section not found",
+        requestId,
+      );
     }
 
     const versionConflict = reusableSectionConflict(section, body);
     if (versionConflict) {
-      return errorResponse(409, 'REUSABLE_SECTION_VERSION_CONFLICT', 'Reusable section has changed since the client loaded it', requestId, {
-        ...versionConflict,
-        section,
-      });
+      return errorResponse(
+        409,
+        "REUSABLE_SECTION_VERSION_CONFLICT",
+        "Reusable section has changed since the client loaded it",
+        requestId,
+        {
+          ...versionConflict,
+          section,
+        },
+      );
     }
 
     const patch = buildReusableSectionMetadataPatch(section.metadata, body);
     if (patch.errors.length > 0) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section metadata is invalid', requestId, {
-        errors: patch.errors,
-      });
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Reusable section metadata is invalid",
+        requestId,
+        {
+          errors: patch.errors,
+        },
+      );
     }
 
-    const updatedBy = typeof body.updatedBy === 'string' && body.updatedBy.trim()
-      ? body.updatedBy.trim()
-      : section.updatedBy || null;
+    const updatedBy =
+      typeof body.updatedBy === "string" && body.updatedBy.trim()
+        ? body.updatedBy.trim()
+        : section.updatedBy || null;
     const updated = updateReusableSection(site.id, section.id, {
       metadata: buildReusableSectionUpdateMetadata(section, patch.metadata, {
         actor: updatedBy,
@@ -237,13 +395,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updatedBy,
     });
     if (!updated) {
-      return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      return errorResponse(
+        404,
+        "REUSABLE_SECTION_NOT_FOUND",
+        "Reusable section not found",
+        requestId,
+      );
     }
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'reusableSection',
+      entity: "reusableSection",
       entityId: updated.id,
-      action: 'reusableSection.metadata.update',
+      action: "reusableSection.metadata.update",
       before: section,
       after: updated,
       metadata: {
@@ -251,6 +414,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         version: reusableSectionVersionFromMetadata(updated.metadata),
       },
       requestId,
+    });
+    await deliverReusableSectionMetadataWebhook({
+      site: site as unknown as Site,
+      before: section,
+      after: updated,
+      changedFields: patch.changedKeys,
+      requestId,
+      actor: access.session?.user.id,
     });
 
     return NextResponse.json({
@@ -264,7 +435,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin reusable section metadata update API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin reusable section metadata update API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

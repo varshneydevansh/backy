@@ -12,7 +12,7 @@ interface RouteParams {
   }>;
 }
 
-type AuditKind = 'form-submission' | 'contact-shared' | 'contact-sync' | 'contact-status' | 'commerce-order' | 'commerce-product' | 'commerce-webhook' | 'comment-submitted' | 'comment-status' | 'comment-reported' | 'all';
+type AuditKind = 'form-submission' | 'contact-shared' | 'contact-sync' | 'contact-status' | 'commerce-order' | 'commerce-product' | 'commerce-webhook' | 'comment-submitted' | 'comment-status' | 'comment-reported' | 'interactive-runtime' | 'all';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -60,7 +60,8 @@ function parseKind(raw: string | null): AuditKind {
     raw === 'commerce-webhook' ||
     raw === 'comment-submitted' ||
     raw === 'comment-status' ||
-    raw === 'comment-reported'
+    raw === 'comment-reported' ||
+    raw === 'interactive-runtime'
   ) {
     return raw;
   }
@@ -81,6 +82,9 @@ function permissionForKind(kind: AuditKind) {
   }
   if (kind === 'commerce-order' || kind === 'commerce-product' || kind === 'commerce-webhook') {
     return 'commerce.view';
+  }
+  if (kind === 'interactive-runtime') {
+    return 'activity.export';
   }
 
   return 'activity.export';

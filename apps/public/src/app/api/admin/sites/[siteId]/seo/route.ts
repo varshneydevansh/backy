@@ -5,24 +5,31 @@
  * PATCH /api/admin/sites/[siteId]/seo
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '@backy-cms/core';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
+import { NextRequest, NextResponse } from "next/server";
+import { DEFAULT_SITE_SETTINGS, type SiteSettings } from "@backy-cms/core";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
 import {
   listCollectionRecords,
   listCollections,
   getSiteByIdOrSlug,
   updateAdminSite,
-} from '@/lib/backyStore';
+} from "@/lib/backyStore";
 import {
   buildCollectionItemPath,
   buildCollectionListPath,
-} from '@/lib/collectionRoutes';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { recordSiteCacheInvalidation, type PublicCacheInvalidation } from '@/lib/cacheInvalidation';
+} from "@/lib/collectionRoutes";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import {
+  recordSiteCacheInvalidation,
+  type PublicCacheInvalidation,
+} from "@/lib/cacheInvalidation";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -31,7 +38,7 @@ interface RouteParams {
 }
 
 interface SeoPreviewRoute {
-  type: 'dynamicList' | 'dynamicItem';
+  type: "dynamicList" | "dynamicItem";
   title: string;
   description: string;
   canonical: string;
@@ -45,38 +52,38 @@ interface SeoPreview {
   routes: SeoPreviewRoute[];
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
-const text = (value: unknown): string | undefined => (
-  typeof value === 'string' ? value.trim() : undefined
-);
+const text = (value: unknown): string | undefined =>
+  typeof value === "string" ? value.trim() : undefined;
 
-const bool = (value: unknown, fallback: boolean) => (
-  typeof value === 'boolean' ? value : fallback
-);
+const bool = (value: unknown, fallback: boolean) =>
+  typeof value === "boolean" ? value : fallback;
 
 const numberInRange = (value: unknown, fallback: number) => {
-  const number = typeof value === 'number' ? value : Number(value);
+  const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : fallback;
 };
 
 const optionalNumberInRange = (value: unknown): number | undefined => {
-  const number = typeof value === 'number' ? value : Number(value);
+  const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : undefined;
 };
 
 const applyTitleTemplate = (
   title: string,
   siteName: string,
-  seo: Partial<SiteSettings['seo']> | undefined,
+  seo: Partial<SiteSettings["seo"]> | undefined,
 ) => {
-  const template = typeof seo?.titleTemplate === 'string' && seo.titleTemplate.trim().length > 0
-    ? seo.titleTemplate.trim()
-    : '';
+  const template =
+    typeof seo?.titleTemplate === "string" &&
+    seo.titleTemplate.trim().length > 0
+      ? seo.titleTemplate.trim()
+      : "";
 
   if (!template) {
     return title;
@@ -88,25 +95,28 @@ const applyTitleTemplate = (
     .replace(/\{siteName\}/g, siteName);
 };
 
-const recordText = (values: Record<string, unknown>, keys: string[]): string => {
+const recordText = (
+  values: Record<string, unknown>,
+  keys: string[],
+): string => {
   for (const key of keys) {
     const value = values[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
+    if (typeof value === "string" && value.trim().length > 0) {
       return value.trim();
     }
   }
 
-  return '';
+  return "";
 };
 
 const previewDescription = (
   sourceDescription: string,
-  seo: Partial<SiteSettings['seo']> | undefined,
-) => sourceDescription || seo?.defaultDescription || '';
+  seo: Partial<SiteSettings["seo"]> | undefined,
+) => sourceDescription || seo?.defaultDescription || "";
 
 const buildPreviewRoute = (
   input: {
-    type: SeoPreviewRoute['type'];
+    type: SeoPreviewRoute["type"];
     sourceTitle: string;
     sourceDescription: string;
     canonical: string;
@@ -135,15 +145,20 @@ const buildPreviewRoute = (
 
 const normalizeJsonLd = (
   value: unknown,
-): { ok: true; value: Array<Record<string, unknown>> } | { ok: false; message: string } => {
+):
+  | { ok: true; value: Array<Record<string, unknown>> }
+  | { ok: false; message: string } => {
   if (!Array.isArray(value)) {
-    return { ok: false, message: 'JSON-LD must be an array of objects' };
+    return { ok: false, message: "JSON-LD must be an array of objects" };
   }
 
   const entries: Array<Record<string, unknown>> = [];
   for (const [index, entry] of value.entries()) {
     if (!isRecord(entry)) {
-      return { ok: false, message: `JSON-LD entry ${index + 1} must be an object` };
+      return {
+        ok: false,
+        message: `JSON-LD entry ${index + 1} must be an object`,
+      };
     }
     entries.push(entry);
   }
@@ -154,14 +169,14 @@ const normalizeJsonLd = (
 const normalizeKeywords = (value: unknown): string[] | undefined => {
   if (Array.isArray(value)) {
     const keywords = value
-      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
       .filter(Boolean);
     return keywords.length > 0 ? keywords : undefined;
   }
 
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const keywords = value
-      .split(',')
+      .split(",")
       .map((entry) => entry.trim())
       .filter(Boolean);
     return keywords.length > 0 ? keywords : undefined;
@@ -172,31 +187,43 @@ const normalizeKeywords = (value: unknown): string[] | undefined => {
 
 const normalizeRouteOverrides = (
   value: unknown,
-): { ok: true; value: NonNullable<SiteSettings['seo']['routeOverrides']> } | { ok: false; message: string } => {
+):
+  | { ok: true; value: NonNullable<SiteSettings["seo"]["routeOverrides"]> }
+  | { ok: false; message: string } => {
   if (value === undefined) {
     return { ok: true, value: [] };
   }
   if (!Array.isArray(value)) {
-    return { ok: false, message: 'Route overrides must be an array' };
+    return { ok: false, message: "Route overrides must be an array" };
   }
 
-  const overrides: NonNullable<SiteSettings['seo']['routeOverrides']> = [];
+  const overrides: NonNullable<SiteSettings["seo"]["routeOverrides"]> = [];
   for (const [index, entry] of value.entries()) {
     if (!isRecord(entry)) {
-      return { ok: false, message: `Route override ${index + 1} must be an object` };
+      return {
+        ok: false,
+        message: `Route override ${index + 1} must be an object`,
+      };
     }
-    const match = text(entry.match) || '';
+    const match = text(entry.match) || "";
     if (!match) {
       continue;
     }
-    const routeJsonLd = entry.jsonLd === undefined ? undefined : normalizeJsonLd(entry.jsonLd);
+    const routeJsonLd =
+      entry.jsonLd === undefined ? undefined : normalizeJsonLd(entry.jsonLd);
     if (routeJsonLd && !routeJsonLd.ok) {
-      return { ok: false, message: `Route override ${index + 1}: ${routeJsonLd.message}` };
+      return {
+        ok: false,
+        message: `Route override ${index + 1}: ${routeJsonLd.message}`,
+      };
     }
     const robotsInput = isRecord(entry.robots) ? entry.robots : {};
-    const changeFrequency = entry.changeFrequency === 'daily' || entry.changeFrequency === 'weekly' || entry.changeFrequency === 'monthly'
-      ? entry.changeFrequency
-      : undefined;
+    const changeFrequency =
+      entry.changeFrequency === "daily" ||
+      entry.changeFrequency === "weekly" ||
+      entry.changeFrequency === "monthly"
+        ? entry.changeFrequency
+        : undefined;
 
     overrides.push({
       id: text(entry.id) || `route_override_${index + 1}`,
@@ -221,7 +248,13 @@ const normalizeRouteOverrides = (
   return { ok: true, value: overrides };
 };
 
-const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: unknown,
+) =>
   NextResponse.json(
     {
       success: false,
@@ -233,14 +266,15 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
     },
     { status },
-  )
-);
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
@@ -258,21 +292,30 @@ const defaultSiteSettings = (): SiteSettings => ({
   },
 });
 
-const buildDemoSeoPreview = (site: { id: string; name: string; settings?: SiteSettings }): SeoPreview => {
+const buildDemoSeoPreview = (site: {
+  id: string;
+  name: string;
+  settings?: SiteSettings;
+}): SeoPreview => {
   const collections = listCollections(site.id, { includeUnpublished: true });
   const routes: SeoPreviewRoute[] = [];
 
   for (const collection of collections.slice(0, 6)) {
-    routes.push(buildPreviewRoute({
-      type: 'dynamicList',
-      sourceTitle: collection.name,
-      sourceDescription: collection.description || '',
-      canonical: buildCollectionListPath(collection),
-      variables: {
-        collectionName: collection.name,
-        collectionSlug: collection.slug,
-      },
-    }, site));
+    routes.push(
+      buildPreviewRoute(
+        {
+          type: "dynamicList",
+          sourceTitle: collection.name,
+          sourceDescription: collection.description || "",
+          canonical: buildCollectionListPath(collection),
+          variables: {
+            collectionName: collection.name,
+            collectionSlug: collection.slug,
+          },
+        },
+        site,
+      ),
+    );
 
     const record = listCollectionRecords(site.id, collection.id, {
       includeUnpublished: true,
@@ -280,24 +323,42 @@ const buildDemoSeoPreview = (site: { id: string; name: string; settings?: SiteSe
       offset: 0,
     }).records[0];
     if (record) {
-      const recordTitle = recordText(record.values, ['title', 'name', 'heading']) || record.slug;
-      routes.push(buildPreviewRoute({
-        type: 'dynamicItem',
-        sourceTitle: recordTitle,
-        sourceDescription: recordText(record.values, ['description', 'summary', 'excerpt']),
-        canonical: buildCollectionItemPath(collection, record.slug),
-        variables: {
-          collectionName: collection.name,
-          collectionSlug: collection.slug,
-          recordTitle,
-          recordSlug: record.slug,
-        },
-      }, site));
+      const recordTitle =
+        recordText(record.values, ["title", "name", "heading"]) || record.slug;
+      routes.push(
+        buildPreviewRoute(
+          {
+            type: "dynamicItem",
+            sourceTitle: recordTitle,
+            sourceDescription: recordText(record.values, [
+              "description",
+              "summary",
+              "excerpt",
+            ]),
+            canonical: buildCollectionItemPath(collection, record.slug),
+            variables: {
+              collectionName: collection.name,
+              collectionSlug: collection.slug,
+              recordTitle,
+              recordSlug: record.slug,
+            },
+          },
+          site,
+        ),
+      );
     }
   }
 
   return {
-    supportedVariables: ['%s', '{title}', '{siteName}', '{collectionName}', '{collectionSlug}', '{recordTitle}', '{recordSlug}'],
+    supportedVariables: [
+      "%s",
+      "{title}",
+      "{siteName}",
+      "{collectionName}",
+      "{collectionSlug}",
+      "{recordTitle}",
+      "{recordSlug}",
+    ],
     routes,
   };
 };
@@ -309,90 +370,130 @@ const buildRepositorySeoPreview = async (
   const collections = await repositories.collections.list({
     siteId: site.id,
     includeUnpublished: true,
-    status: 'all',
+    status: "all",
     limit: 6,
     offset: 0,
   });
   const routes: SeoPreviewRoute[] = [];
 
   for (const collection of collections.items) {
-    routes.push(buildPreviewRoute({
-      type: 'dynamicList',
-      sourceTitle: collection.name,
-      sourceDescription: collection.description || '',
-      canonical: buildCollectionListPath(collection),
-      variables: {
-        collectionName: collection.name,
-        collectionSlug: collection.slug,
-      },
-    }, site));
+    routes.push(
+      buildPreviewRoute(
+        {
+          type: "dynamicList",
+          sourceTitle: collection.name,
+          sourceDescription: collection.description || "",
+          canonical: buildCollectionListPath(collection),
+          variables: {
+            collectionName: collection.name,
+            collectionSlug: collection.slug,
+          },
+        },
+        site,
+      ),
+    );
 
     const records = await repositories.collections.listRecords({
       siteId: site.id,
       collectionId: collection.id,
       includeUnpublished: true,
-      status: 'all',
+      status: "all",
       limit: 1,
       offset: 0,
     });
     const record = records.items[0];
     if (record) {
-      const recordTitle = recordText(record.values, ['title', 'name', 'heading']) || record.slug;
-      routes.push(buildPreviewRoute({
-        type: 'dynamicItem',
-        sourceTitle: recordTitle,
-        sourceDescription: recordText(record.values, ['description', 'summary', 'excerpt']),
-        canonical: buildCollectionItemPath(collection, record.slug),
-        variables: {
-          collectionName: collection.name,
-          collectionSlug: collection.slug,
-          recordTitle,
-          recordSlug: record.slug,
-        },
-      }, site));
+      const recordTitle =
+        recordText(record.values, ["title", "name", "heading"]) || record.slug;
+      routes.push(
+        buildPreviewRoute(
+          {
+            type: "dynamicItem",
+            sourceTitle: recordTitle,
+            sourceDescription: recordText(record.values, [
+              "description",
+              "summary",
+              "excerpt",
+            ]),
+            canonical: buildCollectionItemPath(collection, record.slug),
+            variables: {
+              collectionName: collection.name,
+              collectionSlug: collection.slug,
+              recordTitle,
+              recordSlug: record.slug,
+            },
+          },
+          site,
+        ),
+      );
     }
   }
 
   return {
-    supportedVariables: ['%s', '{title}', '{siteName}', '{collectionName}', '{collectionSlug}', '{recordTitle}', '{recordSlug}'],
+    supportedVariables: [
+      "%s",
+      "{title}",
+      "{siteName}",
+      "{collectionName}",
+      "{collectionSlug}",
+      "{recordTitle}",
+      "{recordSlug}",
+    ],
     routes,
   };
 };
 
 const normalizeSeoInput = (
   input: unknown,
-  current: SiteSettings['seo'],
-): { ok: true; seo: SiteSettings['seo'] } | { ok: false; details: unknown } => {
+  current: SiteSettings["seo"],
+): { ok: true; seo: SiteSettings["seo"] } | { ok: false; details: unknown } => {
   if (!isRecord(input)) {
-    return { ok: false, details: { message: 'seo must be an object' } };
+    return { ok: false, details: { message: "seo must be an object" } };
   }
 
   const titleTemplate = text(input.titleTemplate);
   const sitemapInput = isRecord(input.sitemap) ? input.sitemap : {};
   const robotsInput = isRecord(input.robots) ? input.robots : {};
   const issues: Array<{ field: string; message: string }> = [];
-  const jsonLdInput = input.jsonLd === undefined ? undefined : normalizeJsonLd(input.jsonLd);
-  const routeOverridesInput = input.routeOverrides === undefined ? undefined : normalizeRouteOverrides(input.routeOverrides);
+  const jsonLdInput =
+    input.jsonLd === undefined ? undefined : normalizeJsonLd(input.jsonLd);
+  const routeOverridesInput =
+    input.routeOverrides === undefined
+      ? undefined
+      : normalizeRouteOverrides(input.routeOverrides);
 
-  if (titleTemplate && !titleTemplate.includes('%s') && !titleTemplate.includes('{title}')) {
-    issues.push({ field: 'titleTemplate', message: 'Title template must include %s or {title}' });
+  if (
+    titleTemplate &&
+    !titleTemplate.includes("%s") &&
+    !titleTemplate.includes("{title}")
+  ) {
+    issues.push({
+      field: "titleTemplate",
+      message: "Title template must include %s or {title}",
+    });
   }
 
   if (jsonLdInput && !jsonLdInput.ok) {
-    issues.push({ field: 'jsonLd', message: jsonLdInput.message });
+    issues.push({ field: "jsonLd", message: jsonLdInput.message });
   }
 
   if (routeOverridesInput && !routeOverridesInput.ok) {
-    issues.push({ field: 'routeOverrides', message: routeOverridesInput.message });
+    issues.push({
+      field: "routeOverrides",
+      message: routeOverridesInput.message,
+    });
   }
 
   if (
-    sitemapInput.defaultChangeFrequency !== undefined
-    && sitemapInput.defaultChangeFrequency !== 'daily'
-    && sitemapInput.defaultChangeFrequency !== 'weekly'
-    && sitemapInput.defaultChangeFrequency !== 'monthly'
+    sitemapInput.defaultChangeFrequency !== undefined &&
+    sitemapInput.defaultChangeFrequency !== "daily" &&
+    sitemapInput.defaultChangeFrequency !== "weekly" &&
+    sitemapInput.defaultChangeFrequency !== "monthly"
   ) {
-    issues.push({ field: 'sitemap.defaultChangeFrequency', message: 'Change frequency must be daily, weekly, or monthly' });
+    issues.push({
+      field: "sitemap.defaultChangeFrequency",
+      message: "Change frequency must be daily, weekly, or monthly",
+    });
   }
 
   if (issues.length > 0) {
@@ -403,31 +504,73 @@ const normalizeSeoInput = (
     ok: true,
     seo: {
       ...current,
-      titleTemplate: input.titleTemplate === undefined ? current.titleTemplate : titleTemplate || '',
-      defaultDescription: input.defaultDescription === undefined ? current.defaultDescription : text(input.defaultDescription) || '',
-      defaultOgImage: input.defaultOgImage === undefined ? current.defaultOgImage : text(input.defaultOgImage) || '',
-      favicon: input.favicon === undefined ? current.favicon : text(input.favicon) || '',
-      jsonLd: input.jsonLd === undefined ? current.jsonLd || [] : jsonLdInput && jsonLdInput.ok ? jsonLdInput.value : [],
-      sitemap: input.sitemap === undefined
-        ? current.sitemap
-        : {
-            ...current.sitemap,
-            enabled: bool(sitemapInput.enabled, current.sitemap?.enabled !== false),
-            defaultChangeFrequency: sitemapInput.defaultChangeFrequency === 'daily' || sitemapInput.defaultChangeFrequency === 'weekly' || sitemapInput.defaultChangeFrequency === 'monthly'
-              ? sitemapInput.defaultChangeFrequency
-              : current.sitemap?.defaultChangeFrequency || 'weekly',
-            defaultPriority: numberInRange(sitemapInput.defaultPriority, current.sitemap?.defaultPriority ?? 0.7),
-            includeDynamicRoutes: bool(sitemapInput.includeDynamicRoutes, current.sitemap?.includeDynamicRoutes !== false),
-          },
-      robots: input.robots === undefined
-        ? current.robots
-        : {
-            ...current.robots,
-            index: bool(robotsInput.index, current.robots?.index !== false),
-            follow: bool(robotsInput.follow, current.robots?.follow !== false),
-            extraRules: robotsInput.extraRules === undefined ? current.robots?.extraRules || '' : text(robotsInput.extraRules) || '',
-          },
-      routeOverrides: input.routeOverrides === undefined ? current.routeOverrides || [] : routeOverridesInput && routeOverridesInput.ok ? routeOverridesInput.value : [],
+      titleTemplate:
+        input.titleTemplate === undefined
+          ? current.titleTemplate
+          : titleTemplate || "",
+      defaultDescription:
+        input.defaultDescription === undefined
+          ? current.defaultDescription
+          : text(input.defaultDescription) || "",
+      defaultOgImage:
+        input.defaultOgImage === undefined
+          ? current.defaultOgImage
+          : text(input.defaultOgImage) || "",
+      favicon:
+        input.favicon === undefined
+          ? current.favicon
+          : text(input.favicon) || "",
+      jsonLd:
+        input.jsonLd === undefined
+          ? current.jsonLd || []
+          : jsonLdInput && jsonLdInput.ok
+            ? jsonLdInput.value
+            : [],
+      sitemap:
+        input.sitemap === undefined
+          ? current.sitemap
+          : {
+              ...current.sitemap,
+              enabled: bool(
+                sitemapInput.enabled,
+                current.sitemap?.enabled !== false,
+              ),
+              defaultChangeFrequency:
+                sitemapInput.defaultChangeFrequency === "daily" ||
+                sitemapInput.defaultChangeFrequency === "weekly" ||
+                sitemapInput.defaultChangeFrequency === "monthly"
+                  ? sitemapInput.defaultChangeFrequency
+                  : current.sitemap?.defaultChangeFrequency || "weekly",
+              defaultPriority: numberInRange(
+                sitemapInput.defaultPriority,
+                current.sitemap?.defaultPriority ?? 0.7,
+              ),
+              includeDynamicRoutes: bool(
+                sitemapInput.includeDynamicRoutes,
+                current.sitemap?.includeDynamicRoutes !== false,
+              ),
+            },
+      robots:
+        input.robots === undefined
+          ? current.robots
+          : {
+              ...current.robots,
+              index: bool(robotsInput.index, current.robots?.index !== false),
+              follow: bool(
+                robotsInput.follow,
+                current.robots?.follow !== false,
+              ),
+              extraRules:
+                robotsInput.extraRules === undefined
+                  ? current.robots?.extraRules || ""
+                  : text(robotsInput.extraRules) || "",
+            },
+      routeOverrides:
+        input.routeOverrides === undefined
+          ? current.routeOverrides || []
+          : routeOverridesInput && routeOverridesInput.ok
+            ? routeOverridesInput.value
+            : [],
     },
   };
 };
@@ -456,8 +599,10 @@ const responsePayload = (
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.view",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -466,30 +611,48 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { siteId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      return responsePayload(requestId, site, await buildRepositorySeoPreview(repositories, site));
+      return responsePayload(
+        requestId,
+        site,
+        await buildRepositorySeoPreview(repositories, site),
+      );
     }
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     return responsePayload(requestId, site, buildDemoSeoPreview(site));
   } catch (error) {
-    console.error('Admin site SEO API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin site SEO API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.edit",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -500,15 +663,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       const validation = normalizeSeoInput(body.seo || body, site.settings.seo);
       if (!validation.ok) {
-        return errorResponse(400, 'SEO_VALIDATION', 'SEO defaults are invalid', requestId, validation.details);
+        return errorResponse(
+          400,
+          "SEO_VALIDATION",
+          "SEO defaults are invalid",
+          requestId,
+          validation.details,
+        );
       }
 
       const updated = await repositories.sites.update(site.id, {
@@ -522,26 +698,49 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         teamId: site.teamId,
         actorId: access.session?.user.id,
-        entity: 'site',
+        entity: "site",
         entityId: site.id,
-        action: 'site.seo.updated',
+        action: "site.seo.updated",
         before: site.settings.seo || {},
         after: updated.item.settings.seo || {},
         metadata: {
-          titleTemplate: validation.seo.titleTemplate || '',
+          titleTemplate: validation.seo.titleTemplate || "",
           sitemapEnabled: validation.seo.sitemap?.enabled !== false,
           robotsIndex: validation.seo.robots?.index !== false,
         },
         requestId,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'seo',
-        entity: 'site',
-        entityId: site.id,
-        reason: 'site-seo-updated',
+      await deliverSiteWebhooks({
+        repositories,
+        site: updated.item,
+        kind: "site-updated",
         requestId,
+        actor: access.session?.user.id,
+        reason: "site.seo.updated",
+        data: {
+          before: site.settings.seo || {},
+          after: updated.item.settings.seo || {},
+        },
+        metadata: {
+          action: "site.seo.updated",
+          changedKeys: ["seo"],
+          source: "admin-site-seo-api",
+          titleTemplate: validation.seo.titleTemplate || "",
+          sitemapEnabled: validation.seo.sitemap?.enabled !== false,
+          robotsIndex: validation.seo.robots?.index !== false,
+        },
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "seo",
+          entity: "site",
+          entityId: site.id,
+          reason: "site-seo-updated",
+          requestId,
+        },
+      );
 
       return responsePayload(
         requestId,
@@ -553,13 +752,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const settings = site.settings || defaultSiteSettings();
     const validation = normalizeSeoInput(body.seo || body, settings.seo);
     if (!validation.ok) {
-      return errorResponse(400, 'SEO_VALIDATION', 'SEO defaults are invalid', requestId, validation.details);
+      return errorResponse(
+        400,
+        "SEO_VALIDATION",
+        "SEO defaults are invalid",
+        requestId,
+        validation.details,
+      );
     }
 
     const updated = updateAdminSite(site.id, {
@@ -570,28 +775,52 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!updated) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     await recordAdminAudit({
       siteId: site.id,
       actorId: access.session?.user.id,
-      entity: 'site',
+      entity: "site",
       entityId: site.id,
-      action: 'site.seo.updated',
+      action: "site.seo.updated",
       before: settings.seo || {},
       after: updated.settings?.seo || {},
       metadata: {
-        titleTemplate: validation.seo.titleTemplate || '',
+        titleTemplate: validation.seo.titleTemplate || "",
         sitemapEnabled: validation.seo.sitemap?.enabled !== false,
         robotsIndex: validation.seo.robots?.index !== false,
       },
       requestId,
     });
+    await deliverSiteWebhooks({
+      site: updated,
+      kind: "site-updated",
+      requestId,
+      actor: access.session?.user.id,
+      reason: "site.seo.updated",
+      data: {
+        before: settings.seo || {},
+        after: updated.settings?.seo || {},
+      },
+      metadata: {
+        action: "site.seo.updated",
+        changedKeys: ["seo"],
+        source: "admin-site-seo-api",
+        titleTemplate: validation.seo.titleTemplate || "",
+        sitemapEnabled: validation.seo.sitemap?.enabled !== false,
+        robotsIndex: validation.seo.robots?.index !== false,
+      },
+    });
 
     return responsePayload(requestId, updated, buildDemoSeoPreview(updated));
   } catch (error) {
-    console.error('Admin site SEO update API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin site SEO update API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

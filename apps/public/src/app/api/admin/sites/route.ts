@@ -5,18 +5,37 @@
  * POST /api/admin/sites
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import type { Site } from '@backy-cms/core';
-import { filterAdminTeamScopedResources, requireAdminAccess, requireAdminTeamScopeAccess } from '@/lib/adminAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
-import { createAdminSite, getAdminSettings, getSiteByIdOrSlug, getSites } from '@/lib/backyStore';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { NextRequest, NextResponse } from "next/server";
+import type { Site } from "@backy-cms/core";
+import {
+  filterAdminTeamScopedResources,
+  requireAdminAccess,
+  requireAdminTeamScopeAccess,
+} from "@/lib/adminAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
+import {
+  createAdminSite,
+  getAdminSettings,
+  getSiteByIdOrSlug,
+  getSites,
+} from "@/lib/backyStore";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
   NextResponse.json(
     {
       success: false,
@@ -27,54 +46,64 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
     },
     { status },
-  )
-);
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const normalizeSlug = (value: unknown): string => (
-  typeof value === 'string'
-    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    : ''
-);
+const normalizeSlug = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    : "";
 
-const normalizeSiteStatus = (value: unknown): 'draft' | 'published' | 'archived' | undefined => (
-  value === 'published' || value === 'draft' || value === 'archived' ? value : undefined
-);
+const normalizeSiteStatus = (
+  value: unknown,
+): "draft" | "published" | "archived" | undefined =>
+  value === "published" || value === "draft" || value === "archived"
+    ? value
+    : undefined;
 
-const normalizeSettingsInput = (value: unknown): Partial<Site['settings']> => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Partial<Site['settings']>
-    : {}
-);
+const normalizeSettingsInput = (value: unknown): Partial<Site["settings"]> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Partial<Site["settings"]>)
+    : {};
 
-const toRecord = (value: unknown): Record<string, unknown> => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-);
+const toRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
 const readBillingSitePolicy = (settings: unknown) => {
   const root = toRecord(settings);
   const integrations = toRecord(root.integrations);
   const commerce = toRecord(integrations.commerce);
   const limit = Number(commerce.siteLimit);
-  const overageMode = typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn';
+  const overageMode =
+    typeof commerce.overageMode === "string" ? commerce.overageMode : "warn";
 
   return {
     siteLimit: Number.isFinite(limit) && limit >= 1 ? Math.round(limit) : 3,
     overageMode,
-    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
-    billingContactEmail: typeof commerce.billingContactEmail === 'string' ? commerce.billingContactEmail : '',
+    billingPlan:
+      typeof commerce.billingPlan === "string" ? commerce.billingPlan : "free",
+    billingContactEmail:
+      typeof commerce.billingContactEmail === "string"
+        ? commerce.billingContactEmail
+        : "",
   };
 };
 
@@ -84,11 +113,11 @@ const enforceSiteBillingLimit = (
   requestId: string,
 ) => {
   const policy = readBillingSitePolicy(settings);
-  if (policy.overageMode === 'block' && currentSiteCount >= policy.siteLimit) {
+  if (policy.overageMode === "block" && currentSiteCount >= policy.siteLimit) {
     return errorResponse(
       402,
-      'BILLING_SITE_LIMIT',
-      `The ${policy.billingPlan} billing policy allows ${policy.siteLimit} site${policy.siteLimit === 1 ? '' : 's'}. Update Settings billing limits before creating another site.`,
+      "BILLING_SITE_LIMIT",
+      `The ${policy.billingPlan} billing policy allows ${policy.siteLimit} site${policy.siteLimit === 1 ? "" : "s"}. Update Settings billing limits before creating another site.`,
       requestId,
     );
   }
@@ -96,25 +125,25 @@ const enforceSiteBillingLimit = (
   return null;
 };
 
-const statusForRepositorySite = (site: Site) => (
-  normalizeSiteStatus((site.settings as Site['settings'] & { siteStatus?: unknown }).siteStatus)
-    || (site.isPublished ? 'published' : 'draft')
-);
+const statusForRepositorySite = (site: Site) =>
+  normalizeSiteStatus(
+    (site.settings as Site["settings"] & { siteStatus?: unknown }).siteStatus,
+  ) || (site.isPublished ? "published" : "draft");
 
-const configuredDefaultTeamId = () => (
-  process.env.BACKY_DEFAULT_TEAM_ID?.trim()
-  || process.env.BACKY_TEAM_ID?.trim()
-  || process.env.NEXT_PUBLIC_BACKY_DEFAULT_TEAM_ID?.trim()
-  || ''
-);
+const configuredDefaultTeamId = () =>
+  process.env.BACKY_DEFAULT_TEAM_ID?.trim() ||
+  process.env.BACKY_TEAM_ID?.trim() ||
+  process.env.NEXT_PUBLIC_BACKY_DEFAULT_TEAM_ID?.trim() ||
+  "";
 
 const resolveSiteCreateTeamId = async (
   body: Record<string, unknown>,
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
 ): Promise<string> => {
-  const explicitTeamId = typeof body.teamId === 'string' && body.teamId.trim().length > 0
-    ? body.teamId.trim()
-    : '';
+  const explicitTeamId =
+    typeof body.teamId === "string" && body.teamId.trim().length > 0
+      ? body.teamId.trim()
+      : "";
   if (explicitTeamId) {
     return explicitTeamId;
   }
@@ -125,19 +154,23 @@ const resolveSiteCreateTeamId = async (
   }
 
   const existingSites = await repositories.sites.list({
-    status: 'all',
+    status: "all",
     limit: 100,
     offset: 0,
   });
-  const existingTeamIds = Array.from(new Set(
-    existingSites.items
-      .map((site) => typeof site.teamId === 'string' ? site.teamId.trim() : '')
-      .filter(Boolean),
-  ));
+  const existingTeamIds = Array.from(
+    new Set(
+      existingSites.items
+        .map((site) =>
+          typeof site.teamId === "string" ? site.teamId.trim() : "",
+        )
+        .filter(Boolean),
+    ),
+  );
 
   return !existingSites.pagination.hasMore && existingTeamIds.length === 1
     ? existingTeamIds[0]
-    : '';
+    : "";
 };
 
 const adminSiteFromRepositorySite = (site: Site | null) => {
@@ -149,22 +182,31 @@ const adminSiteFromRepositorySite = (site: Site | null) => {
 };
 
 export async function GET(request: NextRequest) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'sites.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "sites.view",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
 
   try {
     const { searchParams } = new URL(request.url);
-    const includeUnpublished = searchParams.get('includeUnpublished') === 'true';
+    const includeUnpublished =
+      searchParams.get("includeUnpublished") === "true";
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const result = await repositories.sites.list({
-        status: includeUnpublished ? 'all' : 'published',
+        status: includeUnpublished ? "all" : "published",
       });
-      const scopedItems = await filterAdminTeamScopedResources(access, result.items, { action: 'view' });
-      const sites = scopedItems.map((site) => adminSiteFromRepositorySite(site));
+      const scopedItems = await filterAdminTeamScopedResources(
+        access,
+        result.items,
+        { action: "view" },
+      );
+      const sites = scopedItems.map((site) =>
+        adminSiteFromRepositorySite(site),
+      );
 
       return NextResponse.json({
         success: true,
@@ -181,7 +223,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const sites = await filterAdminTeamScopedResources(access, getSites({ includeUnpublished }), { action: 'view' });
+    const sites = await filterAdminTeamScopedResources(
+      access,
+      getSites({ includeUnpublished }),
+      { action: "view" },
+    );
 
     return NextResponse.json({
       success: true,
@@ -197,29 +243,46 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Admin sites list API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin sites list API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function POST(request: NextRequest) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'sites.create' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "sites.create",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
 
   try {
     const body = await parseJsonBody(request);
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const name = typeof body.name === "string" ? body.name.trim() : "";
     const slug = normalizeSlug(body.slug || name);
 
     if (!name) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Site name is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Site name is required",
+        requestId,
+      );
     }
 
     if (!slug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Site slug is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Site slug is required",
+        requestId,
+      );
     }
 
     if (!shouldUseDemoStoreFallback()) {
@@ -229,43 +292,59 @@ export async function POST(request: NextRequest) {
       if (!teamId) {
         return errorResponse(
           400,
-          'TEAM_REQUIRED',
-          'Database mode site creation requires a teamId, BACKY_DEFAULT_TEAM_ID, or exactly one existing site team to infer from.',
+          "TEAM_REQUIRED",
+          "Database mode site creation requires a teamId, BACKY_DEFAULT_TEAM_ID, or exactly one existing site team to infer from.",
           requestId,
         );
       }
-      const scopeError = await requireAdminTeamScopeAccess(access, requestId, { teamId }, { action: 'manage' });
+      const scopeError = await requireAdminTeamScopeAccess(
+        access,
+        requestId,
+        { teamId },
+        { action: "manage" },
+      );
       if (scopeError) {
         return scopeError;
       }
 
       const slugCheck = await repositories.sites.checkSlug({ slug, teamId });
       if (!slugCheck.available) {
-        return errorResponse(409, 'SLUG_CONFLICT', 'A site with this slug already exists', requestId);
+        return errorResponse(
+          409,
+          "SLUG_CONFLICT",
+          "A site with this slug already exists",
+          requestId,
+        );
       }
 
       const [settings, existingSites] = await Promise.all([
         repositories.settings.get(),
-        repositories.sites.list({ status: 'all', limit: 1, offset: 0 }),
+        repositories.sites.list({ status: "all", limit: 1, offset: 0 }),
       ]);
-      const billingLimitError = enforceSiteBillingLimit(settings, existingSites.pagination.total, requestId);
+      const billingLimitError = enforceSiteBillingLimit(
+        settings,
+        existingSites.pagination.total,
+        requestId,
+      );
       if (billingLimitError) {
         return billingLimitError;
       }
 
-      const status = normalizeSiteStatus(body.status) || 'draft';
+      const status = normalizeSiteStatus(body.status) || "draft";
       const settingsInput = normalizeSettingsInput(body.settings);
       const created = await repositories.sites.create({
         teamId,
         name,
         slug,
-        description: typeof body.description === 'string' ? body.description : null,
-        customDomain: typeof body.customDomain === 'string' ? body.customDomain : null,
-        status: status === 'published' ? 'published' : 'draft',
+        description:
+          typeof body.description === "string" ? body.description : null,
+        customDomain:
+          typeof body.customDomain === "string" ? body.customDomain : null,
+        status: status === "published" ? "published" : "draft",
         settings: {
           ...settingsInput,
           siteStatus: status,
-        } as Site['settings'],
+        } as Site["settings"],
       });
       const createdSettings = created.item.settings || {};
       await recordAdminAudit({
@@ -273,20 +352,38 @@ export async function POST(request: NextRequest) {
         siteId: created.item.id,
         teamId,
         actorId: access.session?.user.id,
-        entity: 'site',
+        entity: "site",
         entityId: created.item.id,
-        action: 'site.created',
+        action: "site.created",
         after: adminSiteFromRepositorySite(created.item) || {},
         metadata: {
           slug,
           status,
-          source: 'admin-sites-create',
-          domainVerificationStatus: createdSettings.domainVerification?.status || null,
-          vercelDeploymentStatus: createdSettings.vercelDeployment?.status || null,
+          source: "admin-sites-create",
+          domainVerificationStatus:
+            createdSettings.domainVerification?.status || null,
+          vercelDeploymentStatus:
+            createdSettings.vercelDeployment?.status || null,
           billingPlan: createdSettings.billingQuota?.plan || null,
           frontendDesignStatus: createdSettings.frontendDesign?.status || null,
         },
         requestId,
+      });
+      await deliverSiteWebhooks({
+        repositories,
+        site: adminSiteFromRepositorySite(created.item) || created.item,
+        kind: "site-created",
+        requestId,
+        actor: access.session?.user.id,
+        reason: "site.created",
+        data: {
+          after: adminSiteFromRepositorySite(created.item),
+        },
+        metadata: {
+          action: "site.created",
+          source: "admin-sites-create",
+          lifecycle: "created",
+        },
       });
 
       return NextResponse.json(
@@ -302,17 +399,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (getSiteByIdOrSlug(slug)) {
-      return errorResponse(409, 'SLUG_CONFLICT', 'A site with this slug already exists', requestId);
+      return errorResponse(
+        409,
+        "SLUG_CONFLICT",
+        "A site with this slug already exists",
+        requestId,
+      );
     }
 
-    const billingLimitError = enforceSiteBillingLimit(getAdminSettings(), getSites({ includeUnpublished: true }).length, requestId);
+    const billingLimitError = enforceSiteBillingLimit(
+      getAdminSettings(),
+      getSites({ includeUnpublished: true }).length,
+      requestId,
+    );
     if (billingLimitError) {
       return billingLimitError;
     }
-    const demoTeamId = typeof body.teamId === 'string' && body.teamId.trim().length > 0
-      ? body.teamId.trim()
-      : null;
-    const scopeError = await requireAdminTeamScopeAccess(access, requestId, { teamId: demoTeamId }, { action: 'manage' });
+    const demoTeamId =
+      typeof body.teamId === "string" && body.teamId.trim().length > 0
+        ? body.teamId.trim()
+        : null;
+    const scopeError = await requireAdminTeamScopeAccess(
+      access,
+      requestId,
+      { teamId: demoTeamId },
+      { action: "manage" },
+    );
     if (scopeError) {
       return scopeError;
     }
@@ -325,20 +437,36 @@ export async function POST(request: NextRequest) {
     await recordAdminAudit({
       siteId: site.id,
       actorId: access.session?.user.id,
-      entity: 'site',
+      entity: "site",
       entityId: site.id,
-      action: 'site.created',
+      action: "site.created",
       after: site,
       metadata: {
         slug: site.slug,
         status: site.status,
-        source: 'admin-sites-create',
-        domainVerificationStatus: site.settings?.domainVerification?.status || null,
+        source: "admin-sites-create",
+        domainVerificationStatus:
+          site.settings?.domainVerification?.status || null,
         vercelDeploymentStatus: site.settings?.vercelDeployment?.status || null,
         billingPlan: site.settings?.billingQuota?.plan || null,
         frontendDesignStatus: site.settings?.frontendDesign?.status || null,
       },
       requestId,
+    });
+    await deliverSiteWebhooks({
+      site,
+      kind: "site-created",
+      requestId,
+      actor: access.session?.user.id,
+      reason: "site.created",
+      data: {
+        after: site,
+      },
+      metadata: {
+        action: "site.created",
+        source: "admin-sites-create",
+        lifecycle: "created",
+      },
     });
 
     return NextResponse.json(
@@ -352,7 +480,12 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
-    console.error('Admin site create API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin site create API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

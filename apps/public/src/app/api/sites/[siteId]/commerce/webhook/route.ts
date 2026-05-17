@@ -39,7 +39,7 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   publicContractJson(
     { success: false, requestId, error: { code, message, details } },
-    { status, requestId, cache: 'error' },
+    { status, requestId, cache: 'error', schemaVersion: EVENT_SCHEMA_VERSION },
   )
 );
 
@@ -685,7 +685,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               paymentReference: order.values.paymentreference,
             },
           },
-        }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
+        }, { status: 200, requestId, request, cache: 'private', schemaVersion: EVENT_SCHEMA_VERSION, siteId: site.id });
       }
       const settlement = settlementForEvent(type, object, order.values);
       if (!settlement) {
@@ -748,7 +748,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             paymentReference: updated.values.paymentreference,
           },
         },
-      }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
+      }, { status: 200, requestId, request, cache: 'private', schemaVersion: EVENT_SCHEMA_VERSION, siteId: site.id });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -851,7 +851,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             paymentReference: order.values.paymentreference,
           },
         },
-      }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
+      }, { status: 200, requestId, request, cache: 'private', schemaVersion: EVENT_SCHEMA_VERSION, siteId: site.id });
     }
     const settlement = settlementForEvent(type, object, order.values);
     if (!settlement) {
@@ -912,7 +912,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           paymentReference: updated.values.paymentreference,
         },
       },
-    }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
+    }, { status: 200, requestId, request, cache: 'private', schemaVersion: EVENT_SCHEMA_VERSION, siteId: site.id });
   } catch (error) {
     console.error('Commerce webhook API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

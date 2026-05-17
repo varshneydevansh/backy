@@ -5,8 +5,13 @@
  * POST /api/admin/sites/[siteId]/commerce/orders/[orderId]/shipping-label
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollection, BackyJsonObject, BackyJsonValue } from '@backy-cms/core';
+import { NextRequest, NextResponse } from "next/server";
+import type {
+  BackyCollection,
+  BackyJsonObject,
+  BackyJsonValue,
+  Site,
+} from "@backy-cms/core";
 import {
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
@@ -14,15 +19,23 @@ import {
   getSiteByIdOrSlug,
   updateAdminCollectionRecord,
   validateCollectionRecordValues,
-} from '@/lib/backyStore';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+} from "@/lib/backyStore";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { requireCommerceCollectionAccess } from "@/lib/adminCommerceCollectionAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import {
+  normalizeCollectionRecordMediaValues,
+  validateRepositoryCollectionRecordValues,
+} from "@/lib/collectionRecordValidation";
+import { publicContractJson } from "@/lib/publicContractResponse";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -48,42 +61,72 @@ interface CollectionRecordAuditSource {
   updatedAt?: string | null;
 }
 
-const ORDERS_COLLECTION_SLUG = 'orders';
+const ORDERS_COLLECTION_SLUG = "orders";
+const SHIPPING_LABEL_SCHEMA_VERSION = "backy.shipping-label.v1";
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
-  NextResponse.json({ success: false, requestId, error: { code, message, details } }, { status })
-);
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: unknown,
+) =>
+  publicContractJson(
+    { success: false, requestId, error: { code, message, details } },
+    {
+      status,
+      requestId,
+      cache: "error",
+      schemaVersion: SHIPPING_LABEL_SCHEMA_VERSION,
+    },
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const privateShippingLabelResponse = (
+  body: Record<string, unknown>,
+  requestId: string,
+  siteId: string,
+) =>
+  publicContractJson(body, {
+    requestId,
+    cache: "private",
+    schemaVersion: SHIPPING_LABEL_SCHEMA_VERSION,
+    siteId,
+  });
+
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const toRecord = (value: unknown): Record<string, unknown> => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-);
+const toRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
-const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
-  value as Record<string, BackyJsonValue>
-);
+const toJsonRecord = (
+  value: Record<string, unknown>,
+): Record<string, BackyJsonValue> => value as Record<string, BackyJsonValue>;
 
-const textValue = (value: unknown): string => (
-  typeof value === 'string' ? value.trim() : ''
-);
+const textValue = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
 
 const numberValue = (value: unknown, fallback = 0): number => {
-  const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
-  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100) / 100) : fallback;
+  const parsed =
+    typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(parsed)
+    ? Math.max(0, Math.round(parsed * 100) / 100)
+    : fallback;
 };
 
 const collectionRecordAuditMetadata = (
@@ -124,12 +167,87 @@ const shippingLabelVoidAuditMetadata = (
   label: ShippingLabelPayload,
 ): BackyJsonObject => ({
   ...shippingLabelAuditMetadata(collection, record, label),
-  action: 'void',
+  action: "void",
 });
+
+const orderRecordWebhookSnapshot = (
+  collection: CollectionAuditSource,
+  record: CollectionRecordAuditSource,
+): BackyJsonObject => {
+  const values = toRecord(record.values);
+
+  return {
+    ...collectionRecordAuditMetadata(collection, record),
+    orderNumber: textValue(values.ordernumber) || record.slug,
+    orderStatus: textValue(values.orderstatus),
+    paymentStatus: textValue(values.paymentstatus),
+    fulfillmentStatus: textValue(values.fulfillmentstatus),
+    shippingLabelStatus: textValue(values.shippinglabelstatus),
+    shippingLabelProvider: textValue(values.shippinglabelprovider),
+    shippingServiceLevel: textValue(values.shippingservicelevel),
+    shippingLabelUrl: textValue(values.shippinglabelurl),
+    trackingNumber: textValue(values.trackingnumber),
+  };
+};
+
+const shippingLabelWebhookSnapshot = (
+  label: ShippingLabelPayload,
+): BackyJsonObject => ({
+  id: label.id,
+  status: label.status,
+  provider: label.provider,
+  serviceLevel: label.serviceLevel,
+  url: label.url,
+  cost: label.cost,
+  createdAt: label.createdAt,
+});
+
+const deliverOrderShippingLabelWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  collection: CollectionAuditSource;
+  before: CollectionRecordAuditSource;
+  after: CollectionRecordAuditSource;
+  label: ShippingLabelPayload;
+  action:
+    | "commerce.order.shipping_label_prepared"
+    | "commerce.order.shipping_label_voided";
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: params.action,
+    data: {
+      resourceType: "collectionRecord",
+      before: orderRecordWebhookSnapshot(params.collection, params.before),
+      after: orderRecordWebhookSnapshot(params.collection, params.after),
+      label: shippingLabelWebhookSnapshot(params.label),
+    },
+    metadata: {
+      action: params.action,
+      changedKeys: ["content", "collections", "commerce"],
+      source: "admin-commerce-order-shipping-label-api",
+      resourceType: "collectionRecord",
+      resourceId: params.after.id,
+      orderId: params.after.id,
+      orderSlug: params.after.slug,
+      labelId: params.label.id,
+      labelStatus: params.label.status,
+      provider: params.label.provider,
+      serviceLevel: params.label.serviceLevel,
+    },
+  });
 
 interface ShippingLabelPayload {
   id: string;
-  status: 'draft' | 'purchased' | 'voided';
+  status: "draft" | "purchased" | "voided";
   provider: string;
   serviceLevel: string;
   url: string;
@@ -149,7 +267,7 @@ interface EasyPostLabelResult {
   ok: boolean;
   label?: {
     id: string;
-    status: ShippingLabelPayload['status'];
+    status: ShippingLabelPayload["status"];
     provider: string;
     serviceLevel: string;
     url: string;
@@ -169,7 +287,7 @@ interface ShippoLabelResult {
   ok: boolean;
   label?: {
     id: string;
-    status: ShippingLabelPayload['status'];
+    status: ShippingLabelPayload["status"];
     provider: string;
     serviceLevel: string;
     url: string;
@@ -180,60 +298,74 @@ interface ShippoLabelResult {
 
 type ShippingLabelVoidUpdateResult =
   | { label: ShippingLabelPayload; values: Record<string, unknown> }
-  | { error: { status: number; code: string; message: string; details?: unknown } };
+  | {
+      error: {
+        status: number;
+        code: string;
+        message: string;
+        details?: unknown;
+      };
+    };
 
-const easyPostApiKey = () => (
-  process.env.BACKY_EASYPOST_API_KEY?.trim()
-  || process.env.EASYPOST_API_KEY?.trim()
-  || ''
-);
+const easyPostApiKey = () =>
+  process.env.BACKY_EASYPOST_API_KEY?.trim() ||
+  process.env.EASYPOST_API_KEY?.trim() ||
+  "";
 
-const easyPostApiBaseUrl = () => (
-  process.env.BACKY_EASYPOST_API_BASE_URL?.trim()
-  || process.env.EASYPOST_API_BASE_URL?.trim()
-  || 'https://api.easypost.com/v2'
-).replace(/\/$/, '');
+const easyPostApiBaseUrl = () =>
+  (
+    process.env.BACKY_EASYPOST_API_BASE_URL?.trim() ||
+    process.env.EASYPOST_API_BASE_URL?.trim() ||
+    "https://api.easypost.com/v2"
+  ).replace(/\/$/, "");
 
-const shippoApiKey = () => (
-  process.env.BACKY_SHIPPO_API_KEY?.trim()
-  || process.env.SHIPPO_API_KEY?.trim()
-  || ''
-);
+const shippoApiKey = () =>
+  process.env.BACKY_SHIPPO_API_KEY?.trim() ||
+  process.env.SHIPPO_API_KEY?.trim() ||
+  "";
 
-const shippoApiBaseUrl = () => (
-  process.env.BACKY_SHIPPO_API_BASE_URL?.trim()
-  || process.env.SHIPPO_API_BASE_URL?.trim()
-  || 'https://api.goshippo.com'
-).replace(/\/$/, '');
+const shippoApiBaseUrl = () =>
+  (
+    process.env.BACKY_SHIPPO_API_BASE_URL?.trim() ||
+    process.env.SHIPPO_API_BASE_URL?.trim() ||
+    "https://api.goshippo.com"
+  ).replace(/\/$/, "");
 
-const normalizeProviderKey = (value: string): string => value.toLowerCase().replace(/[\s_-]+/g, '');
+const normalizeProviderKey = (value: string): string =>
+  value.toLowerCase().replace(/[\s_-]+/g, "");
 
-const safeProviderField = (value: unknown): string | number | boolean | null => {
-  if (typeof value === 'string') return value.trim();
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'boolean') return value;
+const safeProviderField = (
+  value: unknown,
+): string | number | boolean | null => {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value;
   return null;
 };
 
-const safeProviderRecord = (value: unknown): Record<string, string | number | boolean | null> => {
+const safeProviderRecord = (
+  value: unknown,
+): Record<string, string | number | boolean | null> => {
   const record = toRecord(value);
   return Object.fromEntries(
     Object.entries(record)
       .map(([key, entry]) => [key, safeProviderField(entry)] as const)
-      .filter(([, entry]) => entry !== null && entry !== ''),
+      .filter(([, entry]) => entry !== null && entry !== ""),
   );
 };
 
-const hasProviderRecordFields = (value: unknown): boolean => Object.keys(safeProviderRecord(value)).length > 0;
+const hasProviderRecordFields = (value: unknown): boolean =>
+  Object.keys(safeProviderRecord(value)).length > 0;
 
 const parseJsonRecord = (value: unknown): Record<string, unknown> => {
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (value && typeof value === "object" && !Array.isArray(value))
+    return value as Record<string, unknown>;
   const text = textValue(value);
   if (!text) return {};
   try {
     const parsed = JSON.parse(text);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
       : {};
   } catch {
     return {};
@@ -246,9 +378,10 @@ const commerceSettings = (settings: unknown): Record<string, unknown> => {
   return toRecord(integrations.commerce || source.commerce);
 };
 
-const nestedProviderRecord = (source: Record<string, unknown>, key: string): Record<string, unknown> => (
-  parseJsonRecord(source[key])
-);
+const nestedProviderRecord = (
+  source: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> => parseJsonRecord(source[key]);
 
 const resolveEasyPostShipmentInput = (
   body: Record<string, unknown>,
@@ -261,27 +394,35 @@ const resolveEasyPostShipmentInput = (
 ) => {
   const commerce = commerceSettings(settings);
   const shippingAddress = parseJsonRecord(values.shippingaddress);
-  const provider = textValue(body.executionProvider)
-    || textValue(body.labelProvider)
-    || textValue(commerce.shippingLabelProvider)
-    || textValue(body.provider)
-    || fallback.provider;
-  const carrier = textValue(body.carrier)
-    || textValue(shippingAddress.carrier)
-    || textValue(commerce.shippingDefaultCarrier)
-    || fallback.provider;
-  const serviceLevel = textValue(body.serviceLevel)
-    || textValue(shippingAddress.serviceLevel)
-    || textValue(commerce.shippingDefaultServiceLevel)
-    || fallback.serviceLevel;
-  const rateId = textValue(body.rateId)
-    || textValue(body.easypostRateId)
-    || textValue(body.shippoRateId)
-    || textValue(shippingAddress.rateId)
-    || textValue(commerce.shippingDefaultRateId);
-  const directToAddress = hasProviderRecordFields(shippingAddress) && !shippingAddress.toAddress && !shippingAddress.fromAddress && !shippingAddress.parcel
-    ? shippingAddress
-    : {};
+  const provider =
+    textValue(body.executionProvider) ||
+    textValue(body.labelProvider) ||
+    textValue(commerce.shippingLabelProvider) ||
+    textValue(body.provider) ||
+    fallback.provider;
+  const carrier =
+    textValue(body.carrier) ||
+    textValue(shippingAddress.carrier) ||
+    textValue(commerce.shippingDefaultCarrier) ||
+    fallback.provider;
+  const serviceLevel =
+    textValue(body.serviceLevel) ||
+    textValue(shippingAddress.serviceLevel) ||
+    textValue(commerce.shippingDefaultServiceLevel) ||
+    fallback.serviceLevel;
+  const rateId =
+    textValue(body.rateId) ||
+    textValue(body.easypostRateId) ||
+    textValue(body.shippoRateId) ||
+    textValue(shippingAddress.rateId) ||
+    textValue(commerce.shippingDefaultRateId);
+  const directToAddress =
+    hasProviderRecordFields(shippingAddress) &&
+    !shippingAddress.toAddress &&
+    !shippingAddress.fromAddress &&
+    !shippingAddress.parcel
+      ? shippingAddress
+      : {};
 
   return {
     executionProvider: provider,
@@ -290,39 +431,54 @@ const resolveEasyPostShipmentInput = (
     rateId,
     fromAddress: hasProviderRecordFields(body.fromAddress)
       ? toRecord(body.fromAddress)
-      : hasProviderRecordFields(nestedProviderRecord(shippingAddress, 'fromAddress'))
-        ? nestedProviderRecord(shippingAddress, 'fromAddress')
+      : hasProviderRecordFields(
+            nestedProviderRecord(shippingAddress, "fromAddress"),
+          )
+        ? nestedProviderRecord(shippingAddress, "fromAddress")
         : parseJsonRecord(commerce.shippingOriginAddress),
     toAddress: hasProviderRecordFields(body.toAddress)
       ? toRecord(body.toAddress)
-      : hasProviderRecordFields(nestedProviderRecord(shippingAddress, 'toAddress'))
-        ? nestedProviderRecord(shippingAddress, 'toAddress')
+      : hasProviderRecordFields(
+            nestedProviderRecord(shippingAddress, "toAddress"),
+          )
+        ? nestedProviderRecord(shippingAddress, "toAddress")
         : directToAddress,
     parcel: hasProviderRecordFields(body.parcel)
       ? toRecord(body.parcel)
-      : hasProviderRecordFields(nestedProviderRecord(shippingAddress, 'parcel'))
-        ? nestedProviderRecord(shippingAddress, 'parcel')
+      : hasProviderRecordFields(nestedProviderRecord(shippingAddress, "parcel"))
+        ? nestedProviderRecord(shippingAddress, "parcel")
         : parseJsonRecord(commerce.shippingDefaultParcel),
   };
 };
 
-const canExecuteEasyPostLabel = (input: ReturnType<typeof resolveEasyPostShipmentInput>): boolean => {
-  if (normalizeProviderKey(input.executionProvider) !== 'easypost') return false;
+const canExecuteEasyPostLabel = (
+  input: ReturnType<typeof resolveEasyPostShipmentInput>,
+): boolean => {
+  if (normalizeProviderKey(input.executionProvider) !== "easypost")
+    return false;
   if (!easyPostApiKey()) return false;
-  return hasProviderRecordFields(input.fromAddress)
-    && hasProviderRecordFields(input.toAddress)
-    && hasProviderRecordFields(input.parcel);
+  return (
+    hasProviderRecordFields(input.fromAddress) &&
+    hasProviderRecordFields(input.toAddress) &&
+    hasProviderRecordFields(input.parcel)
+  );
 };
 
-const canExecuteShippoLabel = (input: ReturnType<typeof resolveEasyPostShipmentInput>): boolean => {
-  if (normalizeProviderKey(input.executionProvider) !== 'shippo') return false;
+const canExecuteShippoLabel = (
+  input: ReturnType<typeof resolveEasyPostShipmentInput>,
+): boolean => {
+  if (normalizeProviderKey(input.executionProvider) !== "shippo") return false;
   if (!shippoApiKey()) return false;
-  return hasProviderRecordFields(input.fromAddress)
-    && hasProviderRecordFields(input.toAddress)
-    && hasProviderRecordFields(input.parcel);
+  return (
+    hasProviderRecordFields(input.fromAddress) &&
+    hasProviderRecordFields(input.toAddress) &&
+    hasProviderRecordFields(input.parcel)
+  );
 };
 
-const safeEasyPostRatePayload = (value: unknown): EasyPostRatePayload | null => {
+const safeEasyPostRatePayload = (
+  value: unknown,
+): EasyPostRatePayload | null => {
   const rate = toRecord(value);
   const id = textValue(rate.id);
   if (!id) return null;
@@ -338,7 +494,9 @@ const safeEasyPostShipmentPayload = (value: Record<string, unknown>) => {
   const postageLabel = toRecord(value.postage_label);
   const selectedRate = safeEasyPostRatePayload(value.selected_rate);
   const rates = Array.isArray(value.rates)
-    ? value.rates.map(safeEasyPostRatePayload).filter((rate): rate is EasyPostRatePayload => Boolean(rate))
+    ? value.rates
+        .map(safeEasyPostRatePayload)
+        .filter((rate): rate is EasyPostRatePayload => Boolean(rate))
     : [];
 
   return {
@@ -363,7 +521,10 @@ const safeEasyPostErrorPayload = (value: Record<string, unknown>) => {
   const error = toRecord(value.error);
   return {
     code: textValue(error.code),
-    message: textValue(error.message) || textValue(value.message) || 'EasyPost label purchase failed.',
+    message:
+      textValue(error.message) ||
+      textValue(value.message) ||
+      "EasyPost label purchase failed.",
     errors: Array.isArray(error.errors) ? error.errors.slice(0, 5) : [],
   };
 };
@@ -377,33 +538,42 @@ const pickEasyPostRate = (
   },
 ): EasyPostRatePayload | null => {
   const rates = Array.isArray(shipment.rates)
-    ? shipment.rates.map(safeEasyPostRatePayload).filter((rate): rate is EasyPostRatePayload => Boolean(rate))
+    ? shipment.rates
+        .map(safeEasyPostRatePayload)
+        .filter((rate): rate is EasyPostRatePayload => Boolean(rate))
     : [];
   if (rates.length === 0) return null;
 
   const normalizedRateId = input.rateId.toLowerCase();
   const normalizedCarrier = input.carrier.toLowerCase();
   const normalizedServiceLevel = input.serviceLevel.toLowerCase();
-  return rates.find((rate) => normalizedRateId && rate.id.toLowerCase() === normalizedRateId)
-    || rates.find((rate) => (
-      (!normalizedCarrier || rate.carrier.toLowerCase() === normalizedCarrier) &&
-      (!normalizedServiceLevel || rate.service.toLowerCase() === normalizedServiceLevel)
-    ))
-    || [...rates].sort((a, b) => a.rate - b.rate)[0]
-    || null;
+  return (
+    rates.find(
+      (rate) => normalizedRateId && rate.id.toLowerCase() === normalizedRateId,
+    ) ||
+    rates.find(
+      (rate) =>
+        (!normalizedCarrier ||
+          rate.carrier.toLowerCase() === normalizedCarrier) &&
+        (!normalizedServiceLevel ||
+          rate.service.toLowerCase() === normalizedServiceLevel),
+    ) ||
+    [...rates].sort((a, b) => a.rate - b.rate)[0] ||
+    null
+  );
 };
 
 const easyPostHeaders = () => ({
-  authorization: `Basic ${Buffer.from(`${easyPostApiKey()}:`).toString('base64')}`,
-  'content-type': 'application/json',
+  authorization: `Basic ${Buffer.from(`${easyPostApiKey()}:`).toString("base64")}`,
+  "content-type": "application/json",
 });
 
 const easyPostRequest = async (path: string, body: Record<string, unknown>) => {
   const response = await fetch(`${easyPostApiBaseUrl()}${path}`, {
-    method: 'POST',
+    method: "POST",
     headers: easyPostHeaders(),
     body: JSON.stringify(body),
-    cache: 'no-store',
+    cache: "no-store",
   });
   const payload = await response.json().catch(() => ({}));
   return {
@@ -414,15 +584,15 @@ const easyPostRequest = async (path: string, body: Record<string, unknown>) => {
 
 const shippoHeaders = () => ({
   authorization: `ShippoToken ${shippoApiKey()}`,
-  'content-type': 'application/json',
+  "content-type": "application/json",
 });
 
 const shippoRequest = async (path: string, body: Record<string, unknown>) => {
   const response = await fetch(`${shippoApiBaseUrl()}${path}`, {
-    method: 'POST',
+    method: "POST",
     headers: shippoHeaders(),
     body: JSON.stringify(body),
-    cache: 'no-store',
+    cache: "no-store",
   });
   const payload = await response.json().catch(() => ({}));
   return {
@@ -433,7 +603,9 @@ const shippoRequest = async (path: string, body: Record<string, unknown>) => {
 
 const safeShippoErrorPayload = (value: Record<string, unknown>) => ({
   code: textValue(value.code || value.error_code),
-  message: textValue(value.message || value.detail || value.error) || 'Shippo label purchase failed.',
+  message:
+    textValue(value.message || value.detail || value.error) ||
+    "Shippo label purchase failed.",
   messages: Array.isArray(value.messages) ? value.messages.slice(0, 5) : [],
 });
 
@@ -445,21 +617,29 @@ const safeShippoRatePayload = (value: unknown): ShippoRatePayload | null => {
   return {
     id,
     provider: textValue(rate.provider || rate.carrier || serviceLevel.provider),
-    serviceLevel: textValue(serviceLevel.token || serviceLevel.name || rate.servicelevel_token || rate.service || rate.serviceLevel),
+    serviceLevel: textValue(
+      serviceLevel.token ||
+        serviceLevel.name ||
+        rate.servicelevel_token ||
+        rate.service ||
+        rate.serviceLevel,
+    ),
     amount: numberValue(rate.amount || rate.amount_local),
   };
 };
 
 const safeShippoShipmentPayload = (value: Record<string, unknown>) => {
   const rates = Array.isArray(value.rates)
-    ? value.rates.map(safeShippoRatePayload).filter((rate): rate is ShippoRatePayload => Boolean(rate))
+    ? value.rates
+        .map(safeShippoRatePayload)
+        .filter((rate): rate is ShippoRatePayload => Boolean(rate))
     : [];
 
   return {
     id: textValue(value.object_id || value.id),
     objectState: textValue(value.object_state),
     status: textValue(value.status),
-    test: typeof value.test === 'boolean' ? value.test : null,
+    test: typeof value.test === "boolean" ? value.test : null,
     ratesCount: rates.length,
   };
 };
@@ -468,7 +648,7 @@ const safeShippoTransactionPayload = (value: Record<string, unknown>) => ({
   id: textValue(value.object_id || value.id),
   objectState: textValue(value.object_state),
   status: textValue(value.status),
-  test: typeof value.test === 'boolean' ? value.test : null,
+  test: typeof value.test === "boolean" ? value.test : null,
   labelUrl: textValue(value.label_url),
   trackingNumber: textValue(value.tracking_number),
   trackingStatus: textValue(value.tracking_status),
@@ -484,32 +664,46 @@ const pickShippoRate = (
   },
 ): ShippoRatePayload | null => {
   const rates = Array.isArray(shipment.rates)
-    ? shipment.rates.map(safeShippoRatePayload).filter((rate): rate is ShippoRatePayload => Boolean(rate))
+    ? shipment.rates
+        .map(safeShippoRatePayload)
+        .filter((rate): rate is ShippoRatePayload => Boolean(rate))
     : [];
   if (rates.length === 0) return null;
 
   const normalizedRateId = input.rateId.toLowerCase();
   const normalizedCarrier = input.carrier.toLowerCase();
   const normalizedServiceLevel = input.serviceLevel.toLowerCase();
-  return rates.find((rate) => normalizedRateId && rate.id.toLowerCase() === normalizedRateId)
-    || rates.find((rate) => (
-      (!normalizedCarrier || rate.provider.toLowerCase() === normalizedCarrier) &&
-      (!normalizedServiceLevel || rate.serviceLevel.toLowerCase() === normalizedServiceLevel)
-    ))
-    || [...rates].sort((a, b) => a.amount - b.amount)[0]
-    || null;
+  return (
+    rates.find(
+      (rate) => normalizedRateId && rate.id.toLowerCase() === normalizedRateId,
+    ) ||
+    rates.find(
+      (rate) =>
+        (!normalizedCarrier ||
+          rate.provider.toLowerCase() === normalizedCarrier) &&
+        (!normalizedServiceLevel ||
+          rate.serviceLevel.toLowerCase() === normalizedServiceLevel),
+    ) ||
+    [...rates].sort((a, b) => a.amount - b.amount)[0] ||
+    null
+  );
 };
 
-const executeEasyPostVoid = async (shipmentId: string): Promise<EasyPostLabelResult> => {
-  const refundResult = await easyPostRequest(`/shipments/${encodeURIComponent(shipmentId)}/refund`, {});
+const executeEasyPostVoid = async (
+  shipmentId: string,
+): Promise<EasyPostLabelResult> => {
+  const refundResult = await easyPostRequest(
+    `/shipments/${encodeURIComponent(shipmentId)}/refund`,
+    {},
+  );
   if (!refundResult.ok) {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'easypost',
-        action: 'shipments.refund',
-        executionMode: 'easypost-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "easypost",
+        action: "shipments.refund",
+        executionMode: "easypost-api",
         error: safeEasyPostErrorPayload(refundResult.payload),
       },
     };
@@ -518,27 +712,29 @@ const executeEasyPostVoid = async (shipmentId: string): Promise<EasyPostLabelRes
   return {
     ok: true,
     payload: {
-      schemaVersion: 'backy.shipping-label.v1',
-      provider: 'easypost',
-      action: 'shipments.refund',
-      executionMode: 'easypost-api',
+      schemaVersion: "backy.shipping-label.v1",
+      provider: "easypost",
+      action: "shipments.refund",
+      executionMode: "easypost-api",
       shipment: safeEasyPostShipmentPayload(refundResult.payload),
     },
   };
 };
 
-const executeShippoVoid = async (transactionId: string): Promise<ShippoLabelResult> => {
-  const refundResult = await shippoRequest('/refunds/', {
+const executeShippoVoid = async (
+  transactionId: string,
+): Promise<ShippoLabelResult> => {
+  const refundResult = await shippoRequest("/refunds/", {
     transaction: transactionId,
   });
   if (!refundResult.ok) {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'shippo',
-        action: 'refunds.create',
-        executionMode: 'shippo-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "shippo",
+        action: "refunds.create",
+        executionMode: "shippo-api",
         error: safeShippoErrorPayload(refundResult.payload),
       },
     };
@@ -547,12 +743,14 @@ const executeShippoVoid = async (transactionId: string): Promise<ShippoLabelResu
   return {
     ok: true,
     payload: {
-      schemaVersion: 'backy.shipping-label.v1',
-      provider: 'shippo',
-      action: 'refunds.create',
-      executionMode: 'shippo-api',
+      schemaVersion: "backy.shipping-label.v1",
+      provider: "shippo",
+      action: "refunds.create",
+      executionMode: "shippo-api",
       refund: {
-        id: textValue(refundResult.payload.object_id || refundResult.payload.id),
+        id: textValue(
+          refundResult.payload.object_id || refundResult.payload.id,
+        ),
         status: textValue(refundResult.payload.status),
         transaction: textValue(refundResult.payload.transaction),
       },
@@ -571,14 +769,14 @@ const executeEasyPostLabel = async (input: {
   toAddress: Record<string, unknown>;
   parcel: Record<string, unknown>;
 }): Promise<EasyPostLabelResult> => {
-  const shipmentResult = await easyPostRequest('/shipments', {
+  const shipmentResult = await easyPostRequest("/shipments", {
     shipment: {
       from_address: safeProviderRecord(input.fromAddress),
       to_address: safeProviderRecord(input.toAddress),
       parcel: safeProviderRecord(input.parcel),
       reference: input.orderNumber || input.orderId,
       options: {
-        label_format: 'PDF',
+        label_format: "PDF",
       },
     },
   });
@@ -587,10 +785,10 @@ const executeEasyPostLabel = async (input: {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'easypost',
-        action: 'shipments.create',
-        executionMode: 'easypost-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "easypost",
+        action: "shipments.create",
+        executionMode: "easypost-api",
         error: safeEasyPostErrorPayload(shipmentResult.payload),
       },
     };
@@ -602,30 +800,35 @@ const executeEasyPostLabel = async (input: {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'easypost',
-        action: 'shipments.buy',
-        executionMode: 'easypost-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "easypost",
+        action: "shipments.buy",
+        executionMode: "easypost-api",
         shipment: safeEasyPostShipmentPayload(shipmentResult.payload),
         error: {
-          message: selectedRate ? 'EasyPost shipment id was missing.' : 'EasyPost did not return a purchasable rate.',
+          message: selectedRate
+            ? "EasyPost shipment id was missing."
+            : "EasyPost did not return a purchasable rate.",
         },
       },
     };
   }
 
-  const buyResult = await easyPostRequest(`/shipments/${encodeURIComponent(shipmentId)}/buy`, {
-    rate: { id: selectedRate.id },
-  });
+  const buyResult = await easyPostRequest(
+    `/shipments/${encodeURIComponent(shipmentId)}/buy`,
+    {
+      rate: { id: selectedRate.id },
+    },
+  );
 
   if (!buyResult.ok) {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'easypost',
-        action: 'shipments.buy',
-        executionMode: 'easypost-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "easypost",
+        action: "shipments.buy",
+        executionMode: "easypost-api",
         shipment: safeEasyPostShipmentPayload(shipmentResult.payload),
         selectedRate,
         error: safeEasyPostErrorPayload(buyResult.payload),
@@ -643,17 +846,17 @@ const executeEasyPostLabel = async (input: {
     ok: true,
     label: {
       id: shipmentId || postageLabelId || input.labelId,
-      status: 'purchased',
-      provider: boughtRate.carrier || input.carrier || 'easypost',
-      serviceLevel: boughtRate.service || input.serviceLevel || 'standard',
+      status: "purchased",
+      provider: boughtRate.carrier || input.carrier || "easypost",
+      serviceLevel: boughtRate.service || input.serviceLevel || "standard",
       url: labelUrl,
       cost: boughtRate.rate,
     },
     payload: {
-      schemaVersion: 'backy.shipping-label.v1',
-      provider: 'easypost',
-      action: 'shipments.buy',
-      executionMode: 'easypost-api',
+      schemaVersion: "backy.shipping-label.v1",
+      provider: "easypost",
+      action: "shipments.buy",
+      executionMode: "easypost-api",
       shipment: boughtShipment,
       selectedRate: boughtRate,
     },
@@ -671,7 +874,7 @@ const executeShippoLabel = async (input: {
   toAddress: Record<string, unknown>;
   parcel: Record<string, unknown>;
 }): Promise<ShippoLabelResult> => {
-  const shipmentResult = await shippoRequest('/shipments/', {
+  const shipmentResult = await shippoRequest("/shipments/", {
     address_from: safeProviderRecord(input.fromAddress),
     address_to: safeProviderRecord(input.toAddress),
     parcels: [safeProviderRecord(input.parcel)],
@@ -683,10 +886,10 @@ const executeShippoLabel = async (input: {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'shippo',
-        action: 'shipments.create',
-        executionMode: 'shippo-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "shippo",
+        action: "shipments.create",
+        executionMode: "shippo-api",
         error: safeShippoErrorPayload(shipmentResult.payload),
       },
     };
@@ -697,21 +900,21 @@ const executeShippoLabel = async (input: {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'shippo',
-        action: 'transactions.create',
-        executionMode: 'shippo-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "shippo",
+        action: "transactions.create",
+        executionMode: "shippo-api",
         shipment: safeShippoShipmentPayload(shipmentResult.payload),
         error: {
-          message: 'Shippo did not return a purchasable rate.',
+          message: "Shippo did not return a purchasable rate.",
         },
       },
     };
   }
 
-  const transactionResult = await shippoRequest('/transactions/', {
+  const transactionResult = await shippoRequest("/transactions/", {
     rate: selectedRate.id,
-    label_file_type: 'PDF_4x6',
+    label_file_type: "PDF_4x6",
     async: false,
     metadata: input.orderNumber || input.orderId,
   });
@@ -720,10 +923,10 @@ const executeShippoLabel = async (input: {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'shippo',
-        action: 'transactions.create',
-        executionMode: 'shippo-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "shippo",
+        action: "transactions.create",
+        executionMode: "shippo-api",
         shipment: safeShippoShipmentPayload(shipmentResult.payload),
         selectedRate,
         error: safeShippoErrorPayload(transactionResult.payload),
@@ -733,14 +936,14 @@ const executeShippoLabel = async (input: {
 
   const transaction = safeShippoTransactionPayload(transactionResult.payload);
   const status = transaction.status.toUpperCase();
-  if (status && status !== 'SUCCESS') {
+  if (status && status !== "SUCCESS") {
     return {
       ok: false,
       payload: {
-        schemaVersion: 'backy.shipping-label.v1',
-        provider: 'shippo',
-        action: 'transactions.create',
-        executionMode: 'shippo-api',
+        schemaVersion: "backy.shipping-label.v1",
+        provider: "shippo",
+        action: "transactions.create",
+        executionMode: "shippo-api",
         shipment: safeShippoShipmentPayload(shipmentResult.payload),
         selectedRate,
         transaction,
@@ -755,17 +958,18 @@ const executeShippoLabel = async (input: {
     ok: true,
     label: {
       id: transaction.id || input.labelId,
-      status: 'purchased',
-      provider: selectedRate.provider || input.carrier || 'shippo',
-      serviceLevel: selectedRate.serviceLevel || input.serviceLevel || 'standard',
+      status: "purchased",
+      provider: selectedRate.provider || input.carrier || "shippo",
+      serviceLevel:
+        selectedRate.serviceLevel || input.serviceLevel || "standard",
       url: transaction.labelUrl,
       cost: selectedRate.amount,
     },
     payload: {
-      schemaVersion: 'backy.shipping-label.v1',
-      provider: 'shippo',
-      action: 'transactions.create',
-      executionMode: 'shippo-api',
+      schemaVersion: "backy.shipping-label.v1",
+      provider: "shippo",
+      action: "transactions.create",
+      executionMode: "shippo-api",
       shipment: safeShippoShipmentPayload(shipmentResult.payload),
       selectedRate,
       transaction,
@@ -791,31 +995,49 @@ const buildShippingLabelVoidUpdate = async ({
     return {
       error: {
         status: 404,
-        code: 'SHIPPING_LABEL_NOT_FOUND',
-        message: 'No shipping label is attached to this order.',
+        code: "SHIPPING_LABEL_NOT_FOUND",
+        message: "No shipping label is attached to this order.",
       },
     };
   }
-  if (existing.status === 'voided') {
+  if (existing.status === "voided") {
     return {
       label: existing,
       values,
     };
   }
 
-  const executionProvider = textValue(body.executionProvider) || textValue(body.labelProvider) || textValue(body.provider);
-  const shouldExecuteEasyPostVoid = Boolean(easyPostApiKey())
-    && existing.status === 'purchased'
-    && existing.id.startsWith('shp_')
-    && (!executionProvider || normalizeProviderKey(executionProvider) === 'easypost');
-  const shouldExecuteShippoVoid = Boolean(shippoApiKey())
-    && existing.status === 'purchased'
-    && normalizeProviderKey(executionProvider) === 'shippo';
+  const executionProvider =
+    textValue(body.executionProvider) ||
+    textValue(body.labelProvider) ||
+    textValue(body.provider);
+  const shouldExecuteEasyPostVoid =
+    Boolean(easyPostApiKey()) &&
+    existing.status === "purchased" &&
+    existing.id.startsWith("shp_") &&
+    (!executionProvider ||
+      normalizeProviderKey(executionProvider) === "easypost");
+  const shouldExecuteShippoVoid =
+    Boolean(shippoApiKey()) &&
+    existing.status === "purchased" &&
+    normalizeProviderKey(executionProvider) === "shippo";
   let providerPayload: Record<string, unknown> = {
-    schemaVersion: 'backy.shipping-label.v1',
-    action: shouldExecuteEasyPostVoid ? 'shipments.refund' : shouldExecuteShippoVoid ? 'refunds.create' : 'provider.shipping_label.void',
-    provider: shouldExecuteEasyPostVoid ? 'easypost' : shouldExecuteShippoVoid ? 'shippo' : existing.provider,
-    executionMode: shouldExecuteEasyPostVoid ? 'easypost-api' : shouldExecuteShippoVoid ? 'shippo-api' : 'handoff',
+    schemaVersion: "backy.shipping-label.v1",
+    action: shouldExecuteEasyPostVoid
+      ? "shipments.refund"
+      : shouldExecuteShippoVoid
+        ? "refunds.create"
+        : "provider.shipping_label.void",
+    provider: shouldExecuteEasyPostVoid
+      ? "easypost"
+      : shouldExecuteShippoVoid
+        ? "shippo"
+        : existing.provider,
+    executionMode: shouldExecuteEasyPostVoid
+      ? "easypost-api"
+      : shouldExecuteShippoVoid
+        ? "shippo-api"
+        : "handoff",
     orderId: record.id,
     orderNumber: textValue(values.ordernumber),
     labelId: existing.id,
@@ -828,8 +1050,8 @@ const buildShippingLabelVoidUpdate = async ({
       return {
         error: {
           status: 502,
-          code: 'SHIPPING_LABEL_VOID_FAILED',
-          message: 'EasyPost did not accept the shipping label void request.',
+          code: "SHIPPING_LABEL_VOID_FAILED",
+          message: "EasyPost did not accept the shipping label void request.",
           details: result.payload,
         },
       };
@@ -842,20 +1064,21 @@ const buildShippingLabelVoidUpdate = async ({
       return {
         error: {
           status: 502,
-          code: 'SHIPPING_LABEL_VOID_FAILED',
-          message: 'Shippo did not accept the shipping label refund request.',
+          code: "SHIPPING_LABEL_VOID_FAILED",
+          message: "Shippo did not accept the shipping label refund request.",
           details: result.payload,
         },
       };
     }
   }
 
-  const nextFulfillmentStatus = textValue(values.fulfillmentstatus) === 'processing'
-    ? 'unfulfilled'
-    : textValue(values.fulfillmentstatus) || 'unfulfilled';
+  const nextFulfillmentStatus =
+    textValue(values.fulfillmentstatus) === "processing"
+      ? "unfulfilled"
+      : textValue(values.fulfillmentstatus) || "unfulfilled";
   const label: ShippingLabelPayload = {
     ...existing,
-    status: 'voided',
+    status: "voided",
     providerPayload,
   };
 
@@ -864,15 +1087,21 @@ const buildShippingLabelVoidUpdate = async ({
     values: {
       ...values,
       fulfillmentstatus: nextFulfillmentStatus,
-      shippinglabelstatus: 'voided',
-      notes: appendNote(values.notes, `Shipping label voided ${now} for ${existing.provider} ${existing.serviceLevel}.`),
+      shippinglabelstatus: "voided",
+      notes: appendNote(
+        values.notes,
+        `Shipping label voided ${now} for ${existing.provider} ${existing.serviceLevel}.`,
+      ),
     },
   };
 };
 
-const buildLabelUrl = (origin: string, siteId: string, orderId: string): string => (
-  `${origin.replace(/\/$/, '')}/api/admin/sites/${encodeURIComponent(siteId)}/commerce/orders/${encodeURIComponent(orderId)}/shipping-label`
-);
+const buildLabelUrl = (
+  origin: string,
+  siteId: string,
+  orderId: string,
+): string =>
+  `${origin.replace(/\/$/, "")}/api/admin/sites/${encodeURIComponent(siteId)}/commerce/orders/${encodeURIComponent(orderId)}/shipping-label`;
 
 const existingLabelPayload = (
   origin: string,
@@ -882,16 +1111,21 @@ const existingLabelPayload = (
   const values = toRecord(record.values);
   const id = textValue(values.shippinglabelid);
   const status = textValue(values.shippinglabelstatus);
-  if (!id || !status || status === 'none') return null;
+  if (!id || !status || status === "none") return null;
 
   return {
     id,
-    status: status === 'purchased' || status === 'voided' ? status : 'draft',
-    provider: textValue(values.shippinglabelprovider) || 'manual',
-    serviceLevel: textValue(values.shippingservicelevel) || 'standard',
-    url: textValue(values.shippinglabelurl) || buildLabelUrl(origin, siteId, record.id),
+    status: status === "purchased" || status === "voided" ? status : "draft",
+    provider: textValue(values.shippinglabelprovider) || "manual",
+    serviceLevel: textValue(values.shippingservicelevel) || "standard",
+    url:
+      textValue(values.shippinglabelurl) ||
+      buildLabelUrl(origin, siteId, record.id),
     cost: numberValue(values.shippinglabelcost),
-    createdAt: textValue(values.shippinglabelcreatedat) || record.updatedAt || new Date().toISOString(),
+    createdAt:
+      textValue(values.shippinglabelcreatedat) ||
+      record.updatedAt ||
+      new Date().toISOString(),
   };
 };
 
@@ -916,43 +1150,83 @@ const buildShippingLabelUpdate = async ({
   const now = new Date().toISOString();
   const values = toRecord(record.values);
   const existing = existingLabelPayload(origin, siteId, record);
-  const reusableExisting = existing?.status === 'voided' ? null : existing;
-  const requestedProvider = textValue(body.provider) || textValue(values.fulfillmentcarrier) || 'manual';
-  const requestedProviderIsEasyPost = normalizeProviderKey(requestedProvider) === 'easypost';
-  const requestedProviderIsShippo = normalizeProviderKey(requestedProvider) === 'shippo';
+  const reusableExisting = existing?.status === "voided" ? null : existing;
+  const requestedProvider =
+    textValue(body.provider) ||
+    textValue(values.fulfillmentcarrier) ||
+    "manual";
+  const requestedProviderIsEasyPost =
+    normalizeProviderKey(requestedProvider) === "easypost";
+  const requestedProviderIsShippo =
+    normalizeProviderKey(requestedProvider) === "shippo";
   const provider = requestedProviderIsEasyPost
-    ? textValue(body.carrier) || textValue(values.fulfillmentcarrier) || 'easypost'
+    ? textValue(body.carrier) ||
+      textValue(values.fulfillmentcarrier) ||
+      "easypost"
     : requestedProviderIsShippo
-      ? textValue(body.carrier) || textValue(values.fulfillmentcarrier) || 'shippo'
-    : requestedProvider;
-  const serviceLevel = textValue(body.serviceLevel) || textValue(values.shippingservicelevel) || 'standard';
-  const easyPostInput = resolveEasyPostShipmentInput(body, values, settings, { provider, serviceLevel });
+      ? textValue(body.carrier) ||
+        textValue(values.fulfillmentcarrier) ||
+        "shippo"
+      : requestedProvider;
+  const serviceLevel =
+    textValue(body.serviceLevel) ||
+    textValue(values.shippingservicelevel) ||
+    "standard";
+  const easyPostInput = resolveEasyPostShipmentInput(body, values, settings, {
+    provider,
+    serviceLevel,
+  });
   const executeEasyPost = canExecuteEasyPostLabel(easyPostInput);
-  const shippoInput = resolveEasyPostShipmentInput(body, values, settings, { provider: 'shippo', serviceLevel });
+  const shippoInput = resolveEasyPostShipmentInput(body, values, settings, {
+    provider: "shippo",
+    serviceLevel,
+  });
   const executeShippo = canExecuteShippoLabel(shippoInput);
-  const labelId = reusableExisting?.id || `lbl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const labelId =
+    reusableExisting?.id ||
+    `lbl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const labelUrl = buildLabelUrl(origin, siteId, record.id);
-  const cost = numberValue(body.cost, numberValue(values.shippinglabelcost, numberValue(values.shippingamount)));
-  const currentFulfillmentStatus = textValue(values.fulfillmentstatus) || 'unfulfilled';
-  const nextFulfillmentStatus = currentFulfillmentStatus === 'fulfilled' || currentFulfillmentStatus === 'cancelled'
-    ? currentFulfillmentStatus
-    : 'processing';
+  const cost = numberValue(
+    body.cost,
+    numberValue(values.shippinglabelcost, numberValue(values.shippingamount)),
+  );
+  const currentFulfillmentStatus =
+    textValue(values.fulfillmentstatus) || "unfulfilled";
+  const nextFulfillmentStatus =
+    currentFulfillmentStatus === "fulfilled" ||
+    currentFulfillmentStatus === "cancelled"
+      ? currentFulfillmentStatus
+      : "processing";
   const createdAt = reusableExisting?.createdAt || now;
   const providerPayload: Record<string, unknown> = {
-    schemaVersion: 'backy.shipping-label.v1',
-    provider: executeEasyPost || requestedProviderIsEasyPost ? 'easypost' : executeShippo || requestedProviderIsShippo ? 'shippo' : provider,
-    action: executeEasyPost || requestedProviderIsEasyPost ? 'shipments.buy' : executeShippo || requestedProviderIsShippo ? 'transactions.create' : 'provider.shipping_label.create',
-    executionMode: executeEasyPost ? 'easypost-api' : executeShippo ? 'shippo-api' : 'handoff',
+    schemaVersion: "backy.shipping-label.v1",
+    provider:
+      executeEasyPost || requestedProviderIsEasyPost
+        ? "easypost"
+        : executeShippo || requestedProviderIsShippo
+          ? "shippo"
+          : provider,
+    action:
+      executeEasyPost || requestedProviderIsEasyPost
+        ? "shipments.buy"
+        : executeShippo || requestedProviderIsShippo
+          ? "transactions.create"
+          : "provider.shipping_label.create",
+    executionMode: executeEasyPost
+      ? "easypost-api"
+      : executeShippo
+        ? "shippo-api"
+        : "handoff",
     orderId: record.id,
     orderNumber: textValue(values.ordernumber),
     requestedCarrier: provider,
     requestedServiceLevel: serviceLevel,
     idempotencyKey: labelId,
   };
-  let statusNote = 'handoff prepared';
+  let statusNote = "handoff prepared";
   let label: ShippingLabelPayload = {
     id: labelId,
-    status: 'draft',
+    status: "draft",
     provider,
     serviceLevel,
     url: labelUrl,
@@ -979,7 +1253,7 @@ const buildShippingLabelUpdate = async ({
       url: result.ok && result.label?.url ? result.label.url : label.url,
       providerPayload: result.payload,
     };
-    statusNote = result.ok ? 'purchased' : 'purchase failed; handoff retained';
+    statusNote = result.ok ? "purchased" : "purchase failed; handoff retained";
   }
   if (executeShippo) {
     const result = await executeShippoLabel({
@@ -999,7 +1273,7 @@ const buildShippingLabelUpdate = async ({
       url: result.ok && result.label?.url ? result.label.url : label.url,
       providerPayload: result.payload,
     };
-    statusNote = result.ok ? 'purchased' : 'purchase failed; handoff retained';
+    statusNote = result.ok ? "purchased" : "purchase failed; handoff retained";
   }
 
   return {
@@ -1015,14 +1289,19 @@ const buildShippingLabelUpdate = async ({
       shippingservicelevel: label.serviceLevel,
       shippinglabelcost: label.cost,
       shippinglabelcreatedat: label.createdAt,
-      notes: appendNote(values.notes, `Shipping label ${statusNote} ${now} with ${label.provider} ${label.serviceLevel}.`),
+      notes: appendNote(
+        values.notes,
+        `Shipping label ${statusNote} ${now} with ${label.provider} ${label.serviceLevel}.`,
+      ),
     },
   };
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'commerce.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "commerce.view",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -1032,42 +1311,132 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const origin = new URL(request.url).origin;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
-      if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
+      if (!site)
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
 
-      const collection = await repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG);
-      if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
-      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+      const collection = await repositories.collections.getBySlug(
+        site.id,
+        ORDERS_COLLECTION_SLUG,
+      );
+      if (!collection)
+        return errorResponse(
+          404,
+          "ORDER_QUEUE_NOT_FOUND",
+          "Private order queue not found",
+          requestId,
+        );
+      const commerceAccess = await requireCommerceCollectionAccess(
+        request,
+        requestId,
+        collection.slug,
+        "view",
+      );
       if (commerceAccess) return commerceAccess;
 
-      const record = await repositories.collections.getRecordById(site.id, collection.id, orderId)
-        || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
-      if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+      const record =
+        (await repositories.collections.getRecordById(
+          site.id,
+          collection.id,
+          orderId,
+        )) ||
+        (await repositories.collections.getRecordBySlug(
+          site.id,
+          collection.id,
+          orderId,
+        ));
+      if (!record)
+        return errorResponse(
+          404,
+          "ORDER_NOT_FOUND",
+          "Order not found",
+          requestId,
+        );
 
-      return NextResponse.json({ success: true, requestId, data: { record, label: existingLabelPayload(origin, site.id, record) } });
+      return privateShippingLabelResponse(
+        {
+          success: true,
+          requestId,
+          data: {
+            record,
+            label: existingLabelPayload(origin, site.id, record),
+          },
+        },
+        requestId,
+        site.id,
+      );
     }
 
     const site = getSiteByIdOrSlug(siteId);
-    if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    if (!site)
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
 
-    const collection = getCollectionByIdOrSlug(site.id, ORDERS_COLLECTION_SLUG, { includeUnpublished: true });
-    if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
-    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+    const collection = getCollectionByIdOrSlug(
+      site.id,
+      ORDERS_COLLECTION_SLUG,
+      { includeUnpublished: true },
+    );
+    if (!collection)
+      return errorResponse(
+        404,
+        "ORDER_QUEUE_NOT_FOUND",
+        "Private order queue not found",
+        requestId,
+      );
+    const commerceAccess = await requireCommerceCollectionAccess(
+      request,
+      requestId,
+      collection.slug,
+      "view",
+    );
     if (commerceAccess) return commerceAccess;
 
-    const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
-    if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+    const record = getCollectionRecordByIdOrSlug(
+      site.id,
+      collection.id,
+      orderId,
+      { includeUnpublished: true },
+    );
+    if (!record)
+      return errorResponse(
+        404,
+        "ORDER_NOT_FOUND",
+        "Order not found",
+        requestId,
+      );
 
-    return NextResponse.json({ success: true, requestId, data: { record, label: existingLabelPayload(origin, site.id, record) } });
+    return privateShippingLabelResponse(
+      {
+        success: true,
+        requestId,
+        data: { record, label: existingLabelPayload(origin, site.id, record) },
+      },
+      requestId,
+      site.id,
+    );
   } catch (error) {
-    console.error('Admin order shipping label read API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin order shipping label read API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'commerce.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "commerce.edit",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -1079,21 +1448,67 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
-      if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
+      if (!site)
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
 
-      const collection = await repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG);
-      if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
-      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      const collection = await repositories.collections.getBySlug(
+        site.id,
+        ORDERS_COLLECTION_SLUG,
+      );
+      if (!collection)
+        return errorResponse(
+          404,
+          "ORDER_QUEUE_NOT_FOUND",
+          "Private order queue not found",
+          requestId,
+        );
+      const commerceAccess = await requireCommerceCollectionAccess(
+        request,
+        requestId,
+        collection.slug,
+        "edit",
+      );
       if (commerceAccess) return commerceAccess;
 
-      const record = await repositories.collections.getRecordById(site.id, collection.id, orderId)
-        || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
-      if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+      const record =
+        (await repositories.collections.getRecordById(
+          site.id,
+          collection.id,
+          orderId,
+        )) ||
+        (await repositories.collections.getRecordBySlug(
+          site.id,
+          collection.id,
+          orderId,
+        ));
+      if (!record)
+        return errorResponse(
+          404,
+          "ORDER_NOT_FOUND",
+          "Order not found",
+          requestId,
+        );
 
       const settings = await repositories.settings.get();
-      const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body, settings });
-      const values = normalizeCollectionRecordMediaValues(collection, rawValues);
+      const { label, values: rawValues } = await buildShippingLabelUpdate({
+        siteId: site.id,
+        origin,
+        record,
+        body,
+        settings,
+      });
+      const values = normalizeCollectionRecordMediaValues(
+        collection,
+        rawValues,
+      );
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
         mediaRepository: repositories.media,
@@ -1104,81 +1519,198 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         excludeRecordId: record.id,
       });
       if (validationErrors.length > 0) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Shipping label values are invalid', requestId, validationErrors);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Shipping label values are invalid",
+          requestId,
+          validationErrors,
+        );
       }
 
-      const updated = (await repositories.collections.updateRecord(site.id, collection.id, record.id, {
-        values: toJsonRecord(values),
-      })).item;
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'collectionRecord',
-        entityId: updated.id,
-        reason: 'order-shipping-label-prepared',
-        requestId,
-      });
+      const updated = (
+        await repositories.collections.updateRecord(
+          site.id,
+          collection.id,
+          record.id,
+          {
+            values: toJsonRecord(values),
+          },
+        )
+      ).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "collectionRecord",
+          entityId: updated.id,
+          reason: "order-shipping-label-prepared",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'collectionRecord',
+        entity: "collectionRecord",
         entityId: updated.id,
-        action: 'update',
+        action: "update",
         before: collectionRecordAuditMetadata(collection, record),
         after: collectionRecordAuditMetadata(collection, updated),
         metadata: shippingLabelAuditMetadata(collection, updated, label),
         requestId,
       });
+      await deliverOrderShippingLabelWebhook({
+        repositories,
+        site,
+        collection,
+        before: record,
+        after: updated,
+        label,
+        action: "commerce.order.shipping_label_prepared",
+        requestId,
+        actor: access.session?.user.id,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { record: updated, order: updated, label, cacheInvalidation } });
+      return privateShippingLabelResponse(
+        {
+          success: true,
+          requestId,
+          data: { record: updated, order: updated, label, cacheInvalidation },
+        },
+        requestId,
+        site.id,
+      );
     }
 
     const site = getSiteByIdOrSlug(siteId);
-    if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    if (!site)
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
 
-    const collection = getCollectionByIdOrSlug(site.id, ORDERS_COLLECTION_SLUG, { includeUnpublished: true });
-    if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
-    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    const collection = getCollectionByIdOrSlug(
+      site.id,
+      ORDERS_COLLECTION_SLUG,
+      { includeUnpublished: true },
+    );
+    if (!collection)
+      return errorResponse(
+        404,
+        "ORDER_QUEUE_NOT_FOUND",
+        "Private order queue not found",
+        requestId,
+      );
+    const commerceAccess = await requireCommerceCollectionAccess(
+      request,
+      requestId,
+      collection.slug,
+      "edit",
+    );
     if (commerceAccess) return commerceAccess;
 
-    const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
-    if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+    const record = getCollectionRecordByIdOrSlug(
+      site.id,
+      collection.id,
+      orderId,
+      { includeUnpublished: true },
+    );
+    if (!record)
+      return errorResponse(
+        404,
+        "ORDER_NOT_FOUND",
+        "Order not found",
+        requestId,
+      );
 
     const settings = getAdminSettings();
-    const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body, settings });
-    const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, rawValues);
-    const validationErrors = validateCollectionRecordValues(collection, values, {
-      existingValues: record.values,
-      excludeRecordId: record.id,
+    const { label, values: rawValues } = await buildShippingLabelUpdate({
+      siteId: site.id,
+      origin,
+      record,
+      body,
+      settings,
     });
+    const values = normalizeCollectionRecordMediaValues(
+      collection as unknown as BackyCollection,
+      rawValues,
+    );
+    const validationErrors = validateCollectionRecordValues(
+      collection,
+      values,
+      {
+        existingValues: record.values,
+        excludeRecordId: record.id,
+      },
+    );
     if (validationErrors.length > 0) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Shipping label values are invalid', requestId, validationErrors);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Shipping label values are invalid",
+        requestId,
+        validationErrors,
+      );
     }
 
-    const updated = updateAdminCollectionRecord(site.id, collection.id, record.id, { values });
-    if (!updated) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+    const updated = updateAdminCollectionRecord(
+      site.id,
+      collection.id,
+      record.id,
+      { values },
+    );
+    if (!updated)
+      return errorResponse(
+        404,
+        "ORDER_NOT_FOUND",
+        "Order not found",
+        requestId,
+      );
 
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'collectionRecord',
+      entity: "collectionRecord",
       entityId: updated.id,
-      action: 'update',
+      action: "update",
       before: collectionRecordAuditMetadata(collection, record),
       after: collectionRecordAuditMetadata(collection, updated),
       metadata: shippingLabelAuditMetadata(collection, updated, label),
       requestId,
     });
+    await deliverOrderShippingLabelWebhook({
+      site: site as unknown as Site,
+      collection,
+      before: record,
+      after: updated,
+      label,
+      action: "commerce.order.shipping_label_prepared",
+      requestId,
+      actor: access.session?.user.id,
+    });
 
-    return NextResponse.json({ success: true, requestId, data: { record: updated, order: updated, label } });
+    return privateShippingLabelResponse(
+      {
+        success: true,
+        requestId,
+        data: { record: updated, order: updated, label },
+      },
+      requestId,
+      site.id,
+    );
   } catch (error) {
-    console.error('Admin order shipping label create API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin order shipping label create API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'commerce.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "commerce.edit",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -1190,24 +1722,75 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
-      if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
+      if (!site)
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
 
-      const collection = await repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG);
-      if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
-      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      const collection = await repositories.collections.getBySlug(
+        site.id,
+        ORDERS_COLLECTION_SLUG,
+      );
+      if (!collection)
+        return errorResponse(
+          404,
+          "ORDER_QUEUE_NOT_FOUND",
+          "Private order queue not found",
+          requestId,
+        );
+      const commerceAccess = await requireCommerceCollectionAccess(
+        request,
+        requestId,
+        collection.slug,
+        "edit",
+      );
       if (commerceAccess) return commerceAccess;
 
-      const record = await repositories.collections.getRecordById(site.id, collection.id, orderId)
-        || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
-      if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+      const record =
+        (await repositories.collections.getRecordById(
+          site.id,
+          collection.id,
+          orderId,
+        )) ||
+        (await repositories.collections.getRecordBySlug(
+          site.id,
+          collection.id,
+          orderId,
+        ));
+      if (!record)
+        return errorResponse(
+          404,
+          "ORDER_NOT_FOUND",
+          "Order not found",
+          requestId,
+        );
 
-      const result = await buildShippingLabelVoidUpdate({ siteId: site.id, origin, record, body });
-      if ('error' in result) {
-        return errorResponse(result.error.status, result.error.code, result.error.message, requestId, result.error.details);
+      const result = await buildShippingLabelVoidUpdate({
+        siteId: site.id,
+        origin,
+        record,
+        body,
+      });
+      if ("error" in result) {
+        return errorResponse(
+          result.error.status,
+          result.error.code,
+          result.error.message,
+          requestId,
+          result.error.details,
+        );
       }
 
-      const values = normalizeCollectionRecordMediaValues(collection, result.values);
+      const values = normalizeCollectionRecordMediaValues(
+        collection,
+        result.values,
+      );
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
         mediaRepository: repositories.media,
@@ -1218,77 +1801,210 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         excludeRecordId: record.id,
       });
       if (validationErrors.length > 0) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Shipping label values are invalid', requestId, validationErrors);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Shipping label values are invalid",
+          requestId,
+          validationErrors,
+        );
       }
 
-      const updated = (await repositories.collections.updateRecord(site.id, collection.id, record.id, {
-        values: toJsonRecord(values),
-      })).item;
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'collectionRecord',
-        entityId: updated.id,
-        reason: 'order-shipping-label-voided',
-        requestId,
-      });
+      const updated = (
+        await repositories.collections.updateRecord(
+          site.id,
+          collection.id,
+          record.id,
+          {
+            values: toJsonRecord(values),
+          },
+        )
+      ).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "collectionRecord",
+          entityId: updated.id,
+          reason: "order-shipping-label-voided",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'collectionRecord',
+        entity: "collectionRecord",
         entityId: updated.id,
-        action: 'update',
+        action: "update",
         before: collectionRecordAuditMetadata(collection, record),
         after: collectionRecordAuditMetadata(collection, updated),
-        metadata: shippingLabelVoidAuditMetadata(collection, updated, result.label),
+        metadata: shippingLabelVoidAuditMetadata(
+          collection,
+          updated,
+          result.label,
+        ),
         requestId,
       });
+      await deliverOrderShippingLabelWebhook({
+        repositories,
+        site,
+        collection,
+        before: record,
+        after: updated,
+        label: result.label,
+        action: "commerce.order.shipping_label_voided",
+        requestId,
+        actor: access.session?.user.id,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { record: updated, order: updated, label: result.label, cacheInvalidation } });
+      return privateShippingLabelResponse(
+        {
+          success: true,
+          requestId,
+          data: {
+            record: updated,
+            order: updated,
+            label: result.label,
+            cacheInvalidation,
+          },
+        },
+        requestId,
+        site.id,
+      );
     }
 
     const site = getSiteByIdOrSlug(siteId);
-    if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    if (!site)
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
 
-    const collection = getCollectionByIdOrSlug(site.id, ORDERS_COLLECTION_SLUG, { includeUnpublished: true });
-    if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
-    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    const collection = getCollectionByIdOrSlug(
+      site.id,
+      ORDERS_COLLECTION_SLUG,
+      { includeUnpublished: true },
+    );
+    if (!collection)
+      return errorResponse(
+        404,
+        "ORDER_QUEUE_NOT_FOUND",
+        "Private order queue not found",
+        requestId,
+      );
+    const commerceAccess = await requireCommerceCollectionAccess(
+      request,
+      requestId,
+      collection.slug,
+      "edit",
+    );
     if (commerceAccess) return commerceAccess;
 
-    const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
-    if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+    const record = getCollectionRecordByIdOrSlug(
+      site.id,
+      collection.id,
+      orderId,
+      { includeUnpublished: true },
+    );
+    if (!record)
+      return errorResponse(
+        404,
+        "ORDER_NOT_FOUND",
+        "Order not found",
+        requestId,
+      );
 
-    const result = await buildShippingLabelVoidUpdate({ siteId: site.id, origin, record, body });
-    if ('error' in result) {
-      return errorResponse(result.error.status, result.error.code, result.error.message, requestId, result.error.details);
-    }
-
-    const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, result.values);
-    const validationErrors = validateCollectionRecordValues(collection, values, {
-      existingValues: record.values,
-      excludeRecordId: record.id,
+    const result = await buildShippingLabelVoidUpdate({
+      siteId: site.id,
+      origin,
+      record,
+      body,
     });
-    if (validationErrors.length > 0) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Shipping label values are invalid', requestId, validationErrors);
+    if ("error" in result) {
+      return errorResponse(
+        result.error.status,
+        result.error.code,
+        result.error.message,
+        requestId,
+        result.error.details,
+      );
     }
 
-    const updated = updateAdminCollectionRecord(site.id, collection.id, record.id, { values });
-    if (!updated) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+    const values = normalizeCollectionRecordMediaValues(
+      collection as unknown as BackyCollection,
+      result.values,
+    );
+    const validationErrors = validateCollectionRecordValues(
+      collection,
+      values,
+      {
+        existingValues: record.values,
+        excludeRecordId: record.id,
+      },
+    );
+    if (validationErrors.length > 0) {
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Shipping label values are invalid",
+        requestId,
+        validationErrors,
+      );
+    }
+
+    const updated = updateAdminCollectionRecord(
+      site.id,
+      collection.id,
+      record.id,
+      { values },
+    );
+    if (!updated)
+      return errorResponse(
+        404,
+        "ORDER_NOT_FOUND",
+        "Order not found",
+        requestId,
+      );
 
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'collectionRecord',
+      entity: "collectionRecord",
       entityId: updated.id,
-      action: 'update',
+      action: "update",
       before: collectionRecordAuditMetadata(collection, record),
       after: collectionRecordAuditMetadata(collection, updated),
-      metadata: shippingLabelVoidAuditMetadata(collection, updated, result.label),
+      metadata: shippingLabelVoidAuditMetadata(
+        collection,
+        updated,
+        result.label,
+      ),
       requestId,
     });
+    await deliverOrderShippingLabelWebhook({
+      site: site as unknown as Site,
+      collection,
+      before: record,
+      after: updated,
+      label: result.label,
+      action: "commerce.order.shipping_label_voided",
+      requestId,
+      actor: access.session?.user.id,
+    });
 
-    return NextResponse.json({ success: true, requestId, data: { record: updated, order: updated, label: result.label } });
+    return privateShippingLabelResponse(
+      {
+        success: true,
+        requestId,
+        data: { record: updated, order: updated, label: result.label },
+      },
+      requestId,
+      site.id,
+    );
   } catch (error) {
-    console.error('Admin order shipping label void API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin order shipping label void API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

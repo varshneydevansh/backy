@@ -6,33 +6,38 @@
  * DELETE /api/admin/sites/[siteId]/blog/[postId]
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 import {
   canvasElementsToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
   type BackyContentDocument,
   type BackyPost,
-} from '@backy-cms/core';
-import { requireAdminAccess } from '@/lib/adminAccess';
+  type Site,
+} from "@backy-cms/core";
+import { requireAdminAccess } from "@/lib/adminAccess";
 import {
   normalizeScheduledAtInput,
   statusRequiresPublishPermission,
   validateScheduledContentStatus,
-} from '@/lib/adminContentStatusPolicy';
+} from "@/lib/adminContentStatusPolicy";
 import {
   deleteAdminBlogPost,
   getAdminBlogPostById,
   getBlogPosts,
   getSiteByIdOrSlug,
   updateAdminBlogPost,
-} from '@/lib/backyStore';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { postRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
-import { recordAdminAudit } from '@/lib/adminAudit';
+} from "@/lib/backyStore";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { postRevisionSnapshot } from "@/lib/repositoryContentWorkflow";
+import { recordAdminAudit } from "@/lib/adminAudit";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -41,7 +46,8 @@ interface RouteParams {
   }>;
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (
   status: number,
@@ -49,7 +55,7 @@ const errorResponse = (
   message: string,
   requestId: string,
   details?: Record<string, unknown>,
-) => (
+) =>
   NextResponse.json(
     {
       success: false,
@@ -61,37 +67,50 @@ const errorResponse = (
       },
     },
     { status },
-  )
-);
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const normalizeSlug = (value: unknown): string => (
-  typeof value === 'string'
-    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    : ''
-);
+const normalizeSlug = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    : "";
 
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
-const statusFromInput = (value: unknown): 'draft' | 'published' | 'scheduled' | 'archived' | undefined => (
-  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived' ? value : undefined
-);
+const statusFromInput = (
+  value: unknown,
+): "draft" | "published" | "scheduled" | "archived" | undefined =>
+  value === "draft" ||
+  value === "published" ||
+  value === "scheduled" ||
+  value === "archived"
+    ? value
+    : undefined;
 
-const stringArrayFromInput = (value: unknown): string[] | undefined => (
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : undefined
-);
+const stringArrayFromInput = (value: unknown): string[] | undefined =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
+    : undefined;
 
 const contentDocumentFromInput = (
   rawContent: unknown,
@@ -99,7 +118,7 @@ const contentDocumentFromInput = (
   input: {
     title: string;
     slug: string;
-    status: 'draft' | 'published' | 'scheduled' | 'archived';
+    status: "draft" | "published" | "scheduled" | "archived";
   },
 ): BackyContentDocument | undefined => {
   if (rawContent === undefined) {
@@ -108,23 +127,30 @@ const contentDocumentFromInput = (
   if (isBackyContentDocument(rawContent)) {
     return rawContent;
   }
-  if (isRecord(rawContent) && isBackyContentDocument(rawContent.contentDocument)) {
+  if (
+    isRecord(rawContent) &&
+    isBackyContentDocument(rawContent.contentDocument)
+  ) {
     return rawContent.contentDocument;
   }
 
   return canvasElementsToBackyContentDocument({
     id: fallback.id,
-    kind: 'post',
+    kind: "post",
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: isRecord(rawContent) && Array.isArray(rawContent.elements)
-      ? rawContent.elements
-      : Array.isArray(rawContent)
-        ? rawContent
-        : [],
+    elements:
+      isRecord(rawContent) && Array.isArray(rawContent.elements)
+        ? rawContent.elements
+        : Array.isArray(rawContent)
+          ? rawContent
+          : [],
     canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
-    customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
+    customCSS:
+      isRecord(rawContent) && typeof rawContent.customCSS === "string"
+        ? rawContent.customCSS
+        : undefined,
   });
 };
 
@@ -137,7 +163,10 @@ const adminPostFromRepositoryPost = (post: BackyPost) => {
     content: {
       elements: post.content.elements,
       canvasSize,
-      customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
+      customCSS:
+        typeof post.content.metadata?.customCSS === "string"
+          ? post.content.metadata.customCSS
+          : undefined,
       contentDocument: post.content,
     },
   };
@@ -163,30 +192,83 @@ const postAuditMetadata = (post: {
   tagIds: Array.isArray(post.tagIds) ? post.tagIds : [],
 });
 
-const updateAuditMetadata = (post: Parameters<typeof postAuditMetadata>[0], body: Record<string, unknown>): BackyJsonObject => ({
+const updateAuditMetadata = (
+  post: Parameters<typeof postAuditMetadata>[0],
+  body: Record<string, unknown>,
+): BackyJsonObject => ({
   ...postAuditMetadata(post),
-  changedFields: Object.keys(body).filter((key) => key !== 'expectedUpdatedAt'),
+  changedFields: Object.keys(body).filter((key) => key !== "expectedUpdatedAt"),
 });
 
+const deliverPostContentWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  action: "blog.post.updated" | "blog.post.deleted";
+  before?: Parameters<typeof postAuditMetadata>[0];
+  after?: Parameters<typeof postAuditMetadata>[0];
+  changedFields?: string[];
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: params.action,
+    data: {
+      resourceType: "blogPost",
+      ...(params.before ? { before: postAuditMetadata(params.before) } : {}),
+      ...(params.after ? { after: postAuditMetadata(params.after) } : {}),
+    },
+    metadata: {
+      action: params.action,
+      changedKeys: ["content"],
+      source: "admin-blog-detail-api",
+      resourceType: "blogPost",
+      resourceId: (params.after || params.before)?.id || null,
+      slug: (params.after || params.before)?.slug || null,
+      status: (params.after || params.before)?.status || null,
+      changedFields: params.changedFields || [],
+    },
+  });
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.view",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, postId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       const post = await repositories.posts.getById(site.id, postId);
 
       if (!post) {
-        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+        return errorResponse(
+          404,
+          "POST_NOT_FOUND",
+          "Post not found",
+          requestId,
+        );
       }
 
       return NextResponse.json({
@@ -201,13 +283,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const post = getAdminBlogPostById(site.id, postId);
 
     if (!post) {
-      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      return errorResponse(404, "POST_NOT_FOUND", "Post not found", requestId);
     }
 
     return NextResponse.json({
@@ -218,113 +300,200 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin blog detail API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin blog detail API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.edit",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, postId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       const post = await repositories.posts.getById(site.id, postId);
 
       if (!post) {
-        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+        return errorResponse(
+          404,
+          "POST_NOT_FOUND",
+          "Post not found",
+          requestId,
+        );
       }
 
       const body = await parseJsonBody(request);
-      const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+      const expectedUpdatedAt =
+        typeof body.expectedUpdatedAt === "string"
+          ? body.expectedUpdatedAt.trim()
+          : "";
       if (expectedUpdatedAt && expectedUpdatedAt !== post.updatedAt) {
-        return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the editor loaded it', requestId, {
-          postId: post.id,
-          expectedUpdatedAt,
-          currentUpdatedAt: post.updatedAt,
-          currentPost: adminPostFromRepositoryPost(post),
-        });
+        return errorResponse(
+          409,
+          "BLOG_VERSION_CONFLICT",
+          "Post has changed since the editor loaded it",
+          requestId,
+          {
+            postId: post.id,
+            expectedUpdatedAt,
+            currentUpdatedAt: post.updatedAt,
+            currentPost: adminPostFromRepositoryPost(post),
+          },
+        );
       }
 
-      const nextSlug = body.slug === undefined ? post.slug : normalizeSlug(body.slug);
+      const nextSlug =
+        body.slug === undefined ? post.slug : normalizeSlug(body.slug);
 
       if (body.slug !== undefined && !nextSlug) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Post slug is required', requestId);
+        return errorResponse(
+          400,
+          "VALIDATION_ERROR",
+          "Post slug is required",
+          requestId,
+        );
       }
 
       if (nextSlug && nextSlug !== post.slug) {
-        const conflict = await repositories.posts.checkSlug({ siteId: site.id, slug: nextSlug, excludePostId: post.id });
+        const conflict = await repositories.posts.checkSlug({
+          siteId: site.id,
+          slug: nextSlug,
+          excludePostId: post.id,
+        });
         if (!conflict.available) {
-          return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
+          return errorResponse(
+            409,
+            "SLUG_CONFLICT",
+            "A post with this slug already exists",
+            requestId,
+          );
         }
       }
 
       const status = statusFromInput(body.status) || post.status;
       const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
-      const nextScheduledAt = scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
-      if (body.status !== undefined && statusRequiresPublishPermission(status)) {
-        const publishAccess = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+      const nextScheduledAt =
+        scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
+      if (
+        body.status !== undefined &&
+        statusRequiresPublishPermission(status)
+      ) {
+        const publishAccess = await requireAdminAccess(request, requestId, {
+          permission: "pages.publish",
+        });
         if (publishAccess instanceof NextResponse) return publishAccess;
       }
-      const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
+      const scheduleValidation = validateScheduledContentStatus(
+        status,
+        nextScheduledAt,
+      );
       if (!scheduleValidation.ok) {
-        return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+        return errorResponse(
+          400,
+          scheduleValidation.code,
+          scheduleValidation.message,
+          requestId,
+        );
       }
-      const title = typeof body.title === 'string' ? body.title : post.title;
-      const content = contentDocumentFromInput(body.content, post, { title, slug: nextSlug, status });
+      const title = typeof body.title === "string" ? body.title : post.title;
+      const content = contentDocumentFromInput(body.content, post, {
+        title,
+        slug: nextSlug,
+        status,
+      });
       await repositories.contentWorkflows.createRevision({
         siteId: site.id,
-        targetType: 'post',
+        targetType: "post",
         targetId: post.id,
         snapshot: postRevisionSnapshot(post),
-        note: typeof body.revisionNote === 'string' && body.revisionNote.trim().length > 0
-          ? body.revisionNote
-          : 'Before update',
-        createdBy: request.headers.get('x-backy-actor') || 'admin',
+        note:
+          typeof body.revisionNote === "string" &&
+          body.revisionNote.trim().length > 0
+            ? body.revisionNote
+            : "Before update",
+        createdBy: request.headers.get("x-backy-actor") || "admin",
       });
       const updated = await repositories.posts.update(site.id, post.id, {
         title: body.title === undefined ? undefined : title,
         slug: body.slug === undefined ? undefined : nextSlug,
-        excerpt: typeof body.excerpt === 'string' || body.excerpt === null ? body.excerpt : undefined,
+        excerpt:
+          typeof body.excerpt === "string" || body.excerpt === null
+            ? body.excerpt
+            : undefined,
         status: statusFromInput(body.status),
         scheduledAt: scheduledAt === undefined ? undefined : scheduledAt,
-        featuredImageId: typeof body.featuredImageId === 'string' || body.featuredImageId === null
-          ? body.featuredImageId
-          : undefined,
-        authorId: typeof body.authorId === 'string' || body.authorId === null ? body.authorId : undefined,
+        featuredImageId:
+          typeof body.featuredImageId === "string" ||
+          body.featuredImageId === null
+            ? body.featuredImageId
+            : undefined,
+        authorId:
+          typeof body.authorId === "string" || body.authorId === null
+            ? body.authorId
+            : undefined,
         categoryIds: stringArrayFromInput(body.categoryIds),
         tagIds: stringArrayFromInput(body.tagIds),
         content,
         meta: isRecord(body.meta) ? body.meta : undefined,
-        revisionNote: typeof body.revisionNote === 'string' ? body.revisionNote : undefined,
+        revisionNote:
+          typeof body.revisionNote === "string" ? body.revisionNote : undefined,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'post',
-        entityId: updated.item.id,
-        reason: 'post-updated',
-        requestId,
-      });
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "post",
+          entityId: updated.item.id,
+          reason: "post-updated",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'post',
+        entity: "post",
         entityId: post.id,
-        action: 'update',
+        action: "update",
         before: postAuditMetadata(post),
         after: postAuditMetadata(updated.item),
         metadata: updateAuditMetadata(updated.item, body),
         requestId,
+      });
+      await deliverPostContentWebhook({
+        repositories,
+        site,
+        action: "blog.post.updated",
+        before: post,
+        after: updated.item,
+        changedFields: Object.keys(body).filter(
+          (key) => key !== "expectedUpdatedAt",
+        ),
+        requestId,
+        actor: access.session?.user.id,
       });
 
       return NextResponse.json({
@@ -340,30 +509,44 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const post = getAdminBlogPostById(site.id, postId);
 
     if (!post) {
-      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      return errorResponse(404, "POST_NOT_FOUND", "Post not found", requestId);
     }
 
     const body = await parseJsonBody(request);
-    const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+    const expectedUpdatedAt =
+      typeof body.expectedUpdatedAt === "string"
+        ? body.expectedUpdatedAt.trim()
+        : "";
     if (expectedUpdatedAt && expectedUpdatedAt !== post.updatedAt) {
-      return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the editor loaded it', requestId, {
-        postId: post.id,
-        expectedUpdatedAt,
-        currentUpdatedAt: post.updatedAt,
-        currentPost: post,
-      });
+      return errorResponse(
+        409,
+        "BLOG_VERSION_CONFLICT",
+        "Post has changed since the editor loaded it",
+        requestId,
+        {
+          postId: post.id,
+          expectedUpdatedAt,
+          currentUpdatedAt: post.updatedAt,
+          currentPost: post,
+        },
+      );
     }
 
-    const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+    const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
 
     if (body.slug !== undefined && !nextSlug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Post slug is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Post slug is required",
+        requestId,
+      );
     }
 
     if (nextSlug && nextSlug !== post.slug) {
@@ -373,20 +556,36 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }).posts[0];
 
       if (conflict && conflict.id !== post.id) {
-        return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
+        return errorResponse(
+          409,
+          "SLUG_CONFLICT",
+          "A post with this slug already exists",
+          requestId,
+        );
       }
     }
 
     const status = statusFromInput(body.status) || post.status;
     const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
-    const nextScheduledAt = scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
+    const nextScheduledAt =
+      scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
     if (body.status !== undefined && statusRequiresPublishPermission(status)) {
-      const publishAccess = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+      const publishAccess = await requireAdminAccess(request, requestId, {
+        permission: "pages.publish",
+      });
       if (publishAccess instanceof NextResponse) return publishAccess;
     }
-    const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
+    const scheduleValidation = validateScheduledContentStatus(
+      status,
+      nextScheduledAt,
+    );
     if (!scheduleValidation.ok) {
-      return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+      return errorResponse(
+        400,
+        scheduleValidation.code,
+        scheduleValidation.message,
+        requestId,
+      );
     }
 
     const updated = updateAdminBlogPost(site.id, post.id, {
@@ -396,17 +595,28 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!updated) {
-      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      return errorResponse(404, "POST_NOT_FOUND", "Post not found", requestId);
     }
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'post',
+      entity: "post",
       entityId: post.id,
-      action: 'update',
+      action: "update",
       before: postAuditMetadata(post),
       after: postAuditMetadata(updated),
       metadata: updateAuditMetadata(updated, body),
       requestId,
+    });
+    await deliverPostContentWebhook({
+      site: site as unknown as Site,
+      action: "blog.post.updated",
+      before: post,
+      after: updated,
+      changedFields: Object.keys(body).filter(
+        (key) => key !== "expectedUpdatedAt",
+      ),
+      requestId,
+      actor: access.session?.user.id,
     });
 
     return NextResponse.json({
@@ -417,54 +627,93 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin blog update API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin blog update API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.delete' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.delete",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, postId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       const post = await repositories.posts.getById(site.id, postId);
       if (!post) {
-        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+        return errorResponse(
+          404,
+          "POST_NOT_FOUND",
+          "Post not found",
+          requestId,
+        );
       }
 
-      await repositories.contentWorkflows.deletePreviewTokensForTarget(site.id, 'post', postId);
+      await repositories.contentWorkflows.deletePreviewTokensForTarget(
+        site.id,
+        "post",
+        postId,
+      );
       const deleted = await repositories.posts.delete(site.id, postId);
 
       if (!deleted) {
-        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+        return errorResponse(
+          404,
+          "POST_NOT_FOUND",
+          "Post not found",
+          requestId,
+        );
       }
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'post',
-        entityId: postId,
-        reason: 'post-deleted',
-        requestId,
-      });
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "post",
+          entityId: postId,
+          reason: "post-deleted",
+          requestId,
+        },
+      );
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        entity: 'post',
+        entity: "post",
         entityId: postId,
-        action: 'delete',
+        action: "delete",
         before: postAuditMetadata(post),
         metadata: postAuditMetadata(post),
         requestId,
+      });
+      await deliverPostContentWebhook({
+        repositories,
+        site,
+        action: "blog.post.deleted",
+        before: post,
+        requestId,
+        actor: access.session?.user.id,
       });
 
       return NextResponse.json({
@@ -481,27 +730,34 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const post = getAdminBlogPostById(site.id, postId);
     if (!post) {
-      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      return errorResponse(404, "POST_NOT_FOUND", "Post not found", requestId);
     }
 
     const deleted = deleteAdminBlogPost(site.id, postId);
 
     if (!deleted) {
-      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      return errorResponse(404, "POST_NOT_FOUND", "Post not found", requestId);
     }
     await recordAdminAudit({
       siteId: site.id,
-      entity: 'post',
+      entity: "post",
       entityId: postId,
-      action: 'delete',
+      action: "delete",
       before: postAuditMetadata(post),
       metadata: postAuditMetadata(post),
       requestId,
+    });
+    await deliverPostContentWebhook({
+      site: site as unknown as Site,
+      action: "blog.post.deleted",
+      before: post,
+      requestId,
+      actor: access.session?.user.id,
     });
 
     return NextResponse.json({
@@ -513,7 +769,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin blog delete API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin blog delete API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

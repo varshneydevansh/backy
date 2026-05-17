@@ -54,7 +54,7 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   publicContractJson(
     { success: false, requestId, error: { code, message, details } },
-    { status, requestId, cache: 'error' },
+    { status, requestId, cache: 'error', schemaVersion: RECONCILIATION_SCHEMA_VERSION },
   )
 );
 
@@ -204,9 +204,10 @@ async function handleCommerceReconciliation(
   request: NextRequest,
   { params }: RouteParams,
   defaultBody?: Record<string, unknown>,
+  accessRequirement: { permission: 'commerce.configure' } = { permission: 'commerce.configure' },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'commerce.configure' });
+  const access = await requireAdminAccess(request, requestId, accessRequirement);
   if (access instanceof NextResponse) {
     return access;
   }
@@ -332,7 +333,7 @@ async function handleCommerceReconciliation(
           updates,
           unmatchedEvents,
         },
-      }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
+      }, { status: 200, requestId, request, cache: 'private', schemaVersion: RECONCILIATION_SCHEMA_VERSION, siteId: site.id });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -441,7 +442,7 @@ async function handleCommerceReconciliation(
         updates,
         unmatchedEvents,
       },
-    }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
+    }, { status: 200, requestId, request, cache: 'private', schemaVersion: RECONCILIATION_SCHEMA_VERSION, siteId: site.id });
   } catch (error) {
     console.error('Commerce reconciliation API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
@@ -449,7 +450,7 @@ async function handleCommerceReconciliation(
 }
 
 export async function POST(request: NextRequest, context: RouteParams) {
-  return handleCommerceReconciliation(request, context);
+  return handleCommerceReconciliation(request, context, undefined, { permission: 'commerce.configure' });
 }
 
 export async function GET(request: NextRequest, context: RouteParams) {

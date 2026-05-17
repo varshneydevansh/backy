@@ -39,6 +39,7 @@ import {
   getOrderAnalytics,
   adminFetch,
   importCollectionRecordsCsv,
+  getCollectionRecord,
   listOrderDeliveryEvents,
   listCollectionRecords,
   listCollections,
@@ -544,6 +545,99 @@ const ORDER_BACKEND_SYSTEMS = [
   },
 ] as const;
 
+const ORDER_API_CONTRACTS = [
+  {
+    key: 'analytics',
+    title: 'Order analytics',
+    methods: ['GET'],
+    endpointKey: 'orderAnalytics',
+    schemaVersion: 'backy.order-analytics.v1',
+    cacheScope: 'private',
+    detail: 'Revenue, payment, fulfillment, provider execution, and operations analytics.',
+  },
+  {
+    key: 'quote',
+    title: 'Pricing quote refresh',
+    methods: ['GET', 'POST'],
+    endpointKey: 'adminQuote',
+    schemaVersion: 'backy.order-quote.v1',
+    cacheScope: 'private',
+    detail: 'Recalculates persisted order subtotal, tax, shipping, discount, total, and provider adjustments.',
+  },
+  {
+    key: 'shipping-label',
+    title: 'Shipping label',
+    methods: ['GET', 'POST', 'DELETE'],
+    endpointKey: 'adminShippingLabel',
+    schemaVersion: 'backy.shipping-label.v1',
+    cacheScope: 'private',
+    detail: 'Reads, prepares, purchases, and voids label metadata and provider payloads.',
+  },
+  {
+    key: 'fulfillment',
+    title: 'Fulfillment dispatch',
+    methods: ['GET', 'POST'],
+    endpointKey: 'adminFulfillment',
+    schemaVersion: 'backy.fulfillment-dispatch.v1',
+    cacheScope: 'private',
+    detail: 'Reads and dispatches warehouse, 3PL, HTTP provider, or manual fulfillment handoffs.',
+  },
+  {
+    key: 'tracking',
+    title: 'Shipment tracking',
+    methods: ['GET', 'POST'],
+    endpointKey: 'adminTracking',
+    schemaVersion: 'backy.tracking.v1',
+    cacheScope: 'private',
+    detail: 'Reads and refreshes carrier tracking state through EasyPost, Shippo, or manual handoff.',
+  },
+  {
+    key: 'provider-refund',
+    title: 'Provider refund',
+    methods: ['GET', 'POST', 'PATCH'],
+    endpointKey: 'adminProviderRefund',
+    schemaVersion: 'backy.provider-refund.v1',
+    cacheScope: 'private',
+    detail: 'Reads, creates, and refreshes provider refund metadata and execution payloads.',
+  },
+  {
+    key: 'commerce-webhook',
+    title: 'Commerce webhook settlement',
+    methods: ['POST'],
+    endpointKey: 'commerceWebhook',
+    schemaVersion: 'backy.commerce-webhook.v1',
+    cacheScope: 'private',
+    detail: 'Settles provider payment, subscription, and refund webhook events into private orders.',
+  },
+  {
+    key: 'site-reconciliation',
+    title: 'Site reconciliation',
+    methods: ['GET', 'POST'],
+    endpointKey: 'siteReconciliation',
+    schemaVersion: 'backy.commerce-reconciliation.v1',
+    cacheScope: 'private',
+    detail: 'Runs dry-run or repair reconciliation for one site from commerce webhook activity.',
+  },
+  {
+    key: 'platform-reconciliation',
+    title: 'Platform reconciliation',
+    methods: ['GET'],
+    endpointKey: 'platformReconciliation',
+    schemaVersion: 'backy.commerce-reconciliation-batch.v1',
+    cacheScope: 'private',
+    detail: 'Runs scheduled platform reconciliation across sites with per-site results.',
+  },
+  {
+    key: 'reconciliation-readiness',
+    title: 'Reconciliation readiness',
+    methods: ['GET'],
+    endpointKey: 'reconciliationReadiness',
+    schemaVersion: 'backy.commerce-reconciliation-readiness.v1',
+    cacheScope: 'private',
+    detail: 'Reports cron, secret, and admin-key readiness for scheduled order repair.',
+  },
+] as const;
+
 const EMPTY_ORDER_FORM: OrderFormState = {
   orderNumber: '',
   customerName: '',
@@ -910,8 +1004,8 @@ function OrdersRoute() {
     const runtime = runtimeCommerce;
     const paymentProvider = commerce?.paymentProvider || runtime?.paymentProvider || 'none';
     const taxProvider = commerce?.taxProvider || runtime?.taxProvider || 'manual';
-    const shippingProvider = commerce?.shippingProvider || 'manual';
-    const discountProvider = commerce?.discountProvider || 'manual';
+    const shippingProvider = commerce?.shippingProvider || runtime?.shippingProvider || 'manual';
+    const discountProvider = commerce?.discountProvider || runtime?.discountProvider || 'manual';
     const shippingLabelProvider = commerce?.shippingLabelProvider || runtime?.shippingLabelProvider || 'manual';
     const fulfillmentProvider = commerce?.fulfillmentProvider || 'manual';
     const reconciliationMode = commerce?.reconciliationMode || 'manual';
@@ -922,7 +1016,48 @@ function OrdersRoute() {
       runtime?.squareAccessTokenConfigured ? 'square' : '',
       runtime?.adyenApiKeyConfigured && runtime?.adyenMerchantAccountConfigured ? 'adyen' : '',
       runtime?.mollieApiKeyConfigured ? 'mollie' : '',
+      runtime?.razorpayKeyIdConfigured && runtime?.razorpayKeySecretConfigured ? 'razorpay' : '',
     ].filter(Boolean);
+    const taxProviderCatalog = 'Supported provider modes: HTTP, Stripe Tax, TaxJar, Avalara.';
+    const shippingProviderCatalog = 'Supported provider modes: HTTP, EasyPost rates, Shippo rates.';
+    const discountProviderCatalog = 'Supported provider modes: HTTP, Stripe promotion codes.';
+    const stripeApiVersionDetail = runtime?.stripeApiVersion ? ` Stripe API version override ${runtime.stripeApiVersion}.` : '';
+    const taxQuoteReady = taxProvider === 'manual'
+      || (taxProvider === 'http' && Boolean(commerce?.taxProviderUrl))
+      || (taxProvider === 'stripe' && Boolean(runtime?.stripeSecretConfigured))
+      || (taxProvider === 'taxjar' && Boolean(runtime?.taxJarApiKeyConfigured))
+      || (
+        taxProvider === 'avalara' &&
+        Boolean(runtime?.avalaraAccountConfigured && runtime?.avalaraLicenseKeyConfigured && runtime?.avalaraCompanyCodeConfigured)
+      );
+    const taxQuoteDetail = taxProvider === 'http'
+      ? commerce?.taxProviderUrl ? `HTTP tax quote endpoint is configured. ${taxProviderCatalog}` : `HTTP tax provider selected without a URL. ${taxProviderCatalog}`
+      : taxProvider === 'stripe'
+        ? runtime?.stripeSecretConfigured ? `Stripe Tax can use ${runtime.stripeTaxApiBaseUrl || runtime.stripeApiBaseUrl || 'Stripe API'}.${stripeApiVersionDetail} ${taxProviderCatalog}` : `Stripe Tax selected without a Stripe secret. ${taxProviderCatalog}`
+        : taxProvider === 'taxjar'
+          ? runtime?.taxJarApiKeyConfigured ? `TaxJar key is configured; API base ${runtime.taxJarApiBaseUrl || 'https://api.taxjar.com/v2'}. ${taxProviderCatalog}` : `TaxJar selected without BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY. ${taxProviderCatalog}`
+          : taxProvider === 'avalara'
+            ? taxQuoteReady ? `Avalara AvaTax credentials are configured; API base ${runtime?.avalaraApiBaseUrl || 'https://sandbox-rest.avatax.com'}. ${taxProviderCatalog}` : `Avalara selected without account id, license key, or company code. ${taxProviderCatalog}`
+            : `Manual tax rules are available from Settings. ${taxProviderCatalog}`;
+    const shippingQuoteReady = shippingProvider === 'manual'
+      || (shippingProvider === 'http' && Boolean(commerce?.shippingProviderUrl))
+      || (shippingProvider === 'easypost' && Boolean(runtime?.easyPostApiKeyConfigured))
+      || (shippingProvider === 'shippo' && Boolean(runtime?.shippoApiKeyConfigured));
+    const shippingQuoteDetail = shippingProvider === 'http'
+      ? commerce?.shippingProviderUrl ? `HTTP shipping quote endpoint is configured. ${shippingProviderCatalog}` : `HTTP shipping provider selected without a URL. ${shippingProviderCatalog}`
+      : shippingProvider === 'easypost'
+        ? runtime?.easyPostApiKeyConfigured ? `EasyPost shipping-rate key is configured; API base ${runtime.easyPostApiBaseUrl || 'https://api.easypost.com/v2'}. ${shippingProviderCatalog}` : `EasyPost shipping rates selected without BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY. ${shippingProviderCatalog}`
+        : shippingProvider === 'shippo'
+          ? runtime?.shippoApiKeyConfigured ? `Shippo shipping-rate key is configured; API base ${runtime.shippoApiBaseUrl || 'https://api.goshippo.com'}. ${shippingProviderCatalog}` : `Shippo shipping rates selected without BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY. ${shippingProviderCatalog}`
+          : `Manual shipping rules are available from Settings. ${shippingProviderCatalog}`;
+    const discountQuoteReady = discountProvider === 'manual'
+      || (discountProvider === 'http' && Boolean(commerce?.discountProviderUrl))
+      || (discountProvider === 'stripe' && Boolean(runtime?.stripeSecretConfigured));
+    const discountQuoteDetail = discountProvider === 'http'
+      ? commerce?.discountProviderUrl ? `HTTP discount quote endpoint is configured. ${discountProviderCatalog}` : `HTTP discount provider selected without a URL. ${discountProviderCatalog}`
+      : discountProvider === 'stripe'
+        ? runtime?.stripeSecretConfigured ? `Stripe promotion codes can use ${runtime.stripeDiscountApiBaseUrl || runtime.stripeApiBaseUrl || 'https://api.stripe.com'}.${stripeApiVersionDetail} ${discountProviderCatalog}` : `Stripe promotion-code discounts selected without a Stripe secret. ${discountProviderCatalog}`
+        : `Manual discount rules are available from Settings. ${discountProviderCatalog}`;
 
     return [
       {
@@ -949,32 +1084,22 @@ function OrdersRoute() {
         key: 'tax-quote',
         title: 'Tax quote',
         mode: taxProvider,
-        ready: taxProvider === 'manual'
-          || (taxProvider === 'http' && Boolean(commerce?.taxProviderUrl))
-          || (taxProvider === 'stripe' && Boolean(runtime?.stripeSecretConfigured)),
-        detail: taxProvider === 'http'
-          ? commerce?.taxProviderUrl ? 'HTTP tax quote endpoint is configured.' : 'HTTP tax provider selected without a URL.'
-          : taxProvider === 'stripe'
-            ? runtime?.stripeSecretConfigured ? `Stripe Tax can use ${runtime.stripeTaxApiBaseUrl || runtime.stripeApiBaseUrl || 'Stripe API'}.` : 'Stripe Tax selected without a Stripe secret.'
-            : 'Manual tax rules are available from Settings.',
+        ready: taxQuoteReady,
+        detail: taxQuoteDetail,
       },
       {
         key: 'shipping-quote',
         title: 'Shipping quote',
         mode: shippingProvider,
-        ready: shippingProvider === 'manual' || Boolean(commerce?.shippingProviderUrl),
-        detail: shippingProvider === 'http'
-          ? commerce?.shippingProviderUrl ? 'HTTP shipping quote endpoint is configured.' : 'HTTP shipping provider selected without a URL.'
-          : 'Manual shipping rules are available from Settings.',
+        ready: shippingQuoteReady,
+        detail: shippingQuoteDetail,
       },
       {
         key: 'discount-quote',
         title: 'Discount quote',
         mode: discountProvider,
-        ready: discountProvider === 'manual' || Boolean(commerce?.discountProviderUrl),
-        detail: discountProvider === 'http'
-          ? commerce?.discountProviderUrl ? 'HTTP discount quote endpoint is configured.' : 'HTTP discount provider selected without a URL.'
-          : 'Manual discount rules are available from Settings.',
+        ready: discountQuoteReady,
+        detail: discountQuoteDetail,
       },
       {
         key: 'carrier-labels',
@@ -1059,14 +1184,64 @@ function OrdersRoute() {
     endpoints: {
       adminListCreate: adminOrdersApiUrl,
       adminDetailUpdate: adminOrderDetailApiUrl,
+      adminQuote: `${adminOrdersApiUrl}/{orderId}/quote`,
       adminShippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
       adminFulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
+      adminTracking: `${adminOrdersApiUrl}/{orderId}/tracking`,
       adminProviderRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
       orderAnalytics: orderAnalyticsApiUrl,
       orderDeliveryEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-order`,
+      commerceWebhook: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/webhook`,
+      siteReconciliation: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/reconcile`,
+      platformReconciliation: `${publicBaseUrl}/api/admin/commerce/reconcile`,
+      reconciliationReadiness: `${publicBaseUrl}/api/admin/commerce/reconcile/readiness`,
       checkoutIntake: publicOrderIntakeUrl,
       publicBlocked: publicOrdersApiUrl,
     },
+    apiContracts: ORDER_API_CONTRACTS.map((contract) => ({
+      ...contract,
+      endpoint: {
+        key: contract.endpointKey,
+        url: {
+          analytics: orderAnalyticsApiUrl,
+          quote: `${adminOrdersApiUrl}/{orderId}/quote`,
+          shippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
+          fulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
+          tracking: `${adminOrdersApiUrl}/{orderId}/tracking`,
+          providerRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
+          commerceWebhook: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/webhook`,
+          siteReconciliation: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/reconcile`,
+          platformReconciliation: `${publicBaseUrl}/api/admin/commerce/reconcile`,
+          reconciliationReadiness: `${publicBaseUrl}/api/admin/commerce/reconcile/readiness`,
+        }[contract.key === 'analytics'
+          ? 'analytics'
+          : contract.key === 'quote'
+            ? 'quote'
+            : contract.key === 'shipping-label'
+              ? 'shippingLabel'
+              : contract.key === 'fulfillment'
+                ? 'fulfillment'
+                : contract.key === 'tracking'
+                  ? 'tracking'
+                  : contract.key === 'provider-refund'
+                    ? 'providerRefund'
+                    : contract.key === 'commerce-webhook'
+                      ? 'commerceWebhook'
+                      : contract.key === 'site-reconciliation'
+                        ? 'siteReconciliation'
+                        : contract.key === 'platform-reconciliation'
+                          ? 'platformReconciliation'
+                          : 'reconciliationReadiness'],
+      },
+      responseHeaders: {
+        schemaVersion: 'x-backy-schema-version',
+        cacheScope: 'x-backy-cache-scope',
+        requestId: 'x-backy-request-id',
+        siteId: contract.key === 'platform-reconciliation' || contract.key === 'reconciliation-readiness'
+          ? null
+          : 'x-backy-site-id',
+      },
+    })),
     storefrontHandoff: {
       productsRoute: '/products',
       storefrontPageRoute: '/pages/new',
@@ -1092,6 +1267,7 @@ function OrdersRoute() {
     },
     metrics,
     analytics: orderAnalytics,
+    providerAnalytics: orderAnalytics?.providerOperations || null,
     providerReadiness: {
       loaded: Boolean(commerceSettings || runtimeCommerce),
       readyCount: providerReadinessReadyCount,
@@ -1401,7 +1577,17 @@ function OrdersRoute() {
             })
           : Promise.resolve(null),
       ]);
-      setOrders(result.records);
+      let nextOrders = result.records;
+      if (routeSearch.orderId && !nextOrders.some((order) => order.id === routeSearch.orderId)) {
+        try {
+          const deepLinkedOrder = await getCollectionRecord(activeSiteId, collection.id, routeSearch.orderId);
+          nextOrders = [deepLinkedOrder, ...nextOrders];
+        } catch {
+          // Keep the normal first page if the deep link points at a stale or deleted order.
+        }
+      }
+
+      setOrders(nextOrders);
       setCustomerProfiles(customersResult?.records || []);
       setOrderPagination(result.pagination);
       void loadOrderAnalytics();
@@ -1520,6 +1706,29 @@ function OrdersRoute() {
     void loadOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId, canViewOrders, isPermissionMatrixPending]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!routeSearch.orderId || !ordersCollection || !canViewOrders || isPermissionMatrixPending) return () => {
+      cancelled = true;
+    };
+
+    getCollectionRecord(activeSiteId, ordersCollection.id, routeSearch.orderId)
+      .then((order) => {
+        if (cancelled) return;
+        setOrders((current) => {
+          const existing = current.filter((item) => item.id !== order.id);
+          return [order, ...existing];
+        });
+      })
+      .catch(() => {
+        // The deep link may point at a record that was deleted by a smoke cleanup or another admin.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSiteId, canViewOrders, isPermissionMatrixPending, ordersCollection, routeSearch.orderId]);
 
   useEffect(() => {
     if (!selectedOrder) return;
@@ -1946,11 +2155,19 @@ function OrdersRoute() {
     setNotice(null);
 
     try {
+      const fulfillmentCarrier = String(readOrderValue(order.values, 'fulfillmentcarrier', '') || '').trim();
+      const shippingLabelProvider = String(readOrderValue(order.values, 'shippinglabelprovider', '') || '').trim();
+      const executionProvider = resolveTrackingExecutionProvider({
+        settingsProvider: commerceSettings?.shippingLabelProvider,
+        shippingLabelProvider,
+        fulfillmentCarrier,
+      });
       const { record: updated, tracking } = await refreshOrderTracking(activeSiteId, order.id, {
-        provider: String(readOrderValue(order.values, 'fulfillmentcarrier', '') || '').trim(),
+        provider: executionProvider || fulfillmentCarrier,
+        carrier: fulfillmentCarrier || shippingLabelProvider,
         trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '') || '').trim(),
         trackingUrl: String(readOrderValue(order.values, 'trackingurl', '') || '').trim(),
-        executionProvider: 'easypost',
+        ...(executionProvider ? { executionProvider } : {}),
       });
       setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       if (selectedOrderId === updated.id) {
@@ -2954,6 +3171,42 @@ function OrdersRoute() {
                   ))}
                 </div>
               </div>
+              <div className="rounded-lg border border-border bg-background p-4" data-testid="orders-api-contracts">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Order API response contracts</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Every order operations endpoint returns Backy contract headers with private cache scope and a stable schema id for external admin clients.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {ORDER_API_CONTRACTS.length} contracts
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {ORDER_API_CONTRACTS.map((contract) => (
+                    <div key={contract.key} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{contract.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{contract.detail}</div>
+                          <code className="mt-2 block truncate text-[11px] text-muted-foreground">
+                            {contract.schemaVersion}
+                          </code>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                            {contract.methods.join('/')}
+                          </span>
+                          <span className="rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                            {contract.cacheScope}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </PanelContent>
         </Panel>
@@ -3117,6 +3370,61 @@ function OrdersRoute() {
                         )}
                       </div>
                     </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-4" data-testid="orders-provider-analytics">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Provider execution analytics</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Backend provider mix and pending execution states across payment, refunds, fulfillment, and shipping labels.
+                      </p>
+                    </div>
+                    <div className="grid gap-2 text-xs sm:grid-cols-3">
+                      <span className="rounded-lg border border-border bg-card px-3 py-2">
+                        Refund pending <strong className="ml-1 font-mono">{orderAnalytics?.providerOperations?.attention.providerRefundPendingCount ?? 0}</strong>
+                      </span>
+                      <span className="rounded-lg border border-border bg-card px-3 py-2">
+                        Fulfillment pending <strong className="ml-1 font-mono">{orderAnalytics?.providerOperations?.attention.fulfillmentDispatchPendingCount ?? 0}</strong>
+                      </span>
+                      <span className="rounded-lg border border-border bg-card px-3 py-2">
+                        Label issues <strong className="ml-1 font-mono">{orderAnalytics?.providerOperations?.attention.shippingLabelIssueCount ?? 0}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      { title: 'Payment providers', items: orderAnalytics?.providerOperations?.paymentProviders || [], empty: 'No payment provider data yet.' },
+                      { title: 'Refund providers', items: orderAnalytics?.providerOperations?.refundProviders || [], empty: 'No provider refund data yet.' },
+                      { title: 'Fulfillment providers', items: orderAnalytics?.providerOperations?.fulfillmentProviders || [], empty: 'No fulfillment dispatch data yet.' },
+                      { title: 'Shipping labels', items: orderAnalytics?.providerOperations?.shippingLabelProviders || [], empty: 'No shipping-label data yet.' },
+                    ].map((group) => (
+                      <div key={group.title} className="rounded-lg border border-border bg-card p-3">
+                        <h4 className="text-xs font-semibold uppercase text-muted-foreground">{group.title}</h4>
+                        <div className="mt-3 space-y-3">
+                          {group.items.slice(0, 4).map((provider) => (
+                            <div key={provider.provider} className="space-y-1">
+                              <div className="flex items-center justify-between gap-3 text-sm">
+                                <span className="truncate font-medium">{provider.provider}</span>
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {provider.count} / {formatMoney(provider.total, orderAnalytics?.currencies[0]?.currency || 'USD')}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(provider.statuses).slice(0, 4).map(([status, count]) => (
+                                  <span key={status} className="rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                                    {status}: {count}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {group.items.length === 0 && (
+                            <div className="text-sm text-muted-foreground">{group.empty}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-background p-4" data-testid="orders-notification-delivery">
@@ -4873,6 +5181,23 @@ const readOrderValue = (
 ): unknown => (
   values[normalizedKey] ?? values[camelizeOrderKey(normalizedKey)] ?? fallback
 );
+
+const normalizeOrderProviderKey = (value: unknown): string => String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+
+const resolveTrackingExecutionProvider = ({
+  settingsProvider,
+  shippingLabelProvider,
+  fulfillmentCarrier,
+}: {
+  settingsProvider?: string;
+  shippingLabelProvider?: string;
+  fulfillmentCarrier?: string;
+}): 'easypost' | 'shippo' | '' => {
+  const candidates = [shippingLabelProvider, settingsProvider, fulfillmentCarrier].map(normalizeOrderProviderKey);
+  if (candidates.includes('shippo')) return 'shippo';
+  if (candidates.includes('easypost')) return 'easypost';
+  return '';
+};
 
 const camelizeOrderKey = (key: string): string => {
   if (key === 'ordernumber') return 'orderNumber';

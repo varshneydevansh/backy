@@ -107,6 +107,63 @@ const PRODUCT_CONTROL_AREAS = [
   },
 ] as const;
 
+const PRODUCT_API_CONTRACTS = [
+  {
+    key: 'commerce-catalog',
+    title: 'Commerce catalog',
+    methods: ['GET'],
+    endpointKey: 'commerceCatalog',
+    schemaVersion: 'backy.commerce-catalog.v1',
+    cacheScope: 'public',
+    detail: 'Public storefront catalog with product cards, facets, inventory state, delivery metadata, and checkout handoff fields.',
+  },
+  {
+    key: 'order-intake',
+    title: 'Order intake',
+    methods: ['GET', 'POST'],
+    endpointKey: 'commerceOrderContract',
+    schemaVersion: 'backy.commerce-order.v1',
+    cacheScope: 'private',
+    detail: 'Checkout contract and cart submission surface for creating private Backy order records from custom storefronts.',
+  },
+  {
+    key: 'provider-sync',
+    title: 'Provider catalog sync',
+    methods: ['POST'],
+    endpointKey: 'providerSync',
+    schemaVersion: 'backy.commerce-product-sync.v1',
+    cacheScope: 'private',
+    detail: 'Admin product provider-sync result for Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, HTTP, or handoff metadata.',
+  },
+  {
+    key: 'subscription-lifecycle',
+    title: 'Subscription lifecycle',
+    methods: ['GET'],
+    endpointKey: 'productSubscriptions',
+    schemaVersion: 'backy.product-subscription-lifecycle.v1',
+    cacheScope: 'private',
+    detail: 'Product-scoped subscription order summary, lifecycle states, provider readiness, and bounded action history.',
+  },
+  {
+    key: 'subscription-action',
+    title: 'Subscription action',
+    methods: ['POST'],
+    endpointKey: 'productSubscriptionAction',
+    schemaVersion: 'backy.product-subscription-action.v1',
+    cacheScope: 'private',
+    detail: 'Admin pause, resume, or cancel action envelope for provider-native execution or structured manual handoff.',
+  },
+  {
+    key: 'product-events',
+    title: 'Product automation events',
+    methods: ['GET'],
+    endpointKey: 'productNotificationEvents',
+    schemaVersion: 'backy.interaction-event.v1',
+    cacheScope: 'private',
+    detail: 'Low-stock automation, catalog handoff, and product workflow event stream for admin/custom dashboards.',
+  },
+] as const;
+
 const PRODUCT_RECORD_PAGE_SIZE = 100;
 const COMMERCE_SIGNAL_RECORD_LIMIT = 100;
 
@@ -741,6 +798,7 @@ function ProductsRoute() {
   const mediaCreatePermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.create', PRODUCT_PERMISSION_ROLE_DEFAULTS);
   const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
   const isProductsAccessBusy = isProductsBusy || isPermissionMatrixPending;
+  const isProductPageTemplateActionDisabled = isPermissionMatrixPending || !canEditPages;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1298,6 +1356,26 @@ function ProductsRoute() {
       list: storefrontApiUrl,
       bySlug: storefrontProductDetailUrl,
     },
+    apiContracts: PRODUCT_API_CONTRACTS.map((contract) => ({
+      ...contract,
+      endpoint: {
+        key: contract.endpointKey,
+        url: {
+          commerceCatalog: commerceCatalogUrl,
+          commerceOrderContract: commerceOrderContractUrl,
+          providerSync: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/provider-sync`,
+          productSubscriptions: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions`,
+          productSubscriptionAction: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions/{orderId}/action`,
+          productNotificationEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-product`,
+        }[contract.endpointKey],
+      },
+      responseHeaders: {
+        contract: 'x-backy-contract',
+        schema: 'x-backy-schema-version',
+        request: 'x-backy-request-id',
+        cacheScope: 'x-backy-cache-scope',
+      },
+    })),
     orderIntake: {
       ready: orderIntakeReady,
       endpoint: commerceOrderContractUrl,
@@ -1314,7 +1392,7 @@ function ProductsRoute() {
     },
     providerExecution: {
       quoteProviders: 'Configured HTTP tax, shipping, and discount quote providers can adjust checkout totals before order persistence.',
-      catalogSync: 'Product records can be synchronized to Stripe, Paddle, Square, or a configured HTTP catalog-sync provider from the Products workspace.',
+      catalogSync: 'Product records can be synchronized to Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, or a configured HTTP catalog-sync provider from the Products workspace.',
       reconciliation: {
         readiness: reconciliationReadiness,
         lastPreview: reconciliationResult
@@ -2349,8 +2427,14 @@ function ProductsRoute() {
 
   const providerSyncLabel = (provider: string | undefined): string => {
     if (provider === 'http') return 'HTTP provider';
+    if (provider === 'paypal') return 'PayPal';
     if (provider === 'paddle') return 'Paddle';
     if (provider === 'square') return 'Square';
+    if (provider === 'shopify') return 'Shopify';
+    if (provider === 'bigcommerce') return 'BigCommerce';
+    if (provider === 'woocommerce') return 'WooCommerce';
+    if (provider === 'etsy') return 'Etsy';
+    if (provider === 'magento') return 'Magento';
     if (provider === 'stripe') return 'Stripe';
     return 'Provider';
   };
@@ -2685,7 +2769,7 @@ function ProductsRoute() {
     navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
   };
   const openProductPageTemplate = (brief: (typeof productPageTemplateBriefs)[number]) => {
-    if (isProductsBusy || !productCollection) return;
+    if (isPermissionMatrixPending || !productCollection) return;
     if (!canEditPages) {
       setError(pagesEditPermissionTitle || 'Your account cannot create storefront pages.');
       return;
@@ -3047,6 +3131,42 @@ function ProductsRoute() {
                 <span>{products.filter((product) => product.status === 'published').length} published records</span>
                 <span>{orderIntakeReady ? 'Order intake ready' : 'Order intake needs private orders'}</span>
               </div>
+              <div className="rounded-lg border border-border bg-background p-4" data-testid="products-api-contracts">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Product API response contracts</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Storefront and product-operations endpoints expose stable Backy schema ids, request ids, and cache-scope headers for custom frontends and admin clients.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {PRODUCT_API_CONTRACTS.length} contracts
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {PRODUCT_API_CONTRACTS.map((contract) => (
+                    <div key={contract.key} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{contract.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{contract.detail}</div>
+                          <code className="mt-2 block truncate text-[11px] text-muted-foreground">
+                            {contract.schemaVersion}
+                          </code>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                            {contract.methods.join('/')}
+                          </span>
+                          <span className="rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                            {contract.cacheScope}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               {missingProductFields.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   Missing commerce fields: {missingProductFields.join(', ')}. Sync the schema before relying on product APIs.
@@ -3094,7 +3214,7 @@ function ProductsRoute() {
                   <div data-testid="products-provider-reconciliation" className="rounded-lg border border-border bg-card p-3">
                     <div className="text-xs font-semibold text-foreground">Provider execution and reconciliation</div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Backy can capture private orders, execute HTTP quote providers, create checkout-session handoffs, sync Stripe, Paddle, Square, or configured HTTP catalog metadata, settle provider webhooks, and preview scheduled reconciliation through the scheduled worker. Deeper marketplace-specific provider automation remains backend rollout work.
+                      Backy can capture private orders, execute HTTP quote providers, create checkout-session handoffs, sync Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, or configured HTTP catalog metadata, settle provider webhooks, and preview scheduled reconciliation through the scheduled worker. Live marketplace certification remains backend rollout work.
                     </p>
                     <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3 text-xs">
                       <div className="flex items-center justify-between gap-3">
@@ -3689,7 +3809,7 @@ function ProductsRoute() {
                           size="sm"
                           variant="primary"
                           onClick={() => openProductPageTemplate(brief)}
-                          disabled={isProductsAccessBusy || !canEditPages}
+                          disabled={isProductPageTemplateActionDisabled}
                           title={!canEditPages ? pagesEditPermissionTitle : undefined}
                           iconStart={<Sparkles className="size-4" />}
                           data-testid={brief.id === 'catalog-grid' ? 'products-page-template-list' : brief.id === 'product-detail' ? 'products-page-template-item' : `products-page-template-${brief.id}`}
@@ -4485,14 +4605,20 @@ function ProductsRoute() {
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-foreground">Provider catalog sync</div>
-                      <div className="mt-1 text-xs text-muted-foreground">Stripe, Paddle, Square, or configured HTTP product and price metadata for provider checkout catalogs.</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, or configured HTTP product and price metadata for provider checkout catalogs.</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {[
                         ['auto', 'Auto'],
                         ['stripe', 'Stripe'],
+                        ['paypal', 'PayPal'],
                         ['paddle', 'Paddle'],
                         ['square', 'Square'],
+                        ['shopify', 'Shopify'],
+                        ['bigcommerce', 'BigCommerce'],
+                        ['woocommerce', 'WooCommerce'],
+                        ['etsy', 'Etsy'],
+                        ['magento', 'Magento'],
                         ['http', 'HTTP'],
                       ].map(([provider, label]) => (
                         <Button

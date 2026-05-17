@@ -5,20 +5,27 @@
  * PATCH /api/admin/sites/[siteId]/navigation
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import type { SiteSettings } from '@backy-cms/core';
-import { requireAdminAccess } from '@/lib/adminAccess';
-import { recordAdminAudit } from '@/lib/adminAudit';
+import { NextRequest, NextResponse } from "next/server";
+import type { SiteSettings } from "@backy-cms/core";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { recordAdminAudit } from "@/lib/adminAudit";
 import {
   getPageSummary,
   getSiteByIdOrSlug,
   updateAdminSite,
-} from '@/lib/backyStore';
-import { buildSiteNavigation, normalizeNavigationConfig } from '@/lib/navigation';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+} from "@/lib/backyStore";
+import {
+  buildSiteNavigation,
+  normalizeNavigationConfig,
+} from "@/lib/navigation";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -26,11 +33,18 @@ interface RouteParams {
   }>;
 }
 
-type NavigationConfig = SiteSettings['navigation'];
+type NavigationConfig = SiteSettings["navigation"];
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: unknown,
+) =>
   NextResponse.json(
     {
       success: false,
@@ -42,23 +56,27 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
     },
     { status },
-  )
-);
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const collectPageIds = (items: NavigationConfig['primary'], pageIds = new Set<string>()) => {
+const collectPageIds = (
+  items: NavigationConfig["primary"],
+  pageIds = new Set<string>(),
+) => {
   for (const item of items) {
-    if (item.type === 'page' && item.pageId) {
+    if (item.type === "page" && item.pageId) {
       pageIds.add(item.pageId);
     }
 
@@ -71,12 +89,12 @@ const collectPageIds = (items: NavigationConfig['primary'], pageIds = new Set<st
 };
 
 const collectIncompletePageItems = (
-  items: NavigationConfig['primary'],
+  items: NavigationConfig["primary"],
   ids = new Set<string>(),
 ) => {
   for (const item of items) {
-    if (item.type === 'page' && !item.pageId) {
-      ids.add(item.id || item.label || 'page');
+    if (item.type === "page" && !item.pageId) {
+      ids.add(item.id || item.label || "page");
     }
 
     if (Array.isArray(item.children)) {
@@ -87,27 +105,37 @@ const collectIncompletePageItems = (
   return ids;
 };
 
-const missingPageIds = (navigation: NavigationConfig, availablePageIds: Set<string>) => (
-  Array.from(new Set([
-    ...collectPageIds(navigation.primary),
-    ...collectPageIds(navigation.footer || []),
-  ])).filter((pageId) => !availablePageIds.has(pageId))
-);
+const missingPageIds = (
+  navigation: NavigationConfig,
+  availablePageIds: Set<string>,
+) =>
+  Array.from(
+    new Set([
+      ...collectPageIds(navigation.primary),
+      ...collectPageIds(navigation.footer || []),
+    ]),
+  ).filter((pageId) => !availablePageIds.has(pageId));
 
-const incompletePageItems = (navigation: NavigationConfig) => Array.from(new Set([
-  ...collectIncompletePageItems(navigation.primary),
-  ...collectIncompletePageItems(navigation.footer || []),
-]));
+const incompletePageItems = (navigation: NavigationConfig) =>
+  Array.from(
+    new Set([
+      ...collectIncompletePageItems(navigation.primary),
+      ...collectIncompletePageItems(navigation.footer || []),
+    ]),
+  );
 
-const requestNavigationInput = (body: Record<string, unknown>) => (
-  body.navigation && typeof body.navigation === 'object' && !Array.isArray(body.navigation)
+const requestNavigationInput = (body: Record<string, unknown>) =>
+  body.navigation &&
+  typeof body.navigation === "object" &&
+  !Array.isArray(body.navigation)
     ? body.navigation
-    : body
-);
+    : body;
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'sites.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "sites.view",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -116,16 +144,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { siteId } = await params;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       const pages = await repositories.pages.list({
         siteId: site.id,
         includeUnpublished: true,
-        status: 'all',
+        status: "all",
         limit: 100,
         offset: 0,
       });
@@ -149,7 +184,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     const pages = getPageSummary(site.id, { includeUnpublished: true });
@@ -169,14 +204,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin site navigation API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin site navigation API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'sites.configure' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "sites.configure",
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -188,28 +230,53 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
-      const navigation = normalizeNavigationConfig(navigationInput, site.settings.navigation);
+      const navigation = normalizeNavigationConfig(
+        navigationInput,
+        site.settings.navigation,
+      );
       const pages = await repositories.pages.list({
         siteId: site.id,
         includeUnpublished: true,
-        status: 'all',
+        status: "all",
         limit: 100,
         offset: 0,
       });
       const incomplete = incompletePageItems(navigation);
       if (incomplete.length > 0) {
-        return errorResponse(400, 'NAVIGATION_VALIDATION', 'Page navigation items require pageId values', requestId, { items: incomplete });
+        return errorResponse(
+          400,
+          "NAVIGATION_VALIDATION",
+          "Page navigation items require pageId values",
+          requestId,
+          { items: incomplete },
+        );
       }
 
-      const missing = missingPageIds(navigation, new Set(pages.items.map((page) => page.id)));
+      const missing = missingPageIds(
+        navigation,
+        new Set(pages.items.map((page) => page.id)),
+      );
       if (missing.length > 0) {
-        return errorResponse(400, 'NAVIGATION_VALIDATION', 'Navigation references pages that do not exist on this site', requestId, { pageIds: missing });
+        return errorResponse(
+          400,
+          "NAVIGATION_VALIDATION",
+          "Navigation references pages that do not exist on this site",
+          requestId,
+          { pageIds: missing },
+        );
       }
 
       const updated = await repositories.sites.update(site.id, {
@@ -223,9 +290,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         teamId: site.teamId,
         actorId: access.session?.user.id,
-        entity: 'site',
+        entity: "site",
         entityId: site.id,
-        action: 'site.navigation.updated',
+        action: "site.navigation.updated",
         before: site.settings.navigation || {},
         after: updated.item.settings.navigation || {},
         metadata: {
@@ -234,14 +301,36 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
         requestId,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'navigation',
-        entity: 'site',
-        entityId: site.id,
-        reason: 'site-navigation-updated',
+      await deliverSiteWebhooks({
+        repositories,
+        site: updated.item,
+        kind: "site-updated",
         requestId,
+        actor: access.session?.user.id,
+        reason: "site.navigation.updated",
+        data: {
+          before: site.settings.navigation || {},
+          after: updated.item.settings.navigation || {},
+        },
+        metadata: {
+          action: "site.navigation.updated",
+          changedKeys: ["navigation"],
+          source: "admin-site-navigation-api",
+          primaryCount: navigation.primary.length,
+          footerCount: navigation.footer?.length || 0,
+        },
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "navigation",
+          entity: "site",
+          entityId: site.id,
+          reason: "site-navigation-updated",
+          requestId,
+        },
+      );
 
       return NextResponse.json({
         success: true,
@@ -263,19 +352,37 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const navigation = normalizeNavigationConfig(navigationInput, site.settings?.navigation);
+    const navigation = normalizeNavigationConfig(
+      navigationInput,
+      site.settings?.navigation,
+    );
     const pages = getPageSummary(site.id, { includeUnpublished: true });
     const incomplete = incompletePageItems(navigation);
     if (incomplete.length > 0) {
-      return errorResponse(400, 'NAVIGATION_VALIDATION', 'Page navigation items require pageId values', requestId, { items: incomplete });
+      return errorResponse(
+        400,
+        "NAVIGATION_VALIDATION",
+        "Page navigation items require pageId values",
+        requestId,
+        { items: incomplete },
+      );
     }
 
-    const missing = missingPageIds(navigation, new Set(pages.map((page) => page.id)));
+    const missing = missingPageIds(
+      navigation,
+      new Set(pages.map((page) => page.id)),
+    );
     if (missing.length > 0) {
-      return errorResponse(400, 'NAVIGATION_VALIDATION', 'Navigation references pages that do not exist on this site', requestId, { pageIds: missing });
+      return errorResponse(
+        400,
+        "NAVIGATION_VALIDATION",
+        "Navigation references pages that do not exist on this site",
+        requestId,
+        { pageIds: missing },
+      );
     }
 
     const updated = updateAdminSite(site.id, {
@@ -286,15 +393,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!updated) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     await recordAdminAudit({
       siteId: site.id,
       actorId: access.session?.user.id,
-      entity: 'site',
+      entity: "site",
       entityId: site.id,
-      action: 'site.navigation.updated',
+      action: "site.navigation.updated",
       before: site.settings?.navigation || {},
       after: updated.settings?.navigation || {},
       metadata: {
@@ -302,6 +409,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         footerCount: navigation.footer?.length || 0,
       },
       requestId,
+    });
+    await deliverSiteWebhooks({
+      site: updated,
+      kind: "site-updated",
+      requestId,
+      actor: access.session?.user.id,
+      reason: "site.navigation.updated",
+      data: {
+        before: site.settings?.navigation || {},
+        after: updated.settings?.navigation || {},
+      },
+      metadata: {
+        action: "site.navigation.updated",
+        changedKeys: ["navigation"],
+        source: "admin-site-navigation-api",
+        primaryCount: navigation.primary.length,
+        footerCount: navigation.footer?.length || 0,
+      },
     });
 
     return NextResponse.json({
@@ -320,7 +445,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin site navigation update API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin site navigation update API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }

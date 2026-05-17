@@ -5,19 +5,24 @@
  * POST /api/admin/sites/[siteId]/blog/tags
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAccess } from "@/lib/adminAccess";
 import {
   createAdminBlogTag,
   getBlogTagByIdOrSlug,
   getSiteByIdOrSlug,
   listBlogTags,
-} from '@/lib/backyStore';
-import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
-import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+} from "@/lib/backyStore";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+import { resolveRepositorySite } from "@/lib/repositoryContentWorkflow";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import type { BackyJsonObject, Site } from "@backy-cms/core";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 interface RouteParams {
   params: Promise<{
@@ -25,9 +30,15 @@ interface RouteParams {
   }>;
 }
 
-const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
   NextResponse.json(
     {
       success: false,
@@ -38,29 +49,79 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
     },
     { status },
-  )
-);
+  );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = async (
+  request: NextRequest,
+): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
-    return body && typeof body === 'object' && !Array.isArray(body)
-      ? body as Record<string, unknown>
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
 };
 
-const normalizeSlug = (value: unknown): string => (
-  typeof value === 'string'
-    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    : ''
-);
+const normalizeSlug = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    : "";
+
+const blogTagWebhookSnapshot = (tag: {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+}): BackyJsonObject => ({
+  tagId: tag.id,
+  name: tag.name,
+  slug: tag.slug,
+  description: tag.description || null,
+});
+
+const deliverBlogTagWebhook = async (params: {
+  repositories?: Awaited<
+    ReturnType<typeof getRequiredDatabaseRepositories>
+  > | null;
+  site: Site;
+  action: "blog.tag.created";
+  after: Parameters<typeof blogTagWebhookSnapshot>[0];
+  requestId: string;
+  actor?: string | null;
+}) =>
+  deliverSiteWebhooks({
+    repositories: params.repositories,
+    site: params.site,
+    kind: "site-updated",
+    requestId: params.requestId,
+    actor: params.actor,
+    reason: params.action,
+    data: {
+      resourceType: "blogTag",
+      after: blogTagWebhookSnapshot(params.after),
+    },
+    metadata: {
+      action: params.action,
+      changedKeys: ["content"],
+      source: "admin-blog-tags-api",
+      resourceType: "blogTag",
+      resourceId: params.after.id,
+      slug: params.after.slug,
+      name: params.after.name,
+    },
+  });
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.view",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -70,7 +131,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const site = await resolveRepositorySite(repositories, siteId);
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       return NextResponse.json({
@@ -85,7 +151,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     return NextResponse.json({
@@ -96,28 +162,45 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Admin blog tags list API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin blog tags list API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "pages.edit",
+  });
   if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
     const body = await parseJsonBody(request);
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const name = typeof body.name === "string" ? body.name.trim() : "";
     const slug = normalizeSlug(body.slug || name);
 
     if (!name) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Tag name is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Tag name is required",
+        requestId,
+      );
     }
 
     if (!slug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Tag slug is required', requestId);
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Tag slug is required",
+        requestId,
+      );
     }
 
     if (!shouldUseDemoStoreFallback()) {
@@ -125,26 +208,50 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const site = await resolveRepositorySite(repositories, siteId);
 
       if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
       }
 
       if (await repositories.blogTaxonomy.getTagByIdOrSlug(site.id, slug)) {
-        return errorResponse(409, 'SLUG_CONFLICT', 'A tag with this slug already exists', requestId);
+        return errorResponse(
+          409,
+          "SLUG_CONFLICT",
+          "A tag with this slug already exists",
+          requestId,
+        );
       }
 
       const created = await repositories.blogTaxonomy.createTag({
         siteId: site.id,
         name,
         slug,
-        description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
+        description:
+          typeof body.description === "string" || body.description === null
+            ? body.description
+            : undefined,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
-        siteId: site.id,
-        scope: 'content',
-        entity: 'blogTag',
-        entityId: created.item.id,
-        reason: 'blog-tag-created',
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: site.id,
+          scope: "content",
+          entity: "blogTag",
+          entityId: created.item.id,
+          reason: "blog-tag-created",
+          requestId,
+        },
+      );
+      await deliverBlogTagWebhook({
+        repositories,
+        site,
+        action: "blog.tag.created",
+        after: created.item,
         requestId,
+        actor: access.session?.user.id,
       });
 
       return NextResponse.json(
@@ -163,17 +270,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
     if (getBlogTagByIdOrSlug(site.id, slug)) {
-      return errorResponse(409, 'SLUG_CONFLICT', 'A tag with this slug already exists', requestId);
+      return errorResponse(
+        409,
+        "SLUG_CONFLICT",
+        "A tag with this slug already exists",
+        requestId,
+      );
     }
 
     const tag = createAdminBlogTag(site.id, {
       ...body,
       name,
       slug,
+    });
+    await deliverBlogTagWebhook({
+      site: site as unknown as Site,
+      action: "blog.tag.created",
+      after: tag,
+      requestId,
+      actor: access.session?.user.id,
     });
 
     return NextResponse.json(
@@ -187,7 +306,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { status: 201 },
     );
   } catch (error) {
-    console.error('Admin blog tag create API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    console.error("Admin blog tag create API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
   }
 }
