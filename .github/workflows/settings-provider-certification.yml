@@ -153,6 +153,7 @@ jobs:
       BACKY_SETTINGS_CERTIFICATION_BASE_URL: ${{ vars.BACKY_SETTINGS_CERTIFICATION_BASE_URL }}
       BACKY_ADMIN_API_KEY: settings-provider-cert-${{ github.run_id }}-${{ github.run_attempt }}
       BACKY_DATABASE_URL: ${{ secrets.BACKY_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BACKY_STORAGE_PROVIDER: ${{ vars.BACKY_STORAGE_PROVIDER }}
       BACKY_SUPABASE_URL: ${{ secrets.BACKY_SUPABASE_URL }}
       BACKY_SUPABASE_ANON_KEY: ${{ secrets.BACKY_SUPABASE_ANON_KEY }}
