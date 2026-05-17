@@ -1,0 +1,64 @@
+#!/usr/bin/env node
+
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const read = (relativePath) => fs.readFileSync(
+  fileURLToPath(new URL(relativePath, import.meta.url)),
+  'utf8',
+);
+
+const assert = (condition, message) => {
+  if (!condition) {
+    throw new Error(message);
+  }
+};
+
+const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
+const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
+const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
+const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
+const rootPackage = read('../../../package.json');
+const publicPackage = read('../package.json');
+
+assert(
+  manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
+  'Frontend manifest must advertise public site discovery for custom frontends.',
+);
+
+assert(
+  openApiRoute.includes('"/api/sites":') &&
+    openApiRoute.includes('operationId: "discoverBackySite"') &&
+    openApiRoute.includes('$ref: "#/components/schemas/SiteListEnvelope"') &&
+    openApiRoute.includes('$ref: "#/components/schemas/SiteEnvelope"') &&
+    openApiRoute.includes('SiteSummary:') &&
+    openApiRoute.includes('Discovery rate limit exceeded'),
+  'Site-scoped OpenAPI must document public site discovery, list/detail envelopes, and rate-limit errors.',
+);
+
+assert(
+  sdkSmoke.includes('function assertManifestEndpointsDocumented') &&
+    sdkSmoke.includes('endpointPath(endpoint)') &&
+    sdkSmoke.includes('openapi() is missing manifest-advertised endpoint paths') &&
+    sdkSmoke.includes("openapi.paths?.['/api/sites']?.get?.operationId === 'discoverBackySite'"),
+  'SDK smoke must enforce that manifest-advertised endpoints are present in OpenAPI.',
+);
+
+assert(
+  generatedSdkTypes.includes('"discoverBackySite"') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiSiteSummary') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiSiteListEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiSiteEnvelope'),
+  'Generated SDK types must expose site discovery operation and envelope contracts.',
+);
+
+assert(
+  publicPackage.includes('"test:frontend-contract": "node scripts/frontend-contract-smoke.mjs"') &&
+    rootPackage.includes('"test:frontend-contract-types": "npm run test:frontend-contract --workspace @backy/public && npm run test:generated-types --workspace @backy/sdk-js"'),
+  'Root and public package scripts must wire frontend contract smoke before generated SDK type checks.',
+);
+
+console.log(JSON.stringify({
+  ok: true,
+  contract: 'backy.frontend-contract.discovery.v1',
+}, null, 2));
