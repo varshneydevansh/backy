@@ -10,6 +10,7 @@ import {
   createContentWorkflowRepository,
   createDatabaseRepositories,
   createFormRepository,
+  createInteractiveComponentRepository,
   createMediaRepository,
   createPageRepository,
   createPostRepository,
@@ -34,6 +35,7 @@ import {
   formContacts,
   formDefinitions,
   formSubmissions,
+  interactiveComponents,
   media,
   mediaFolders,
   mediaVersions,
@@ -77,6 +79,7 @@ const tableName = (table) => {
   if (table === formDefinitions) return 'formDefinitions';
   if (table === formSubmissions) return 'formSubmissions';
   if (table === formContacts) return 'formContacts';
+  if (table === interactiveComponents) return 'interactiveComponents';
   if (table === media) return 'media';
   if (table === mediaFolders) return 'mediaFolders';
   if (table === mediaVersions) return 'mediaVersions';
@@ -107,6 +110,7 @@ const createFakeDb = () => {
     formDefinitions: [],
     formSubmissions: [],
     formContacts: [],
+    interactiveComponents: [],
     media: [],
     mediaFolders: [],
     mediaVersions: [],
@@ -135,6 +139,7 @@ const createFakeDb = () => {
     formDefinitions: 0,
     formSubmissions: 0,
     formContacts: 0,
+    interactiveComponents: 0,
     media: 0,
     mediaFolders: 0,
     mediaVersions: 0,
@@ -270,6 +275,39 @@ const createFakeDb = () => {
         sourceElementId: null,
         createdBy: null,
         updatedBy: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'interactiveComponents') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        componentKey: 'repo.component',
+        displayName: 'Repository component',
+        type: 'codeComponent',
+        status: 'disabled',
+        reviewStatus: 'draft',
+        version: '1.0.0',
+        renderMode: 'sandbox-iframe',
+        source: 'custom',
+        description: '',
+        allowedDataScopes: [],
+        requiredFields: [],
+        controls: [],
+        fallback: { required: true, supported: [] },
+        security: {},
+        integrity: { signed: false, signatureRequiredForCustomCode: true },
+        runtime: {},
+        ownerId: null,
+        dependencyMetadata: {},
+        changelog: null,
+        rollbackFromVersion: null,
+        createdBy: null,
+        updatedBy: null,
+        reviewedBy: null,
+        reviewedAt: null,
         createdAt: timestamp,
         updatedAt: timestamp,
         ...values,
@@ -766,6 +804,7 @@ assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
 assert(repositorySet.comments, 'Expected comment repository factory');
 assert(repositorySet.reusableSections, 'Expected reusable section repository factory');
+assert(repositorySet.interactiveComponents, 'Expected interactive component repository factory');
 assert(repositorySet.contentWorkflows, 'Expected content workflow repository factory');
 assert(repositorySet.teams, 'Expected team repository factory');
 assert(repositorySet.users, 'Expected user repository factory');
@@ -788,6 +827,7 @@ const teamRepository = createTeamRepository(db);
 const userRepository = createUserRepository(db);
 const settingsRepository = createSettingsRepository(db);
 const reusableSectionRepository = createReusableSectionRepository(db);
+const interactiveComponentRepository = createInteractiveComponentRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -1773,12 +1813,32 @@ const updatedSettings = (await settingsRepository.update({
     secretKeyId: 'sk_manual_contract',
   },
   storage: { provider: 's3' },
+  auth: { requireTwoFactor: true },
+  integrations: {
+    supabase: {
+      projectRef: 'repo-contract',
+      projectUrl: 'https://repo-contract.supabase.co',
+      databaseEnabled: true,
+    },
+    vercel: {
+      projectId: 'prj_repo_contract',
+      productionDomain: 'repo-contract.example.com',
+    },
+  },
   rotatePublicKey: true,
 })).item;
 assert(updatedSettings.deliveryMode === 'custom-frontend', 'Expected settings delivery mode update');
 assert(updatedSettings.apiKeys.publicKey !== 'pk_manual_contract', 'Expected public key rotation');
 assert(updatedSettings.apiKeys.secretKeyId === 'sk_manual_contract', 'Expected secret key manual update');
 assert(updatedSettings.storage?.provider === 's3', 'Expected settings storage update');
+const reloadedSettings = await settingsRepository.get();
+assert(reloadedSettings.deliveryMode === 'custom-frontend', 'Expected settings delivery mode to persist through repository readback');
+assert(reloadedSettings.apiKeys.publicKey === updatedSettings.apiKeys.publicKey, 'Expected rotated public key to persist through repository readback');
+assert(reloadedSettings.apiKeys.secretKeyId === 'sk_manual_contract', 'Expected secret key id to persist through repository readback');
+assert(reloadedSettings.storage?.provider === 's3', 'Expected storage settings to persist through repository readback');
+assert(reloadedSettings.auth?.requireTwoFactor === true, 'Expected auth settings to persist through repository readback');
+assert(reloadedSettings.integrations?.supabase?.projectRef === 'repo-contract', 'Expected Supabase metadata to persist through repository readback');
+assert(reloadedSettings.integrations?.vercel?.productionDomain === 'repo-contract.example.com', 'Expected Vercel metadata to persist through repository readback');
 
 const reusableSection = (await reusableSectionRepository.create({
   siteId: site.id,
@@ -1828,6 +1888,111 @@ const archivedReusableSection = (await reusableSectionRepository.update(site.id,
 })).item;
 assert(archivedReusableSection.status === 'archived', 'Expected reusable section update');
 assert(await reusableSectionRepository.delete(site.id, reusableSection.id), 'Expected reusable section delete');
+
+const interactiveComponent = (await interactiveComponentRepository.create({
+  siteId: site.id,
+  componentKey: 'repo.contract.figure',
+  displayName: 'Repository contract figure',
+  type: 'codeComponent',
+  status: 'disabled',
+  reviewStatus: 'draft',
+  version: '1.0.0',
+  renderMode: 'sandbox-iframe',
+  source: 'custom',
+  description: 'Repository-mode interactive component contract.',
+  allowedDataScopes: ['collections', 'page', 'blog'],
+  requiredFields: ['componentKey', 'version', 'fallback', 'runtime.sandboxUrl'],
+  controls: [{ key: 'rounds', type: 'range', min: 1, max: 8 }],
+  fallback: { required: true, supported: ['title', 'text', 'html', 'alt', 'ariaLabel'] },
+  security: {
+    adminApiAccess: true,
+    parentDomAccess: true,
+  },
+  integrity: { signed: false, signatureRequiredForCustomCode: true },
+  runtime: {
+    sandboxUrl: '/api/sites/sites_1/interactive-components/repo.contract.figure/1.0.0/sandbox',
+    bundleUrl: null,
+    iframeSandbox: 'allow-scripts allow-forms',
+    allowedPermissions: [],
+    postMessageProtocol: 'backy.interactive-component.v1',
+  },
+  ownerId: 'user_admin',
+  dependencyMetadata: {
+    packageManager: 'none',
+    dependencies: [],
+  },
+  changelog: 'Initial repository contract component.',
+  createdBy: 'user_admin',
+})).item;
+assert(interactiveComponent.id === 'interactiveComponents_1', 'Expected fake interactive component id');
+assert(interactiveComponent.security.adminApiAccess === false, 'Expected interactive component repository to force admin API access off');
+assert((await interactiveComponentRepository.getByKeyVersion(site.id, 'repo.contract.figure', '1.0.0'))?.id === interactiveComponent.id, 'Expected interactive component getByKeyVersion');
+assert((await interactiveComponentRepository.list({
+  siteId: site.id,
+  status: 'all',
+  reviewStatus: 'draft',
+  type: 'codeComponent',
+  search: 'contract',
+})).items.length === 1, 'Expected interactive component filtered list');
+const approvedInteractiveComponent = (await interactiveComponentRepository.update(site.id, 'repo.contract.figure', '1.0.0', {
+  status: 'active',
+  reviewStatus: 'approved',
+  runtime: {
+    sandboxUrl: '/api/sites/sites_1/interactive-components/repo.contract.figure/1.0.0/sandbox',
+    bundleUrl: '/uploads/sites/sites_1/interactive-components/repo.contract.figure/1.0.0/index.js',
+    iframeSandbox: 'allow-scripts allow-forms',
+    allowedPermissions: [],
+    postMessageProtocol: 'backy.interactive-component.v1',
+  },
+  integrity: {
+    signed: true,
+    signatureRequiredForCustomCode: true,
+    algorithm: 'sha256',
+    sha256: 'a'.repeat(64),
+    signature: 'sha256=repo-contract-signature',
+    signedBy: 'user_admin',
+    signedAt: '2026-05-16T00:00:00.000Z',
+    storageProvider: 'supabase',
+    storagePath: 'sites/sites_1/interactive-components/repo.contract.figure/1.0.0/index.js',
+    bundleUrl: '/uploads/sites/sites_1/interactive-components/repo.contract.figure/1.0.0/index.js',
+    sizeBytes: 64,
+    contentType: 'application/javascript',
+    filename: 'index.js',
+  },
+  dependencyMetadata: {
+    packageManager: 'none',
+    dependencies: [],
+    bundle: {
+      schemaVersion: 'backy.interactive-component-bundle.v1',
+      storageProvider: 'supabase',
+      storagePath: 'sites/sites_1/interactive-components/repo.contract.figure/1.0.0/index.js',
+      sha256: 'a'.repeat(64),
+    },
+  },
+  reviewedBy: 'user_admin',
+  reviewedAt: '2026-05-16T00:00:00.000Z',
+  updatedBy: 'user_admin',
+})).item;
+assert(approvedInteractiveComponent.status === 'active' && approvedInteractiveComponent.reviewStatus === 'approved', 'Expected interactive component approval persistence');
+assert(approvedInteractiveComponent.integrity.sha256 === 'a'.repeat(64), 'Expected interactive component integrity hash persistence');
+assert(approvedInteractiveComponent.integrity.storageProvider === 'supabase', 'Expected interactive component bundle storage provider persistence');
+assert(approvedInteractiveComponent.runtime?.bundleUrl?.includes('/uploads/sites/sites_1/interactive-components/'), 'Expected interactive component runtime bundle URL persistence');
+assert(approvedInteractiveComponent.dependencyMetadata?.bundle?.storagePath?.includes('interactive-components'), 'Expected interactive component dependency bundle metadata persistence');
+const interactiveComponentV2 = (await interactiveComponentRepository.create({
+  ...approvedInteractiveComponent,
+  id: undefined,
+  version: '2.0.0',
+  rollbackFromVersion: '1.0.0',
+  changelog: 'Second repository contract component version.',
+})).item;
+const rollbackInteractiveComponent = await interactiveComponentRepository.rollbackVersion(site.id, 'repo.contract.figure', '1.0.0', {
+  rollbackBy: 'user_admin',
+  changelog: 'Repository smoke rollback.',
+});
+assert(rollbackInteractiveComponent?.restored.version === '1.0.0', 'Expected interactive component rollback to restore requested version');
+assert(rollbackInteractiveComponent.disabledVersions.some((component) => component.version === interactiveComponentV2.version), 'Expected interactive component rollback to disable newer version');
+assert(await interactiveComponentRepository.delete(site.id, 'repo.contract.figure', '2.0.0'), 'Expected interactive component delete newer version');
+assert(await interactiveComponentRepository.delete(site.id, 'repo.contract.figure', '1.0.0'), 'Expected interactive component delete initial version');
 
 const revision = await contentWorkflowRepository.createRevision({
   siteId: site.id,
