@@ -13,6 +13,23 @@ const includesAll = (source, snippets, label) => {
   assert(missing.length === 0, `${label} missing snippets: ${missing.join(', ')}`);
 };
 
+const extractChoiceOptions = (source, inputName) => {
+  const match = source.match(new RegExp(`\\n\\s{6}${inputName}:\\n[\\s\\S]*?\\n\\s{8}options:\\n((?:\\s{10}- .+\\n)+)`));
+  assert(match, `Workflow input ${inputName} is missing a choice options block.`);
+  return match[1]
+    .trim()
+    .split('\n')
+    .map((line) => line.replace(/^\s*-\s*/, '').trim());
+};
+
+const assertChoiceOptions = (source, inputName, expected) => {
+  const actual = extractChoiceOptions(source, inputName);
+  assert(
+    JSON.stringify(actual) === JSON.stringify(expected),
+    `Workflow input ${inputName} options drifted. Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.`,
+  );
+};
+
 const certificationCi = read('./commerce-provider-certification-ci.mjs');
 const mockCi = read('./commerce-provider-smoke-ci.mjs');
 const workflow = read('../.github/workflows/commerce-provider-certification.yml');
@@ -140,6 +157,13 @@ assert(
   /subscription_provider:[\s\S]*?options:[\s\S]*?- razorpay[\s\S]*?certify_webhooks:/m.test(workflow),
   'Commerce provider certification workflow must expose razorpay as a subscription_provider option.',
 );
+
+assertChoiceOptions(workflow, 'payment_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay']);
+assertChoiceOptions(workflow, 'tax_provider', ['auto', 'stripe', 'taxjar', 'avalara', 'http']);
+assertChoiceOptions(workflow, 'shipping_provider', ['auto', 'easypost', 'shippo', 'http']);
+assertChoiceOptions(workflow, 'catalog_provider', ['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http']);
+assertChoiceOptions(workflow, 'subscription_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http']);
+assertChoiceOptions(workflow, 'webhook_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'generic']);
 
 assert(
   workflow.indexOf('- name: Run Commerce provider certification preflight') < workflow.indexOf('- name: Write non-secret Commerce certification summary') &&

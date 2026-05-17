@@ -13,6 +13,23 @@ const includesAll = (source, snippets, label) => {
   assert(missing.length === 0, `${label} missing snippets: ${missing.join(', ')}`);
 };
 
+const extractChoiceOptions = (source, inputName) => {
+  const match = source.match(new RegExp(`\\n\\s{6}${inputName}:\\n[\\s\\S]*?\\n\\s{8}options:\\n((?:\\s{10}- .+\\n)+)`));
+  assert(match, `Workflow input ${inputName} is missing a choice options block.`);
+  return match[1]
+    .trim()
+    .split('\n')
+    .map((line) => line.replace(/^\s*-\s*/, '').trim());
+};
+
+const assertChoiceOptions = (source, inputName, expected) => {
+  const actual = extractChoiceOptions(source, inputName);
+  assert(
+    JSON.stringify(actual) === JSON.stringify(expected),
+    `Workflow input ${inputName} options drifted. Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.`,
+  );
+};
+
 const workflow = read('../.github/workflows/backy-release-certification.yml');
 const doctor = read('./backy-release-certification-doctor.mjs');
 const doctorContract = read('./backy-release-certification-doctor-contract-smoke.mjs');
@@ -94,6 +111,15 @@ assert(
   /subscription_provider:[\s\S]*?options:[\s\S]*?- razorpay[\s\S]*?webhook_provider:/m.test(workflow),
   'Backy release certification workflow must expose razorpay as a subscription_provider option.',
 );
+
+assertChoiceOptions(workflow, 'storage_provider', ['auto', 'local', 's3', 'supabase']);
+assertChoiceOptions(workflow, 'notification_provider', ['auto', 'webhook', 'http-endpoint', 'resend', 'smtp', 'local-outbox']);
+assertChoiceOptions(workflow, 'payment_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay']);
+assertChoiceOptions(workflow, 'tax_provider', ['auto', 'stripe', 'taxjar', 'avalara', 'http']);
+assertChoiceOptions(workflow, 'shipping_provider', ['auto', 'easypost', 'shippo', 'http']);
+assertChoiceOptions(workflow, 'catalog_provider', ['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http']);
+assertChoiceOptions(workflow, 'subscription_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http']);
+assertChoiceOptions(workflow, 'webhook_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'generic']);
 
 assert(
     workflow.indexOf('- name: Run local release preflight contracts') < workflow.indexOf('- name: Run Forms Postgres certification') &&
