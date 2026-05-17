@@ -159,6 +159,9 @@ import type {
   GeneratedBackyOpenApiReusableSectionListEnvelope,
   GeneratedBackyOpenApiSeoDiscoveryEnvelope,
   GeneratedBackyOpenApiSeoRoute,
+  GeneratedBackyOpenApiSiteEnvelope,
+  GeneratedBackyOpenApiSiteListEnvelope,
+  GeneratedBackyOpenApiSiteSummary,
   GeneratedBackyOpenApiSiteWebhookPayload,
   GeneratedBackyRenderCommentThread,
   GeneratedBackyRenderFontAsset,
@@ -1280,6 +1283,39 @@ const manifestEnvelope = {
   data: manifest,
 } satisfies GeneratedBackyFrontendManifestEnvelope;
 
+const siteSummary = {
+  id: "site_demo",
+  slug: "demo",
+  name: "Demo Site",
+  description: "Typed public discovery site",
+  customDomain: null,
+  status: "published",
+  isPublished: true,
+  theme: {},
+} satisfies GeneratedBackyOpenApiSiteSummary;
+
+const siteEnvelope = {
+  success: true,
+  requestId: "req_site",
+  data: {
+    site: siteSummary,
+  },
+} satisfies GeneratedBackyOpenApiSiteEnvelope;
+
+const siteListEnvelope = {
+  success: true,
+  requestId: "req_sites",
+  data: {
+    sites: [siteSummary],
+    pagination: {
+      total: 1,
+      limit: 100,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies GeneratedBackyOpenApiSiteListEnvelope;
+
 const openApi = {
   openapi: "3.1.0",
   info: {
@@ -1287,6 +1323,12 @@ const openApi = {
     version: "backy-public.v1",
   },
   paths: {
+    "/api/sites": {
+      get: {
+        operationId: "discoverBackySite",
+        responses: {},
+      },
+    },
     "/api/sites/site_demo/manifest": {
       get: {
         operationId: "getBackyFrontendManifest",
@@ -1304,6 +1346,9 @@ const openApi = {
           message: "Missing",
         },
       },
+      SiteSummary: siteSummary,
+      SiteEnvelope: siteEnvelope,
+      SiteListEnvelope: siteListEnvelope,
       RouteResolveEnvelope: {
         success: true,
         requestId: "req_route",
@@ -3387,6 +3432,15 @@ const invalidCommerceCheckoutProvider = { ...commerceOrderEnvelope, data: { ...c
 
 // @ts-expect-error commerce webhooks require an event type.
 const invalidCommerceWebhookRequest = { id: "evt_missing_type", } satisfies GeneratedBackyOpenApiCommerceWebhookRequest;
+
+// @ts-expect-error public site discovery status is limited to documented content states.
+const invalidSiteSummaryStatus = { ...siteSummary, status: "hidden", } satisfies GeneratedBackyOpenApiSiteSummary;
+
+// @ts-expect-error public site discovery detail envelopes require a site object.
+const invalidSiteEnvelope = { success: true, requestId: "req_site_invalid", data: {}, } satisfies GeneratedBackyOpenApiSiteEnvelope;
+
+// @ts-expect-error public site discovery list envelopes require pagination metadata.
+const invalidSiteListEnvelope = { success: true, requestId: "req_sites_invalid", data: { sites: [siteSummary] }, } satisfies GeneratedBackyOpenApiSiteListEnvelope;
 
 // @ts-expect-error site webhook payloads must advertise the stable site-webhook schema version.
 const invalidSiteWebhookSchemaVersion = { ...siteWebhookPayload, schemaVersion: "backy.site-webhook.v0", } satisfies GeneratedBackyOpenApiSiteWebhookPayload;

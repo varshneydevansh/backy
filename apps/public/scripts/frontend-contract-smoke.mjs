@@ -16,7 +16,9 @@ const assert = (condition, message) => {
 
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
+const sdkSource = read('../../../packages/sdk-js/src/index.ts');
 const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
+const generatedSdkSmoke = read('../../../packages/sdk-js/scripts/generated-contract-types.ts');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const rootPackage = read('../../../package.json');
 const publicPackage = read('../package.json');
@@ -52,6 +54,16 @@ assert(
     generatedSdkTypes.includes('GeneratedBackyOpenApiSiteListEnvelope') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiSiteEnvelope'),
   'Generated SDK types must expose site discovery operation and envelope contracts.',
+);
+
+assert(
+  sdkSource.includes('GeneratedBackyOpenApiSiteSummary') &&
+    sdkSource.includes('GeneratedBackyOpenApiSiteListEnvelope') &&
+    sdkSource.includes('GeneratedBackyOpenApiSiteEnvelope') &&
+    generatedSdkSmoke.includes('satisfies GeneratedBackyOpenApiSiteSummary') &&
+    generatedSdkSmoke.includes('invalidSiteSummaryStatus') &&
+    generatedSdkSmoke.includes('invalidSiteListEnvelope'),
+  'SDK barrel and generated-type smoke must export and exercise public site discovery contracts.',
 );
 
 assert(
