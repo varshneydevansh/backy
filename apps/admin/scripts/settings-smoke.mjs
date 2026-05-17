@@ -1662,6 +1662,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasCommerceRuntime: document.body?.innerText?.includes('Commerce runtime') || false,
     hasInteractiveComponentRuntime: document.body?.innerText?.includes('Interactive component runtime') || false,
     hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
+    hasNotificationHttpEndpointEnv: document.body?.innerText?.includes('HTTP delivery endpoint') && document.body?.innerText?.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
+    hasNotificationSmtpAuthEnv: document.body?.innerText?.includes('SMTP username') && document.body?.innerText?.includes('SMTP_PASSWORD'),
     hasComponentRegistryEnv: document.body?.innerText?.includes('Interactive component registry') || false,
     hasComponentSandboxEnv: document.body?.innerText?.includes('Code component sandbox origin') || false,
     hasStripeApiEnv: document.body?.innerText?.includes('Payment provider API key') || false,
@@ -1697,6 +1699,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasCommerceRuntime &&
     infrastructureState.hasInteractiveComponentRuntime &&
     infrastructureState.hasCommerceWebhookSecretEnv &&
+    infrastructureState.hasNotificationHttpEndpointEnv &&
+    infrastructureState.hasNotificationSmtpAuthEnv &&
     infrastructureState.hasComponentRegistryEnv &&
     infrastructureState.hasComponentSandboxEnv &&
     infrastructureState.hasStripeApiEnv &&

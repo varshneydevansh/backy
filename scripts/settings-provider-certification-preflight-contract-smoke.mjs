@@ -236,6 +236,12 @@ includesAll(
     'Plan env sync',
     'Promote env',
     'Revoke next env',
+    'BACKY_EMAIL_DELIVERY_ENDPOINT',
+    'BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
+    'BACKY_SMTP_USER',
+    'SMTP_USER',
+    'BACKY_SMTP_PASSWORD',
+    'SMTP_PASSWORD',
   ],
   'Settings provider operation UI controls',
 );
@@ -248,6 +254,8 @@ includesAll(
     'hasSecretManagerPlan',
     'hasSecretManagerPromote',
     'hasSecretManagerRevoke',
+    'hasNotificationHttpEndpointEnv',
+    'hasNotificationSmtpAuthEnv',
   ],
   'Settings UI smoke provider operation coverage',
 );
