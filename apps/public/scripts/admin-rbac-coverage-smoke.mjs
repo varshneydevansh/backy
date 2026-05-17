@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, '..');
 const adminApiRoot = path.join(appRoot, 'src', 'app', 'api', 'admin');
+const exportedMethodPattern = /export\s+async\s+function\s+(GET|POST|PATCH|PUT|DELETE)\b/g;
 const mutatingMethodPattern = /export\s+async\s+function\s+(POST|PATCH|PUT|DELETE)\b/g;
 const adminAccessPattern = /\brequireAdminAccess\s*\(/;
 
@@ -55,26 +56,37 @@ const walkRouteFiles = (directory) => {
 };
 
 const routeFiles = walkRouteFiles(adminApiRoot);
+const checkedAdminRoutes = [];
 const checked = [];
 const skippedAuth = [];
+const readFailures = [];
 const failures = [];
 const contractFailures = [];
 
 for (const routeFile of routeFiles) {
   const source = fs.readFileSync(routeFile, 'utf8');
+  const exportedMethods = [...source.matchAll(exportedMethodPattern)].map((match) => match[1]);
   const mutatingMethods = [...source.matchAll(mutatingMethodPattern)].map((match) => match[1]);
-  if (mutatingMethods.length === 0) {
+  if (exportedMethods.length === 0) {
     continue;
   }
 
   const relativePath = path.relative(appRoot, routeFile);
   if (authLifecycleRoutePattern.test(routeFile)) {
-    skippedAuth.push({ path: relativePath, methods: mutatingMethods });
+    skippedAuth.push({ path: relativePath, methods: exportedMethods });
     continue;
   }
 
-  checked.push({ path: relativePath, methods: mutatingMethods });
-  if (!adminAccessPattern.test(source)) {
+  checkedAdminRoutes.push({ path: relativePath, methods: exportedMethods });
+  const hasAdminAccess = adminAccessPattern.test(source);
+  if (!hasAdminAccess) {
+    readFailures.push({ path: relativePath, methods: exportedMethods });
+  }
+
+  if (mutatingMethods.length > 0) {
+    checked.push({ path: relativePath, methods: mutatingMethods });
+  }
+  if (mutatingMethods.length > 0 && !hasAdminAccess) {
     failures.push({ path: relativePath, methods: mutatingMethods });
   }
 }
@@ -101,6 +113,14 @@ for (const contract of routeContractChecks) {
   }
 }
 
+if (readFailures.length > 0) {
+  console.error('Admin API routes missing requireAdminAccess:');
+  for (const failure of readFailures) {
+    console.error(`- ${failure.path}: ${failure.methods.join(', ')}`);
+  }
+  process.exit(1);
+}
+
 if (failures.length > 0) {
   console.error('Admin API mutating routes missing requireAdminAccess:');
   for (const failure of failures) {
@@ -122,6 +142,8 @@ if (contractFailures.length > 0) {
 
 console.log(JSON.stringify({
   ok: true,
+  checkedAdminRoutes: checkedAdminRoutes.length,
+  checkedAdminMethods: checkedAdminRoutes.reduce((total, route) => total + route.methods.length, 0),
   checkedMutatingAdminRoutes: checked.length,
   checkedMutatingMethods: checked.reduce((total, route) => total + route.methods.length, 0),
   skippedAuthLifecycleRoutes: skippedAuth.length,
