@@ -319,6 +319,19 @@ assert(
   'Doctor Vercel secrets mode should report token and project failures.',
 );
 
+const backyVercelAliases = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_VERCEL_TOKEN: 'backy_vercel_alias_token',
+  BACKY_VERCEL_PROJECT_ID: 'backy-vercel-project',
+  BACKY_VERCEL_TEAM_ID: 'backy-vercel-team',
+});
+assert(
+  backyVercelAliases.code === 0,
+  `Doctor Vercel secrets mode should accept BACKY_VERCEL_* aliases, got ${backyVercelAliases.code}.`,
+);
+
 const stripePayment = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_COMMERCE_CERTIFY_PAYMENT: '1',
