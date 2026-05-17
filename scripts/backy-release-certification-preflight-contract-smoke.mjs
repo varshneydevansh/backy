@@ -232,6 +232,13 @@ includesAll(
     'Magento catalog credentials',
     'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
     'Commerce webhook secret',
+    'assertProviderAliasReady',
+    'selected PayPal payment',
+    'selected Adyen subscription',
+    'selected Avalara tax',
+    'selected EasyPost shipping',
+    'selected BigCommerce catalog',
+    'selected Magento catalog',
   ],
   'Backy release certification doctor behavior contract',
 );

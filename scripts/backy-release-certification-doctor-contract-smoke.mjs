@@ -51,6 +51,18 @@ const assertMissingProvider = async ({ label, env, failure }) => {
   return json;
 };
 
+const assertProviderAliasReady = async ({ label, env }) => {
+  const result = await runDoctor({
+    BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    ...env,
+  });
+  assert(result.code === 0, `Doctor ${label} mode should accept provider-native aliases, got ${result.code}.`);
+  const json = parseJson(result, `${label} alias-ready doctor`);
+  assert(json.ok === true, `Doctor ${label} alias-ready mode should report ok=true.`);
+  return json;
+};
+
 const normal = await runDoctor({});
 assert(normal.code === 0, `Doctor default mode should exit 0, got ${normal.code}: ${normal.stderr}`);
 const normalJson = parseJson(normal, 'default doctor');
@@ -431,6 +443,150 @@ for (const { provider, failure } of [
     },
     failure,
   });
+}
+
+for (const { label, env } of [
+  {
+    label: 'selected Stripe payment',
+    env: {
+      BACKY_COMMERCE_CERTIFY_PAYMENT: '1',
+      BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: 'stripe',
+      STRIPE_SECRET_KEY: 'stripe_alias_secret',
+    },
+  },
+  {
+    label: 'selected PayPal payment',
+    env: {
+      BACKY_COMMERCE_CERTIFY_PAYMENT: '1',
+      BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: 'paypal',
+      PAYPAL_ACCESS_TOKEN: 'paypal_alias_token',
+    },
+  },
+  {
+    label: 'selected Paddle subscription',
+    env: {
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: 'paddle',
+      PADDLE_API_KEY: 'paddle_alias_key',
+    },
+  },
+  {
+    label: 'selected Square payment',
+    env: {
+      BACKY_COMMERCE_CERTIFY_PAYMENT: '1',
+      BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: 'square',
+      SQUARE_ACCESS_TOKEN: 'square_alias_token',
+    },
+  },
+  {
+    label: 'selected Adyen subscription',
+    env: {
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: 'adyen',
+      ADYEN_API_KEY: 'adyen_alias_key',
+      ADYEN_MERCHANT_ACCOUNT: 'adyen_alias_merchant',
+    },
+  },
+  {
+    label: 'selected Mollie payment',
+    env: {
+      BACKY_COMMERCE_CERTIFY_PAYMENT: '1',
+      BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: 'mollie',
+      MOLLIE_API_KEY: 'mollie_alias_key',
+    },
+  },
+  {
+    label: 'selected Razorpay subscription',
+    env: {
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: 'razorpay',
+      RAZORPAY_KEY_ID: 'razorpay_alias_key',
+      RAZORPAY_KEY_SECRET: 'razorpay_alias_secret',
+    },
+  },
+  {
+    label: 'selected TaxJar tax',
+    env: {
+      BACKY_COMMERCE_CERTIFY_TAX: '1',
+      BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'taxjar',
+      TAXJAR_API_KEY: 'taxjar_alias_key',
+    },
+  },
+  {
+    label: 'selected Avalara tax',
+    env: {
+      BACKY_COMMERCE_CERTIFY_TAX: '1',
+      BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'avalara',
+      AVALARA_ACCOUNT_ID: 'avalara_alias_account',
+      AVALARA_LICENSE_KEY: 'avalara_alias_license',
+      AVALARA_COMPANY_CODE: 'avalara_alias_company',
+    },
+  },
+  {
+    label: 'selected EasyPost shipping',
+    env: {
+      BACKY_COMMERCE_CERTIFY_SHIPPING: '1',
+      BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: 'easypost',
+      EASYPOST_API_KEY: 'easypost_alias_key',
+    },
+  },
+  {
+    label: 'selected Shippo shipping',
+    env: {
+      BACKY_COMMERCE_CERTIFY_SHIPPING: '1',
+      BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: 'shippo',
+      SHIPPO_API_KEY: 'shippo_alias_key',
+    },
+  },
+  {
+    label: 'selected Shopify catalog',
+    env: {
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'shopify',
+      SHOPIFY_ADMIN_ACCESS_TOKEN: 'shopify_alias_token',
+      SHOPIFY_STORE_DOMAIN: 'shop.example.test',
+    },
+  },
+  {
+    label: 'selected BigCommerce catalog',
+    env: {
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'bigcommerce',
+      BIGCOMMERCE_ACCESS_TOKEN: 'bigcommerce_alias_token',
+      BIGCOMMERCE_STORE_HASH: 'store_hash',
+    },
+  },
+  {
+    label: 'selected WooCommerce catalog',
+    env: {
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'woocommerce',
+      WOOCOMMERCE_CONSUMER_KEY: 'woocommerce_alias_key',
+      WOOCOMMERCE_CONSUMER_SECRET: 'woocommerce_alias_secret',
+      WOOCOMMERCE_STORE_URL: 'https://woo.example.test',
+    },
+  },
+  {
+    label: 'selected Etsy catalog',
+    env: {
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'etsy',
+      ETSY_ACCESS_TOKEN: 'etsy_alias_token',
+      ETSY_API_KEY: 'etsy_alias_key',
+      ETSY_SHOP_ID: 'etsy_shop',
+    },
+  },
+  {
+    label: 'selected Magento catalog',
+    env: {
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'magento',
+      MAGENTO_ACCESS_TOKEN: 'magento_alias_token',
+      MAGENTO_STORE_URL: 'https://magento.example.test',
+    },
+  },
+]) {
+  await assertProviderAliasReady({ label, env });
 }
 
 const commerceWebhook = await runDoctor({
