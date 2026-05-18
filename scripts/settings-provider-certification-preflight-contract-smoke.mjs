@@ -13,6 +13,11 @@ const includesAll = (source, snippets, label) => {
   assert(missing.length === 0, `${label} missing snippets: ${missing.join(', ')}`);
 };
 
+const excludesAll = (source, snippets, label) => {
+  const present = snippets.filter((snippet) => source.includes(snippet));
+  assert(present.length === 0, `${label} still contains stale snippets: ${present.join(', ')}`);
+};
+
 const extractChoiceOptions = (source, inputName) => {
   const match = source.match(new RegExp(`\\n\\s{6}${inputName}:\\n[\\s\\S]*?\\n\\s{8}options:\\n((?:\\s{10}- .+\\n)+)`));
   assert(match, `Workflow input ${inputName} is missing a choice options block.`);
@@ -362,8 +367,19 @@ includesAll(
     'full nested Commerce provider env surface',
     'Settings storage alias certification update',
     'runtime-compatible storage aliases',
+    'This closes the previously listed auth/RBAC and site-scoping blocker for the Settings row',
+    'Actual Supabase/Vercel/payment-provider connection execution, live billing/provider certification, and external provider-managed webhook certification.',
     'GITHUB_STEP_SUMMARY',
     'Real-provider certification for Supabase, Vercel, storage, notification, and commerce providers.',
+  ],
+  'Settings provider certification audit evidence',
+);
+
+excludesAll(
+  audit,
+  [
+    'Broader auth/RBAC rollout outside Settings, workspace/site scoping',
+    'deeper workspace/site UI rollout',
   ],
   'Settings provider certification audit evidence',
 );
