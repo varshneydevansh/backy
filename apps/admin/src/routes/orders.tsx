@@ -25,6 +25,7 @@ import {
   Trash2,
   Truck,
   Upload,
+  Users,
 } from 'lucide-react';
 import {
   createCollection,
@@ -4257,8 +4258,12 @@ function OrdersRoute() {
                       </div>
                     </div>
                   ) : (
-                    <div className="mt-3 rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                      Customer profiles are created by checkout intake or contact promotion, then linked by customer ID or email.
+                    <div className="mt-3">
+                      <EmptyState
+                        icon={Users}
+                        title="No customer profiles linked yet"
+                        description="Customer profiles are created by checkout intake or contact promotion, then linked by customer ID or email."
+                      />
                     </div>
                   )}
 

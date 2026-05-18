@@ -140,6 +140,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('title={group.emptyTitle}') && source.includes('description={group.emptyDescription}'), 'Orders provider analytics empty states must render through the shared EmptyState component');
   assert(source.includes('title="No order notification events"'), 'Orders notification delivery empty state must keep the shared title visible');
   assert(source.includes("title={orders.length === 0 ? 'No orders yet' : 'No orders match this view'}"), 'Orders list empty state must keep the shared dynamic title visible');
+  assert(source.includes('title="No customer profiles linked yet"'), 'Orders customer profile manager must keep the shared empty-state title visible');
+  assert(source.includes('Customer profiles are created by checkout intake or contact promotion, then linked by customer ID or email.'), 'Orders customer profile empty state must explain checkout/contact promotion linking');
   assert(source.includes('title="No line items yet"'), 'Orders line-item empty state must keep the shared title visible');
   assert(source.includes('failedResults'), 'Orders bulk workflow must collect failed per-order updates');
   assert(source.includes('updatedOrders.length === 0'), 'Orders bulk workflow must distinguish total failure from partial success');
