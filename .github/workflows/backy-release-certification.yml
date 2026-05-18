@@ -171,6 +171,7 @@ jobs:
       BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST: ${{ inputs.database_expected_host }}
       BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE: ${{ inputs.database_expected_name }}
       BACKY_DATA_MODE: ${{ inputs.certify_database && 'database' || 'demo' }}
+      BACKY_RELEASE_CERTIFY_DATABASE: ${{ inputs.certify_database && '1' || '0' }}
       BACKY_SDK_REQUIRE_DATABASE: ${{ inputs.certify_database && '1' || '0' }}
       BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1'
       BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: ${{ inputs.certify_settings_providers && '1' || '0' }}
