@@ -39,6 +39,7 @@ const workflow = read('../.github/workflows/backy-release-certification.yml');
 const doctor = read('./backy-release-certification-doctor.mjs');
 const doctorContract = read('./backy-release-certification-doctor-contract-smoke.mjs');
 const rootPackage = read('../package.json');
+const rootPackageJson = JSON.parse(rootPackage);
 const setup = read('../SETUP.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
@@ -325,6 +326,30 @@ includesAll(
     '"ci:commerce-provider-certification"',
   ],
   'Root package release certification script wiring',
+);
+
+const partialGatePreflights = rootPackageJson.scripts?.['test:partial-gate-preflights'] || '';
+includesAll(
+  partialGatePreflights,
+  [
+    'npm run test:forms-postgres-preflight-contract',
+    'npm run test:sdk-postgres-preflight-contract',
+    'npm run test:settings-provider-certification-preflight-contract',
+    'npm run test:commerce-provider-certification-preflight-contract',
+    'npm run test:release-certification-doctor-contract',
+    'npm run test:release-certification-preflight-contract',
+  ],
+  'Root aggregate Partial gate preflight script',
+);
+excludesAll(
+  partialGatePreflights,
+  [
+    'npm run ci:forms-postgres',
+    'npm run ci:sdk-postgres-smoke',
+    'npm run ci:settings-provider-certification',
+    'npm run ci:commerce-provider-certification',
+  ],
+  'Root aggregate Partial gate preflight script',
 );
 
 includesAll(
