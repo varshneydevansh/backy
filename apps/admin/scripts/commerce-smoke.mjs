@@ -872,6 +872,16 @@ const assertProductsApiContractsSource = () => {
     "Products page must render the live provider certification handoff",
   );
   assert(
+    source.includes('data-testid="products-provider-certification-download-button"') &&
+      source.includes('data-testid="products-provider-certification-copy-button"') &&
+      source.includes("providerCertificationHandoffText") &&
+      source.includes("catalogEvidence") &&
+      source.includes("endpointEvidence") &&
+      source.includes("-backy-products-provider-certification.json") &&
+      source.includes("Products provider certification handoff downloaded."),
+    "Products page must expose a focused provider certification JSON export",
+  );
+  assert(
     source.includes("providerCertification") &&
       source.includes("schemaVersion: 'backy.commerce-provider-certification-handoff.v1'") &&
       source.includes("requiredFor: 'live-commerce-provider-launch'") &&
@@ -6773,6 +6783,8 @@ const assertProductsLayout = async (client) => {
       const productAutomationText = productAutomation?.textContent || '';
       const providerReconciliation = document.querySelector('[data-testid="products-provider-reconciliation"]');
       const providerReconciliationText = providerReconciliation?.textContent || '';
+      const providerCertification = document.querySelector('[data-testid="products-provider-certification"]');
+      const providerCertificationText = providerCertification?.textContent || '';
       return {
         width: window.innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
@@ -6839,6 +6851,12 @@ const assertProductsLayout = async (client) => {
           providerReconciliationText.includes('Preview reconciliation') &&
           /\\d+ events \\/ \\d+ eligible/.test(providerReconciliationText),
         providerReconciliationText,
+        hasProviderCertificationExport: Boolean(providerCertification) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-download-button"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-copy-button"]')) &&
+          providerCertificationText.includes('Live provider certification') &&
+          providerCertificationText.includes('Download provider JSON'),
+        providerCertificationText,
         hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
           document.body?.innerText?.includes('Page and editor binding contract') &&
           document.body?.innerText?.includes('Product card blocks') &&
@@ -6886,6 +6904,7 @@ const assertProductsLayout = async (client) => {
       layout.hasSubscriptionLifecycle &&
       layout.hasProviderSync &&
       layout.hasProviderReconciliation &&
+      layout.hasProviderCertificationExport &&
       layout.hasPageBindingContract &&
       layout.hasProductPageTemplates &&
       layout.hasEditor &&

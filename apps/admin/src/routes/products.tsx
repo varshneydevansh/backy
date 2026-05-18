@@ -1398,13 +1398,36 @@ function ProductsRoute() {
     products,
   ]);
   const providerCertificationSummary = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
     status: 'external-live-provider-gate',
     requiredFor: 'live-commerce-provider-launch',
     selectedSiteId: activeSiteId,
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
     localMockGate: 'ci:commerce-provider-smoke',
     liveCertificationGate: 'ci:commerce-provider-certification',
     secretHandling: 'Provider credentials stay in server environment/configuration; product records and handoff manifests only expose non-secret readiness evidence.',
+    catalogEvidence: {
+      apiReady: productApiReady,
+      orderIntakeReady,
+      readinessScore: catalogReadiness.score,
+      missingProductFields,
+      totalProductCount,
+      loadedProductCount,
+      filteredProductCount: filteredProducts.length,
+    },
+    endpointEvidence: {
+      commerceCatalog: commerceCatalogUrl,
+      commerceOrderCreate: commerceOrderCreateUrl,
+      providerSync: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/provider-sync`,
+      productSubscriptions: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions`,
+      productSubscriptionAction: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions/{orderId}/action`,
+    },
     groups: PRODUCT_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
       family: group.family,
       providers: [...group.providers],
@@ -1412,7 +1435,22 @@ function ProductsRoute() {
       requiredInputs: [...group.requiredInputs],
       evidence: group.evidence,
     })),
-  }), [activeSiteId]);
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    catalogReadiness.score,
+    commerceCatalogUrl,
+    commerceOrderCreateUrl,
+    filteredProducts.length,
+    loadedProductCount,
+    missingProductFields,
+    orderIntakeReady,
+    productApiReady,
+    publicBaseUrl,
+    totalProductCount,
+  ]);
 
   const productHandoff = useMemo(() => ({
     site: {
@@ -1716,6 +1754,7 @@ function ProductsRoute() {
     totalProductCount,
   ]);
   const productHandoffText = useMemo(() => JSON.stringify(productHandoff, null, 2), [productHandoff]);
+  const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationSummary, null, 2), [providerCertificationSummary]);
   const productsRouteSearch = useMemo<ProductsSearch>(() => ({
     siteId: activeSiteId,
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
@@ -2754,6 +2793,26 @@ function ProductsRoute() {
     URL.revokeObjectURL(url);
     setNotice('Product handoff manifest downloaded.');
   };
+
+  const downloadProviderCertificationHandoff = () => {
+    if (isProductsBusy) return;
+    if (!canExportProducts) {
+      setError(exportPermissionTitle || 'Your account cannot export product data.');
+      return;
+    }
+
+    const blob = new Blob([providerCertificationHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-products-provider-certification.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Products provider certification handoff downloaded.');
+  };
+
   const exportProductsCsv = () => {
     if (filteredProducts.length === 0 || isProductsBusy) return;
     if (!canExportProducts) {
@@ -3403,9 +3462,33 @@ function ProductsRoute() {
                         Mock-provider automation is repeatable through {providerCertificationSummary.localMockGate}. Live checkout, quote, catalog, webhook, and subscription certification remains gated on configured provider accounts through {providerCertificationSummary.liveCertificationGate}.
                       </p>
                     </div>
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                      External credentials
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copyText(providerCertificationHandoffText, 'Products provider certification handoff')}
+                        disabled={isProductsAccessBusy || !canExportProducts}
+                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="products-provider-certification-copy-button"
+                      >
+                        Copy provider handoff
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={downloadProviderCertificationHandoff}
+                        disabled={isProductsAccessBusy || !canExportProducts}
+                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        iconStart={<Download className="size-4" />}
+                        data-testid="products-provider-certification-download-button"
+                      >
+                        Download provider JSON
+                      </Button>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        External credentials
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
