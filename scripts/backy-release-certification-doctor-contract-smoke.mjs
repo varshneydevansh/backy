@@ -117,6 +117,23 @@ const missingDatabaseJson = parseJson(missingDatabase, 'missing database doctor'
 assert(missingDatabaseJson.ok === false, 'Doctor required database mode should report ok=false.');
 assert(missingDatabaseJson.failures.includes('database URL'), 'Doctor required database mode should report database URL failure.');
 
+const invalidDatabaseUrl = await runDoctor({
+  BACKY_RELEASE_CERTIFY_DATABASE: '1',
+  BACKY_DATABASE_URL: 'not-a-postgres-url',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(invalidDatabaseUrl.code === 1, `Doctor required database mode should exit 1 with invalid DB URL, got ${invalidDatabaseUrl.code}.`);
+const invalidDatabaseUrlJson = parseJson(invalidDatabaseUrl, 'invalid database URL doctor');
+assert(invalidDatabaseUrlJson.ok === false, 'Doctor invalid database URL mode should report ok=false.');
+assert(
+  invalidDatabaseUrlJson.failures.includes('database URL format'),
+  'Doctor required database mode should report database URL format failure.',
+);
+assert(
+  invalidDatabaseUrlJson.database.urlValid === false,
+  'Doctor required database mode should expose urlValid=false for malformed database URLs.',
+);
+
 const missingSettingsGroup = await runDoctor({
   BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',

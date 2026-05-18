@@ -9,6 +9,13 @@ const hasCompleteAlternative = (fields) => fields.every((names) => hasAny(names)
 const selected = (name, fallback = 'auto') => value(name).toLowerCase() || fallback;
 const requested = (name, fallback = false) => (env[name] === undefined ? fallback : env[name] === '1' || env[name] === 'true');
 const isHttpUrl = (name) => /^https?:\/\//i.test(value(name));
+const isPostgresUrl = (url) => {
+  try {
+    return ['postgres:', 'postgresql:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+};
 
 const check = (label, names, enabled = true) => {
   const missing = enabled ? names.filter((name) => !has(name)) : [];
@@ -103,6 +110,7 @@ const requestWebhooks = requested('BACKY_COMMERCE_CERTIFY_WEBHOOKS', false);
 const database = {
   requested: requested('BACKY_RELEASE_CERTIFY_DATABASE', requested('BACKY_SDK_REQUIRE_DATABASE', false)),
   ready: hasAny(['BACKY_DATABASE_URL', 'DATABASE_URL']),
+  urlValid: hasAny(['BACKY_DATABASE_URL', 'DATABASE_URL']) && isPostgresUrl(value('BACKY_DATABASE_URL') || value('DATABASE_URL')),
   missingAnyOf: hasAny(['BACKY_DATABASE_URL', 'DATABASE_URL']) ? [] : ['BACKY_DATABASE_URL', 'DATABASE_URL'],
   targetGuard: {
     expectedHostConfigured: has('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'),
@@ -264,6 +272,7 @@ const collectFailures = (group) => group.checks
 
 const failures = [
   ...(database.requested && !database.ready ? ['database URL'] : []),
+  ...(database.requested && database.ready && !database.urlValid ? ['database URL format'] : []),
   ...(settings.required && settings.target.externalBaseUrlConfigured && !isHttpUrl('BACKY_SETTINGS_CERTIFICATION_BASE_URL') ? ['Settings external base URL'] : []),
   ...(settings.required && ![
     settings.requested.storage,

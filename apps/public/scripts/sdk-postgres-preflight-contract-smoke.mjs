@@ -238,6 +238,8 @@ assert(
     sdkPostgresWorkflow.includes('database_expected_name:') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
+    sdkSmokeCi.includes('assertPostgresDatabaseUrl') &&
+    sdkSmokeCi.includes('valid postgres:// or postgresql:// URL for the SDK database smoke') &&
     sdkPostgresWorkflow.includes("BACKY_RELEASE_CERTIFY_DATABASE: '1'") &&
     sdkPostgresWorkflow.includes("BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1'") &&
     sdkPostgresWorkflow.includes('Run non-secret database certification doctor') &&
@@ -260,6 +262,12 @@ assert(
     sdkPostgresWorkflow.indexOf('Write non-secret SDK database summary') < sdkPostgresWorkflow.indexOf('Require disposable Postgres or Supabase database URL') &&
     sdkPostgresWorkflow.indexOf('Run SDK Postgres preflight contract') < sdkPostgresWorkflow.indexOf('Run SDK Postgres/Supabase smoke'),
   'SDK Postgres root script and manual workflow must run the preflight contract and require disposable database confirmation before the DB-backed smoke.',
+);
+
+assert(
+  sdkSmokeCi.indexOf('assertPostgresDatabaseUrl();') < sdkSmokeCi.indexOf('assertExpectedDatabaseTarget();') &&
+    sdkSmokeCi.indexOf('assertExpectedDatabaseTarget();') < sdkSmokeCi.indexOf('await assertSdkDatabaseSchemaReady();'),
+  'SDK Postgres smoke must verify database URL format and expected database host/name before schema checks or runtime startup.',
 );
 
 assert(

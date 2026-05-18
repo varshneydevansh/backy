@@ -40,6 +40,18 @@ if (!databaseUrl) {
   throw new Error('BACKY_DATABASE_URL or DATABASE_URL is required for the forms Postgres smoke.');
 }
 
+const assertPostgresDatabaseUrl = () => {
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error('BACKY_DATABASE_URL or DATABASE_URL must be a valid postgres:// or postgresql:// URL for the forms Postgres smoke.');
+  }
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('BACKY_DATABASE_URL or DATABASE_URL must be a valid postgres:// or postgresql:// URL for the forms Postgres smoke.');
+  }
+};
+
 const assertExpectedDatabaseTarget = () => {
   const expectedHost = (process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST || '').trim();
   const expectedDatabase = (process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE || '').trim();
@@ -62,6 +74,7 @@ const assertExpectedDatabaseTarget = () => {
   }
 };
 
+assertPostgresDatabaseUrl();
 assertExpectedDatabaseTarget();
 
 const requiredSchema = {

@@ -27,6 +27,19 @@ if (requireDatabaseMode && !configuredDatabaseUrl) {
   throw new Error('BACKY_SDK_REQUIRE_DATABASE=1 requires BACKY_DATABASE_URL or DATABASE_URL for the SDK database smoke.');
 }
 
+const assertPostgresDatabaseUrl = () => {
+  if (!requireDatabaseMode) return;
+  let parsed;
+  try {
+    parsed = new URL(configuredDatabaseUrl);
+  } catch {
+    throw new Error('BACKY_DATABASE_URL or DATABASE_URL must be a valid postgres:// or postgresql:// URL for the SDK database smoke.');
+  }
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('BACKY_DATABASE_URL or DATABASE_URL must be a valid postgres:// or postgresql:// URL for the SDK database smoke.');
+  }
+};
+
 const listen = (server, port = 0) => new Promise((resolve) => {
   server.listen(port, '127.0.0.1', () => resolve(server.address()));
 });
@@ -46,6 +59,8 @@ const baseUrl = (externalBaseUrl || `http://127.0.0.1:${await freePort()}`).repl
 const localServerPort = new URL(baseUrl).port;
 const shouldStartLocalServer = !externalBaseUrl;
 const localNextDistDir = '.next-sdk-smoke';
+
+assertPostgresDatabaseUrl();
 
 const assertExpectedDatabaseTarget = () => {
   if (!requireDatabaseMode) return;

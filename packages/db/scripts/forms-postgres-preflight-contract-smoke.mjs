@@ -149,6 +149,8 @@ const constraints = [
 ];
 
 const destructiveSafeWorkflowEvidence = [
+  'assertPostgresDatabaseUrl',
+  'valid postgres:// or postgresql:// URL for the forms Postgres smoke',
   'assertExpectedDatabaseTarget',
   'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
   'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
@@ -301,8 +303,9 @@ if (workflow) {
 }
 
 assert(
+  smoke.indexOf('assertPostgresDatabaseUrl();') < smoke.indexOf('assertExpectedDatabaseTarget();') &&
   smoke.indexOf('assertExpectedDatabaseTarget();') < smoke.indexOf('await assertPostgresSchemaReady();'),
-  'Forms Postgres smoke must verify expected database host/name before schema checks or repository writes.',
+  'Forms Postgres smoke must verify database URL format and expected database host/name before schema checks or repository writes.',
 );
 
 includesEvery(rootPackage, [
