@@ -2269,6 +2269,22 @@ try {
     assert(pagePreviewAuditEntry?.metadata?.tokenStored === false, `${pagePreviewAudit.url} should record that preview token is redacted`);
     assert(!JSON.stringify(pagePreviewAuditEntry?.metadata || {}).includes(pagePreview.json.data.previewToken), `${pagePreviewAudit.url} leaked preview token into audit metadata`);
 
+    const pagePreviewUseRequestId = `contract-page-preview-use-${unique}`;
+    const pagePreviewUse = await request(pagePreview.json.data.pageApiUrl, {
+      headers: {
+        'x-request-id': pagePreviewUseRequestId,
+      },
+    });
+    assert(pagePreviewUse.response.status === 200, `${pagePreviewUse.url} expected tokenized page API response`);
+    const pagePreviewUseAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=page&entityId=${createdPageId}&action=previewToken.use&requestId=${pagePreviewUseRequestId}`);
+    assert(pagePreviewUseAudit.response.status === 200, `${pagePreviewUseAudit.url} expected preview use audit readback`);
+    const pagePreviewUseAuditEntry = pagePreviewUseAudit.json?.data?.logs?.[0];
+    assert(pagePreviewUseAuditEntry?.action === 'previewToken.use', `${pagePreviewUseAudit.url} missing preview use audit action`);
+    assert(pagePreviewUseAuditEntry?.actorId === 'public-preview', `${pagePreviewUseAudit.url} missing public preview actor`);
+    assert(pagePreviewUseAuditEntry?.metadata?.surface === 'page-api', `${pagePreviewUseAudit.url} missing page-api preview surface`);
+    assert(pagePreviewUseAuditEntry?.metadata?.tokenStored === false, `${pagePreviewUseAudit.url} should record that preview token use is redacted`);
+    assert(!JSON.stringify(pagePreviewUseAuditEntry?.metadata || {}).includes(pagePreview.json.data.previewToken), `${pagePreviewUseAudit.url} leaked preview token into use audit metadata`);
+
     const canonicalConflictPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
       headers: {
@@ -3998,6 +4014,22 @@ try {
     assert(typeof previewAuditEntry?.metadata?.createdBy === 'string' && previewAuditEntry.metadata.createdBy.length > 0, `${previewAudit.url} missing preview actor binding`);
     assert(previewAuditEntry?.metadata?.tokenStored === false, `${previewAudit.url} should record that preview token is redacted`);
     assert(!JSON.stringify(previewAuditEntry?.metadata || {}).includes(preview.json.data.previewToken), `${previewAudit.url} leaked preview token into audit metadata`);
+
+    const previewUseRequestId = `contract-blog-preview-use-${unique}`;
+    const previewUse = await request(preview.json.data.postApiUrl, {
+      headers: {
+        'x-request-id': previewUseRequestId,
+      },
+    });
+    assert(previewUse.response.status === 200, `${previewUse.url} expected tokenized post API response`);
+    const previewUseAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=post&entityId=${createdPostId}&action=previewToken.use&requestId=${previewUseRequestId}`);
+    assert(previewUseAudit.response.status === 200, `${previewUseAudit.url} expected preview use audit readback`);
+    const previewUseAuditEntry = previewUseAudit.json?.data?.logs?.[0];
+    assert(previewUseAuditEntry?.action === 'previewToken.use', `${previewUseAudit.url} missing preview use audit action`);
+    assert(previewUseAuditEntry?.actorId === 'public-preview', `${previewUseAudit.url} missing public preview actor`);
+    assert(previewUseAuditEntry?.metadata?.surface === 'blog-api', `${previewUseAudit.url} missing blog-api preview surface`);
+    assert(previewUseAuditEntry?.metadata?.tokenStored === false, `${previewUseAudit.url} should record that preview token use is redacted`);
+    assert(!JSON.stringify(previewUseAuditEntry?.metadata || {}).includes(preview.json.data.previewToken), `${previewUseAudit.url} leaked preview token into use audit metadata`);
 
     const invalidPost = await request(`/api/admin/sites/${createdSiteId}/blog`, {
       method: 'POST',

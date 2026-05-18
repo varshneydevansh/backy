@@ -138,6 +138,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Pages created from a connected frontend design template expose raw `meta.frontendDesign*` provenance plus a normalized `frontendDesign` summary (`templateId`, `templateName`, `routePattern`, `source`, `chrome`, `tokens`, `customCss`, `bindingHints`) in public page list/detail responses and manifest page summaries.
   - Must return only published content.
   - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
+  - Successful preview-token reads record a tokenless `previewToken.use` audit event with `actorId: "public-preview"`, target, surface, path/slug metadata, and `tokenStored: false`.
 
 - `POST /api/admin/sites/:siteId/pages`
   - Accepts top-level `frontendDesignTemplateId` or `designTemplateId` for connected frontend contracts.
@@ -158,6 +159,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Collection dynamic list paths resolve after normal pages and blog posts using `/:collectionSlug` by default and return a generated `dynamicList` content document with a hydrated collection dataset. Collection dynamic item paths use `/:collectionSlug/:recordSlug` by default and return a generated `dynamicItem` content document backed by the selected public record.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
   - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page or post.
+  - Successful page/post preview-token render reads record tokenless `previewToken.use` audit metadata without storing the raw token.
 
 - `GET /api/sites/:siteId/blog`
   - Blog posts created from a connected frontend design template expose raw `meta.frontendDesign*` provenance plus a normalized `frontendDesign` summary (`templateId`, `templateName`, `routePattern`, `source`, `chrome`, `tokens`, `customCss`, `bindingHints`) in public blog list/detail responses and manifest blog summaries.
@@ -186,6 +188,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Published post detail by slug.
   - Current repository route is `GET /api/sites/:siteId/blog?slug=:slug`; response uses `{ success, requestId, data: { post } }` while preserving legacy top-level `post`.
   - Draft post detail access requires `previewToken` created by the admin preview endpoint for that exact post.
+  - Successful preview-token reads record a tokenless `previewToken.use` audit event with `actorId: "public-preview"`, target, surface, path/slug metadata, and `tokenStored: false`.
 
 - `GET /api/sites/:siteId/blog/categories`
 - `GET /api/sites/:siteId/blog/tags`

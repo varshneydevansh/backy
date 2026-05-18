@@ -33,6 +33,7 @@ import { normalizeRoutePath } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
+import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 
 interface RouteParams {
   params: Promise<{
@@ -408,6 +409,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
         }
 
+        if (canPreview) {
+          await recordPreviewTokenUse({
+            repositories,
+            siteId: site.id,
+            targetType: 'post',
+            targetId: post.id,
+            requestId,
+            surface: 'render-api',
+            path,
+            slug: post.slug,
+          });
+        }
+
         return publicContractJson(
           await withRepositoryNavigation(
             buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), { requestId, path, dataSource }),
@@ -432,6 +446,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
         : false;
       if (page && (isPubliclyReadable(page) || canPreviewPage)) {
+        if (canPreviewPage) {
+          await recordPreviewTokenUse({
+            repositories,
+            siteId: site.id,
+            targetType: 'page',
+            targetId: page.id,
+            requestId,
+            surface: 'render-api',
+            path,
+            slug: page.slug,
+          });
+        }
+
         return publicContractJson(
           await withRepositoryNavigation(
             buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), { requestId, path, dataSource }),
@@ -553,6 +580,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
       }
 
+      if (canPreview) {
+        await recordPreviewTokenUse({
+          siteId: site.id,
+          targetType: 'post',
+          targetId: post.id,
+          requestId,
+          surface: 'render-api',
+          path,
+          slug: post.slug,
+        });
+      }
+
       return publicContractJson(
         buildPublicBlogPostRenderPayload(site, post, { requestId, path }),
         {
@@ -576,6 +615,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ? previewPage
       : getPageByPath(site.id, path);
     if (page) {
+      if (canPreview) {
+        await recordPreviewTokenUse({
+          siteId: site.id,
+          targetType: 'page',
+          targetId: page.id,
+          requestId,
+          surface: 'render-api',
+          path,
+          slug: page.slug,
+        });
+      }
+
       return publicContractJson(
         buildPublicRenderPayload(site, page, { requestId, path }),
         {

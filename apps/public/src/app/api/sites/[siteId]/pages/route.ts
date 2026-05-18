@@ -14,6 +14,7 @@ import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { getHostedRouteUrl } from '@/lib/seoDiscovery';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
+import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 
 interface RouteParams {
     params: Promise<{
@@ -211,6 +212,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
                 }
 
+                if (canPreview) {
+                    await recordPreviewTokenUse({
+                        repositories,
+                        siteId: site.id,
+                        targetType: 'page',
+                        targetId: page.id,
+                        requestId,
+                        surface: 'page-api',
+                        path,
+                        slug: page.slug,
+                    });
+                }
+
                 const responsePage = publicPageFromRepositoryPage(page, site, origin);
                 const cacheRevision = previewToken
                     ? undefined
@@ -304,6 +318,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
             if (!page) {
                 return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+            }
+
+            if (canPreview) {
+                await recordPreviewTokenUse({
+                    siteId: site.id,
+                    targetType: 'page',
+                    targetId: page.id,
+                    requestId,
+                    surface: 'page-api',
+                    path,
+                    slug: page.slug,
+                });
             }
 
             const responsePage = publicPage(page, site, origin);

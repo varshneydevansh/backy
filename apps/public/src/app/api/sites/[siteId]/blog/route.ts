@@ -12,6 +12,7 @@ import type { BackyPost } from '@backy-cms/core';
 import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 
 interface RouteParams {
     params: Promise<{
@@ -144,6 +145,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
                 }
 
+                if (canPreview) {
+                    await recordPreviewTokenUse({
+                        repositories,
+                        siteId: site.id,
+                        targetType: 'post',
+                        targetId: post.id,
+                        requestId,
+                        surface: 'blog-api',
+                        path: `/blog/${post.slug}`,
+                        slug: post.slug,
+                    });
+                }
+
                 const responsePost = publicPostFromRepositoryPost(post);
                 const cacheRevision = previewToken
                     ? undefined
@@ -260,6 +274,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
             if (!post) {
                 return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+            }
+
+            if (canPreview) {
+                await recordPreviewTokenUse({
+                    siteId: site.id,
+                    targetType: 'post',
+                    targetId: post.id,
+                    requestId,
+                    surface: 'blog-api',
+                    path: `/blog/${post.slug}`,
+                    slug: post.slug,
+                });
             }
 
             const responsePost = publicPost(post);
