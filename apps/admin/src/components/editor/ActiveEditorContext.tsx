@@ -1325,6 +1325,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const currentEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    if (!currentEntry) {
+      return false;
+    }
     const nextRowSpan = rowSpan - 1;
     const targetRowIndex = context.rowIndex + nextRowSpan;
     if (targetRowIndex >= rows.length) {
@@ -1352,7 +1357,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     const targetRowPath = [...context.tablePath, targetRowIndex];
     const targetRowNode = Node.get(editor as any, targetRowPath) as any;
     const targetRowChildren = Array.isArray(targetRowNode?.children) ? targetRowNode.children : [];
-    const targetCellIndex = Math.max(0, Math.min(context.cellIndex, targetRowChildren.length));
+    const targetRowEntries = tableGrid.entries.filter((entry) => entry.rowStart === targetRowIndex);
+    const nextEntry = targetRowEntries.find((entry) => entry.columnStart >= currentEntry.columnStart);
+    const targetCellIndex = Math.max(0, Math.min(
+      nextEntry ? nextEntry.path[nextEntry.path.length - 1] : targetRowChildren.length,
+      targetRowChildren.length,
+    ));
     Transforms.insertNodes(editor as any, splitCell, { at: [...targetRowPath, targetCellIndex] });
 
     try {
@@ -1361,7 +1371,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after table cell split.
     }
     return true;
-  }, [createEmptyTableCellNode, getSelectedTableContext]);
+  }, [buildTableCellGrid, createEmptyTableCellNode, getSelectedTableContext, isSamePath]);
 
   const setSelectedTableCellBackgroundColor = useCallback((editor: PlateEditor, color: string) => {
     const context = getSelectedTableContext(editor);
