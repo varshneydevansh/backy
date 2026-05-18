@@ -1735,9 +1735,11 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
   };
 };
 
-const assertStarterTemplatePublicResponsiveRender = async (parentClient, pageId, testCase) => {
+const assertPublicResponsivePageRender = async (parentClient, pageId, testCase) => {
   const preview = await requestPagePreview(pageId);
   const results = {};
+  const renderLabel = testCase.label || testCase.template;
+  const screenshotName = renderLabel.replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
 
   for (const viewport of PUBLIC_TEMPLATE_RESPONSIVE_VIEWPORTS) {
     let publicClient = null;
@@ -1803,21 +1805,21 @@ const assertStarterTemplatePublicResponsiveRender = async (parentClient, pageId,
         }
 
         if (attempt === 99) {
-          throw new Error(`Created ${testCase.template} public ${viewport.key} render did not reach a complete responsive state: ${JSON.stringify(renderState)}`);
+          throw new Error(`Created ${renderLabel} public ${viewport.key} render did not reach a complete responsive state: ${JSON.stringify(renderState)}`);
         }
 
         await sleep(200);
       }
 
-      assert(renderState.breakpoint === viewport.expectedBreakpoint, `Created ${testCase.template} public ${viewport.key} breakpoint mismatch: ${JSON.stringify(renderState)}`);
-      assert(renderState.renderScale > 0 && renderState.renderScale <= 1, `Created ${testCase.template} public ${viewport.key} scale mismatch: ${JSON.stringify(renderState)}`);
-      assert(renderState.horizontalOverflow <= 4, `Created ${testCase.template} public ${viewport.key} route has horizontal overflow: ${JSON.stringify(renderState)}`);
+      assert(renderState.breakpoint === viewport.expectedBreakpoint, `Created ${renderLabel} public ${viewport.key} breakpoint mismatch: ${JSON.stringify(renderState)}`);
+      assert(renderState.renderScale > 0 && renderState.renderScale <= 1, `Created ${renderLabel} public ${viewport.key} scale mismatch: ${JSON.stringify(renderState)}`);
+      assert(renderState.horizontalOverflow <= 4, `Created ${renderLabel} public ${viewport.key} route has horizontal overflow: ${JSON.stringify(renderState)}`);
 
-      const screenshotPath = path.join(EDITOR_TEMPLATE_SCREENSHOT_DIR, `backy-page-create-public-${testCase.template}-${viewport.key}.png`);
+      const screenshotPath = path.join(EDITOR_TEMPLATE_SCREENSHOT_DIR, `backy-page-create-public-${screenshotName}-${viewport.key}.png`);
       const screenshot = await captureScreenshotData(publicClient, screenshotPath);
       const screenshotMetrics = await assertScreenshotPixelThresholds(
         publicClient,
-        `Created ${testCase.template} public ${viewport.key} render`,
+        `Created ${renderLabel} public ${viewport.key} render`,
         screenshot.data,
         getPublicTemplateScreenshotThresholds(testCase.template),
         { x: 0, y: 0, width: viewport.width, height: viewport.height },
@@ -1850,6 +1852,32 @@ const assertStarterTemplatePublicResponsiveRender = async (parentClient, pageId,
   };
 };
 
+const datasetResponsiveRenderCase = (collection, mode) => {
+  const requiredElementIds = mode === 'list'
+    ? [
+        `collection-${collection.id}-list-section`,
+        `collection-${collection.id}-list-route`,
+        `collection-${collection.id}-list-title`,
+        `collection-${collection.id}-list-intro`,
+        `collection-${collection.id}-repeater`,
+      ]
+    : [
+        `collection-${collection.id}-detail-section`,
+        `collection-${collection.id}-route-label`,
+        `collection-${collection.id}-detail-title`,
+        `collection-${collection.id}-detail-summary`,
+        `collection-${collection.id}-detail-card`,
+        `collection-${collection.id}-detail-fields`,
+      ];
+
+  return {
+    template: `dataset-${mode}`,
+    label: `dataset ${mode} page`,
+    minTotalElementCount: mode === 'list' ? 14 : 15,
+    requiredElementIds,
+  };
+};
+
 const createStarterTemplateBackends = async (client, createdPageIds) => {
   const summaries = [];
 
@@ -1861,7 +1889,7 @@ const createStarterTemplateBackends = async (client, createdPageIds) => {
     createdPageIds.push(pageId);
     const editorRender = await assertStarterTemplateEditorRender(client, testCase);
     const content = await assertStarterTemplatePageContent(pageId, testCase, slug);
-    const publicResponsiveRender = await assertStarterTemplatePublicResponsiveRender(client, pageId, testCase);
+    const publicResponsiveRender = await assertPublicResponsivePageRender(client, pageId, testCase);
 
     summaries.push({
       template: testCase.template,
@@ -1902,11 +1930,17 @@ const createDatasetPageBackend = async (client, createdPageIds, collection, mode
   const slug = routeState.state.slug;
   const title = routeState.state.title;
   const content = await assertDatasetPageContent(pageId, collection, mode, slug, title);
+  const publicResponsiveRender = await assertPublicResponsivePageRender(
+    client,
+    pageId,
+    datasetResponsiveRenderCase(collection, mode),
+  );
 
   return {
     routeState: routeState.state,
     editState,
     pageId,
+    publicResponsiveRender,
     content,
   };
 };
