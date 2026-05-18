@@ -26,6 +26,10 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('validateSearch') && source.includes('siteMatchesIdentifier(site, requestedSiteId)'), 'Sites route must allow selecting the API handoff site from the siteId search param');
   assert(source.includes('title="No site audit events yet"'), 'Sites audit panel must keep the empty audit title visible');
   assert(source.includes('Site creation, status changes, domain updates, quota refreshes, and delivery handoffs will appear here.'), 'Sites audit empty state must explain which actions populate activity');
+  assert(source.includes('title="No deploy handoffs yet"'), 'Sites deploy history must keep the empty handoff title visible');
+  assert(source.includes('Record a preview, production promotion, or rollback to keep Vercel delivery history attached to this site.'), 'Sites deploy history empty state must explain how to populate handoff history');
+  assert(source.includes('title="No billing or quota events yet"'), 'Sites billing history must keep the empty quota title visible');
+  assert(source.includes('Change plans or refresh usage to build a quota history for this workspace.'), 'Sites billing history empty state must explain how to populate quota history');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

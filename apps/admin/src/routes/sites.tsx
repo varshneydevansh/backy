@@ -1852,9 +1852,11 @@ function SitesListView() {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent runs</h4>
                   <div className="mt-2 grid gap-2">
                     {(selectedVercelDeployment.history || []).length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-center text-xs text-muted-foreground">
-                        No deploy handoff recorded yet.
-                      </div>
+                      <EmptyState
+                        icon={Server}
+                        title="No deploy handoffs yet"
+                        description="Record a preview, production promotion, or rollback to keep Vercel delivery history attached to this site."
+                      />
                     ) : (
                       selectedVercelDeployment.history?.slice(0, 4).map((run) => (
                         <div key={run.id} className="rounded-lg border border-border bg-card px-3 py-2">
@@ -1989,9 +1991,11 @@ function SitesListView() {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent quota events</h4>
                   <div className="mt-2 grid gap-2">
                     {(selectedBillingQuota.history || []).length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-center text-xs text-muted-foreground">
-                        No billing or quota event recorded yet.
-                      </div>
+                      <EmptyState
+                        icon={CreditCard}
+                        title="No billing or quota events yet"
+                        description="Change plans or refresh usage to build a quota history for this workspace."
+                      />
                     ) : (
                       selectedBillingQuota.history?.slice(0, 4).map((event) => (
                         <div key={event.id} className="rounded-lg border border-border bg-card px-3 py-2">
