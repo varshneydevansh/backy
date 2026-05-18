@@ -138,6 +138,17 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
+    source.includes('data-testid="orders-provider-certification-download-button"') &&
+      source.includes('data-testid="orders-provider-certification-copy-button"') &&
+      source.includes('providerCertificationHandoffText') &&
+      source.includes('orderEvidence') &&
+      source.includes('endpointEvidence') &&
+      source.includes('providerReadinessEvidence') &&
+      source.includes('-backy-orders-provider-certification.json') &&
+      source.includes('Orders provider certification handoff downloaded.'),
+    'Orders page must expose a focused provider certification JSON export',
+  );
+  assert(
     source.includes('providerCertification') &&
       source.includes("schemaVersion: 'backy.commerce-provider-certification-handoff.v1'") &&
       source.includes("requiredFor: 'live-commerce-provider-launch'") &&
@@ -1918,6 +1929,11 @@ const assertOrdersLayout = async (client) => {
         document.body?.innerText?.includes('Carrier labels/tracking') &&
         document.body?.innerText?.includes('Fulfillment dispatch') &&
         document.body?.innerText?.includes('Webhook settlement'),
+      providerCertificationExport: Boolean(document.querySelector('[data-testid="orders-provider-certification"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')) &&
+        document.body?.innerText?.includes('Live provider certification') &&
+        document.body?.innerText?.includes('Download provider JSON'),
       cronReadiness: Boolean(document.querySelector('[data-testid="orders-cron-readiness"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
@@ -1936,7 +1952,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);

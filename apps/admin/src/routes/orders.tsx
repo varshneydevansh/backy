@@ -1230,13 +1230,49 @@ function OrdersRoute() {
   }, [commerceSettings, cronReadiness?.ready, runtimeCommerce]);
   const providerReadinessReadyCount = providerReadinessChecks.filter((check) => check.ready).length;
   const providerCertificationSummary = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
     status: 'external-live-provider-gate',
     requiredFor: 'live-commerce-provider-launch',
     selectedSiteId: activeSiteId,
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
     localMockGate: 'ci:commerce-provider-smoke',
     liveCertificationGate: 'ci:commerce-provider-certification',
     secretHandling: 'Provider credentials stay in server environment/configuration; order records and handoff manifests only expose non-secret readiness evidence.',
+    orderEvidence: {
+      apiReady: ordersApiReady,
+      readinessScore: orderReadiness.score,
+      missingOrderFields,
+      totalOrderCount,
+      loadedOrderCount,
+      filteredOrderCount: filteredOrders.length,
+      metrics,
+    },
+    endpointEvidence: {
+      adminOrders: adminOrdersApiUrl,
+      quote: `${adminOrdersApiUrl}/{orderId}/quote`,
+      shippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
+      fulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
+      tracking: `${adminOrdersApiUrl}/{orderId}/tracking`,
+      providerRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
+      commerceWebhook: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/webhook`,
+      siteReconciliation: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/reconcile`,
+      platformReconciliation: `${publicBaseUrl}/api/admin/commerce/reconcile`,
+      reconciliationReadiness: `${publicBaseUrl}/api/admin/commerce/reconcile/readiness`,
+      checkoutIntake: publicOrderIntakeUrl,
+    },
+    providerReadinessEvidence: {
+      readyCount: providerReadinessReadyCount,
+      total: providerReadinessChecks.length,
+      runtimeCommerce: runtimeCommerce || null,
+      providerAnalytics: orderAnalytics?.providerOperations || null,
+      checks: providerReadinessChecks,
+    },
     groups: ORDER_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
       family: group.family,
       providers: [...group.providers],
@@ -1244,7 +1280,26 @@ function OrdersRoute() {
       requiredInputs: [...group.requiredInputs],
       evidence: group.evidence,
     })),
-  }), [activeSiteId]);
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    adminOrdersApiUrl,
+    filteredOrders.length,
+    loadedOrderCount,
+    metrics,
+    missingOrderFields,
+    orderAnalytics?.providerOperations,
+    orderReadiness.score,
+    ordersApiReady,
+    providerReadinessChecks,
+    providerReadinessReadyCount,
+    publicBaseUrl,
+    publicOrderIntakeUrl,
+    runtimeCommerce,
+    totalOrderCount,
+  ]);
   const orderHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1495,6 +1550,7 @@ function OrdersRoute() {
     totalOrderCount,
   ]);
   const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
+  const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationSummary, null, 2), [providerCertificationSummary]);
   const ordersRouteSearch = useMemo<OrdersSearch>(() => ({
     siteId: activeSiteId,
     ...(filter !== 'all' ? { workflow: filter } : {}),
@@ -2702,6 +2758,22 @@ function OrdersRoute() {
       setNotice(orderHandoffText);
     }
   };
+
+  const copyProviderCertificationHandoff = async () => {
+    if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(providerCertificationHandoffText);
+      setNotice('Orders provider certification handoff copied.');
+    } catch {
+      setNotice(providerCertificationHandoffText);
+    }
+  };
+
   const downloadOrderHandoff = () => {
     if (isOrdersBusy) return;
     if (!canExportOrders) {
@@ -2720,6 +2792,26 @@ function OrdersRoute() {
     URL.revokeObjectURL(url);
     setNotice('Order handoff manifest downloaded.');
   };
+
+  const downloadProviderCertificationHandoff = () => {
+    if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
+
+    const blob = new Blob([providerCertificationHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-orders-provider-certification.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Orders provider certification handoff downloaded.');
+  };
+
   const exportOrdersCsv = () => {
     if (isOrdersBusy) return;
     if (filteredOrders.length === 0) return;
@@ -3196,9 +3288,33 @@ function OrdersRoute() {
                         Mock-provider operations are covered by {providerCertificationSummary.localMockGate}. Live order execution remains gated on provider accounts, webhook secrets, carrier credentials, and warehouse endpoints through {providerCertificationSummary.liveCertificationGate}.
                       </p>
                     </div>
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                      External credentials
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copyProviderCertificationHandoff()}
+                        disabled={isOrdersAccessBusy || !canExportOrders}
+                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="orders-provider-certification-copy-button"
+                      >
+                        Copy provider handoff
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={downloadProviderCertificationHandoff}
+                        disabled={isOrdersAccessBusy || !canExportOrders}
+                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        iconStart={<Download className="size-4" />}
+                        data-testid="orders-provider-certification-download-button"
+                      >
+                        Download provider JSON
+                      </Button>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        External credentials
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
