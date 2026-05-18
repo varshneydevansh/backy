@@ -2265,6 +2265,7 @@ try {
     assert(pagePreviewAuditEntry?.metadata?.targetType === 'page', `${pagePreviewAudit.url} missing preview target type`);
     assert(pagePreviewAuditEntry?.metadata?.ttlSeconds === 1200, `${pagePreviewAudit.url} missing preview TTL metadata`);
     assert(pagePreviewAuditEntry?.metadata?.slug === pageSlug, `${pagePreviewAudit.url} missing preview slug metadata`);
+    assert(typeof pagePreviewAuditEntry?.metadata?.createdBy === 'string' && pagePreviewAuditEntry.metadata.createdBy.length > 0, `${pagePreviewAudit.url} missing preview actor binding`);
     assert(pagePreviewAuditEntry?.metadata?.tokenStored === false, `${pagePreviewAudit.url} should record that preview token is redacted`);
     assert(!JSON.stringify(pagePreviewAuditEntry?.metadata || {}).includes(pagePreview.json.data.previewToken), `${pagePreviewAudit.url} leaked preview token into audit metadata`);
 
@@ -3994,6 +3995,7 @@ try {
     assert(previewAuditEntry?.metadata?.targetType === 'post', `${previewAudit.url} missing preview target type`);
     assert(previewAuditEntry?.metadata?.ttlSeconds === 900, `${previewAudit.url} missing preview TTL metadata`);
     assert(previewAuditEntry?.metadata?.slug === postSlug, `${previewAudit.url} missing preview slug metadata`);
+    assert(typeof previewAuditEntry?.metadata?.createdBy === 'string' && previewAuditEntry.metadata.createdBy.length > 0, `${previewAudit.url} missing preview actor binding`);
     assert(previewAuditEntry?.metadata?.tokenStored === false, `${previewAudit.url} should record that preview token is redacted`);
     assert(!JSON.stringify(previewAuditEntry?.metadata || {}).includes(preview.json.data.previewToken), `${previewAudit.url} leaked preview token into audit metadata`);
 

@@ -50,6 +50,10 @@ const previewUrlsForPage = (
   };
 };
 
+const previewActorId = (access: Exclude<Awaited<ReturnType<typeof requireAdminAccess>>, NextResponse>) => (
+  access.session?.user.id || (access.type === 'api-key' ? 'admin-api-key' : 'admin')
+);
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
@@ -75,12 +79,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
       }
 
+      const actorId = previewActorId(access);
       const preview = await repositories.contentWorkflows.createPreviewToken({
         siteId: site.id,
         targetType: 'page',
         targetId: page.id,
         ttlSeconds: body.ttlSeconds,
-        createdBy: request.headers.get('x-backy-actor') || 'admin',
+        createdBy: actorId,
       });
       const origin = new URL(request.url).origin;
       const encodedToken = encodeURIComponent(preview.token);
@@ -89,7 +94,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+        actorId,
         entity: 'page',
         entityId: page.id,
         action: 'previewToken.create',
@@ -103,6 +108,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${previewUrls.hostedPath}`,
           renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=${encodePath(previewUrls.publicPath)}`,
           pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodePath(previewUrls.publicSlug)}`,
+          createdBy: actorId,
           tokenStored: false,
         },
         requestId,
@@ -134,12 +140,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
     }
 
+    const actorId = previewActorId(access);
     const preview = createPreviewToken(
       site.id,
       'page',
       page.id,
       body.ttlSeconds,
-      request.headers.get('x-backy-actor') || 'admin',
+      actorId,
     );
     const origin = new URL(request.url).origin;
     const encodedToken = encodeURIComponent(preview.token);
@@ -147,7 +154,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     await recordAdminAudit({
       siteId: site.id,
-      actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+      actorId,
       entity: 'page',
       entityId: page.id,
       action: 'previewToken.create',
@@ -161,6 +168,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${previewUrls.hostedPath}`,
         renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=${encodePath(previewUrls.publicPath)}`,
         pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodePath(previewUrls.publicSlug)}`,
+        createdBy: actorId,
         tokenStored: false,
       },
       requestId,

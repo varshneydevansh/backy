@@ -27,6 +27,10 @@ const encodePath = (path: string) => (
     .join('/')
 );
 
+const previewActorId = (access: Exclude<Awaited<ReturnType<typeof requireAdminAccess>>, NextResponse>) => (
+  access.session?.user.id || (access.type === 'api-key' ? 'admin-api-key' : 'admin')
+);
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
@@ -50,12 +54,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
       }
 
+      const actorId = previewActorId(access);
       const preview = await repositories.contentWorkflows.createPreviewToken({
         siteId: site.id,
         targetType: 'post',
         targetId: post.id,
         ttlSeconds: body.ttlSeconds,
-        createdBy: request.headers.get('x-backy-actor') || 'admin',
+        createdBy: actorId,
       });
       const origin = new URL(request.url).origin;
       const encodedToken = encodeURIComponent(preview.token);
@@ -66,7 +71,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       await recordAdminAudit({
         repositories,
         siteId: site.id,
-        actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+        actorId,
         entity: 'post',
         entityId: post.id,
         action: 'previewToken.create',
@@ -78,6 +83,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           expiresAt: preview.expiresAt,
           hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}/blog/${encodedSlug}`,
           postApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/blog?slug=${encodedSlug}`,
+          createdBy: actorId,
           tokenStored: false,
         },
         requestId,
@@ -108,12 +114,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
     }
 
+    const actorId = previewActorId(access);
     const preview = createPreviewToken(
       site.id,
       'post',
       post.id,
       body.ttlSeconds,
-      request.headers.get('x-backy-actor') || 'admin',
+      actorId,
     );
     const origin = new URL(request.url).origin;
     const encodedToken = encodeURIComponent(preview.token);
@@ -123,7 +130,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     await recordAdminAudit({
       siteId: site.id,
-      actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+      actorId,
       entity: 'post',
       entityId: post.id,
       action: 'previewToken.create',
@@ -135,6 +142,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         expiresAt: preview.expiresAt,
         hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}/blog/${encodedSlug}`,
         postApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/blog?slug=${encodedSlug}`,
+        createdBy: actorId,
         tokenStored: false,
       },
       requestId,

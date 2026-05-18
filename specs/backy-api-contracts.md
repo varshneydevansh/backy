@@ -634,7 +634,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - `POST /api/admin/sites/:siteId/pages/:pageId/preview`
   - Body: `{ ttlSeconds? }`
   - Creates a bounded preview token and returns draft-capable `hostedUrl`, `renderUrl`, and `pageApiUrl`.
-  - Current local runtime stores preview tokens in `data/backy/admin-content.json`; production should bind tokens to authenticated actors, audit creation, and invalidate on policy changes.
+  - Preview-token creation is gated by `pages.publish`, binds the token record to the resolved admin session or service-key actor, records a tokenless `previewToken.create` audit event with target, TTL, expiry, public paths, and redaction metadata, and keeps the raw token out of audit storage.
 
 - `GET /api/admin/sites/:siteId/blog/:postId/revisions`
   - Returns local revision history for the post with pagination metadata.
@@ -654,6 +654,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - `POST /api/admin/sites/:siteId/blog/:postId/preview`
   - Body: `{ ttlSeconds? }`
   - Creates a bounded preview token and returns draft-capable `hostedUrl` and `postApiUrl`.
+  - Preview-token creation is gated by `pages.publish`, binds the token record to the resolved admin session or service-key actor, records a tokenless `previewToken.create` audit event with target, TTL, expiry, public paths, and redaction metadata, and keeps the raw token out of audit storage.
 
 - `POST /api/admin/sites/:siteId/pages/:pageId/resolve-conflict`
   - Future workflow endpoint for merge/conflict resolution once collaborative editing is implemented.
