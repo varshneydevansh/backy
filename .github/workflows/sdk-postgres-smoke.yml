@@ -55,9 +55,9 @@ jobs:
           {
             echo "## Backy SDK Postgres Certification"
             echo ""
-            echo "| Gate | Requested | Non-secret target evidence |"
-            echo "| --- | --- | --- |"
-            echo "| SDK database | true | disposable confirmed: ${{ inputs.disposable_database_confirmed }}; expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
+            echo "| Partial row | Gate | Requested | Non-secret target evidence |"
+            echo "| --- | --- | --- | --- |"
+            echo "| Frontend manifest/OpenAPI/SDK APIs | npm run ci:sdk-postgres-smoke | true | disposable confirmed: ${{ inputs.disposable_database_confirmed }}; expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Require disposable Postgres or Supabase database URL
