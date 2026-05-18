@@ -43,6 +43,7 @@ const openApiRoute = read('../apps/public/src/app/api/sites/[siteId]/openapi/rou
 const frontendManifestSchema = read('../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const generatedSdkTypes = read('../packages/sdk-js/src/generated-contract-types.ts');
 const sdkSource = read('../packages/sdk-js/src/index.ts');
+const sdkRuntimeSmoke = read('../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../packages/sdk-js/scripts/generated-contract-types.ts');
 const productsRoute = read('../apps/admin/src/routes/products.tsx');
 const ordersRoute = read('../apps/admin/src/routes/orders.tsx');
@@ -115,6 +116,34 @@ includesAll(
     '"ci:commerce-provider-certification"',
   ],
   'Convenience SDK commerce provider certification type exports',
+);
+
+includesAll(
+  sdkRuntimeSmoke,
+  [
+    'assertCommerceProviderCertification',
+    "assertCommerceProviderCertification(manifest.data.modules?.commerce, 'manifest() commerce module')",
+    "assertCommerceProviderCertification(commerceOrderContract.data.commerce, 'commerceOrderContract()')",
+    "assertCommerceProviderCertification(cachedCommerceOrderContract.body.data.commerce, 'commerceOrderContractCached()')",
+    "assertCommerceProviderCertification(commerceCatalog.data.commerce, 'commerceCatalog()')",
+    "assertCommerceProviderCertification(cachedCommerceCatalog.body.data.commerce, 'commerceCatalogCached()')",
+    'backy.commerce-provider-certification-handoff.v1',
+    'external-live-provider-gate',
+    'ci:commerce-provider-smoke',
+    'ci:commerce-provider-certification',
+    'live-commerce-provider-launch',
+    'Provider credentials stay in server environment/configuration',
+    'Stripe webhooks',
+    'TaxJar',
+    'Avalara',
+    'EasyPost',
+    'Shippo',
+    'Stripe promotion codes',
+    'Magento',
+    'Razorpay',
+    'Local provider mocks',
+  ],
+  'SDK runtime smoke commerce provider certification response guard',
 );
 
 includesAll(

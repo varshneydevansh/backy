@@ -37,6 +37,52 @@ function assertManifestEndpointsDocumented(manifestData, openapiDocument) {
   );
 }
 
+function assertCommerceProviderCertification(commerce, label) {
+  const certification = commerce?.providerCertification;
+  assert(certification, `${label} missing commerce provider certification handoff`);
+  assert(
+    certification.schemaVersion === 'backy.commerce-provider-certification-handoff.v1',
+    `${label} provider certification schema drifted`,
+  );
+  assert(certification.status === 'external-live-provider-gate', `${label} missing live-provider gate status`);
+  assert(certification.localMockGate === 'ci:commerce-provider-smoke', `${label} missing mock provider gate`);
+  assert(certification.liveCertificationGate === 'ci:commerce-provider-certification', `${label} missing live provider certification gate`);
+  assert(certification.requiredFor === 'live-commerce-provider-launch', `${label} missing live launch requirement`);
+  assert(
+    typeof certification.secretHandling === 'string' &&
+      certification.secretHandling.includes('Provider credentials stay in server environment/configuration'),
+    `${label} missing non-secret credential handling guidance`,
+  );
+
+  const groups = Array.isArray(certification.groups) ? certification.groups : [];
+  const families = groups.map((group) => group.family);
+  const providers = groups.flatMap((group) => (Array.isArray(group.providers) ? group.providers : []));
+  for (const family of [
+    'Checkout and payment settlement',
+    'Tax quote providers',
+    'Shipping rate, label, and tracking providers',
+    'Discount quote providers',
+    'Catalog sync providers',
+    'Subscription lifecycle providers',
+    'Mock provider regression',
+  ]) {
+    assert(families.includes(family), `${label} missing certification family ${family}`);
+  }
+  for (const provider of [
+    'Stripe webhooks',
+    'TaxJar',
+    'Avalara',
+    'EasyPost',
+    'Shippo',
+    'Stripe promotion codes',
+    'Magento',
+    'Razorpay',
+    'Local provider mocks',
+  ]) {
+    assert(providers.includes(provider), `${label} missing certification provider ${provider}`);
+  }
+}
+
 async function request(path, init) {
   const headers = new Headers(init?.headers || {});
 
@@ -474,6 +520,7 @@ assert(site.data.site?.id, 'discoverSite() did not return a site id');
 const manifest = await client.manifest();
 assert(manifest.data.capabilities?.renderPayload === true, 'manifest() missing render payload capability');
 assert(typeof manifest.data.endpoints?.render === 'string', 'manifest() missing render endpoint');
+assertCommerceProviderCertification(manifest.data.modules?.commerce, 'manifest() commerce module');
 assert(manifest.data.capabilities?.interactiveComponents === true, 'manifest() missing interactive component capability');
 assert(manifest.data.endpoints?.interactiveComponents === `/api/sites/${site.data.site.id}/interactive-components`, 'manifest() missing interactive component registry endpoint');
 assert(manifest.data.endpoints?.interactiveRuntimeEvents === `/api/sites/${site.data.site.id}/interactive-components/runtime-events`, 'manifest() missing interactive runtime event endpoint');
@@ -807,9 +854,11 @@ try {
   const commerceOrderContract = await client.commerceOrderContract();
   assert(commerceOrderContract.data.schemaVersion === 'backy.commerce-orders.v1', 'commerceOrderContract() missing schema version');
   assert(commerceOrderContract.data.relatedEndpoints?.catalog, 'commerceOrderContract() missing catalog endpoint');
+  assertCommerceProviderCertification(commerceOrderContract.data.commerce, 'commerceOrderContract()');
   const cachedCommerceOrderContract = await client.commerceOrderContractCached();
   assert(cachedCommerceOrderContract.notModified === false, 'commerceOrderContractCached() first request should return a body');
   assert(cachedCommerceOrderContract.body.data.schemaVersion === 'backy.commerce-orders.v1', 'commerceOrderContractCached() missing schema version');
+  assertCommerceProviderCertification(cachedCommerceOrderContract.body.data.commerce, 'commerceOrderContractCached()');
   assert(cachedCommerceOrderContract.meta.etag, 'commerceOrderContractCached() missing response ETag');
   const revalidatedCommerceOrderContract = await client.commerceOrderContractCached({ etag: cachedCommerceOrderContract.meta.etag });
   assert(revalidatedCommerceOrderContract.notModified === true, 'commerceOrderContractCached() did not return notModified for matching ETag');
@@ -817,9 +866,11 @@ try {
   const commerceCatalog = await client.commerceCatalog({ limit: 5 });
   assert(commerceCatalog.data.schemaVersion === 'backy.commerce-catalog.v1', 'commerceCatalog() missing schema version');
   assert(Array.isArray(commerceCatalog.data.products), 'commerceCatalog() missing products array');
+  assertCommerceProviderCertification(commerceCatalog.data.commerce, 'commerceCatalog()');
   const cachedCommerceCatalog = await client.commerceCatalogCached({ limit: 5 });
   assert(cachedCommerceCatalog.notModified === false, 'commerceCatalogCached() first request should return a body');
   assert(cachedCommerceCatalog.body.data.schemaVersion === 'backy.commerce-catalog.v1', 'commerceCatalogCached() missing schema version');
+  assertCommerceProviderCertification(cachedCommerceCatalog.body.data.commerce, 'commerceCatalogCached()');
   assert(cachedCommerceCatalog.meta.etag, 'commerceCatalogCached() missing response ETag');
   const revalidatedCommerceCatalog = await client.commerceCatalogCached({ limit: 5, etag: cachedCommerceCatalog.meta.etag });
   assert(revalidatedCommerceCatalog.notModified === true, 'commerceCatalogCached() did not return notModified for matching ETag');
