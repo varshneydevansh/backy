@@ -79,6 +79,8 @@ const requiredDatabaseRlsTables = [
   'form_submissions',
   'form_contacts',
   'comments',
+  'activity_logs',
+  'platform_settings',
   'media_folders',
   'media_versions',
   'cache_invalidation_events',
@@ -117,6 +119,12 @@ const requiredDatabasePolicies = {
   comments: [
     'Team members can view comments',
     'Editors can manage comments',
+  ],
+  activity_logs: [
+    'Team members can view activity logs',
+  ],
+  platform_settings: [
+    'Owners and admins can manage platform settings',
   ],
   media_folders: [
     'Team members can view folders',
@@ -192,6 +200,10 @@ const requiredDatabaseIndexes = {
     'idx_comments_request_id',
     'idx_comments_created_at',
   ],
+  activity_logs: [
+    'idx_activity_logs_site_id',
+    'idx_activity_logs_created_at',
+  ],
   media_versions: [
     'idx_media_versions_site_id',
     'idx_media_versions_media_id',
@@ -235,6 +247,9 @@ const requiredDatabaseConstraints = {
     'comments_target_type_check',
     'comments_status_check',
     'comments_report_count_check',
+  ],
+  platform_settings: [
+    'platform_settings_delivery_mode_check',
   ],
   interactive_components: [
     'interactive_components_type_check',

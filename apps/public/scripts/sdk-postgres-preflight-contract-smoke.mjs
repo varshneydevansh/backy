@@ -100,11 +100,22 @@ assert(
     sdkSmokeCi.includes('form_submissions') &&
     sdkSmokeCi.includes('form_contacts') &&
     sdkSmokeCi.includes('comments') &&
+    sdkSmokeCi.includes('activity_logs') &&
+    sdkSmokeCi.includes('platform_settings') &&
     sdkSmokeCi.includes('media_folders') &&
     sdkSmokeCi.includes('media_versions') &&
     sdkSmokeCi.includes('cache_invalidation_events') &&
     sdkSmokeCi.includes('interactive_components'),
   'SDK Postgres smoke must preflight every public SDK service-data table used by the smoke.',
+);
+
+assert(
+  sdkSmokeCi.includes('Team members can view activity logs') &&
+    sdkSmokeCi.includes('Owners and admins can manage platform settings') &&
+    sdkSmokeCi.includes('idx_activity_logs_site_id') &&
+    sdkSmokeCi.includes('idx_activity_logs_created_at') &&
+    sdkSmokeCi.includes('platform_settings_delivery_mode_check'),
+  'SDK Postgres smoke must preflight activity log and platform settings RLS, index, and constraint readiness.',
 );
 
 assert(
