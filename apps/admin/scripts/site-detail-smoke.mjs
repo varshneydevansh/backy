@@ -33,6 +33,8 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('Add a redirect rule to preserve old URLs, point traffic to new content, or mark retired paths as gone.'), 'Site detail redirects empty state must explain redirect setup');
   assert(source.includes('title="No route-level SEO overrides"'), 'Site detail SEO route override panel must keep the empty override title visible');
   assert(source.includes('Add route overrides for custom canonical paths, campaign landing pages, and dynamic collection route SEO.'), 'Site detail SEO route override empty state must explain override use cases');
+  assert(source.includes('title="No navigation links yet"'), 'Site detail navigation editor must keep the empty menu title visible');
+  assert(source.includes('Add route or URL links to build this menu for custom frontend navigation.'), 'Site detail navigation empty state must explain menu setup');
   assert(source.includes('title="No form selected"'), 'Site detail forms workspace must keep the empty form selection title visible');
   assert(source.includes('Create a standalone form or choose an existing form from the Active Form selector to edit its fields and delivery settings.'), 'Site detail form selection empty state must explain how to start editing');
   assert(source.includes('title="No submissions in the selected state"'), 'Site detail submissions panel must keep the filtered empty submissions title visible');

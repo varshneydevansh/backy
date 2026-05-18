@@ -10168,8 +10168,12 @@ function NavigationMenuEditor({
             Loading navigation...
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-            Add links to create this menu.
+          <div>
+            <EmptyState
+              icon={Menu}
+              title="No navigation links yet"
+              description="Add route or URL links to build this menu for custom frontend navigation."
+            />
           </div>
         ) : (
           items.map((item, index) => (
