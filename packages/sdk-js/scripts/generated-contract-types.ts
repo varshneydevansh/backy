@@ -75,6 +75,8 @@ import type {
   GeneratedBackyOpenApiCommerceOrderEnvelope,
   GeneratedBackyOpenApiCommerceProduct,
   GeneratedBackyOpenApiCommerceProductDesign,
+  GeneratedBackyOpenApiCommerceProviderCertification,
+  GeneratedBackyOpenApiCommerceStorefrontContract,
   GeneratedBackyOpenApiCommerceWebhookEnvelope,
   GeneratedBackyOpenApiCommerceWebhookRequest,
   GeneratedBackyOpenApiCollectionFieldOption,
@@ -589,6 +591,29 @@ const manifestNavigationItem = {
   ],
 } satisfies GeneratedBackyFrontendManifestNavigationItem;
 
+const commerceProviderCertification = {
+  schemaVersion: "backy.commerce-provider-certification-handoff.v1",
+  status: "external-live-provider-gate",
+  localMockGate: "ci:commerce-provider-smoke",
+  liveCertificationGate: "ci:commerce-provider-certification",
+  requiredFor: "live-commerce-provider-launch",
+  secretHandling: "Provider credentials stay in server env.",
+  groups: [
+    {
+      family: "Tax quote providers",
+      providers: ["TaxJar", "Avalara"],
+      gate: "ci:commerce-provider-certification",
+      evidence: "Live tax account credentials.",
+    },
+    {
+      family: "Mock provider regression",
+      providers: ["Local provider mocks"],
+      gate: "ci:commerce-provider-smoke",
+      evidence: "Repeatable local provider coverage.",
+    },
+  ],
+} satisfies GeneratedBackyOpenApiCommerceProviderCertification;
+
 const manifest = {
   schemaVersion: "backy.frontend-manifest.v1",
   site: {
@@ -910,6 +935,7 @@ const manifest = {
         windowHours: 24,
         requiresManualReview: false,
       },
+      providerCertification: commerceProviderCertification,
     },
     interactiveComponents: {
       schemaVersion: "backy.interactive-components.v1",
@@ -1098,6 +1124,8 @@ const manifest = {
     },
   },
 } satisfies GeneratedBackyFrontendManifest;
+
+const commerceStorefrontContract = manifest.modules.commerce satisfies GeneratedBackyOpenApiCommerceStorefrontContract;
 
 const sdkDeliveryDiscovery = {
   canonicalBaseUrl: "https://demo.example.com",
@@ -2350,6 +2378,7 @@ const commerceCatalogEnvelope = {
       slug: "products",
     },
     products: [commerceProduct],
+    commerce: commerceStorefrontContract,
     facets: {
       categories: ["Templates"],
     },
@@ -2409,6 +2438,7 @@ const commerceOrderContractEnvelope = {
     relatedEndpoints: {
       catalog: "/api/sites/site_demo/commerce/catalog",
     },
+    commerce: commerceStorefrontContract,
   },
 } satisfies GeneratedBackyOpenApiCommerceOrderContractEnvelope;
 
@@ -3470,8 +3500,14 @@ const invalidCommerceProductStatus = { ...commerceProduct, status: "hidden", } s
 // @ts-expect-error commerce catalog envelopes require the versioned catalog schema marker.
 const invalidCommerceCatalogSchemaVersion = { ...commerceCatalogEnvelope, data: { ...commerceCatalogEnvelope.data, schemaVersion: "backy.catalog.v0" }, } satisfies GeneratedBackyOpenApiCommerceCatalogEnvelope;
 
+// @ts-expect-error commerce catalog envelopes expose storefront provider certification through the commerce contract.
+const invalidCommerceCatalogCertification = { ...commerceCatalogEnvelope, data: { ...commerceCatalogEnvelope.data, commerce: { ...commerceCatalogEnvelope.data.commerce, providerCertification: undefined, }, }, } satisfies GeneratedBackyOpenApiCommerceCatalogEnvelope;
+
 // @ts-expect-error commerce order creation requires customer identity.
 const invalidCommerceOrderCreateRequest = { items: commerceOrderCreateRequest.items, } satisfies GeneratedBackyOpenApiCommerceOrderCreateRequest;
+
+// @ts-expect-error commerce order contracts expose storefront provider certification through the commerce contract.
+const invalidCommerceOrderContractCertification = { ...commerceOrderContractEnvelope, data: { ...commerceOrderContractEnvelope.data, commerce: { ...commerceOrderContractEnvelope.data.commerce, providerCertification: undefined, }, }, } satisfies GeneratedBackyOpenApiCommerceOrderContractEnvelope;
 
 // @ts-expect-error checkout sessions only expose documented frontend handoff providers.
 const invalidCommerceCheckoutProvider = { ...commerceOrderEnvelope, data: { ...commerceOrderEnvelope.data, checkoutSession: { ...commerceOrderEnvelope.data.checkoutSession, provider: "paypal", }, }, } satisfies GeneratedBackyOpenApiCommerceOrderEnvelope;

@@ -5401,12 +5401,112 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
               },
             },
+            CommerceProviderCertification: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "status",
+                "localMockGate",
+                "liveCertificationGate",
+                "requiredFor",
+                "secretHandling",
+                "groups",
+              ],
+              properties: {
+                schemaVersion: {
+                  type: "string",
+                  const: "backy.commerce-provider-certification-handoff.v1",
+                },
+                status: {
+                  type: "string",
+                  const: "external-live-provider-gate",
+                },
+                localMockGate: {
+                  type: "string",
+                  const: "ci:commerce-provider-smoke",
+                },
+                liveCertificationGate: {
+                  type: "string",
+                  const: "ci:commerce-provider-certification",
+                },
+                requiredFor: {
+                  type: "string",
+                  const: "live-commerce-provider-launch",
+                },
+                secretHandling: { type: "string" },
+                groups: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["family", "providers", "gate", "evidence"],
+                    properties: {
+                      family: { type: "string" },
+                      providers: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      gate: {
+                        type: "string",
+                        enum: [
+                          "ci:commerce-provider-certification",
+                          "ci:commerce-provider-smoke",
+                        ],
+                      },
+                      evidence: { type: "string" },
+                    },
+                    additionalProperties: true,
+                  },
+                },
+              },
+              additionalProperties: true,
+            },
+            CommerceStorefrontContract: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "mode",
+                "currency",
+                "paymentProvider",
+                "capabilities",
+                "checkout",
+                "pricing",
+                "providerCertification",
+              ],
+              properties: {
+                schemaVersion: {
+                  type: "string",
+                  const: "backy.commerce-settings.v1",
+                },
+                mode: {
+                  type: "string",
+                  enum: ["catalog-only", "manual-orders", "checkout-provider"],
+                },
+                currency: { type: "string" },
+                paymentProvider: {
+                  type: "string",
+                  enum: ["none", "stripe", "manual"],
+                },
+                providerAccountId: { type: ["string", "null"] },
+                provider: { type: "object", additionalProperties: true },
+                capabilities: { type: "object", additionalProperties: true },
+                checkout: { type: "object", additionalProperties: true },
+                pricing: { type: "object", additionalProperties: true },
+                inventory: { type: "object", additionalProperties: true },
+                webhooks: { type: "object", additionalProperties: true },
+                reconciliation: { type: "object", additionalProperties: true },
+                providerCertification: {
+                  $ref: "#/components/schemas/CommerceProviderCertification",
+                },
+              },
+              additionalProperties: true,
+            },
             CommerceCatalogEnvelope: envelopeSchema({
               type: "object",
               required: [
                 "schemaVersion",
                 "collection",
                 "products",
+                "commerce",
                 "facets",
                 "pagination",
               ],
@@ -5419,6 +5519,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 products: {
                   type: "array",
                   items: { $ref: "#/components/schemas/CommerceProduct" },
+                },
+                commerce: {
+                  $ref: "#/components/schemas/CommerceStorefrontContract",
                 },
                 facets: { type: "object", additionalProperties: true },
                 filters: { type: "object", additionalProperties: true },
@@ -5476,6 +5579,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "inventoryReservation",
                 "pricing",
                 "relatedEndpoints",
+                "commerce",
               ],
               properties: {
                 schemaVersion: {
@@ -5493,6 +5597,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "object",
                   additionalProperties: true,
                 },
+                commerce: {
+                  $ref: "#/components/schemas/CommerceStorefrontContract",
+                },
+                readiness: { type: "object", additionalProperties: true },
               },
             }),
             CommerceOrderEnvelope: envelopeSchema({

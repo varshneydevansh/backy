@@ -163,6 +163,20 @@ export interface CommerceStorefrontContract {
     windowHours: number;
     requiresManualReview: boolean;
   };
+  providerCertification: {
+    schemaVersion: 'backy.commerce-provider-certification-handoff.v1';
+    status: 'external-live-provider-gate';
+    localMockGate: 'ci:commerce-provider-smoke';
+    liveCertificationGate: 'ci:commerce-provider-certification';
+    requiredFor: 'live-commerce-provider-launch';
+    secretHandling: string;
+    groups: Array<{
+      family: string;
+      providers: string[];
+      gate: 'ci:commerce-provider-certification' | 'ci:commerce-provider-smoke';
+      evidence: string;
+    }>;
+  };
 }
 
 export const PRODUCT_COLLECTION_SLUG = 'products';
@@ -280,6 +294,59 @@ const normalizeEventAllowlist = (value: unknown): string[] => {
     .slice(0, 24);
 };
 
+const commerceProviderCertification = (): CommerceStorefrontContract['providerCertification'] => ({
+  schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
+  status: 'external-live-provider-gate',
+  localMockGate: 'ci:commerce-provider-smoke',
+  liveCertificationGate: 'ci:commerce-provider-certification',
+  requiredFor: 'live-commerce-provider-launch',
+  secretHandling: 'Provider credentials stay in server environment/configuration; storefront contracts expose only non-secret readiness gates and provider-family requirements.',
+  groups: [
+    {
+      family: 'Checkout and payment settlement',
+      providers: ['Stripe checkout', 'Stripe webhooks', 'PayPal', 'Square', 'Adyen', 'Mollie', 'Razorpay'],
+      gate: 'ci:commerce-provider-certification',
+      evidence: 'Live payment credentials, signed webhook secrets, and provider settlement events.',
+    },
+    {
+      family: 'Tax quote providers',
+      providers: ['Stripe Tax', 'TaxJar', 'Avalara', 'HTTP'],
+      gate: 'ci:commerce-provider-certification',
+      evidence: 'Live tax account credentials or a selected HTTP tax quote endpoint.',
+    },
+    {
+      family: 'Shipping rate, label, and tracking providers',
+      providers: ['EasyPost', 'Shippo', 'HTTP'],
+      gate: 'ci:commerce-provider-certification',
+      evidence: 'Live carrier rate, label, void/refund, and tracking credentials.',
+    },
+    {
+      family: 'Discount quote providers',
+      providers: ['Stripe promotion codes', 'HTTP'],
+      gate: 'ci:commerce-provider-certification',
+      evidence: 'Live promotion-code lookup credentials or selected HTTP discount endpoint.',
+    },
+    {
+      family: 'Catalog sync providers',
+      providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento', 'HTTP'],
+      gate: 'ci:commerce-provider-certification',
+      evidence: 'Live catalog credentials or a selected HTTP product sync endpoint.',
+    },
+    {
+      family: 'Subscription lifecycle providers',
+      providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'HTTP', 'Manual handoff'],
+      gate: 'ci:commerce-provider-certification',
+      evidence: 'Live subscription pause, resume, cancel, webhook, renewal, dunning, and cancellation evidence.',
+    },
+    {
+      family: 'Mock provider regression',
+      providers: ['Local provider mocks'],
+      gate: 'ci:commerce-provider-smoke',
+      evidence: 'Repeatable checkout, quote, catalog, label, tracking, fulfillment, refund, webhook, and reconciliation coverage without live credentials.',
+    },
+  ],
+});
+
 export const buildCommerceStorefrontContract = ({
   siteId,
   settings,
@@ -351,6 +418,7 @@ export const buildCommerceStorefrontContract = ({
       windowHours: Math.max(1, Math.min(720, Math.round(normalizeNumber(commerce.reconciliationWindowHours, 24)))),
       requiresManualReview: reconciliationMode === 'manual' || !eventsEnabled,
     },
+    providerCertification: commerceProviderCertification(),
   };
 };
 

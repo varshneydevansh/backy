@@ -60,6 +60,8 @@ export type {
   GeneratedBackyOpenApiCommerceOrderEnvelope,
   GeneratedBackyOpenApiCommerceProduct,
   GeneratedBackyOpenApiCommerceProductDesign,
+  GeneratedBackyOpenApiCommerceProviderCertification,
+  GeneratedBackyOpenApiCommerceStorefrontContract,
   GeneratedBackyOpenApiCommerceWebhookEnvelope,
   GeneratedBackyOpenApiCommerceWebhookRequest,
   GeneratedBackyOpenApiCollectionFieldOption,
@@ -893,6 +895,22 @@ export interface BackyCommerceStorefrontContract {
     mode: "manual" | "webhook" | "scheduled";
     windowHours: number;
     requiresManualReview: boolean;
+    [key: string]: unknown;
+  };
+  providerCertification?: {
+    schemaVersion: "backy.commerce-provider-certification-handoff.v1";
+    status: "external-live-provider-gate";
+    localMockGate: "ci:commerce-provider-smoke";
+    liveCertificationGate: "ci:commerce-provider-certification";
+    requiredFor: "live-commerce-provider-launch";
+    secretHandling: string;
+    groups: Array<{
+      family: string;
+      providers: string[];
+      gate: "ci:commerce-provider-certification" | "ci:commerce-provider-smoke";
+      evidence: string;
+      [key: string]: unknown;
+    }>;
     [key: string]: unknown;
   };
   [key: string]: unknown;

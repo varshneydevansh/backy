@@ -36,6 +36,11 @@ const workflow = read('../.github/workflows/commerce-provider-certification.yml'
 const mockWorkflow = read('../.github/workflows/commerce-provider-smoke.yml');
 const rootPackage = read('../package.json');
 const settingsRoute = read('../apps/public/src/app/api/admin/settings/route.ts');
+const commerceContract = read('../apps/public/src/lib/commerceCatalog.ts');
+const openApiRoute = read('../apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
+const generatedSdkTypes = read('../packages/sdk-js/src/generated-contract-types.ts');
+const sdkSource = read('../packages/sdk-js/src/index.ts');
+const generatedSdkSmoke = read('../packages/sdk-js/scripts/generated-contract-types.ts');
 const productsRoute = read('../apps/admin/src/routes/products.tsx');
 const ordersRoute = read('../apps/admin/src/routes/orders.tsx');
 const commerceSmoke = read('../apps/admin/scripts/commerce-smoke.mjs');
@@ -43,6 +48,76 @@ const ordersSmoke = read('../apps/admin/scripts/orders-smoke.mjs');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const apiContracts = read('../specs/backy-api-contracts.md');
 const setup = read('../SETUP.md');
+
+includesAll(
+  commerceContract,
+  [
+    'providerCertification',
+    "schemaVersion: 'backy.commerce-provider-certification-handoff.v1'",
+    "status: 'external-live-provider-gate'",
+    "localMockGate: 'ci:commerce-provider-smoke'",
+    "liveCertificationGate: 'ci:commerce-provider-certification'",
+    "requiredFor: 'live-commerce-provider-launch'",
+    'TaxJar',
+    'Avalara',
+    'EasyPost',
+    'Shippo',
+    'Stripe promotion codes',
+    'Magento',
+    'Provider credentials stay in server environment/configuration',
+  ],
+  'Commerce storefront provider certification handoff',
+);
+
+includesAll(
+  openApiRoute,
+  [
+    'CommerceProviderCertification',
+    'CommerceStorefrontContract',
+    'backy.commerce-provider-certification-handoff.v1',
+    'providerCertification',
+    'ci:commerce-provider-certification',
+    'ci:commerce-provider-smoke',
+    '$ref: "#/components/schemas/CommerceStorefrontContract"',
+  ],
+  'Commerce OpenAPI provider certification contract',
+);
+
+includesAll(
+  generatedSdkTypes,
+  [
+    'GeneratedBackyOpenApiCommerceProviderCertification',
+    'GeneratedBackyOpenApiCommerceStorefrontContract',
+    'providerCertification: GeneratedBackyOpenApiCommerceProviderCertification',
+    '"backy.commerce-provider-certification-handoff.v1"',
+    '"ci:commerce-provider-certification"',
+  ],
+  'Generated SDK commerce provider certification types',
+);
+
+includesAll(
+  sdkSource,
+  [
+    'GeneratedBackyOpenApiCommerceProviderCertification',
+    'GeneratedBackyOpenApiCommerceStorefrontContract',
+    'providerCertification?:',
+    '"backy.commerce-provider-certification-handoff.v1"',
+    '"ci:commerce-provider-certification"',
+  ],
+  'Convenience SDK commerce provider certification type exports',
+);
+
+includesAll(
+  generatedSdkSmoke,
+  [
+    'commerceProviderCertification',
+    'commerceStorefrontContract',
+    'providerCertification',
+    'invalidCommerceCatalogCertification',
+    'invalidCommerceOrderContractCertification',
+  ],
+  'Generated SDK commerce provider certification smoke cases',
+);
 
 includesAll(
   certificationCi,
@@ -272,6 +347,20 @@ includesAll(
 );
 
 includesAll(
+  apiContracts,
+  [
+    'data.modules.commerce.providerCertification',
+    'data.commerce.providerCertification',
+    'backy.commerce-provider-certification-handoff.v1',
+    'CommerceProviderCertification',
+    'CommerceStorefrontContract',
+    'GeneratedBackyOpenApiCommerceProviderCertification',
+    'GeneratedBackyOpenApiCommerceStorefrontContract',
+  ],
+  'API contracts commerce storefront provider certification handoff',
+);
+
+includesAll(
   setup,
   [
     'Commerce provider mock smoke',
@@ -371,6 +460,11 @@ includesAll(
 includesAll(
   audit,
   [
+    'Commerce storefront provider certification handoff',
+    'data.modules.commerce.providerCertification',
+    'data.commerce.providerCertification',
+    'CommerceProviderCertification',
+    'GeneratedBackyOpenApiCommerceProviderCertification',
     'Commerce provider certification workflow',
     'test:commerce-provider-certification-preflight-contract',
     'ci:commerce-provider-certification',

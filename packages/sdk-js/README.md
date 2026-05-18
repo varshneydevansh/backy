@@ -31,14 +31,18 @@ console.log(seo.data.sitemap.url);
 Commerce storefronts can read the normalized product catalog and submit a checkout cart into Backy's private order queue:
 
 ```ts
+const certification = catalog.data.commerce.providerCertification;
 const order = await backy.createCommerceOrder({
   customer: { name: 'Jane Customer', email: 'jane@example.com' },
   items: [{ slug: 'starter-template', quantity: 1 }],
   paymentProvider: 'manual',
 });
 
+console.log(certification.liveCertificationGate, certification.groups.map((group) => group.family));
 console.log(order.data.order.orderNumber, order.data.order.paymentStatus);
 ```
+
+`manifest.data.modules.commerce`, `catalog.data.commerce`, and `commerceOrderContract().data.commerce` expose the same non-secret storefront contract. Its `providerCertification` block uses `backy.commerce-provider-certification-handoff.v1` so generated frontends can display the local mock gate, live provider certification gate, provider families, and server-side secret-handling expectations without calling admin APIs. Generated OpenAPI exports include `GeneratedBackyOpenApiCommerceProviderCertification` and `GeneratedBackyOpenApiCommerceStorefrontContract`.
 
 Conditional discovery/frontend-design/render/navigation/SEO/media/data helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
 
