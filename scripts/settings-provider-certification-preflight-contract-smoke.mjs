@@ -51,6 +51,8 @@ includesAll(
   [
     'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED',
     'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+    'providedAdminKey',
+    'with BACKY_SETTINGS_CERTIFICATION_BASE_URL requires BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
     'BACKY_SETTINGS_CERTIFY_STORAGE',
     'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
     'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER',
@@ -416,6 +418,7 @@ includesAll(
     'target.mode',
     'externalBaseUrlConfigured',
     'Settings certification summary update',
+    'external-target runs now require an explicit `BACKY_ADMIN_API_KEY` or `BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY`',
     'Settings nested Commerce certification parity update',
     'full nested Commerce provider env surface',
     'Settings storage alias certification update',

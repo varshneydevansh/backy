@@ -16,7 +16,8 @@ const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const requireCertification = process.env.BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED === '1';
 const externalBaseUrl = (process.env.BACKY_SETTINGS_CERTIFICATION_BASE_URL || '').replace(/\/$/, '');
 const generatedAdminKey = `settings-provider-cert-${Date.now()}`;
-const adminKey = process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY || generatedAdminKey;
+const providedAdminKey = process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY || '';
+const adminKey = providedAdminKey || generatedAdminKey;
 const certifyStorage = process.env.BACKY_SETTINGS_CERTIFY_STORAGE === '1';
 const certifyRotation = process.env.BACKY_SETTINGS_CERTIFY_ROTATION === '1';
 const certifyVercelSecrets = process.env.BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS === '1';
@@ -35,6 +36,10 @@ const assert = (condition, message) => {
 
 if (requireCertification && !adminKey) {
   throw new Error('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 requires BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY.');
+}
+
+if (requireCertification && externalBaseUrl && !providedAdminKey) {
+  throw new Error('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 with BACKY_SETTINGS_CERTIFICATION_BASE_URL requires BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY.');
 }
 
 if (requireCertification && ![
