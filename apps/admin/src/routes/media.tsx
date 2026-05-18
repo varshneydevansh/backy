@@ -4733,9 +4733,11 @@ function MediaPage() {
                 </span>
               </div>
               {mediaAnalytics.providerRoiRows.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                  Provider ROI appears after CDN/storage analytics include requests, conversions, or attributed value.
-                </p>
+                <EmptyState
+                  icon={Cloud}
+                  title="No provider ROI data yet"
+                  description="Provider ROI appears after CDN/storage analytics include requests, conversions, or attributed value."
+                />
               ) : (
                 <div className="grid gap-4">
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
