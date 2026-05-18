@@ -42,6 +42,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/EmptyState';
 import type { ComponentLibraryItem } from '@/types/editor';
 import { CANVAS_COMPONENT_LIBRARY } from '@/components/editor/editorCatalog';
 import type { ReusableSection } from '@/lib/adminContentApi';
@@ -361,9 +362,11 @@ export function ComponentLibrary({
         ))}
 
         {filteredItems.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            <p className="text-sm">No components found</p>
-          </div>
+          <EmptyState
+            icon={Search}
+            title="No components match this view"
+            description="Clear the search or switch categories to find layout blocks, media, forms, commerce, and reusable sections."
+          />
         )}
       </div>
 

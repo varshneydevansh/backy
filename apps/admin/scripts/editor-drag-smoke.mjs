@@ -250,6 +250,13 @@ const assertInteractiveRegistryVersionPinningSource = () => {
   assert(registrySource.includes('backy.figure.rounds') && registrySource.includes('self-correction'), 'Public interactive registry must expose the communication-round/self-correction figure preset');
 };
 
+const assertComponentLibraryEmptyStateSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor component library must use the shared EmptyState component');
+  assert(source.includes('title="No components match this view"'), 'Editor component library empty search state must keep the shared title visible');
+  assert(source.includes('Clear the search or switch categories to find layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -8307,7 +8314,7 @@ const readComponentLibraryState = async (client, label) => (
       searchValue: document.querySelector('[data-testid="editor-component-search"]')?.value || '',
       itemIds,
       categories,
-      hasEmpty: /No components found/i.test(document.querySelector('[data-testid="editor-component-library"]')?.textContent || ''),
+      hasEmpty: /No components match this view/i.test(document.querySelector('[data-testid="editor-component-library"]')?.textContent || ''),
       dividerFavoritePressed: favoriteButton?.getAttribute('aria-pressed') === 'true',
       previewKey: preview?.getAttribute('data-component-preview') || null,
       previewText: preview?.textContent || '',
@@ -13971,6 +13978,7 @@ const main = async () => {
   assertPageEditorFallbackIsReadOnly();
   assertEditorInteractiveSandboxPreviewSource();
   assertInteractiveRegistryVersionPinningSource();
+  assertComponentLibraryEmptyStateSource();
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
   const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
