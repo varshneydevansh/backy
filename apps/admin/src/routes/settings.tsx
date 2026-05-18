@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
@@ -7926,9 +7927,13 @@ function SecuritySettings({
           <p className="mt-3 text-sm text-muted-foreground">{serviceKeyNotice}</p>
         ) : null}
         {serviceKeys.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-            No service keys have been issued yet.
-          </p>
+          <div className="mt-4">
+            <EmptyState
+              icon={Shield}
+              title="No service keys have been issued yet"
+              description="Issue a scoped admin service key when an automation or external backend needs non-owner access to Backy APIs."
+            />
+          </div>
         ) : (
           <div className="mt-4 divide-y divide-border rounded-lg border border-border">
             {serviceKeys.slice(0, 10).map((entry) => {
@@ -7997,9 +8002,13 @@ function SecuritySettings({
           </span>
         </div>
         {rotationHistory.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-            No API key rotations have been recorded yet.
-          </p>
+          <div className="mt-4">
+            <EmptyState
+              icon={History}
+              title="No API key rotations have been recorded yet"
+              description="Rotate public or admin API keys to populate this audit trail with non-secret fingerprints and actor details."
+            />
+          </div>
         ) : (
           <div className="mt-4 divide-y divide-border rounded-lg border border-border">
             {rotationHistory.slice(0, 6).map((entry) => (
@@ -8050,9 +8059,13 @@ function SecuritySettings({
           </span>
         </div>
         {revocationHistory.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-            No API keys have been revoked by rotation yet.
-          </p>
+          <div className="mt-4">
+            <EmptyState
+              icon={History}
+              title="No API keys have been revoked by rotation yet"
+              description="Revoked fingerprints appear here after key rotation so operators can confirm replaced credentials are no longer accepted."
+            />
+          </div>
         ) : (
           <div className="mt-4 divide-y divide-border rounded-lg border border-border">
             {revocationHistory.slice(0, 8).map((entry) => (
