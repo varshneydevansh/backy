@@ -44,6 +44,11 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes("schemaVersion: 'backy.form-template-pack.v1'"), 'Forms template export must advertise backy.form-template-pack.v1');
   assert(source.includes('templateExport'), 'Forms handoff manifest must summarize template export metadata');
   assert(source.includes('-backy-form-template-pack.json'), 'Forms template export must download a named JSON template pack');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Forms route must use the shared EmptyState component');
+  assert(source.includes('title="No form audit events yet"'), 'Forms audit panel must keep the empty activity title visible');
+  assert(source.includes('Form edits, submission review, consent retention, and embed-block changes will appear here.'), 'Forms audit empty state must explain which actions populate activity');
+  assert(source.includes('title="No delivery events yet"'), 'Forms delivery panel must keep the empty delivery title visible');
+  assert(source.includes('Webhook and email delivery attempts, retries, and provider responses for this form will appear here.'), 'Forms delivery empty state must explain which events populate delivery history');
   for (const label of [
     'backy.forms-persistence-certification.v1',
     'npm run test:forms --workspace @backy-cms/admin',
@@ -192,7 +197,7 @@ const requestApiRaw = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -200,9 +205,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_FORMS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -718,6 +733,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -2109,6 +2136,7 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(apiAdminSessionToken),
     });

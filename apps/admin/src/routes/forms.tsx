@@ -2763,9 +2763,11 @@ function FormsRoute() {
         </div>
         <div className="mt-4 grid gap-2" data-testid="forms-audit-list">
           {formsAuditLogs.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
-              No form audit events recorded yet.
-            </div>
+            <EmptyState
+              icon={History}
+              title="No form audit events yet"
+              description="Form edits, submission review, consent retention, and embed-block changes will appear here."
+            />
           ) : (
             formsAuditLogs.map((log) => (
               <FormAuditLogCard key={log.id} log={log} />
@@ -4167,8 +4169,12 @@ function FormsRoute() {
                       </div>
                     </div>
                     {selectedDeliveryEvents.length === 0 ? (
-                      <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
-                        No webhook delivery events recorded for this form yet.
+                      <div className="mt-4">
+                        <EmptyState
+                          icon={Inbox}
+                          title="No delivery events yet"
+                          description="Webhook and email delivery attempts, retries, and provider responses for this form will appear here."
+                        />
                       </div>
                     ) : (
                       <div className="mt-4 grid gap-3">
