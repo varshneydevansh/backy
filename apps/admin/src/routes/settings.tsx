@@ -2963,7 +2963,13 @@ function SiteScopedSettingsPanel({
         ) : auditNotice ? (
           <Notice tone="warning" className="mt-3">{auditNotice}</Notice>
         ) : auditLogs.length === 0 ? (
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">No site settings updates recorded yet.</p>
+          <div className="mt-3">
+            <EmptyState
+              icon={History}
+              title="No site settings updates yet"
+              description="Save scoped SEO, analytics, localization, or comment policy changes to start this request-id audit trail."
+            />
+          </div>
         ) : (
           <div className="mt-3 divide-y divide-border rounded-lg border border-border bg-background">
             {auditLogs.map((log) => {
@@ -8383,8 +8389,12 @@ function AuditTrail({
             Loading audit trail...
           </div>
         ) : filteredLogs.length === 0 ? (
-          <div className="px-4 py-5 text-sm text-muted-foreground">
-            No matching audit events have been recorded yet.
+          <div className="px-4 py-5">
+            <EmptyState
+              icon={History}
+              title="No matching settings audit events"
+              description="Change the audit filter or perform a settings, provider, deployment, notification, or API-key action to populate this trail."
+            />
           </div>
         ) : (
           filteredLogs.map((log) => (
