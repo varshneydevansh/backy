@@ -42,6 +42,7 @@ import {
     repositoryCollectionRecordTitle,
     resolveRepositorySiteRoute,
 } from '@/lib/repositoryRouteResolver';
+import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -59,6 +60,8 @@ type HostedSite =
 const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 async function getSite(subdomain: string) {
     if (!shouldUseDemoStoreFallback()) {
@@ -678,6 +681,22 @@ export default async function SitePage({ params, searchParams }: PageProps) {
             notFound();
         }
 
+        if (
+            previewToken
+            && await hostedSite.repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
+        ) {
+            await recordPreviewTokenUse({
+                repositories: hostedSite.repositories,
+                siteId: site.id,
+                targetType: 'page',
+                targetId: page.id,
+                requestId: makeRequestId(),
+                surface: 'hosted-html',
+                path: routePath,
+                slug: page.slug,
+            });
+        }
+
         return (
             <>
                 <PageRenderer
@@ -706,6 +725,18 @@ export default async function SitePage({ params, searchParams }: PageProps) {
         const page = await getPage(site.id, route.resource.slug, previewToken);
         if (!page) {
             notFound();
+        }
+
+        if (previewToken && validatePreviewToken(site.id, 'page', page.id, previewToken)) {
+            await recordPreviewTokenUse({
+                siteId: site.id,
+                targetType: 'page',
+                targetId: page.id,
+                requestId: makeRequestId(),
+                surface: 'hosted-html',
+                path: routePath,
+                slug: page.slug,
+            });
         }
 
         const pageContent = {

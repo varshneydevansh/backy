@@ -12,6 +12,7 @@ import { getBlogPosts, getMediaList, getSiteByIdOrSlug, validatePreviewToken } f
 import { resolveElementDataBindings, type RenderDataSource } from '@/lib/renderPayload';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 import type { Metadata } from 'next';
 import type { StoreBlogPost, StoreCollection, StoreCollectionRecord } from '@/lib/backyStore';
 
@@ -44,6 +45,8 @@ const firstParam = (value: string | string[] | undefined): string | undefined =>
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
   item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
@@ -428,6 +431,22 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
       notFound();
     }
 
+    if (
+      previewToken
+      && await hostedSite.repositories.contentWorkflows.validatePreviewToken(site.id, 'post', post.id, previewToken)
+    ) {
+      await recordPreviewTokenUse({
+        repositories: hostedSite.repositories,
+        siteId: site.id,
+        targetType: 'post',
+        targetId: post.id,
+        requestId: makeRequestId(),
+        surface: 'hosted-html',
+        path: `/blog/${post.slug}`,
+        slug: post.slug,
+      });
+    }
+
     return (
       <>
         <PageRenderer
@@ -447,6 +466,18 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
   const post = getPostBySlug(site.id, slug, previewToken);
   if (!post) {
     notFound();
+  }
+
+  if (previewToken && validatePreviewToken(site.id, 'post', post.id, previewToken)) {
+    await recordPreviewTokenUse({
+      siteId: site.id,
+      targetType: 'post',
+      targetId: post.id,
+      requestId: makeRequestId(),
+      surface: 'hosted-html',
+      path: `/blog/${post.slug}`,
+      slug: post.slug,
+    });
   }
 
   return (

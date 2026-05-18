@@ -6,12 +6,13 @@
 
 import { NextRequest } from 'next/server';
 import type { Site } from '@backy-cms/core';
-import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
+import { getSiteByIdOrSlug, getSiteNavigation, validatePreviewToken } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
 import { buildSiteNavigation } from '@/lib/navigation';
 import type { ResolvedRedirectRoute } from '@/lib/redirectRules';
+import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 import {
   canonicalPathForRepositoryPage,
   isRepositoryContentPubliclyReadable,
@@ -147,6 +148,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }, requestId, { previewToken, cacheRevision });
       }
 
+      if ((route.type === 'page' || route.type === 'post') && previewToken) {
+        const canPreview = await repositories.contentWorkflows.validatePreviewToken(
+          site.id,
+          route.type,
+          route.resource.id,
+          previewToken,
+        );
+        if (canPreview) {
+          await recordPreviewTokenUse({
+            repositories,
+            siteId: site.id,
+            targetType: route.type,
+            targetId: route.resource.id,
+            requestId,
+            surface: 'resolve-api',
+            path,
+            slug: route.resource.slug,
+          });
+        }
+      }
+
       return publicContractJson({
         success: true,
         requestId,
@@ -187,6 +209,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         name: site.name,
         status: site.status,
       }, requestId, { previewToken });
+    }
+
+    if ((route.type === 'page' || route.type === 'post') && previewToken) {
+      const canPreview = validatePreviewToken(site.id, route.type, route.resource.id, previewToken);
+      if (canPreview) {
+        await recordPreviewTokenUse({
+          siteId: site.id,
+          targetType: route.type,
+          targetId: route.resource.id,
+          requestId,
+          surface: 'resolve-api',
+          path,
+          slug: route.resource.slug,
+        });
+      }
     }
 
     return publicContractJson({

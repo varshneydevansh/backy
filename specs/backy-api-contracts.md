@@ -176,6 +176,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Blog post routes under `/blog/:slug` include `resource.kind: "post"` plus post API and hosted path.
   - Collection dynamic list routes under `/:collectionSlug` include `resource.kind: "dynamicList"`, collection metadata, public records API URL, render URL, hosted path, and record count. Collection dynamic item routes under `/:collectionSlug/:recordSlug` include `resource.kind: "dynamicItem"`, collection metadata, record id/slug, public records API URL, render URL, and hosted path.
   - Draft and future scheduled content stays hidden unless the exact preview token is supplied.
+  - Successful page/post preview-token route resolutions record tokenless `previewToken.use` audit metadata without storing the raw token.
   - Unresolved paths return `404` with `ROUTE_NOT_FOUND`.
 
 - `GET /api/sites/:siteId/blog/posts?status=published&limit=&cursor=`
