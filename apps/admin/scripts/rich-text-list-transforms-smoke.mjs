@@ -303,8 +303,32 @@ assert.equal(movedImportedRawIndent.changed, true);
 assert.equal(movedImportedRawIndent.nodes[0].children[0].children[0].text, 'Imported too deep');
 assert.equal(movedImportedRawIndent.nodes[0].children[0].indent, 8);
 
+assert.equal(helper.normalizeRichTextListIndent({ indent: '99' }), 8);
+assert.equal(helper.normalizeRichTextListIndent({ indent: 'nope' }), undefined);
+
+const outdentedImportedRawIndent = helper.applyListIndentToNodes([{
+  type: 'ul',
+  children: [
+    { type: 'li', indent: '99', children: [{ text: 'Imported too deep' }] },
+    { type: 'li', indent: 'nope', children: [{ text: 'Imported invalid' }] },
+  ],
+}], -1);
+assert.equal(outdentedImportedRawIndent[0].children[0].indent, 7);
+assert.equal(outdentedImportedRawIndent[0].children[1].indent, undefined);
+
+const selectedOutdentedImportedRawIndent = helper.applyListIndentToSelectedListItemNodes([{
+  type: 'ul',
+  children: [
+    { type: 'li', indent: '99', children: [{ text: 'Imported too deep' }] },
+    { type: 'li', indent: 2, children: [{ text: 'Stay nested' }] },
+  ],
+}], 'Imported too deep', -1);
+assert.equal(selectedOutdentedImportedRawIndent.changed, true);
+assert.equal(selectedOutdentedImportedRawIndent.nodes[0].children[0].indent, 7);
+assert.equal(selectedOutdentedImportedRawIndent.nodes[0].children[1].indent, 2);
+
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 90,
+  cases: 96,
 }));

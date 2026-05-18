@@ -19,6 +19,7 @@ import {
   applyListTypeToSelectedListItemNodes,
   applyListTypeToNodes,
   moveSelectedListItemNodes,
+  normalizeRichTextListIndent,
   RICH_TEXT_LIST_MAX_INDENT,
   type RichTextListType,
 } from './richTextListTransforms';
@@ -478,14 +479,12 @@ export function RichTextFormatting({
       const matchesSelectedText = !!selectedText && listText.includes(selectedText);
       if (nextNode.type === 'li' && (intersectsSelection || matchesSelectedText)) {
         didTargetListItem = true;
-        const currentIndent = Number(nextNode.indent || 0);
-        if (Number.isFinite(currentIndent)) {
-          const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
-          if (nextIndent === 0) {
-            delete nextNode.indent;
-          } else {
-            nextNode.indent = nextIndent;
-          }
+        const currentIndent = normalizeRichTextListIndent(nextNode) ?? 0;
+        const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
+        if (nextIndent === 0) {
+          delete nextNode.indent;
+        } else {
+          nextNode.indent = nextIndent;
         }
       }
 

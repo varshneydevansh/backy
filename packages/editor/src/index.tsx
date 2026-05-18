@@ -327,7 +327,7 @@ export const BackyEditor = ({
         }
 
         for (const [node, path] of selectedListItems) {
-            const currentIndent = Number((node as any).indent || 0);
+            const currentIndent = normalizeRichTextListIndent(node) ?? 0;
             const nextIndent = Math.max(0, Math.min(8, currentIndent + step));
             if (nextIndent === 0) {
                 Transforms.unsetNodes(slateEditor, 'indent' as any, { at: path });
@@ -366,7 +366,7 @@ export const BackyEditor = ({
             return false;
         }
 
-        const currentIndent = Number((selectedListItems[0][0] as any).indent || 0);
+        const currentIndent = normalizeRichTextListIndent(selectedListItems[0][0]) ?? 0;
 
         event.preventDefault();
 

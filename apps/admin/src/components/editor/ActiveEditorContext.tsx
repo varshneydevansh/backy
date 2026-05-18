@@ -9,7 +9,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import type { PlateEditor } from '@udecode/plate/react';
 import { Editor, Transforms, Element as SlateElement, Range, BaseSelection, Node, Text } from 'slate';
 import { ReactEditor } from 'slate-react';
-import { normalizeNestedRichTextLists, RICH_TEXT_LIST_MAX_INDENT } from './richTextListTransforms';
+import { normalizeNestedRichTextLists, normalizeRichTextListIndent, RICH_TEXT_LIST_MAX_INDENT } from './richTextListTransforms';
 
 interface ActiveEditorContextType {
   /** The currently active Plate editor */
@@ -2441,10 +2441,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
 
       for (const [node, path] of listItems) {
-        const currentIndent = Number((node as any).indent || 0);
+        const currentIndent = normalizeRichTextListIndent(node) ?? 0;
         const next = Math.max(
           0,
-          Math.min(RICH_TEXT_LIST_MAX_INDENT, Number.isFinite(currentIndent) ? currentIndent + step : step)
+          Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step)
         );
         if (next === 0) {
           Transforms.unsetNodes(editor as any, 'indent' as any, { at: path, match: getIsListItemNode });

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   normalizeNestedRichTextLists,
   normalizeRichTextListIndent,
@@ -12,6 +13,10 @@ assert.equal(normalizeRichTextListIndent({ indent: -4 }), undefined);
 assert.equal(normalizeRichTextListIndent({ indent: 0 }), undefined);
 assert.equal(normalizeRichTextListIndent({ indent: 'nope' }), undefined);
 assert.equal(normalizeRichTextListIndent(null), undefined);
+
+const editorSource = fs.readFileSync(new URL('../src/index.tsx', import.meta.url), 'utf8');
+assert.match(editorSource, /const currentIndent = normalizeRichTextListIndent\(node\) \?\? 0;/);
+assert.match(editorSource, /const currentIndent = normalizeRichTextListIndent\(selectedListItems\[0\]\[0\]\) \?\? 0;/);
 
 const normalized = normalizeNestedRichTextLists([
   {
@@ -40,4 +45,4 @@ assert.equal(normalized[0].children[1].indent, undefined);
 assert.equal(normalized[0].children[2].indent, 1);
 assert.equal(normalized[0].children[2].children[0].text, 'Nested child');
 
-console.log(JSON.stringify({ ok: true, cases: 13 }));
+console.log(JSON.stringify({ ok: true, cases: 15 }));

@@ -13,7 +13,7 @@ const cloneNode = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T;
 };
 
-const readIndent = (value: unknown): number | undefined => {
+export const normalizeRichTextListIndent = (value: unknown): number | undefined => {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -43,7 +43,7 @@ const cloneNodeWithNormalizedListIndent = (value: unknown): unknown => {
     }
 
     if (nextNode.type === 'li') {
-      const indent = readIndent(nextNode);
+      const indent = normalizeRichTextListIndent(nextNode);
       if (typeof indent === 'number') {
         nextNode.indent = indent;
       } else {
@@ -353,12 +353,7 @@ export const applyListIndentToSelectedListItemNodes = (
 
       const nextNode = cloneNode(node) as Record<string, unknown>;
       if (nextNode.type === 'li' && listItemMatchesText(nextNode, needle)) {
-        const currentIndent = Number(nextNode.indent || 0);
-        if (!Number.isFinite(currentIndent)) {
-          nextNodes.push(node);
-          continue;
-        }
-
+        const currentIndent = normalizeRichTextListIndent(nextNode) ?? 0;
         const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
         if (nextIndent === 0) {
           delete nextNode.indent;
@@ -404,14 +399,12 @@ export const applyListIndentToNodes = (nodes: unknown[], step: number): unknown[
     }
 
     if (nextNode.type === 'li') {
-      const currentIndent = Number(nextNode.indent || 0);
-      if (Number.isFinite(currentIndent)) {
-        const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
-        if (nextIndent === 0) {
-          delete nextNode.indent;
-        } else {
-          nextNode.indent = nextIndent;
-        }
+      const currentIndent = normalizeRichTextListIndent(nextNode) ?? 0;
+      const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
+      if (nextIndent === 0) {
+        delete nextNode.indent;
+      } else {
+        nextNode.indent = nextIndent;
       }
     }
 
@@ -444,7 +437,7 @@ export const normalizeNestedRichTextLists = (nodes: unknown[]): unknown[] => {
 
   const normalizeListItem = (node: Record<string, unknown>, fallbackIndent: number): unknown[] => {
     const children = Array.isArray(node.children) ? node.children : [];
-    const ownIndent = readIndent(node);
+    const ownIndent = normalizeRichTextListIndent(node);
     const itemIndent = typeof ownIndent === 'number'
       ? ownIndent
       : Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, fallbackIndent));
