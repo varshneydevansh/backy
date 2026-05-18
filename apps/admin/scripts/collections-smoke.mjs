@@ -28,6 +28,8 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Collections route must use the shared EmptyState component for the primary no-collections state');
   assert(source.includes('title="No collections yet"'), 'Collections empty state must keep the no-collections title visible');
   assert(source.includes('reusable CMS data for pages, APIs, and custom frontends'), 'Collections empty state must explain what the first schema unlocks');
+  assert(source.includes('title="No collection activity yet"'), 'Collections audit panel must keep the empty activity title visible');
+  assert(source.includes('Collection schema changes, record edits, imports, exports, and deletes will appear here for audit review.'), 'Collections audit empty state must explain which actions populate activity');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

@@ -4338,9 +4338,11 @@ function CollectionsPage() {
                   Loading collection activity...
                 </div>
               ) : collectionAuditLogs.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-card px-4 py-5 text-sm text-muted-foreground">
-                  No collection or record audit events recorded yet.
-                </div>
+                <EmptyState
+                  icon={History}
+                  title="No collection activity yet"
+                  description="Collection schema changes, record edits, imports, exports, and deletes will appear here for audit review."
+                />
               ) : (
                 collectionAuditLogs.map((log) => (
                   <CollectionAuditLogCard key={log.id} log={log} />
