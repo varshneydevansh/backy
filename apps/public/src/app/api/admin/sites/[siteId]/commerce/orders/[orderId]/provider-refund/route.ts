@@ -230,6 +230,33 @@ const canExecutePayPalRefund = (provider: string, paymentReference: string) =>
   Boolean(paypalAccessToken()) &&
   Boolean(paymentReference);
 
+const paddleApiKey = () =>
+  process.env.BACKY_PADDLE_API_KEY?.trim() ||
+  process.env.PADDLE_API_KEY?.trim() ||
+  "";
+
+const paddleApiBaseUrl = () =>
+  (
+    process.env.BACKY_PADDLE_API_BASE_URL?.trim() ||
+    process.env.PADDLE_API_BASE_URL?.trim() ||
+    "https://api.paddle.com"
+  ).replace(/\/$/, "");
+
+const paddleAdjustmentsEndpoint = () => `${paddleApiBaseUrl()}/adjustments`;
+
+const paddleAdjustmentStatusEndpoint = (adjustmentId: string) => {
+  const params = new URLSearchParams({
+    id: adjustmentId,
+    per_page: "1",
+  });
+  return `${paddleAdjustmentsEndpoint()}?${params.toString()}`;
+};
+
+const canExecutePaddleRefund = (provider: string, paymentReference: string) =>
+  provider.toLowerCase() === "paddle" &&
+  Boolean(paddleApiKey()) &&
+  Boolean(paymentReference);
+
 const squareAccessToken = () =>
   process.env.BACKY_SQUARE_ACCESS_TOKEN?.trim() ||
   process.env.SQUARE_ACCESS_TOKEN?.trim() ||
@@ -598,6 +625,27 @@ const safePayPalErrorPayload = (value: Record<string, unknown>) => {
   };
 };
 
+const safePaddleRefundPayload = (value: Record<string, unknown>) => ({
+  id: textValue(value.id),
+  action: textValue(value.action),
+  type: textValue(value.type),
+  status: textValue(value.status),
+  transaction_id: textValue(value.transaction_id),
+  reason: textValue(value.reason),
+  created_at: textValue(value.created_at),
+  updated_at: textValue(value.updated_at),
+});
+
+const safePaddleErrorPayload = (value: Record<string, unknown>) => ({
+  status: Number(value.status || value.status_code || 0),
+  code: textValue(value.code) || textValue(value.error_code),
+  type: textValue(value.type),
+  message:
+    textValue(value.detail) ||
+    textValue(value.message) ||
+    "Paddle refund adjustment request failed.",
+});
+
 const safeSquareMoneyPayload = (value: unknown) => {
   const money = toRecord(value);
   return {
@@ -843,6 +891,82 @@ const refreshPayPalRefund = async (refundId: string) => {
   return {
     ok: true as const,
     payload: safePayPalRefundPayload(payloadRecord),
+  };
+};
+
+const executePaddleRefund = async (input: {
+  refundId: string;
+  orderId: string;
+  orderNumber: string;
+  paymentReference: string;
+  reason: string;
+}) => {
+  const response = await fetch(paddleAdjustmentsEndpoint(), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${paddleApiKey()}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "refund",
+      type: "full",
+      transaction_id: input.paymentReference,
+      reason: input.reason.slice(0, 255),
+      custom_data: {
+        backyRefundId: input.refundId,
+        backyOrderId: input.orderId,
+        backyOrderNumber: input.orderNumber,
+      },
+    }),
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+  const dataRecord = Array.isArray(payloadRecord.data)
+    ? toRecord(payloadRecord.data[0])
+    : toRecord(payloadRecord.data);
+  const sourceRecord = Object.keys(dataRecord).length ? dataRecord : payloadRecord;
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safePaddleErrorPayload(
+        payloadRecord.error ? toRecord(payloadRecord.error) : payloadRecord,
+      ),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safePaddleRefundPayload(sourceRecord),
+  };
+};
+
+const refreshPaddleRefund = async (adjustmentId: string) => {
+  const response = await fetch(paddleAdjustmentStatusEndpoint(adjustmentId), {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${paddleApiKey()}`,
+    },
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+  const dataRecord = toRecord(payloadRecord.data);
+  const sourceRecord = Object.keys(dataRecord).length ? dataRecord : payloadRecord;
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safePaddleErrorPayload(
+        payloadRecord.error ? toRecord(payloadRecord.error) : payloadRecord,
+      ),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safePaddleRefundPayload(sourceRecord),
   };
 };
 
@@ -1121,6 +1245,10 @@ const buildProviderRefundUpdate = async (
     provider,
     paymentReference,
   );
+  const shouldExecutePaddleRefund = canExecutePaddleRefund(
+    provider,
+    paymentReference,
+  );
   const shouldExecuteSquareRefund = canExecuteSquareRefund(
     provider,
     paymentReference,
@@ -1142,15 +1270,17 @@ const buildProviderRefundUpdate = async (
     ? "stripe-api"
     : shouldExecutePayPalRefund
       ? "paypal-api"
-      : shouldExecuteSquareRefund
-        ? "square-api"
-        : shouldExecuteAdyenRefund
-          ? "adyen-api"
-          : shouldExecuteMollieRefund
-            ? "mollie-api"
-            : shouldExecuteRazorpayRefund
-              ? "razorpay-api"
-              : "handoff";
+      : shouldExecutePaddleRefund
+        ? "paddle-api"
+        : shouldExecuteSquareRefund
+          ? "square-api"
+          : shouldExecuteAdyenRefund
+            ? "adyen-api"
+            : shouldExecuteMollieRefund
+              ? "mollie-api"
+              : shouldExecuteRazorpayRefund
+                ? "razorpay-api"
+                : "handoff";
   const providerPayload: Record<string, unknown> = {
     schemaVersion: "backy.provider-refund.v1",
     action:
@@ -1158,15 +1288,17 @@ const buildProviderRefundUpdate = async (
         ? "refunds.create"
         : provider === "paypal"
           ? "payments.captures.refund"
-          : provider === "square"
-            ? "refunds.create"
-            : provider === "adyen"
-              ? "payments.refunds.create"
-              : provider === "mollie"
+          : provider === "paddle"
+            ? "adjustments.create"
+            : provider === "square"
+              ? "refunds.create"
+              : provider === "adyen"
                 ? "payments.refunds.create"
-                : provider === "razorpay"
-                  ? "payments.refund"
-                  : "provider.refund.create",
+                : provider === "mollie"
+                  ? "payments.refunds.create"
+                  : provider === "razorpay"
+                    ? "payments.refund"
+                    : "provider.refund.create",
     provider,
     executionMode,
     orderId: record.id,
@@ -1236,6 +1368,36 @@ const buildProviderRefundUpdate = async (
         paypalStatus === "FAILED" ||
         paypalStatus === "CANCELLED" ||
         paypalStatus === "DENIED"
+      ) {
+        status = "failed";
+      } else {
+        status = "requested";
+      }
+      providerRefundId = result.payload.id || refundId;
+      providerReference = `${provider}:${result.payload.id || refundId}`;
+      statusNote = "executed";
+    } else {
+      status = "failed";
+      statusNote = "failed";
+    }
+  } else if (shouldExecutePaddleRefund) {
+    const result = await executePaddleRefund({
+      refundId,
+      orderId: record.id,
+      orderNumber,
+      paymentReference,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      const paddleStatus = result.payload.status.toLowerCase();
+      if (paddleStatus === "approved" || paddleStatus === "refunded") {
+        status = "succeeded";
+        completedAt = new Date().toISOString();
+      } else if (
+        paddleStatus === "rejected" ||
+        paddleStatus === "failed" ||
+        paddleStatus === "reversed"
       ) {
         status = "failed";
       } else {
@@ -1378,6 +1540,7 @@ const buildProviderRefundUpdate = async (
     !(
       shouldExecuteStripeRefund ||
       shouldExecutePayPalRefund ||
+      shouldExecutePaddleRefund ||
       shouldExecuteSquareRefund ||
       shouldExecuteAdyenRefund ||
       shouldExecuteMollieRefund ||
@@ -1430,15 +1593,17 @@ const buildProviderRefundRefreshUpdate = async (
         ? "refunds.retrieve"
         : provider === "paypal"
           ? "payments.refunds.get"
-          : provider === "square"
-            ? "refunds.get"
-            : provider === "adyen"
-              ? "payments.refunds.webhook_reconcile"
-              : provider === "mollie"
-                ? "payments.refunds.get"
-                : provider === "razorpay"
-                  ? "refunds.get"
-                  : "provider.refund.refresh",
+          : provider === "paddle"
+            ? "adjustments.get"
+            : provider === "square"
+              ? "refunds.get"
+              : provider === "adyen"
+                ? "payments.refunds.webhook_reconcile"
+                : provider === "mollie"
+                  ? "payments.refunds.get"
+                  : provider === "razorpay"
+                    ? "refunds.get"
+                    : "provider.refund.refresh",
     provider,
     orderId: record.id,
     orderNumber: textValue(values.ordernumber),
@@ -1497,6 +1662,32 @@ const buildProviderRefundRefreshUpdate = async (
         paypalStatus === "FAILED" ||
         paypalStatus === "CANCELLED" ||
         paypalStatus === "DENIED"
+      ) {
+        status = "failed";
+      } else {
+        status = "requested";
+      }
+      providerReference = `${provider}:${result.payload.id || existing.id}`;
+      statusNote = "reconciled";
+    } else {
+      statusNote = "refresh_failed";
+    }
+  } else if (provider === "paddle" && paddleApiKey() && existing.id) {
+    const result = await refreshPaddleRefund(existing.id);
+    providerPayload.refresh = {
+      requestedAt: now,
+      executionMode: "paddle-api",
+      ...result,
+    };
+    if (result.ok) {
+      const paddleStatus = result.payload.status.toLowerCase();
+      if (paddleStatus === "approved" || paddleStatus === "refunded") {
+        status = "succeeded";
+        completedAt = completedAt || now;
+      } else if (
+        paddleStatus === "rejected" ||
+        paddleStatus === "failed" ||
+        paddleStatus === "reversed"
       ) {
         status = "failed";
       } else {

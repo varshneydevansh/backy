@@ -36,6 +36,7 @@ const workflow = read('../.github/workflows/commerce-provider-certification.yml'
 const mockWorkflow = read('../.github/workflows/commerce-provider-smoke.yml');
 const rootPackage = read('../package.json');
 const settingsRoute = read('../apps/public/src/app/api/admin/settings/route.ts');
+const providerRefundRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/orders/[orderId]/provider-refund/route.ts');
 const commerceContract = read('../apps/public/src/lib/commerceCatalog.ts');
 const openApiRoute = read('../apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
 const generatedSdkTypes = read('../packages/sdk-js/src/generated-contract-types.ts');
@@ -313,6 +314,8 @@ includesAll(
     'BACKY_WOOCOMMERCE_CONSUMER_KEY',
     'BACKY_ETSY_ACCESS_TOKEN',
     'BACKY_MAGENTO_ACCESS_TOKEN',
+    'BACKY_PADDLE_API_KEY',
+    'paddleRefundMockBaseUrl',
     'BACKY_RAZORPAY_KEY_ID',
     'BACKY_TAXJAR_API_KEY',
     'BACKY_AVALARA_ACCOUNT_ID',
@@ -340,7 +343,7 @@ includesAll(
     'public checkout and admin-order TaxJar/Avalara tax quotes',
     'EasyPost/Shippo shipping rates and label/tracking flows',
     'Stripe Tax and Stripe promotion-code discount quotes',
-    'Stripe/PayPal/Square/Adyen/Mollie/Razorpay refunds',
+    'Stripe/PayPal/Paddle/Square/Adyen/Mollie/Razorpay refunds',
     '.github/workflows/commerce-provider-smoke.yml',
   ],
   'API contracts commerce mock provider coverage summary',
@@ -368,7 +371,7 @@ includesAll(
     'public checkout and admin-order TaxJar/Avalara tax quotes',
     'EasyPost/Shippo shipping rates, labels, and tracking',
     'Stripe Tax and Stripe promotion-code discount quotes',
-    'Stripe/PayPal/Square/Adyen/Mollie/Razorpay refunds',
+    'Stripe/PayPal/Paddle/Square/Adyen/Mollie/Razorpay refunds',
     'npm run ci:commerce-provider-smoke',
   ],
   'SETUP commerce mock provider coverage runbook',
@@ -384,6 +387,7 @@ includesAll(
     'BACKY_AVALARA_ACCOUNT_ID',
     'BACKY_EASYPOST_API_KEY',
     'BACKY_SHIPPO_API_KEY',
+    'BACKY_PADDLE_API_KEY',
     'BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN',
     'BACKY_BIGCOMMERCE_ACCESS_TOKEN',
     'BACKY_WOOCOMMERCE_CONSUMER_KEY',
@@ -395,6 +399,21 @@ includesAll(
     'Subscription lifecycle execution',
   ],
   'Settings runtime commerce diagnostics contract',
+);
+
+includesAll(
+  providerRefundRoute,
+  [
+    'canExecutePaddleRefund',
+    'executePaddleRefund',
+    'refreshPaddleRefund',
+    'adjustments.create',
+    'adjustments.get',
+    'paddle-api',
+    'BACKY_PADDLE_API_KEY',
+    'PADDLE_API_KEY',
+  ],
+  'Paddle provider refund route execution contract',
 );
 
 includesAll(
@@ -417,6 +436,7 @@ includesAll(
     'orders-provider-readiness',
     'providerReadinessChecks',
     'Stripe checkout/refund',
+    'Paddle refunds',
     'TaxJar',
     'Avalara',
     'EasyPost rates',
@@ -451,6 +471,8 @@ includesAll(
     'EasyPost mock',
     'Shippo mock',
     'provider refund',
+    'Paddle refund',
+    'createPaddleRefundMockServer',
     'Razorpay refund',
     'providerReadiness',
   ],
@@ -461,6 +483,7 @@ includesAll(
   audit,
   [
     'Commerce storefront provider certification handoff',
+    'Paddle order refund provider update',
     'data.modules.commerce.providerCertification',
     'data.commerce.providerCertification',
     'CommerceProviderCertification',

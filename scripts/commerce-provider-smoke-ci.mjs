@@ -23,6 +23,7 @@ const stripeRefundMockBaseUrl = "http://127.0.0.1:45680";
 const easyPostMockBaseUrl = "http://127.0.0.1:45681/v2";
 const shippoMockBaseUrl = "http://127.0.0.1:45682";
 const paypalRefundMockBaseUrl = "http://127.0.0.1:45685";
+const paddleRefundMockBaseUrl = "http://127.0.0.1:45692";
 const squareRefundMockBaseUrl = "http://127.0.0.1:45686";
 const adyenRefundMockBaseUrl = "http://127.0.0.1:45687";
 const mollieRefundMockBaseUrl = "http://127.0.0.1:45688";
@@ -117,6 +118,8 @@ const ordersMockEnv = {
   BACKY_SHIPPO_API_BASE_URL: shippoMockBaseUrl,
   BACKY_PAYPAL_ACCESS_TOKEN: "paypal-orders-mock-token",
   BACKY_PAYPAL_API_BASE_URL: paypalRefundMockBaseUrl,
+  BACKY_PADDLE_API_KEY: "paddle-orders-mock-key",
+  BACKY_PADDLE_API_BASE_URL: paddleRefundMockBaseUrl,
   BACKY_SQUARE_ACCESS_TOKEN: "square-orders-mock-token",
   BACKY_SQUARE_API_BASE_URL: squareRefundMockBaseUrl,
   BACKY_ADYEN_API_KEY: "adyen-orders-mock-key",

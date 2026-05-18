@@ -29,6 +29,8 @@ const STRIPE_REFUND_MOCK_PORT = Number(process.env.BACKY_STRIPE_REFUND_MOCK_PORT
 const STRIPE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_REFUND_MOCK_PORT}`;
 const PAYPAL_REFUND_MOCK_PORT = Number(process.env.BACKY_PAYPAL_REFUND_MOCK_PORT || 45685);
 const PAYPAL_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${PAYPAL_REFUND_MOCK_PORT}`;
+const PADDLE_REFUND_MOCK_PORT = Number(process.env.BACKY_PADDLE_REFUND_MOCK_PORT || 45692);
+const PADDLE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${PADDLE_REFUND_MOCK_PORT}`;
 const SQUARE_REFUND_MOCK_PORT = Number(process.env.BACKY_SQUARE_REFUND_MOCK_PORT || 45686);
 const SQUARE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${SQUARE_REFUND_MOCK_PORT}`;
 const ADYEN_REFUND_MOCK_PORT = Number(process.env.BACKY_ADYEN_REFUND_MOCK_PORT || 45687);
@@ -552,6 +554,65 @@ const createPayPalRefundMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(PAYPAL_REFUND_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const paddleRefundExecutionEnabled = () => {
+  const key = process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || '';
+  const apiBaseUrl = process.env.BACKY_PADDLE_API_BASE_URL || process.env.PADDLE_API_BASE_URL || '';
+  return Boolean(key && apiBaseUrl === PADDLE_REFUND_MOCK_BASE_URL);
+};
+
+const createPaddleRefundMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(request.method === 'GET' ? 200 : 201, { 'content-type': 'application/json' });
+      if (request.method === 'GET') {
+        const adjustmentUrl = new URL(request.url || '/adjustments', PADDLE_REFUND_MOCK_BASE_URL);
+        const adjustmentId = adjustmentUrl.searchParams.get('id') || `adj_paddle_smoke_${requests.length}`;
+        response.end(JSON.stringify({
+          data: [{
+            id: adjustmentId,
+            action: 'refund',
+            type: 'full',
+            status: 'approved',
+            transaction_id: `txn_paddle_refresh_${Date.now()}`,
+            reason: 'refresh',
+            created_at: '2026-05-16T00:00:00Z',
+            updated_at: '2026-05-16T00:00:05Z',
+          }],
+        }));
+        return;
+      }
+      response.end(JSON.stringify({
+        data: {
+          id: `adj_paddle_smoke_${requests.length}`,
+          action: body.action || '',
+          type: body.type || '',
+          status: 'approved',
+          transaction_id: body.transaction_id || '',
+          reason: body.reason || '',
+          created_at: '2026-05-16T00:00:00Z',
+          updated_at: '2026-05-16T00:00:01Z',
+        },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(PADDLE_REFUND_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -2371,6 +2432,30 @@ const preparePayPalProviderRefundThroughUi = async (client, orderNumber, suffix)
   return null;
 };
 
+const preparePaddleProviderRefundThroughUi = async (client, orderNumber, suffix) => {
+  await clickOrderCardButton(client, orderNumber, 'Edit');
+  await setLabeledControl(client, 'Provider', 'paddle', { exact: true });
+  await setLabeledControl(client, 'Payment ref', `txn_paddle_${suffix}`, { exact: true });
+  await clickByText(client, 'Save Order', { exact: true });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updated: document.body?.innerText?.includes('Order updated.') || false,
+      providerVisible: document.body?.innerText?.includes('paddle') && document.body?.innerText?.includes(${JSON.stringify(`txn_paddle_${suffix}`)}),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.updated || state.providerVisible) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Paddle provider refund preparation did not save: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const prepareSquareProviderRefundThroughUi = async (client, orderNumber, suffix) => {
   await clickOrderCardButton(client, orderNumber, 'Edit');
   await setLabeledControl(client, 'Provider', 'square', { exact: true });
@@ -2849,6 +2934,7 @@ const main = async () => {
   let avalaraMockServer;
   let stripeRefundMockServer;
   let paypalRefundMockServer;
+  let paddleRefundMockServer;
   let squareRefundMockServer;
   let adyenRefundMockServer;
   let mollieRefundMockServer;
@@ -3366,21 +3452,26 @@ const main = async () => {
 
     const providerRefundExecutionProvider = paypalRefundExecutionEnabled()
       ? 'paypal'
-      : squareRefundExecutionEnabled()
-        ? 'square'
-        : adyenRefundExecutionEnabled()
-          ? 'adyen'
-          : mollieRefundExecutionEnabled()
-            ? 'mollie'
-            : razorpayRefundExecutionEnabled()
-              ? 'razorpay'
-              : stripeRefundExecutionEnabled()
-                ? 'stripe'
-                : 'manual';
+      : paddleRefundExecutionEnabled()
+        ? 'paddle'
+        : squareRefundExecutionEnabled()
+          ? 'square'
+          : adyenRefundExecutionEnabled()
+            ? 'adyen'
+            : mollieRefundExecutionEnabled()
+              ? 'mollie'
+              : razorpayRefundExecutionEnabled()
+                ? 'razorpay'
+                : stripeRefundExecutionEnabled()
+                  ? 'stripe'
+                  : 'manual';
 
     if (providerRefundExecutionProvider === 'paypal') {
       paypalRefundMockServer = await createPayPalRefundMockServer();
       await preparePayPalProviderRefundThroughUi(client, orderNumber, suffix);
+    } else if (providerRefundExecutionProvider === 'paddle') {
+      paddleRefundMockServer = await createPaddleRefundMockServer();
+      await preparePaddleProviderRefundThroughUi(client, orderNumber, suffix);
     } else if (providerRefundExecutionProvider === 'square') {
       squareRefundMockServer = await createSquareRefundMockServer();
       await prepareSquareProviderRefundThroughUi(client, orderNumber, suffix);
@@ -3448,6 +3539,22 @@ const main = async () => {
       assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful PayPal execution: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned PayPal refund id: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.executionMode === 'paypal-api', `Provider refund payload did not persist PayPal execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    } else if (providerRefundExecutionProvider === 'paddle') {
+      const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
+      assert(paddleRefundMockServer.requests.length >= 1, `Paddle refund mock did not receive a refund request: ${paddleRefundMockServer.requests.length}`);
+      const paddleRefundRequest = paddleRefundMockServer.requests[0];
+      const expectedKey = process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY;
+      assert(paddleRefundRequest.url === '/adjustments', `Paddle refund mock received unexpected URL: ${JSON.stringify(paddleRefundMockServer.requests)}`);
+      assert(paddleRefundRequest.headers.authorization === `Bearer ${expectedKey}`, `Paddle refund mock did not receive bearer auth: ${JSON.stringify(paddleRefundRequest.headers)}`);
+      assert(paddleRefundRequest.body.action === 'refund', `Paddle refund body did not request a refund adjustment: ${JSON.stringify(paddleRefundRequest.body)}`);
+      assert(paddleRefundRequest.body.type === 'full', `Paddle refund body did not request a full refund: ${JSON.stringify(paddleRefundRequest.body)}`);
+      assert(paddleRefundRequest.body.transaction_id === `txn_paddle_${suffix}`, `Paddle refund body did not include transaction id: ${JSON.stringify(paddleRefundRequest.body)}`);
+      assert(/^rf_/.test(String(paddleRefundRequest.body.custom_data?.backyRefundId || '')), `Paddle refund body did not include internal refund metadata: ${JSON.stringify(paddleRefundRequest.body)}`);
+      assert(String(providerRefundRecord.values.providerrefundid || '').startsWith('adj_paddle_smoke_'), `Provider refund did not persist the Paddle adjustment id: ${JSON.stringify(providerRefundRecord.values)}`);
+      assert(persistedProviderPayload.action === 'adjustments.create', `Provider refund payload did not persist the Paddle action: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Paddle execution: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Paddle adjustment id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.executionMode === 'paddle-api', `Provider refund payload did not persist Paddle execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     } else if (providerRefundExecutionProvider === 'square') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
       assert(squareRefundMockServer.requests.length >= 1, `Square refund mock did not receive a refund request: ${squareRefundMockServer.requests.length}`);
@@ -3531,7 +3638,7 @@ const main = async () => {
       assert(persistedProviderPayload.executionMode === 'stripe-api', `Provider refund payload did not persist Stripe execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     }
 
-    if (['paypal', 'square', 'mollie', 'razorpay', 'stripe'].includes(providerRefundExecutionProvider)) {
+    if (['paypal', 'paddle', 'square', 'mollie', 'razorpay', 'stripe'].includes(providerRefundExecutionProvider)) {
       let pendingRefundId = String(providerRefundRecord.values.providerrefundid || '');
       if (providerRefundExecutionProvider !== 'razorpay') {
         pendingRefundId = `${providerRefundExecutionProvider}_refresh_${suffix}`;
@@ -3584,13 +3691,15 @@ const main = async () => {
       assert(refreshedProviderPayload.refresh?.executionMode === `${providerRefundExecutionProvider}-api`, `Provider refund refresh payload did not persist the execution mode: ${JSON.stringify(refreshedProviderPayload)}`);
       const providerRefundMockServer = providerRefundExecutionProvider === 'paypal'
         ? paypalRefundMockServer
-        : providerRefundExecutionProvider === 'square'
-          ? squareRefundMockServer
-          : providerRefundExecutionProvider === 'mollie'
-            ? mollieRefundMockServer
-            : providerRefundExecutionProvider === 'razorpay'
-              ? razorpayRefundMockServer
-              : stripeRefundMockServer;
+        : providerRefundExecutionProvider === 'paddle'
+          ? paddleRefundMockServer
+          : providerRefundExecutionProvider === 'square'
+            ? squareRefundMockServer
+            : providerRefundExecutionProvider === 'mollie'
+              ? mollieRefundMockServer
+              : providerRefundExecutionProvider === 'razorpay'
+                ? razorpayRefundMockServer
+                : stripeRefundMockServer;
       const refreshRequest = providerRefundMockServer.requests.find((request) => request.method === 'GET' && String(request.url || '').includes(pendingRefundId));
       assert(refreshRequest, `Provider refund refresh did not query the ${providerRefundExecutionProvider} mock: ${JSON.stringify(providerRefundMockServer.requests)}`);
     } else if (providerRefundExecutionProvider === 'manual') {
@@ -3910,6 +4019,9 @@ const main = async () => {
     }
     if (paypalRefundMockServer) {
       await paypalRefundMockServer.close().catch(() => {});
+    }
+    if (paddleRefundMockServer) {
+      await paddleRefundMockServer.close().catch(() => {});
     }
     if (squareRefundMockServer) {
       await squareRefundMockServer.close().catch(() => {});

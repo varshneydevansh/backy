@@ -1888,6 +1888,7 @@ const buildInfrastructureDiagnostics = ({
         ready: Boolean(
           runtimeCommerce.stripeSecretConfigured ||
             runtimeCommerce.paypalAccessTokenConfigured ||
+            runtimeCommerce.paddleApiKeyConfigured ||
             runtimeCommerce.squareAccessTokenConfigured ||
             (runtimeCommerce.adyenApiKeyConfigured && runtimeCommerce.adyenMerchantAccountConfigured) ||
             runtimeCommerce.mollieApiKeyConfigured ||
@@ -1897,6 +1898,7 @@ const buildInfrastructureDiagnostics = ({
         detail: [
           runtimeCommerce.stripeSecretConfigured ? 'Stripe refunds ready.' : '',
           runtimeCommerce.paypalAccessTokenConfigured ? 'PayPal refunds ready.' : '',
+          runtimeCommerce.paddleApiKeyConfigured ? 'Paddle refunds ready.' : '',
           runtimeCommerce.squareAccessTokenConfigured ? 'Square refunds ready.' : '',
           runtimeCommerce.adyenApiKeyConfigured && runtimeCommerce.adyenMerchantAccountConfigured ? 'Adyen refunds ready.' : '',
           runtimeCommerce.mollieApiKeyConfigured ? 'Mollie refunds ready.' : '',

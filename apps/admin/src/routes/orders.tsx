@@ -641,7 +641,7 @@ const ORDER_API_CONTRACTS = [
 const ORDER_PROVIDER_CERTIFICATION_GROUPS = [
   {
     family: 'Checkout and payment settlement',
-    providers: ['Stripe checkout', 'Stripe webhooks', 'PayPal', 'Square', 'Adyen', 'Mollie', 'Razorpay'],
+    providers: ['Stripe checkout', 'Stripe webhooks', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay'],
     gate: 'ci:commerce-provider-certification',
     evidence: 'Live payment credentials, signed webhook secrets, and provider settlement events.',
   },
@@ -665,7 +665,7 @@ const ORDER_PROVIDER_CERTIFICATION_GROUPS = [
   },
   {
     family: 'Provider refunds',
-    providers: ['Stripe refunds', 'PayPal refunds', 'Square refunds', 'Adyen refunds', 'Mollie refunds', 'Razorpay refunds'],
+    providers: ['Stripe refunds', 'PayPal refunds', 'Paddle refunds', 'Square refunds', 'Adyen refunds', 'Mollie refunds', 'Razorpay refunds'],
     gate: 'ci:commerce-provider-certification',
     evidence: 'Live refund credentials plus provider-specific reference formats and refresh/webhook behavior.',
   },
@@ -1052,6 +1052,7 @@ function OrdersRoute() {
     const refundProviderModes = [
       runtime?.stripeSecretConfigured ? 'stripe' : '',
       runtime?.paypalAccessTokenConfigured ? 'paypal' : '',
+      runtime?.paddleApiKeyConfigured ? 'paddle' : '',
       runtime?.squareAccessTokenConfigured ? 'square' : '',
       runtime?.adyenApiKeyConfigured && runtime?.adyenMerchantAccountConfigured ? 'adyen' : '',
       runtime?.mollieApiKeyConfigured ? 'mollie' : '',
