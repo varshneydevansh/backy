@@ -886,6 +886,19 @@ const assertProductsApiContractsSource = () => {
     "Products customer profiles empty state must explain checkout intake and private storage",
   );
   assert(
+    source.includes("const PRODUCT_GALLERY_IMAGE_LIMIT = 12;") &&
+      source.includes("galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT") &&
+      source.includes("Product galleries support up to ${PRODUCT_GALLERY_IMAGE_LIMIT} images. Remove an image before adding another.") &&
+      source.includes("That image is already in this product gallery."),
+    "Products gallery controls must enforce image caps and duplicate prevention in the shared add handler",
+  );
+  assert(
+    source.includes("const PRODUCT_VARIANT_LIMIT = 50;") &&
+      source.includes("productVariants.length >= PRODUCT_VARIANT_LIMIT") &&
+      source.includes(".slice(0, PRODUCT_VARIANT_LIMIT)"),
+    "Products variant controls must enforce variant caps through a shared source limit",
+  );
+  assert(
     source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),
     "Products handoff manifest must expose API response contracts for custom frontends",
   );

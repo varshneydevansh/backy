@@ -243,6 +243,8 @@ const PRODUCT_PROVIDER_CERTIFICATION_GROUPS = [
 
 const PRODUCT_RECORD_PAGE_SIZE = 100;
 const COMMERCE_SIGNAL_RECORD_LIMIT = 100;
+const PRODUCT_VARIANT_LIMIT = 50;
+const PRODUCT_GALLERY_IMAGE_LIMIT = 12;
 
 type ProductStatusFilter = ContentStatus | 'all';
 type ProductTypeFilter = ProductFormState['productType'] | 'all';
@@ -2269,14 +2271,23 @@ function ProductsRoute() {
   };
 
   const addGalleryImageUrl = (url: string) => {
-    if (isProductsBusy) return;
-    if (!canEditProducts) return;
+    if (isProductsBusy) return false;
+    if (!canEditProducts) return false;
 
     const normalizedUrl = url.trim();
-    if (!normalizedUrl) return;
+    if (!normalizedUrl) return false;
+    if (galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT) {
+      setNotice(`Product galleries support up to ${PRODUCT_GALLERY_IMAGE_LIMIT} images. Remove an image before adding another.`);
+      return false;
+    }
+    if (galleryImageUrls.includes(normalizedUrl)) {
+      setNotice('That image is already in this product gallery.');
+      return false;
+    }
 
     setGalleryImages([...galleryImageUrls, normalizedUrl]);
     setGalleryImageDraft('');
+    return true;
   };
 
   const removeGalleryImageUrl = (url: string) => {
@@ -2308,7 +2319,7 @@ function ProductsRoute() {
     const sku = variantDraft.sku.trim();
     const option = variantDraft.option.trim();
 
-    if ((!title && !option) || productVariants.length >= 50) return;
+    if ((!title && !option) || productVariants.length >= PRODUCT_VARIANT_LIMIT) return;
 
     setProductVariants([
       ...productVariants,
@@ -2348,7 +2359,7 @@ function ProductsRoute() {
     }
 
     const existing = optionMatrixDraft.replaceExisting ? [] : productVariants;
-    const nextVariants = dedupeProductVariants([...existing, ...generated]).slice(0, 50);
+    const nextVariants = dedupeProductVariants([...existing, ...generated]).slice(0, PRODUCT_VARIANT_LIMIT);
     if (nextVariants.length < existing.length + generated.length) {
       setNotice('Variant matrix generated; duplicate or over-limit variants were skipped.');
     } else {
@@ -4400,7 +4411,7 @@ function ProductsRoute() {
                       <div className="mt-1 text-xs text-muted-foreground">Options for sizes, licenses, colors, tiers, or file formats.</div>
                     </div>
                     <span className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
-                      {productVariants.length}/50
+                      {productVariants.length}/{PRODUCT_VARIANT_LIMIT}
                     </span>
                   </div>
 
@@ -4468,7 +4479,7 @@ function ProductsRoute() {
                     <Button
                       variant="outline"
                       onClick={addProductVariant}
-                      disabled={(!variantDraft.title.trim() && !variantDraft.option.trim()) || productVariants.length >= 50}
+                      disabled={(!variantDraft.title.trim() && !variantDraft.option.trim()) || productVariants.length >= PRODUCT_VARIANT_LIMIT}
                     >
                       Add
                     </Button>
@@ -4543,7 +4554,7 @@ function ProductsRoute() {
                       <Button
                         variant="outline"
                         onClick={generateVariantMatrix}
-                        disabled={!optionMatrixDraft.options.trim() || productVariants.length >= 50 || isProductsAccessBusy || !canEditProducts}
+                        disabled={!optionMatrixDraft.options.trim() || productVariants.length >= PRODUCT_VARIANT_LIMIT || isProductsAccessBusy || !canEditProducts}
                         data-testid="products-variant-matrix-generate"
                       >
                         Generate
@@ -4988,7 +4999,7 @@ function ProductsRoute() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
                     <span>Gallery images</span>
-                    <span className="font-mono">{galleryImageUrls.length}/12</span>
+                    <span className="font-mono">{galleryImageUrls.length}/{PRODUCT_GALLERY_IMAGE_LIMIT}</span>
                   </div>
                   {galleryImageUrls.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -5029,13 +5040,13 @@ function ProductsRoute() {
                       <Button
                         variant="outline"
                         onClick={() => addGalleryImageUrl(galleryImageDraft)}
-                        disabled={!galleryImageDraft.trim() || galleryImageUrls.length >= 12}
+                        disabled={!galleryImageDraft.trim() || galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT}
                       >
                         Add URL
                       </Button>
                       <Button
                         onClick={() => openMediaPicker('gallery')}
-                        disabled={galleryImageUrls.length >= 12 || !canViewMedia}
+                        disabled={galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT || !canViewMedia}
                         title={!canViewMedia ? mediaViewPermissionTitle : undefined}
                         iconStart={<ImageIcon className="size-4" />}
                       >
@@ -5220,8 +5231,9 @@ function ProductsRoute() {
           }
 
           if (mediaPickerTarget === 'gallery') {
-            addGalleryImageUrl(deliveryUrl);
-            setNotice(`Added ${asset.name} to the product gallery.`);
+            if (addGalleryImageUrl(deliveryUrl)) {
+              setNotice(`Added ${asset.name} to the product gallery.`);
+            }
             return;
           }
 
@@ -5650,7 +5662,7 @@ const buildProductVariantMatrix = ({
   const inventoryValue = inventory.trim() ? Number(inventory) : null;
 
   return combineProductOptionValues(groups)
-    .slice(0, 50)
+    .slice(0, PRODUCT_VARIANT_LIMIT)
     .map((combination, index) => {
       const option = combination.map((item) => `${item.name}: ${item.value}`).join(' / ');
       const optionSlug = combination.map((item) => slugify(item.value)).filter(Boolean).join('-');
@@ -5953,7 +5965,7 @@ const parseGalleryImages = (value: string): string[] => (
     .map((url) => url.trim())
     .filter(Boolean)
     .filter((url, index, urls) => urls.indexOf(url) === index)
-    .slice(0, 12)
+    .slice(0, PRODUCT_GALLERY_IMAGE_LIMIT)
 );
 
 const serializeGalleryImages = (urls: string[]): string => (
@@ -6006,7 +6018,7 @@ const formatProductVariants = (value: unknown): ProductVariant[] => {
   return source
     .map(normalizeProductVariant)
     .filter((variant): variant is ProductVariant => Boolean(variant))
-    .slice(0, 50);
+    .slice(0, PRODUCT_VARIANT_LIMIT);
 };
 
 const parseProductVariants = (value: string): ProductVariant[] => formatProductVariants(value);
