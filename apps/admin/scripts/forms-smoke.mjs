@@ -32,6 +32,10 @@ const assertFormsPersistenceCertificationSource = () => {
   const source = fs.readFileSync(new URL('../src/routes/forms.tsx', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
+  assert(source.includes('data-testid="forms-template-pack-download-button"'), 'Forms templates panel must expose template-pack download action');
+  assert(source.includes("schemaVersion: 'backy.form-template-pack.v1'"), 'Forms template export must advertise backy.form-template-pack.v1');
+  assert(source.includes('templateExport'), 'Forms handoff manifest must summarize template export metadata');
+  assert(source.includes('-backy-form-template-pack.json'), 'Forms template export must download a named JSON template pack');
   for (const label of [
     'backy.forms-persistence-certification.v1',
     'npm run test:forms --workspace @backy-cms/admin',

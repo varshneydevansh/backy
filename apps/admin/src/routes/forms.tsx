@@ -915,6 +915,28 @@ function FormsRoute() {
     secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
     checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
   }), [activeSiteId]);
+  const formsTemplatePack = useMemo(() => ({
+    schemaVersion: 'backy.form-template-pack.v1',
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+    },
+    export: {
+      format: 'json',
+      source: 'forms-template-library',
+      builtInTemplateCount: FORM_TEMPLATES.length,
+      frontendTemplateCount: frontendTemplateBlueprints.length,
+    },
+    builtInTemplates: FORM_TEMPLATES.map((template) => buildTemplateManifest(template)),
+    frontendTemplates: frontendTemplateBlueprints.map(({ template, blueprint }) => ({
+      schemaVersion: 'backy.frontend-form-template.v1',
+      template,
+      form: buildTemplateManifest(blueprint),
+      settings: buildFrontendFormTemplateSettings(template, frontendDesign),
+    })),
+  }), [activeSite?.name, activeSite?.slug, activeSiteId, frontendDesign, frontendTemplateBlueprints]);
   const formsHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -964,6 +986,12 @@ function FormsRoute() {
       remainingAccountMilestone: 'Authenticated member accounts, password/session lifecycle, and role assignment are still handled by the Users/Auth roadmap.',
     },
     persistenceCertification: formPersistenceCertification,
+    templateExport: {
+      schemaVersion: formsTemplatePack.schemaVersion,
+      format: formsTemplatePack.export.format,
+      builtInTemplateCount: formsTemplatePack.export.builtInTemplateCount,
+      frontendTemplateCount: formsTemplatePack.export.frontendTemplateCount,
+    },
     metrics,
     templates: FORM_TEMPLATES.map((template) => buildTemplateManifest(template)),
     frontendDesign: frontendDesign ? {
@@ -1057,6 +1085,7 @@ function FormsRoute() {
     frontendFormTemplates,
     formDestinationFilter,
     formPersistenceCertification,
+    formsTemplatePack,
     formCommandReadiness.checks,
     formCommandReadiness.score,
     formReadinessFilter,
@@ -1075,6 +1104,7 @@ function FormsRoute() {
     selectedFormSamplePayload,
     selectedFormSubmitUrl,
   ]);
+  const formsTemplatePackText = useMemo(() => JSON.stringify(formsTemplatePack, null, 2), [formsTemplatePack]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
   const formsRouteSearch = useMemo<FormsSearch>(() => ({
     siteId: activeSiteId,
@@ -2157,6 +2187,26 @@ function FormsRoute() {
     setError(null);
     setNotice('Forms handoff manifest downloaded.');
   };
+  const downloadFormTemplatePack = () => {
+    if (isFormsBusy) return;
+    if (!canExportForms) {
+      setError(exportPermissionTitle || 'Your account cannot export form templates.');
+      setNotice(null);
+      return;
+    }
+
+    const blob = new Blob([formsTemplatePackText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-form-template-pack.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Form template pack downloaded.');
+  };
   const clearFormFilters = () => {
     if (isFormsBusy) return;
 
@@ -2681,16 +2731,28 @@ function FormsRoute() {
           description="Start from a blank standalone form or copy complete schemas for registration, contact, newsletter, and product inquiry experiences."
           icon={<Sparkles className="size-4" />}
           action={
-            <Button
-              variant="primary"
-              onClick={() => void createBlankStandaloneForm()}
-              disabled={isFormsBusy || !canCreateForms}
-              title={!canCreateForms ? createPermissionTitle : undefined}
-              iconStart={<Plus className="size-4" />}
-              data-testid="forms-template-create-blank-button"
-            >
-              {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={downloadFormTemplatePack}
+                disabled={isFormsBusy || !canExportForms}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Download className="size-4" />}
+                data-testid="forms-template-pack-download-button"
+              >
+                Download templates
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void createBlankStandaloneForm()}
+                disabled={isFormsBusy || !canCreateForms}
+                title={!canCreateForms ? createPermissionTitle : undefined}
+                iconStart={<Plus className="size-4" />}
+                data-testid="forms-template-create-blank-button"
+              >
+                {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
+              </Button>
+            </div>
           }
         />
         <PanelContent>
