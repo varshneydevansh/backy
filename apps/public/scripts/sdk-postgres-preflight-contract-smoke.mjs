@@ -108,6 +108,19 @@ assert(
 );
 
 assert(
+  sdkSmokeCi.includes('Team members can view folders') &&
+    sdkSmokeCi.includes('Editors can manage folders') &&
+    sdkSmokeCi.includes('Team members can view media versions') &&
+    sdkSmokeCi.includes('Editors can manage media versions') &&
+    sdkSmokeCi.includes('Team members can view cache invalidations') &&
+    sdkSmokeCi.includes('Editors can create cache invalidations') &&
+    sdkSmokeCi.includes('Public can view approved active interactive components') &&
+    sdkSmokeCi.includes('Team members can view interactive components') &&
+    sdkSmokeCi.includes('Editors can manage interactive components'),
+  'SDK Postgres smoke must preflight media folder/version, cache invalidation, and interactive component RLS policy names.',
+);
+
+assert(
   sdkSmokeCi.includes('media_type') &&
     sdkSmokeCi.includes("'image'") &&
     sdkSmokeCi.includes("'video'") &&
