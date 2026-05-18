@@ -14284,13 +14284,37 @@ const main = async () => {
           expectedWidth: 420,
           testLayerOverride: false,
         }),
+        navMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-nav', {
+          breakpoint: 'mobile',
+          expectedX: 20,
+          expectedWidth: 340,
+          testLayerOverride: false,
+        }),
+        navTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-nav', {
+          breakpoint: 'tablet',
+          expectedX: 84,
+          expectedWidth: 500,
+          testLayerOverride: false,
+        }),
+        formMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-form', {
+          breakpoint: 'mobile',
+          expectedX: 26,
+          expectedWidth: 320,
+          testLayerOverride: false,
+        }),
+        formTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-form', {
+          breakpoint: 'tablet',
+          expectedX: 92,
+          expectedWidth: 440,
+          testLayerOverride: false,
+        }),
       };
 
       let reloadClient = null;
       let reloadedResponsiveEditing = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-columns']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-columns', 'smoke-nav', 'smoke-form']);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
             reloadClient,
@@ -14380,6 +14404,50 @@ const main = async () => {
               testLayerOverride: false,
             },
           ),
+          navMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-nav',
+            {
+              breakpoint: 'mobile',
+              expectedX: 20,
+              expectedWidth: 340,
+              testLayerOverride: false,
+            },
+          ),
+          navTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-nav',
+            {
+              breakpoint: 'tablet',
+              expectedX: 84,
+              expectedWidth: 500,
+              testLayerOverride: false,
+            },
+          ),
+          formMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-form',
+            {
+              breakpoint: 'mobile',
+              expectedX: 26,
+              expectedWidth: 320,
+              testLayerOverride: false,
+            },
+          ),
+          formTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-form',
+            {
+              breakpoint: 'tablet',
+              expectedX: 92,
+              expectedWidth: 440,
+              testLayerOverride: false,
+            },
+          ),
         };
       } finally {
         if (reloadClient) {
@@ -14408,7 +14476,15 @@ const main = async () => {
           reloadedResponsiveEditing.columnsMobile.breakpointAfter.x === responsiveEditing.columnsMobile.breakpointAfter.x &&
           reloadedResponsiveEditing.columnsMobile.breakpointAfter.width === responsiveEditing.columnsMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.columnsTablet.breakpointAfter.x === responsiveEditing.columnsTablet.breakpointAfter.x &&
-          reloadedResponsiveEditing.columnsTablet.breakpointAfter.width === responsiveEditing.columnsTablet.breakpointAfter.width,
+          reloadedResponsiveEditing.columnsTablet.breakpointAfter.width === responsiveEditing.columnsTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.navMobile.breakpointAfter.x === responsiveEditing.navMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.navMobile.breakpointAfter.width === responsiveEditing.navMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.navTablet.breakpointAfter.x === responsiveEditing.navTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.navTablet.breakpointAfter.width === responsiveEditing.navTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.formMobile.breakpointAfter.x === responsiveEditing.formMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.formMobile.breakpointAfter.width === responsiveEditing.formMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.formTablet.breakpointAfter.x === responsiveEditing.formTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.formTablet.breakpointAfter.width === responsiveEditing.formTablet.breakpointAfter.width,
         `Responsive smoke reload did not hydrate saved overrides: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
       );
 
@@ -14443,6 +14519,38 @@ const main = async () => {
           elementId: 'smoke-columns',
           expectedX: 72,
           expectedWidth: 420,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'navMobile',
+          label: 'Public mobile nav responsive geometry',
+          elementId: 'smoke-nav',
+          expectedX: 20,
+          expectedWidth: 340,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'navTablet',
+          label: 'Public tablet nav responsive geometry',
+          elementId: 'smoke-nav',
+          expectedX: 84,
+          expectedWidth: 500,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'formMobile',
+          label: 'Public mobile form responsive geometry',
+          elementId: 'smoke-form',
+          expectedX: 26,
+          expectedWidth: 320,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'formTablet',
+          label: 'Public tablet form responsive geometry',
+          elementId: 'smoke-form',
+          expectedX: 92,
+          expectedWidth: 440,
           viewport: { width: 820, height: 1024 },
         },
       ]);

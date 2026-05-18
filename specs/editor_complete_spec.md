@@ -174,13 +174,13 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Tablet/mobile layer hide/show and lock/unlock edits persist into `element.responsive` overrides
 - Active breakpoint override groups show which element areas inherit desktop, and layout/layer/content/style groups can be reset independently
 - Public rendering applies responsive overrides from the rendered container width
-- `test:editor-drag` verifies mobile and tablet layout plus layer visibility/lock override persistence, group-level reset/inheritance controls, desktop layout preservation, breakpoint switching, and reload hydration across text, image, and box/nested-container elements
-- Responsive smoke verifies mobile/tablet CSS and canvas-relative visual geometry with thresholds, hit-testing, clipped snapshots, editor reload hydration, and public preview rendering for text, media, box/nested-container, and columns components
+- `test:editor-drag` verifies mobile and tablet layout plus layer visibility/lock override persistence, group-level reset/inheritance controls, desktop layout preservation, breakpoint switching, and reload hydration across text, image, box/nested-container, columns, navigation, and form elements.
+- Responsive smoke verifies mobile/tablet CSS and canvas-relative visual geometry with thresholds, hit-testing, clipped snapshots, editor reload hydration, and public preview rendering for text, media, box/nested-container, columns, navigation, and form components.
 - `test:page-create` now verifies each built-in starter page template plus collection dataset list/detail pages in mobile and tablet hosted previews with breakpoint/scale assertions, required element presence, overflow checks, and pixel-threshold screenshots.
 - `test:reusable-sections` now verifies saved reusable section canvas content in mobile and tablet hosted previews with breakpoint/scale assertions, required element presence, overflow checks, and pixel-threshold screenshots.
 - Public rendering applies tablet/mobile overrides inside the matching breakpoint canvas dimensions instead of scaling a desktop-width canvas around mobile-authored coordinates.
 - **Remaining Improvements Needed:**
-    - Broaden pixel-level screenshot comparison across additional component combinations
+    - Broaden pixel-level screenshot comparison across remaining component combinations such as comments, repeaters, embeds, interactive components, and choice inputs
 - **Implemented Contract:**
     ```typescript
     interface CanvasElement {
@@ -500,8 +500,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
-  - Mobile and tablet persistence plus thresholded editor/public visual geometry are covered for heading, image, box/nested-container, columns, built-in starter page templates, collection dataset list/detail pages, and saved reusable section canvas content; still needs broader pixel-level comparison across additional component combinations.
-- Responsive smoke now also covers mobile/tablet columns layout overrides, reload hydration, and public preview CSS/visual geometry with clipped screenshots and hit-testing.
+  - Mobile and tablet persistence plus thresholded editor/public visual geometry are covered for heading, image, box/nested-container, columns, navigation, form, built-in starter page templates, collection dataset list/detail pages, and saved reusable section canvas content; still needs broader pixel-level comparison across comments, repeaters, embeds, interactive components, and choice inputs.
+- Responsive smoke now also covers mobile/tablet columns, navigation, and form layout overrides, reload hydration, and public preview CSS/visual geometry with clipped screenshots and hit-testing.
 - Long-session stress smoke now covers repeated keyboard edits across multiple elements, undo/redo recovery, a midpoint mobile responsive override edit, save/reload persistence, and runtime health sampling via `npm run test:editor-stress --workspace @backy-cms/admin`.
 - Public `PageRenderer` now uses the active breakpoint canvas size for tablet/mobile scaling so responsive overrides are positioned in the same coordinate system authored in the editor.
 - Editor smoke login now supports seeded admin MFA through `BACKY_EDITOR_SMOKE_MFA_CODE`, `BACKY_ADMIN_MFA_CODE`, or `BACKY_ADMIN_2FA_CODE` and seeds the httpOnly admin session cookie for browser-driven editor routes, matching the other admin smoke suites.
