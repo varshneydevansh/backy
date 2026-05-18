@@ -56,6 +56,7 @@ import {
 } from '@/lib/adminContentApi';
 import { getDefaultMediaSiteId, listMedia } from '@/lib/mediaApi';
 import { PageShell } from '@/components/layout/PageShell';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -189,13 +190,13 @@ const dashboardPermissionRule = (
 
 const isDashboardPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  _currentAdmin: Pick<User, 'role'> | null | undefined,
+  currentAdmin: Pick<User, 'role'> | null | undefined,
   key: DashboardPermissionKey,
 ) => {
   const matrixRule = dashboardPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.allowed;
 
-  return false;
+  return currentAdmin ? DASHBOARD_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role) : false;
 };
 
 const dashboardPermissionReason = (
@@ -1078,16 +1079,40 @@ function Index() {
           ? listAdminAuditLogs({ limit: 8 }).catch(() => ({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }))
           : Promise.resolve({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }),
       ]);
+      setDashboard((current) => ({
+        ...emptyDashboardData(),
+        sites,
+        pages: current.source === 'backend' ? current.pages : [],
+        posts: current.source === 'backend' ? current.posts : [],
+        users,
+        media: current.source === 'backend' ? current.media : [],
+        collections: current.source === 'backend' ? current.collections : [],
+        forms: current.source === 'backend' ? current.forms : [],
+        contacts: current.source === 'backend' ? current.contacts : 0,
+        comments: current.source === 'backend' ? current.comments : 0,
+        pendingComments: current.source === 'backend' ? current.pendingComments : 0,
+        commerce: current.source === 'backend' ? current.commerce : emptyCommerceMetrics(),
+        moderation: current.source === 'backend' ? current.moderation : emptyModerationMetrics(),
+        settings,
+        auditLogs: auditResult.logs,
+        readiness: current.source === 'backend' ? current.readiness : [],
+        source: 'backend',
+      }));
+      const selectedSiteIdentifier = search.siteId || selectedSiteId || sites[0]?.publicSiteId || sites[0]?.id || '';
+      const selectedSite = selectedSiteIdentifier
+        ? sites.find((site) => siteMatchesIdentifier(site, selectedSiteIdentifier))
+        : undefined;
+      const detailSites = selectedSite ? [selectedSite] : sites.slice(0, 1);
       const [pagesBySite, postsBySite, readinessBySite, mediaBySite] = await Promise.all([
-        canViewPages ? Promise.all(sites.map((site) => listPages(site.id).catch(() => [] as Page[]))) : Promise.resolve([] as Page[][]),
-        canViewPages ? Promise.all(sites.map((site) => listBlogPosts(site.id).catch(() => [] as BlogPost[]))) : Promise.resolve([] as BlogPost[][]),
-        canViewSites ? Promise.all(sites.map((site) => getSiteReadiness(site.id).catch(() => null))) : Promise.resolve([]),
-        canViewMedia ? Promise.all(sites.map((site) => listMedia({ siteId: site.id, limit: 200 }).catch(() => [] as MediaAsset[]))) : Promise.resolve([] as MediaAsset[][]),
+        canViewPages ? Promise.all(detailSites.map((site) => listPages(site.id).catch(() => [] as Page[]))) : Promise.resolve([] as Page[][]),
+        canViewPages ? Promise.all(detailSites.map((site) => listBlogPosts(site.id).catch(() => [] as BlogPost[]))) : Promise.resolve([] as BlogPost[][]),
+        canViewSites ? Promise.all(detailSites.map((site) => getSiteReadiness(site.id).catch(() => null))) : Promise.resolve([]),
+        canViewMedia ? Promise.all(detailSites.map((site) => listMedia({ siteId: site.id, limit: 200 }).catch(() => [] as MediaAsset[]))) : Promise.resolve([] as MediaAsset[][]),
       ]);
       const [collectionsBySite, formsBySite, commentsBySite] = await Promise.all([
-        canViewCollections ? Promise.all(sites.map((site) => listCollections(site.id).catch(() => [] as Collection[]))) : Promise.resolve([] as Collection[][]),
-        canViewForms ? Promise.all(sites.map((site) => listForms(site.id).catch(() => [] as FormDefinition[]))) : Promise.resolve([] as FormDefinition[][]),
-        canViewComments ? Promise.all(sites.map((site) => listComments(site.id, { limit: 100 }).catch(() => null))) : Promise.resolve([]),
+        canViewCollections ? Promise.all(detailSites.map((site) => listCollections(site.id).catch(() => [] as Collection[]))) : Promise.resolve([] as Collection[][]),
+        canViewForms ? Promise.all(detailSites.map((site) => listForms(site.id).catch(() => [] as FormDefinition[]))) : Promise.resolve([] as FormDefinition[][]),
+        canViewComments ? Promise.all(detailSites.map((site) => listComments(site.id, { limit: 100 }).catch(() => null))) : Promise.resolve([]),
       ]);
       const collections = collectionsBySite.flat();
       const forms = formsBySite.flat();
@@ -1338,7 +1363,7 @@ function Index() {
       : undefined
   );
   const selectDashboardSite = (nextSiteId: string) => {
-    if (isDashboardBusy) return;
+    if (isCheckingInfrastructure || isRunningDeployment) return;
 
     setSelectedSiteId(nextSiteId);
     navigate({ to: '/', search: { siteId: nextSiteId }, replace: true });
@@ -2646,7 +2671,7 @@ function Index() {
             id="dashboard-active-site"
             value={activeSiteId}
             onChange={(event) => selectDashboardSite(event.target.value)}
-            disabled={isDashboardBusy}
+            disabled={isCheckingInfrastructure || isRunningDeployment}
             className="min-w-48 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {dashboard.sites.length === 0 ? (
@@ -3546,8 +3571,12 @@ function Index() {
                     </div>
                   ))
                 ) : (
-                  <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                    No activity has been recorded yet.
+                  <div className="p-5">
+                    <EmptyState
+                      icon={History}
+                      title="No backend activity yet"
+                      description="Authenticated content, settings, media, and workflow changes will appear here with request ids for debugging."
+                    />
                   </div>
                 )}
               </div>
@@ -3578,9 +3607,11 @@ function Index() {
                     </Link>
                   ))
                 ) : (
-                  <div className="rounded-lg border border-success/25 bg-success/10 px-3 py-3 text-sm text-success">
-                    No publish blockers found in loaded readiness checks.
-                  </div>
+                  <EmptyState
+                    icon={CheckCircle2}
+                    title="No publish blockers found"
+                    description="Loaded readiness checks have no blocking issues for the selected workspace. Refresh the dashboard after major content, API, or deployment changes."
+                  />
                 )}
               </div>
             </section>
