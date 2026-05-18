@@ -1695,6 +1695,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationStorageAliases: runbookText.includes('BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('SUPABASE_SERVICE_ROLE_KEY') && runbookText.includes('AWS_ACCESS_KEY_ID'),
     hasReleaseCertificationNotificationAliases: runbookText.includes('RESEND_API_KEY') && runbookText.includes('SMTP_HOST') && runbookText.includes('SMTP_USER') && runbookText.includes('SMTP_PASSWORD') && runbookText.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
     hasReleaseCertificationCommerceAliases: runbookText.includes('STRIPE_SECRET_KEY') && runbookText.includes('PAYPAL_ACCESS_TOKEN') && runbookText.includes('SHOPIFY_ADMIN_ACCESS_TOKEN') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
+    hasReleaseCertificationCommerceHttpAliases: runbookText.includes('COMMERCE_TAX_PROVIDER_URL') && runbookText.includes('COMMERCE_SHIPPING_PROVIDER_URL') && runbookText.includes('COMMERCE_PRODUCT_SYNC_URL') && runbookText.includes('COMMERCE_SUBSCRIPTION_ACTION_URL'),
   };
 })()`);
   assert(infrastructureState.search.includes('tab=infrastructure'), `Infrastructure tab search state was not persisted: ${JSON.stringify(infrastructureState)}`);
@@ -1752,6 +1753,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationStorageAliases &&
       infrastructureState.hasReleaseCertificationNotificationAliases &&
       infrastructureState.hasReleaseCertificationCommerceAliases &&
+      infrastructureState.hasReleaseCertificationCommerceHttpAliases &&
       infrastructureState.hasVercelAliasEnv,
     `Settings release certification runbook was not visible: ${JSON.stringify(infrastructureState)}`,
   );

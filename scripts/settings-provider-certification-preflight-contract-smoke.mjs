@@ -296,6 +296,10 @@ includesAll(
     'PAYPAL_ACCESS_TOKEN',
     'SHOPIFY_ADMIN_ACCESS_TOKEN',
     'COMMERCE_WEBHOOK_SECRET',
+    'COMMERCE_TAX_PROVIDER_URL',
+    'COMMERCE_SHIPPING_PROVIDER_URL',
+    'COMMERCE_PRODUCT_SYNC_URL',
+    'COMMERCE_SUBSCRIPTION_ACTION_URL',
   ],
   'Settings provider operation UI controls',
 );
@@ -314,6 +318,7 @@ includesAll(
     'hasReleaseCertificationStorageAliases',
     'hasReleaseCertificationNotificationAliases',
     'hasReleaseCertificationCommerceAliases',
+    'hasReleaseCertificationCommerceHttpAliases',
   ],
   'Settings UI smoke provider operation coverage',
 );
