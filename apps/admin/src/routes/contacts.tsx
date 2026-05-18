@@ -2306,8 +2306,12 @@ function ContactsRoute() {
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {contactSavedLists.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
-              No saved lists yet.
+            <div className="md:col-span-2 xl:col-span-3">
+              <EmptyState
+                icon={Filter}
+                title="No saved lists yet"
+                description="Save a filtered contact view to reuse lead segments for exports, sync handoffs, and follow-up workflows."
+              />
             </div>
           ) : contactSavedLists.map((list) => (
             <div key={list.id} className="rounded-lg border border-border bg-background p-3">
@@ -2387,8 +2391,12 @@ function ContactsRoute() {
                 <div className="size-6 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
               </div>
             ) : contactAuditLogs.length === 0 ? (
-              <div className="mt-3 rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                No contact audit activity yet for this site.
+              <div className="mt-3">
+                <EmptyState
+                  icon={ShieldCheck}
+                  title="No contact audit activity yet"
+                  description="Contact imports, lifecycle changes, merges, promotions, syncs, and retention actions will appear here for this site."
+                />
               </div>
             ) : (
               <div className="mt-3 grid gap-2">

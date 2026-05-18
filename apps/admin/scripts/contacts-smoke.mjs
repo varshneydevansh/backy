@@ -23,6 +23,15 @@ const assert = (condition, message) => {
   }
 };
 
+const assertContactsEmptyStatesUseSharedComponent = () => {
+  const source = fs.readFileSync(new URL('../src/routes/contacts.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Contacts route must use the shared EmptyState component');
+  assert(source.includes('title="No saved lists yet"'), 'Contacts saved-lists panel must keep the no-lists empty-state title visible');
+  assert(source.includes('Save a filtered contact view to reuse lead segments'), 'Contacts saved-lists empty state must explain what saved views unlock');
+  assert(source.includes('title="No contact audit activity yet"'), 'Contacts audit panel must keep the audit empty-state title visible');
+  assert(source.includes('Contact imports, lifecycle changes, merges, promotions, syncs, and retention actions will appear here'), 'Contacts audit empty state must explain what will populate the audit log');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -124,7 +133,7 @@ const updateSettings = async (input) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -132,9 +141,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_CONTACTS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -1235,6 +1254,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  assertContactsEmptyStatesUseSharedComponent();
   const syncReceiver = await startContactSyncReceiver();
   await loginAdminApi();
   const form = await createLeadForm();
