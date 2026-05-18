@@ -1094,7 +1094,7 @@ export function MediaLibraryModal({
                         onMouseEnter={() => {
                           if (item.type === 'image') setFocalPreviewAssetId(item.id);
                         }}
-                        disabled={Boolean(selectingMediaId)}
+                        disabled={Boolean(selectingMediaId) || isPrivateAsset}
                         aria-disabled={isPrivateAsset}
                         title={isPrivateAsset ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.' : undefined}
                         data-testid="media-library-item"

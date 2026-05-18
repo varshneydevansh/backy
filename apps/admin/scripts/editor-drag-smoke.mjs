@@ -262,6 +262,8 @@ const assertMediaLibraryModalEmptyStateSource = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor media library modal must use the shared EmptyState component');
   assert(source.includes('title="No media matches this view"'), 'Editor media library modal empty state must keep the shared title visible');
   assert(source.includes('Upload assets to this site or clear filters to attach existing files.'), 'Editor media library modal empty state must explain how to recover from filters');
+  assert(source.includes('disabled={Boolean(selectingMediaId) || isPrivateAsset}'), 'Editor media library modal must disable private assets at the button level');
+  assert(source.includes('Private media cannot be inserted directly into public editor fields.'), 'Editor media library modal must keep the private asset insertion guard visible');
 };
 
 const requestApi = async (endpoint, options = {}) => {
