@@ -1713,6 +1713,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasProviderCertificationSettings: runbookText.includes('Provider certification matrix') && runbookText.includes('npm run ci:settings-provider-certification'),
     hasProviderCertificationCommerce: runbookText.includes('npm run ci:commerce-provider-certification') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
     hasProviderCertificationFamilies: runbookText.includes('Supabase/Postgres') && runbookText.includes('Vercel env secret manager') && runbookText.includes('Resend') && runbookText.includes('Magento'),
+    hasProviderCertificationHandoffSummary: runbookText.includes('backy.settings-provider-certification-handoff.v1') && runbookText.includes('external-live-provider-gate') && runbookText.includes('npm run test:settings-provider-certification-preflight-contract') && runbookText.includes('Provider credentials stay in deployment or CI environment variables'),
     hasProviderCertificationRequiredInputs: runbookText.includes('Required inputs') && runbookText.includes('BACKY_DATABASE_URL or DATABASE_URL') && runbookText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID'),
     hasReleaseCertificationStorageAliases: runbookText.includes('BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('SUPABASE_SERVICE_ROLE_KEY') && runbookText.includes('AWS_ACCESS_KEY_ID'),
     hasReleaseCertificationNotificationAliases: runbookText.includes('RESEND_API_KEY') && runbookText.includes('SMTP_HOST') && runbookText.includes('SMTP_USER') && runbookText.includes('SMTP_PASSWORD') && runbookText.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
@@ -1776,6 +1777,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasProviderCertificationSettings &&
       infrastructureState.hasProviderCertificationCommerce &&
       infrastructureState.hasProviderCertificationFamilies &&
+      infrastructureState.hasProviderCertificationHandoffSummary &&
       infrastructureState.hasProviderCertificationRequiredInputs &&
       infrastructureState.hasReleaseCertificationStorageAliases &&
       infrastructureState.hasReleaseCertificationNotificationAliases &&

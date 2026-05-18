@@ -5795,6 +5795,19 @@ function InfrastructureSettings({
                 External providers
               </span>
             </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: 'Schema', value: 'backy.settings-provider-certification-handoff.v1' },
+                { label: 'Status', value: 'external-live-provider-gate' },
+                { label: 'Local preflight', value: 'npm run test:settings-provider-certification-preflight-contract' },
+                { label: 'Secret boundary', value: 'Provider credentials stay in deployment or CI environment variables' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                  <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
+                </div>
+              ))}
+            </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => (
                 <div key={group.family} className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
