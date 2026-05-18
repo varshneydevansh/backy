@@ -32,6 +32,10 @@ const assertCommentsRouteSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Comments route must use the shared EmptyState component for primary list empty states');
   assert(source.includes("title={hasComments ? 'No comments match this view' : 'No comments yet'}"), 'Comments queue empty state must distinguish empty queues from filtered views');
   assert(source.includes('Page and blog comments will appear here for review'), 'Comments queue empty state must tell admins what will populate the queue');
+  assert(source.includes('title="No comment delivery activity yet"'), 'Comments delivery panel must keep the empty delivery title visible');
+  assert(source.includes('Comment notification, webhook, retry, and handoff events will appear here after moderation activity.'), 'Comments delivery empty state must explain which events populate delivery history');
+  assert(source.includes('title="No comment audit entries yet"'), 'Comments audit panel must keep the empty audit title visible');
+  assert(source.includes('Policy updates, moderation decisions, thread changes, retries, and blocklist actions will appear here.'), 'Comments audit empty state must explain which actions populate activity');
 };
 
 const requestApi = async (endpoint, options = {}) => {

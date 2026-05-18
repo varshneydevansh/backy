@@ -2192,8 +2192,12 @@ function CommentsRoute() {
                 </span>
               </div>
               {commentDeliveryEvents.length === 0 ? (
-                <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5 text-sm text-muted-foreground">
-                  No comment delivery activity has been recorded yet.
+                <div className="mt-4">
+                  <EmptyState
+                    icon={MessageSquare}
+                    title="No comment delivery activity yet"
+                    description="Comment notification, webhook, retry, and handoff events will appear here after moderation activity."
+                  />
                 </div>
               ) : (
                 <div className="mt-4 grid gap-3" data-testid="comments-delivery-list">
@@ -2269,8 +2273,12 @@ function CommentsRoute() {
                 </span>
               </div>
               {commentAuditLogs.length === 0 ? (
-                <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5 text-sm text-muted-foreground">
-                  No comment audit entries have been recorded yet.
+                <div className="mt-4">
+                  <EmptyState
+                    icon={ShieldAlert}
+                    title="No comment audit entries yet"
+                    description="Policy updates, moderation decisions, thread changes, retries, and blocklist actions will appear here."
+                  />
                 </div>
               ) : (
                 <div className="mt-4 grid gap-3" data-testid="comments-audit-list">
