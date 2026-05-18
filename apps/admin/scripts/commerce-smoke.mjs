@@ -860,6 +860,22 @@ const assertProductsApiContractsSource = () => {
     "utf8",
   );
   assert(
+    source.includes("import { EmptyState } from '@/components/ui/EmptyState';"),
+    "Products route must use the shared EmptyState component",
+  );
+  for (const emptyStateTitle of [
+    'title="No private order records yet"',
+    'title="No product performance yet"',
+    'title="No product automation events"',
+    "title={products.length === 0 ? 'No products yet' : 'No products match this view'}",
+    'title="No subscription orders yet"',
+  ]) {
+    assert(
+      source.includes(emptyStateTitle),
+      `Products route must keep shared empty state visible: ${emptyStateTitle}`,
+    );
+  }
+  assert(
     source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),
     "Products handoff manifest must expose API response contracts for custom frontends",
   );

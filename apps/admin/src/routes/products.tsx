@@ -3688,9 +3688,11 @@ function ProductsRoute() {
                           </div>
                         </div>
                       )) : (
-                        <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                          No private order records loaded yet. Public checkout intake will populate this signal after the first order.
-                        </div>
+                        <EmptyState
+                          icon={FileText}
+                          title="No private order records yet"
+                          description="Public checkout intake will populate this signal after the first order."
+                        />
                       )}
                     </div>
                   </div>
@@ -3728,9 +3730,11 @@ function ProductsRoute() {
                           </div>
                         </div>
                       )) : (
-                        <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                          Product performance appears after paid checkout orders include structured line items.
-                        </div>
+                        <EmptyState
+                          icon={Package}
+                          title="No product performance yet"
+                          description="Performance appears after paid checkout orders include structured line items."
+                        />
                       )}
                     </div>
                   </div>
@@ -3757,8 +3761,12 @@ function ProductsRoute() {
                         {productNotificationError}
                       </div>
                     ) : productNotificationEvents.length === 0 ? (
-                      <div className="mt-3 rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                        No product automation events recorded yet.
+                      <div className="mt-3">
+                        <EmptyState
+                          icon={FileText}
+                          title="No product automation events"
+                          description="Low-stock email and workflow webhook handoffs will appear after checkout inventory reservations trigger product alerts."
+                        />
                       </div>
                     ) : (
                       <div className="mt-3 space-y-2">
@@ -4267,20 +4275,19 @@ function ProductsRoute() {
                 </div>
 
                 {filteredProducts.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
-                    <div className="text-sm font-medium text-foreground">
-                      {products.length === 0 ? 'No products yet' : 'No products match this view'}
-                    </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {products.length === 0
+                  <div>
+                    <EmptyState
+                      icon={ShoppingBag}
+                      title={products.length === 0 ? 'No products yet' : 'No products match this view'}
+                      description={products.length === 0
                         ? 'Create the first sellable product, then publish it for storefront APIs.'
                         : 'Change the search, status, type, category, or stock filters to broaden the catalog.'}
-                    </div>
-                    {products.length > 0 && hasActiveCatalogFilters && (
-                      <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsAccessBusy || !canViewProducts} className="mt-4">
-                        Clear filters
-                      </Button>
-                    )}
+                      action={products.length > 0 && hasActiveCatalogFilters ? (
+                        <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsAccessBusy || !canViewProducts}>
+                          Clear filters
+                        </Button>
+                      ) : undefined}
+                    />
                   </div>
                 ) : (
                   <div className="grid gap-3 lg:grid-cols-2">
@@ -4839,9 +4846,11 @@ function ProductsRoute() {
                           </div>
                         </div>
                       )) : (
-                        <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                          No subscription orders are attached to this product yet.
-                        </div>
+                        <EmptyState
+                          icon={Package}
+                          title="No subscription orders yet"
+                          description="Subscription lifecycle rows appear after checkout or provider webhooks attach subscription orders to this product."
+                        />
                       )}
                     </div>
                   </div>
