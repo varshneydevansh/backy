@@ -625,6 +625,7 @@ const run = async () => {
     ok: true,
     database: 'postgres',
     targetGuard: {
+      urlValid: true,
       expectedHostConfigured: Boolean((process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST || '').trim()),
       expectedDatabaseConfigured: Boolean((process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE || '').trim()),
     },

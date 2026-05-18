@@ -547,6 +547,7 @@ try {
     databaseRequired: requireDatabaseMode,
     dataMode: baseEnv.BACKY_DATA_MODE,
     targetGuard: {
+      urlValid: requireDatabaseMode ? true : null,
       expectedHostConfigured: Boolean(expectedDatabaseHost),
       expectedDatabaseConfigured: Boolean(expectedDatabaseName),
     },

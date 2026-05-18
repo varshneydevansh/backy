@@ -96,6 +96,7 @@ assert(
     sdkSmokeCi.includes('SDK Postgres certification expected database name') &&
     sdkSmokeCi.includes('backy.sdk-postgres-smoke-ci.v1') &&
     sdkSmokeCi.includes('targetGuard') &&
+    sdkSmokeCi.includes('urlValid: requireDatabaseMode ? true : null') &&
     sdkSmokeCi.includes('expectedHostConfigured') &&
     sdkSmokeCi.includes('expectedDatabaseConfigured'),
   'SDK Postgres smoke must preflight target host/name, schema, enum, RLS, policy, index, and constraint readiness, then emit machine-readable certification evidence.',
@@ -119,6 +120,7 @@ assert(
 assert(
   sdkSmokeCi.includes("contract: 'backy.sdk-postgres-smoke-ci.v1'") &&
     sdkSmokeCi.includes('targetGuard') &&
+    sdkSmokeCi.includes('urlValid: requireDatabaseMode ? true : null') &&
     sdkSmokeCi.includes('expectedHostConfigured') &&
     sdkSmokeCi.includes('expectedDatabaseConfigured'),
   'SDK Postgres smoke must emit machine-readable target-guard evidence after the configured database run.',

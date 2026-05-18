@@ -158,6 +158,7 @@ const destructiveSafeWorkflowEvidence = [
   'Forms Postgres certification expected database name',
   'configured database URL points at',
   'targetGuard',
+  'urlValid: true',
   'expectedHostConfigured',
   'expectedDatabaseConfigured',
   'assertExpectedDatabaseTarget();',
