@@ -38,6 +38,7 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import { buildTemplateRegistry } from "@/lib/templateRegistry";
 
 export const runtime = "nodejs";
 
@@ -692,6 +693,7 @@ const responseForSite = (
 ) => {
   const frontendDesign =
     site.settings?.frontendDesign || emptyFrontendDesignContract();
+  const templateRegistry = buildTemplateRegistry(site.id, frontendDesign);
 
   return NextResponse.json({
     success: true,
@@ -706,11 +708,21 @@ const responseForSite = (
       frontendDesign,
       endpoints: {
         admin: `/api/admin/sites/${site.id}/frontend-design`,
+        templates: `/api/admin/sites/${site.id}/templates`,
         publicManifest: `/api/sites/${site.id}/manifest`,
+      },
+      templateRegistry: {
+        schemaVersion: templateRegistry.schemaVersion,
+        status: templateRegistry.status,
+        templateCount: templateRegistry.totalTemplateCount,
+        supportedTypes: templateRegistry.supportedTypes,
+        cloneField: templateRegistry.cloneField,
+        cloneTargets: templateRegistry.cloneTargets,
       },
       nextSteps: [
         "PATCH a custom frontend design contract after scanning your frontend components.",
         "Use capture-site-defaults to snapshot current Backy navigation, theme tokens, and page templates.",
+        "Use the templates endpoint to list clone-ready page, blog, form, product, collection, and section templates.",
         "New page, blog, form, product, and section generation can use this contract as its site design source.",
       ],
       ...(options.cacheInvalidation

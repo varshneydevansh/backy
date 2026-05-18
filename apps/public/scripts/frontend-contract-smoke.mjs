@@ -19,6 +19,7 @@ const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const publicSiteDiscoveryRoute = read('../src/app/api/sites/route.ts');
 const adminSitesRoute = read('../src/app/api/admin/sites/route.ts');
 const adminSiteDetailRoute = read('../src/app/api/admin/sites/[siteId]/route.ts');
+const adminFrontendDesignRoute = read('../src/app/api/admin/sites/[siteId]/frontend-design/route.ts');
 const adminTemplateRegistryRoute = read('../src/app/api/admin/sites/[siteId]/templates/route.ts');
 const templateRegistryLib = read('../src/lib/templateRegistry.ts');
 const sdkSource = read('../../../packages/sdk-js/src/index.ts');
@@ -57,6 +58,16 @@ assert(
     templateRegistryLib.includes('form: `/api/admin/sites/${siteId}/forms`') &&
     templateRegistryLib.includes('product: `/api/admin/sites/${siteId}/collections/products/records`'),
   'Admin template registry must expose persisted frontend-design templates and clone targets for page/blog/form/section/collection/product creation.',
+);
+
+assert(
+  adminFrontendDesignRoute.includes('buildTemplateRegistry') &&
+    adminFrontendDesignRoute.includes('templates: `/api/admin/sites/${site.id}/templates`') &&
+    adminFrontendDesignRoute.includes('templateRegistry:') &&
+    adminFrontendDesignRoute.includes('cloneTargets: templateRegistry.cloneTargets') &&
+    apiContracts.includes('templateRegistry') &&
+    apiContracts.includes('endpoints.templates'),
+  'Admin frontend-design responses must advertise the normalized template registry endpoint and clone summary.',
 );
 
 assert(
