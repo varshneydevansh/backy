@@ -314,6 +314,11 @@ const DASHBOARD_CONTROL_AREAS = [
     detail: 'Copy or download the public/admin contract payload for a custom frontend.',
     href: '#dashboard-api',
   },
+  {
+    title: 'API consumers',
+    detail: 'Check keys, service clients, endpoint coverage, and recent API access changes.',
+    href: '#dashboard-api-consumers',
+  },
 ] as const;
 
 const DASHBOARD_MODULES = [
@@ -1028,7 +1033,7 @@ function Index() {
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const publicBaseUrl = getPublicBaseUrl();
   const adminBaseUrl = getAdminBaseUrl();
-  const frontendContractUrls: Record<string, string> = {
+  const frontendContractUrls = useMemo<Record<string, string>>(() => ({
     manifest: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/manifest`,
     render: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=/`,
     navigation: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/navigation`,
@@ -1039,8 +1044,8 @@ function Index() {
     forms: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms`,
     comments: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`,
     seo: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/seo?format=sitemap`,
-  };
-  const adminContractUrls = {
+  }), [activeSiteId, publicBaseUrl]);
+  const adminContractUrls = useMemo(() => ({
     sites: `${adminBaseUrl}/sites`,
     pages: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/pages`,
     blog: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/blog/posts`,
@@ -1053,7 +1058,7 @@ function Index() {
     orders: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/orders/records`,
     users: `${adminBaseUrl}/users`,
     settings: `${adminBaseUrl}/settings`,
-  };
+  }), [activeSiteId, adminBaseUrl]);
   const adminContractUrlEntries = Object.entries(adminContractUrls).filter(([label]) => (
     label === 'users'
       ? canViewUsers
@@ -1061,6 +1066,44 @@ function Index() {
         ? canViewSettings
         : true
   ));
+  const apiConsumerReadiness = useMemo(() => {
+    const serviceKeys = dashboard.settings?.auth?.apiKeyServiceKeys || [];
+    const activeServiceKeys = serviceKeys.filter((key) => key.status !== 'revoked' && !key.revokedAt).length;
+    const revokedServiceKeys = serviceKeys.length - activeServiceKeys;
+    const rotationEvents = dashboard.settings?.auth?.apiKeyRotationHistory?.length || 0;
+    const revocationEvents = dashboard.settings?.auth?.apiKeyRevocationHistory?.length || 0;
+    const apiAuditEvents = dashboard.auditLogs.filter((log) => {
+      const action = log.action.toLowerCase();
+      const entity = log.entity.toLowerCase();
+      return entity === 'settings' && (
+        action.includes('api') ||
+        action.includes('key') ||
+        action.includes('service') ||
+        action.includes('auth')
+      );
+    }).length;
+
+    return {
+      publicEndpoints: Object.keys(frontendContractUrls).length,
+      adminEndpoints: adminContractUrlEntries.length,
+      apiKeysConfigured,
+      activeServiceKeys,
+      revokedServiceKeys,
+      rotationEvents,
+      revocationEvents,
+      apiAuditEvents,
+      deliveryMode: dashboard.settings?.deliveryMode || 'unknown',
+    };
+  }, [
+    adminContractUrlEntries.length,
+    apiKeysConfigured,
+    dashboard.auditLogs,
+    dashboard.settings?.auth?.apiKeyRevocationHistory,
+    dashboard.settings?.auth?.apiKeyRotationHistory,
+    dashboard.settings?.auth?.apiKeyServiceKeys,
+    dashboard.settings?.deliveryMode,
+    frontendContractUrls,
+  ]);
   const dashboardWorkflowActions = [
     { label: 'New site', to: '/sites/new' as const, icon: Globe, detail: 'Website container', visible: canCreateSites },
     { label: 'New page', to: '/pages/new' as const, icon: Layout, detail: 'Visual canvas', visible: canEditPages },
@@ -1108,6 +1151,16 @@ function Index() {
     },
     publicEndpoints: frontendContractUrls,
     adminEndpoints: Object.fromEntries(adminContractUrlEntries),
+    apiConsumers: {
+      publicEndpointCount: apiConsumerReadiness.publicEndpoints,
+      adminEndpointCount: apiConsumerReadiness.adminEndpoints,
+      apiKeysConfigured: apiConsumerReadiness.apiKeysConfigured,
+      activeServiceKeys: apiConsumerReadiness.activeServiceKeys,
+      revokedServiceKeys: apiConsumerReadiness.revokedServiceKeys,
+      rotationEvents: apiConsumerReadiness.rotationEvents,
+      revocationEvents: apiConsumerReadiness.revocationEvents,
+      recentApiAuditEvents: apiConsumerReadiness.apiAuditEvents,
+    },
     controlRoutes: {
       sites: '/sites',
       pages: `/pages?siteId=${encodeURIComponent(activeSiteId)}`,
@@ -1166,6 +1219,7 @@ function Index() {
     activeSite,
     activeSiteId,
     adminContractUrlEntries,
+    apiConsumerReadiness,
     backendHealthy,
     dashboard.collections.length,
     dashboard.comments,
@@ -2248,6 +2302,98 @@ function Index() {
               <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                 Uses loaded form contacts, comment counts, product records, and order totals from Backy APIs.
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          id="dashboard-api-consumers"
+          className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+          data-testid="dashboard-api-consumers"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <KeyRound className="size-4 text-primary" />
+                <h2 className="font-semibold">API consumer readiness</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Summarizes the keys, endpoint coverage, service clients, and recent access-control changes custom frontends need before handoff.
+              </p>
+            </div>
+            <Link
+              to="/settings"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              Manage keys
+              <ArrowUpRight className="size-4" />
+            </Link>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Contract coverage</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Public and admin URLs exported into the handoff manifest for custom clients.
+                  </p>
+                </div>
+                <Code2 className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Public APIs" value={`${apiConsumerReadiness.publicEndpoints}`} />
+                <SignalMetric label="Admin APIs" value={`${apiConsumerReadiness.adminEndpoints}`} />
+                <SignalMetric label="Delivery" value={apiConsumerReadiness.deliveryMode} />
+                <SignalMetric label="Site scope" value={activeSite?.slug || activeSiteId} />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Credentials</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Handoff keys and named service clients are tracked without exposing raw secrets.
+                  </p>
+                </div>
+                <KeyRound className="size-4 text-success" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="API keys" value={apiConsumerReadiness.apiKeysConfigured ? 'Configured' : 'Missing'} />
+                <SignalMetric label="Service keys" value={`${apiConsumerReadiness.activeServiceKeys}`} />
+                <SignalMetric label="Revoked clients" value={`${apiConsumerReadiness.revokedServiceKeys}`} />
+                <SignalMetric label="Key rotations" value={`${apiConsumerReadiness.rotationEvents}`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                apiConsumerReadiness.apiKeysConfigured ? 'border-success/25 bg-success/10 text-success' : 'border-warning/25 bg-warning/10 text-warning',
+              )}>
+                {apiConsumerReadiness.apiKeysConfigured
+                  ? 'Public/admin keys are configured for frontend handoff.'
+                  : 'Configure public and admin keys before external clients depend on this workspace.'}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Access changes</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Rotation, revocation, and audit activity that affects existing API consumers.
+                  </p>
+                </div>
+                <History className="size-4 text-warning" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Revocations" value={`${apiConsumerReadiness.revocationEvents}`} />
+                <SignalMetric label="API audit" value={`${apiConsumerReadiness.apiAuditEvents}`} />
+                <SignalMetric label="RBAC source" value={rbacSummary.source} />
+                <SignalMetric label="Role" value={rbacSummary.role} />
+              </div>
+              <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Recent API access changes remain visible in Settings audit history and the handoff JSON includes non-secret consumer counts.
+              </p>
             </div>
           </div>
         </section>

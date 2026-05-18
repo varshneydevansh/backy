@@ -490,6 +490,11 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Publishing mix') &&
       document.body?.innerText?.includes('Activity velocity') &&
       document.body?.innerText?.includes('Engagement and commerce'),
+    hasApiConsumers: Boolean(document.querySelector('[data-testid="dashboard-api-consumers"]')) &&
+      document.body?.innerText?.includes('API consumer readiness') &&
+      document.body?.innerText?.includes('Contract coverage') &&
+      document.body?.innerText?.includes('Credentials') &&
+      document.body?.innerText?.includes('Access changes'),
     hasReadiness: Boolean(document.querySelector('#dashboard-readiness')) && document.body?.innerText?.includes('Backy platform readiness'),
     hasInfrastructureDiagnostics: Boolean(document.querySelector('[data-testid="dashboard-infrastructure-diagnostics"]') && document.body?.innerText?.includes('Infrastructure diagnostics')),
     hasWorkflows: Boolean(document.querySelector('#dashboard-workflows')) && document.body?.innerText?.includes('Build and manage'),
@@ -512,6 +517,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasDeploymentHistory &&
       layout.hasOperationsSignals &&
       layout.hasAggregateAnalytics &&
+      layout.hasApiConsumers &&
       layout.hasReadiness &&
       layout.hasInfrastructureDiagnostics &&
       layout.hasWorkflows &&
@@ -542,6 +548,7 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
       ['deploymentHistory', '[data-testid="dashboard-deployment-history"]'],
       ['operationsSignals', '[data-testid="dashboard-operations-signal-board"]'],
       ['aggregateAnalytics', '[data-testid="dashboard-aggregate-analytics"]'],
+      ['apiConsumers', '[data-testid="dashboard-api-consumers"]'],
       ['readiness', '#dashboard-readiness'],
       ['infrastructureDiagnostics', '[data-testid="dashboard-infrastructure-diagnostics"]'],
       ['workflows', '#dashboard-workflows'],

@@ -31,7 +31,7 @@ The dashboard must answer four questions without requiring the operator to hunt 
 - Form/comment moderation queue: pending submissions, spam reports, approval throughput.
 - Deployment health: Vercel project status, last deploy, domain verification, cache invalidation/rebuild status.
 - Supabase connectivity: selected database provider, migration state, RLS status, repository mode, backup status.
-- API consumers: API key rotation history, external frontend manifests, webhook retries, request volume, error rates.
+- API consumers: implemented for the current Settings/API contract slice. The dashboard now renders API consumer readiness with public/admin endpoint counts, API key configured state, active/revoked named service-key counts, rotation/revocation history counts, recent API access audit events, and the same non-secret counts in the downloadable handoff JSON.
 
 ## UX rules
 
