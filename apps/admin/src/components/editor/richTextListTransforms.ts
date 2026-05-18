@@ -301,6 +301,65 @@ export const moveSelectedListItemNodes = (
   return patchNodes(nodes);
 };
 
+export const applyListIndentToSelectedListItemNodes = (
+  nodes: unknown[],
+  selectedText: string,
+  step: number
+): { changed: boolean; nodes: unknown[] } => {
+  const needle = selectedText.trim();
+  if (!needle || step === 0) {
+    return { changed: false, nodes };
+  }
+
+  const patchNodes = (values: unknown[]): { changed: boolean; nodes: unknown[] } => {
+    const nextNodes: unknown[] = [];
+    let didChange = false;
+
+    for (const node of values) {
+      if (didChange || !isRecord(node)) {
+        nextNodes.push(node);
+        continue;
+      }
+
+      const nextNode = cloneNode(node) as Record<string, unknown>;
+      if (nextNode.type === 'li' && listItemMatchesText(nextNode, needle)) {
+        const currentIndent = Number(nextNode.indent || 0);
+        if (!Number.isFinite(currentIndent)) {
+          nextNodes.push(node);
+          continue;
+        }
+
+        const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
+        if (nextIndent === 0) {
+          delete nextNode.indent;
+        } else {
+          nextNode.indent = nextIndent;
+        }
+        nextNodes.push(nextNode);
+        didChange = true;
+        continue;
+      }
+
+      const children = Array.isArray(nextNode.children) ? nextNode.children : null;
+      if (children) {
+        const patchedChildren = patchNodes(children);
+        if (patchedChildren.changed) {
+          nextNode.children = patchedChildren.nodes;
+          nextNodes.push(nextNode);
+          didChange = true;
+          continue;
+        }
+      }
+
+      nextNodes.push(node);
+    }
+
+    return { changed: didChange, nodes: nextNodes };
+  };
+
+  return patchNodes(nodes);
+};
+
 export const applyListIndentToNodes = (nodes: unknown[], step: number): unknown[] => {
   const patchNode = (node: unknown): unknown => {
     if (!isRecord(node)) {

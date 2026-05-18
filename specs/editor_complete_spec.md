@@ -132,6 +132,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
     - Nested Slate list content is normalized into Backy's flat list item + `indent` model before active editing, so selecting and indenting a nested child item no longer retargets the parent item.
     - Rich-text list helper coverage now guards nested child list targeting, so type conversion/reordering for selected child items does not retarget the parent item that contains descendant text.
+    - Selected nested list indent/outdent now targets the active list item's own text before falling back to range offsets, so parent and sibling list item indentation is preserved when changing a child item's depth.
     - Rich-text tables support authored captions that render above the table, remain outside the editable Slate cell flow, sync to table metadata, and persist through save/reload smoke coverage.
     - Selected rich-text table cells can merge with the right sibling or cell below, then split spanned cells back into sibling cells using persisted `colSpan`/`rowSpan` metadata.
     - Selected table cells can receive an independent fill color from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
@@ -274,6 +275,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text controls can remove the active table while preserving surrounding rich-text blocks.
   - Selected-range mark controls split multi-node selections at text boundaries, persist marks only on selected fragments, and leave neighboring text unmarked.
   - Nested Slate lists normalize into flat list item metadata before editing, preserving parent/child/sibling targeting for right-panel indent controls.
+  - Right-panel list indent/outdent for selected nested list items now preserves parent and sibling indentation while clamping the selected item's depth.
   - Shared editor block markdown shortcuts now support `>` for blockquote.
   - Editor context list actions now expose:
     - Toggle same-list off by unwrapping existing list wrappers.

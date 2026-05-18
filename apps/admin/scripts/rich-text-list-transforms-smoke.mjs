@@ -128,6 +128,25 @@ assert.equal(movedNestedChildren[1].indent, 2);
 assert.equal(nestedSelectedMoveDown.nodes[0].children[0].children[0].text, 'Parent item');
 assert.equal(nestedSelectedMoveDown.nodes[0].children[1].children[0].text, 'Outer sibling');
 
+const nestedSelectedIndent = helper.applyListIndentToSelectedListItemNodes(nestedSelectionSource, 'Child target', 1);
+assert.equal(nestedSelectedIndent.changed, true);
+assert.equal(nestedSelectedIndent.nodes[0].children[0].indent, undefined);
+assert.equal(nestedSelectedIndent.nodes[0].children[0].children[1].children[0].indent, 3);
+assert.equal(nestedSelectedIndent.nodes[0].children[0].children[1].children[1].indent, undefined);
+assert.equal(nestedSelectedIndent.nodes[0].children[1].indent, undefined);
+
+const nestedSelectedOutdent = helper.applyListIndentToSelectedListItemNodes(nestedSelectionSource, 'Child target', -1);
+assert.equal(nestedSelectedOutdent.changed, true);
+assert.equal(nestedSelectedOutdent.nodes[0].children[0].indent, undefined);
+assert.equal(nestedSelectedOutdent.nodes[0].children[0].children[1].children[0].indent, 1);
+assert.equal(nestedSelectedOutdent.nodes[0].children[0].children[1].children[1].indent, undefined);
+
+const parentSelectedIndent = helper.applyListIndentToSelectedListItemNodes(nestedSelectionSource, 'Parent item', 1);
+assert.equal(parentSelectedIndent.changed, true);
+assert.equal(parentSelectedIndent.nodes[0].children[0].indent, 1);
+assert.equal(parentSelectedIndent.nodes[0].children[0].children[1].children[0].indent, 2);
+assert.equal(parentSelectedIndent.nodes[0].children[1].indent, undefined);
+
 const outdented = helper.applyListIndentToNodes(existingOrdered, -2);
 assert.equal(outdented[0].children[0].indent, undefined);
 assert.equal(outdented[0].children[1].indent, undefined);
@@ -236,5 +255,5 @@ assert.deepEqual(listUtils.extractListItemEntriesFromSlate(objectBackedList), [
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 57,
+  cases: 70,
 }));

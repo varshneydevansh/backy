@@ -15,6 +15,7 @@ import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { EmojiPickerModal } from './EmojiPickerModal';
 import {
   applyListIndentToNodes,
+  applyListIndentToSelectedListItemNodes,
   applyListTypeToSelectedListItemNodes,
   applyListTypeToNodes,
   moveSelectedListItemNodes,
@@ -406,6 +407,26 @@ export function RichTextFormatting({
     let selectedText = '';
     if (typeof window !== 'undefined') {
       selectedText = window.getSelection()?.toString() || '';
+    }
+
+    const selectedListIndent = selectedText.trim()
+      ? applyListIndentToSelectedListItemNodes(normalizedElementContent, selectedText, step)
+      : null;
+    if (selectedListIndent?.changed) {
+      const clonedContent = JSON.parse(JSON.stringify(selectedListIndent.nodes)) as unknown[];
+      onElementContentChange?.(clonedContent);
+
+      const activeEditor = getActiveEditor();
+      const activeEditorElementId = getCurrentActiveEditorId();
+      if (activeEditor && (!elementId || !activeEditorElementId || activeEditorElementId === elementId)) {
+        try {
+          (activeEditor as any).children = JSON.parse(JSON.stringify(selectedListIndent.nodes));
+          (activeEditor as any).onChange?.();
+          syncActiveEditorContentAfterCommand();
+        } catch {
+        }
+      }
+      return true;
     }
 
     const getNodeTextLength = (node: unknown): number => {
