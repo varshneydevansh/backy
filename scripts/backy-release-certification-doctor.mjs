@@ -202,6 +202,8 @@ const commerceChecks = [
   ], requestShipping && shippingProvider === 'auto'),
   checkCompleteAny('EasyPost credentials', providerCredentials.easypost, requestShipping && shippingProvider === 'easypost'),
   checkCompleteAny('Shippo credentials', providerCredentials.shippo, requestShipping && shippingProvider === 'shippo'),
+  checkAny('HTTP tax provider URL', ['BACKY_COMMERCE_TAX_PROVIDER_URL', 'COMMERCE_TAX_PROVIDER_URL'], requestTax && taxProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
+  checkAny('HTTP shipping provider URL', ['BACKY_COMMERCE_SHIPPING_PROVIDER_URL', 'COMMERCE_SHIPPING_PROVIDER_URL'], requestShipping && shippingProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
   checkCompleteAny('auto catalog credentials', [
     ...providerCredentials.shopify,
     ...providerCredentials.bigcommerce,
@@ -214,6 +216,8 @@ const commerceChecks = [
   checkCompleteAny('WooCommerce catalog credentials', providerCredentials.woocommerce, requestCatalog && catalogProvider === 'woocommerce'),
   checkCompleteAny('Etsy catalog credentials', providerCredentials.etsy, requestCatalog && catalogProvider === 'etsy'),
   checkCompleteAny('Magento catalog credentials', providerCredentials.magento, requestCatalog && catalogProvider === 'magento'),
+  checkAny('HTTP catalog provider URL', ['BACKY_COMMERCE_PRODUCT_SYNC_URL', 'COMMERCE_PRODUCT_SYNC_URL'], requestCatalog && catalogProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
+  checkAny('HTTP subscription provider URL', ['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'], requestSubscriptions && subscriptionProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
   checkAny('Commerce webhook secret', ['BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'], requestWebhooks && webhookProvider !== 'auto'),
 ];
 

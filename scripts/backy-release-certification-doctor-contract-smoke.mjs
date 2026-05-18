@@ -439,6 +439,47 @@ await assertMissingProvider({
   failure: 'Shippo credentials',
 });
 
+for (const { label, env, failure } of [
+  {
+    label: 'HTTP tax',
+    env: {
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+      BACKY_COMMERCE_CERTIFY_TAX: '1',
+      BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'http',
+    },
+    failure: 'HTTP tax provider URL',
+  },
+  {
+    label: 'HTTP shipping',
+    env: {
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+      BACKY_COMMERCE_CERTIFY_SHIPPING: '1',
+      BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: 'http',
+    },
+    failure: 'HTTP shipping provider URL',
+  },
+  {
+    label: 'HTTP catalog',
+    env: {
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'http',
+    },
+    failure: 'HTTP catalog provider URL',
+  },
+  {
+    label: 'HTTP subscription',
+    env: {
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: 'http',
+    },
+    failure: 'HTTP subscription provider URL',
+  },
+]) {
+  await assertMissingProvider({ label, env, failure });
+}
+
 const shopifyCatalog = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_COMMERCE_CERTIFY_CATALOG: '1',
@@ -581,12 +622,44 @@ for (const { label, env } of [
     },
   },
   {
+    label: 'selected HTTP tax',
+    env: {
+      BACKY_COMMERCE_CERTIFY_TAX: '1',
+      BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'http',
+      COMMERCE_TAX_PROVIDER_URL: 'https://commerce-http.example.test/tax',
+    },
+  },
+  {
+    label: 'selected HTTP shipping',
+    env: {
+      BACKY_COMMERCE_CERTIFY_SHIPPING: '1',
+      BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: 'http',
+      COMMERCE_SHIPPING_PROVIDER_URL: 'https://commerce-http.example.test/shipping',
+    },
+  },
+  {
     label: 'selected Shopify catalog',
     env: {
       BACKY_COMMERCE_CERTIFY_CATALOG: '1',
       BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'shopify',
       SHOPIFY_ADMIN_ACCESS_TOKEN: 'shopify_alias_token',
       SHOPIFY_STORE_DOMAIN: 'shop.example.test',
+    },
+  },
+  {
+    label: 'selected HTTP catalog',
+    env: {
+      BACKY_COMMERCE_CERTIFY_CATALOG: '1',
+      BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: 'http',
+      COMMERCE_PRODUCT_SYNC_URL: 'https://commerce-http.example.test/catalog',
+    },
+  },
+  {
+    label: 'selected HTTP subscription',
+    env: {
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: '1',
+      BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: 'http',
+      COMMERCE_SUBSCRIPTION_ACTION_URL: 'https://commerce-http.example.test/subscription',
     },
   },
   {

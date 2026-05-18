@@ -183,6 +183,14 @@ const asRecord = (value) => (
 const stringValue = (value) => (typeof value === 'string' ? value.trim() : '');
 
 const hasHttpUrl = (value) => /^https?:\/\//i.test(stringValue(value));
+const envValue = (names) => names.map((name) => stringValue(process.env[name])).find(Boolean) || '';
+
+const commerceHttpCertificationUrls = {
+  taxProviderUrl: envValue(['BACKY_COMMERCE_TAX_PROVIDER_URL', 'COMMERCE_TAX_PROVIDER_URL']),
+  shippingProviderUrl: envValue(['BACKY_COMMERCE_SHIPPING_PROVIDER_URL', 'COMMERCE_SHIPPING_PROVIDER_URL']),
+  catalogSyncProviderUrl: envValue(['BACKY_COMMERCE_PRODUCT_SYNC_URL', 'COMMERCE_PRODUCT_SYNC_URL']),
+  subscriptionActionProviderUrl: envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL']),
+};
 
 const configuredCommerceSettings = (settings) => {
   const integrations = asRecord(asRecord(settings).integrations);
@@ -383,12 +391,32 @@ const prepareLocalCertificationSettings = async (baseUrl, settings) => {
     if (provider && provider !== stringValue(commerce.taxProvider)) {
       commercePatch.taxProvider = provider;
     }
+    if (provider === 'http' && commerceHttpCertificationUrls.taxProviderUrl && commerceHttpCertificationUrls.taxProviderUrl !== stringValue(commerce.taxProviderUrl)) {
+      commercePatch.taxProviderUrl = commerceHttpCertificationUrls.taxProviderUrl;
+    }
   }
 
   if (certifyShipping) {
     const provider = inferShippingCertificationProvider();
     if (provider && provider !== stringValue(commerce.shippingProvider)) {
       commercePatch.shippingProvider = provider;
+    }
+    if (provider === 'http' && commerceHttpCertificationUrls.shippingProviderUrl && commerceHttpCertificationUrls.shippingProviderUrl !== stringValue(commerce.shippingProviderUrl)) {
+      commercePatch.shippingProviderUrl = commerceHttpCertificationUrls.shippingProviderUrl;
+    }
+  }
+
+  if (certifyCatalog) {
+    const provider = inferCatalogCertificationProvider();
+    if (provider === 'http' && commerceHttpCertificationUrls.catalogSyncProviderUrl && commerceHttpCertificationUrls.catalogSyncProviderUrl !== stringValue(commerce.catalogSyncProviderUrl)) {
+      commercePatch.catalogSyncProviderUrl = commerceHttpCertificationUrls.catalogSyncProviderUrl;
+    }
+  }
+
+  if (certifySubscriptions) {
+    const provider = inferSubscriptionCertificationProvider();
+    if (provider === 'http' && commerceHttpCertificationUrls.subscriptionActionProviderUrl && commerceHttpCertificationUrls.subscriptionActionProviderUrl !== stringValue(commerce.subscriptionActionProviderUrl)) {
+      commercePatch.subscriptionActionProviderUrl = commerceHttpCertificationUrls.subscriptionActionProviderUrl;
     }
   }
 
