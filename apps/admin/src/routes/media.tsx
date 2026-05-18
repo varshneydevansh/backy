@@ -4689,9 +4689,11 @@ function MediaPage() {
                 )}
               </div>
               {mediaAnalytics.largestAssets.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                  No assets are loaded yet.
-                </p>
+                <EmptyState
+                  icon={File}
+                  title="No large assets yet"
+                  description="Upload images, fonts, documents, or videos to see the largest files that may affect frontend delivery."
+                />
               ) : (
                 <div className="space-y-2">
                   {mediaAnalytics.largestAssets.map(({ asset, bytes }) => (

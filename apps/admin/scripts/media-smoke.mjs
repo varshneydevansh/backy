@@ -60,6 +60,8 @@ const assertMediaRouteSourceContract = () => {
   const source = fs.readFileSync(new URL('../src/routes/media.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Media route must use the shared EmptyState component');
   assert(source.includes('title="No media audit records"'), 'Media library audit empty state must keep the shared title visible');
+  assert(source.includes('title="No large assets yet"'), 'Media analytics panel must keep the largest-assets empty state visible');
+  assert(source.includes('Upload images, fonts, documents, or videos to see the largest files that may affect frontend delivery.'), 'Media largest-assets empty state must explain what populates analytics');
   assert(source.includes('title="No Backy delivery requests"'), 'Media asset delivery empty state must keep the shared title visible');
   assert(source.includes('title="No replacements recorded"'), 'Media asset replacement empty state must keep the shared title visible');
   assert(source.includes('title="No page or post references"'), 'Media asset reference empty state must keep the shared title visible');
