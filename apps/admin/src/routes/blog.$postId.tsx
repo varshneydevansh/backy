@@ -44,6 +44,7 @@ import { useAuthStore, type User } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
@@ -2362,9 +2363,11 @@ function EditBlogPostPage() {
                                             Loading post comments...
                                         </div>
                                     ) : postComments.length === 0 ? (
-                                        <div className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-                                            No comments have been submitted for this post yet.
-                                        </div>
+                                        <EmptyState
+                                            icon={MessageSquare}
+                                            title="No comments yet"
+                                            description="Public comments for this post will appear here for quick review, with the full queue still available from Comments."
+                                        />
                                     ) : postComments.slice(0, 4).map((comment) => (
                                         <BlogCommentModerationItem
                                             key={comment.id}
@@ -2566,9 +2569,11 @@ function EditBlogPostPage() {
                             <PanelHeader title="Revisions" icon={<History className="size-4" />} />
                             <PanelContent>
                                 {revisions.length === 0 ? (
-                                    <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                                        No saved revisions yet.
-                                    </div>
+                                    <EmptyState
+                                        icon={History}
+                                        title="No saved revisions yet"
+                                        description="Save this post after editing to create a restorable revision snapshot for the article and canvas."
+                                    />
                                 ) : (
                                     <div className="grid gap-2">
                                         {revisions.slice(0, 6).map((revision) => (

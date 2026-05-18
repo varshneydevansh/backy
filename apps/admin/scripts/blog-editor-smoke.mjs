@@ -30,6 +30,9 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
   assert(source.includes('editorBusy || !canEditBlog || isUsingLocalPostCopy'), 'Blog editor canvas changes must ignore local fallback copies');
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend post loaded into the editor.'), 'Blog editor reload must clear fallback state after loading backend content');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog editor must use the shared EmptyState component for sidebar empty states');
+  assert(source.includes('Public comments for this post will appear here for quick review'), 'Blog editor comments empty state must explain how post comments populate');
+  assert(source.includes('create a restorable revision snapshot'), 'Blog editor revision empty state must explain how revisions populate');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -70,7 +73,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -78,9 +81,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_BLOG_EDITOR_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -167,6 +180,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -369,6 +394,11 @@ const waitForEditor = async (client, postId) => {
         savePersistence: saveStatus?.getAttribute('data-save-persistence') || '',
         saveStatusText: saveStatus?.textContent || '',
         focusButton: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Focus canvas'),
+        focusButtonReady: Array.from(document.querySelectorAll('button')).some((button) => (
+          (button.textContent || '').trim() === 'Focus canvas' &&
+          button instanceof HTMLButtonElement &&
+          !button.disabled
+        )),
         width: rect?.width || 0,
         height: rect?.height || 0,
         body: document.body?.innerText?.slice(0, 1200) || '',
@@ -394,7 +424,7 @@ const waitForEditor = async (client, postId) => {
       state.savePersistence === 'parent' &&
       state.saveStatusText.includes('Post save') &&
       !state.saveStatusText.includes('Saved') &&
-      state.focusButton &&
+      state.focusButtonReady &&
       state.width >= 900 &&
       state.height >= 760
     ) {
@@ -412,17 +442,26 @@ const waitForEditor = async (client, postId) => {
 };
 
 const assertFocusMode = async (client) => {
-  const clicked = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').trim() === 'Focus canvas'
-    ));
-    if (!(button instanceof HTMLButtonElement) || button.disabled) {
-      return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+  let clicked = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Focus canvas'
+      ));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (clicked.ok) {
+      break;
     }
-    button.click();
-    return { ok: true };
-  })()`);
-  assert(clicked.ok, `Focus canvas button was not ready: ${JSON.stringify(clicked)}`);
+
+    await sleep(200);
+  }
+  assert(clicked?.ok, `Focus canvas button was not ready: ${JSON.stringify(clicked)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -663,6 +702,7 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     const editorState = await waitForEditor(client, post.id);
