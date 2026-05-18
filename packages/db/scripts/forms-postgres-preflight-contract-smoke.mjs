@@ -9,6 +9,7 @@ const files = {
   workflow: new URL('../../../.github/workflows/forms-postgres-contract.yml', import.meta.url),
   rootPackage: new URL('../../../package.json', import.meta.url),
   adminFormsRoute: new URL('../../../apps/public/src/app/api/admin/sites/[siteId]/forms/route.ts', import.meta.url),
+  adminFormsSmoke: new URL('../../../apps/admin/scripts/forms-smoke.mjs', import.meta.url),
   apiContracts: new URL('../../../specs/backy-api-contracts.md', import.meta.url),
   audit: new URL('../../../specs/page-completion-audit/backy-page-surface-audit.md', import.meta.url),
 };
@@ -30,6 +31,7 @@ const hardeningMigration = await readFile(files.hardeningMigration, 'utf8');
 const workflow = await readFile(files.workflow, 'utf8').catch(() => '');
 const rootPackage = await readFile(files.rootPackage, 'utf8');
 const adminFormsRoute = await readFile(files.adminFormsRoute, 'utf8');
+const adminFormsSmoke = await readFile(files.adminFormsSmoke, 'utf8');
 const apiContracts = await readFile(files.apiContracts, 'utf8');
 const audit = await readFile(files.audit, 'utf8');
 
@@ -213,6 +215,24 @@ includesEvery(adminFormsRoute, [
   'persistenceCertification: formPersistenceCertification(site.id)',
   'Database URLs stay in server/CI environment variables',
 ], 'Admin Forms API persistence certification handoff');
+includesEvery(adminFormsSmoke, [
+  'assertFormsPersistenceCertificationResponse',
+  'data.persistenceCertification',
+  'legacy persistenceCertification',
+  'backy.forms-persistence-certification.v1',
+  'external-database-gate',
+  'npm run test:forms-postgres --workspace @backy/db',
+  'npm run ci:forms-postgres',
+  '.github/workflows/forms-postgres-contract.yml',
+  'BACKY_DATABASE_URL',
+  'DATABASE_URL',
+  'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
+  'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
+  'disposable migrated Supabase/Postgres database',
+  'disposable_database_confirmed=true',
+  'Database URLs stay in server/CI environment variables',
+  'assertFormsPersistenceCertificationResponse(payload);',
+], 'Forms admin smoke runtime persistence certification response guard');
 
 if (workflow) {
   includesEvery(workflow, [

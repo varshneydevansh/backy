@@ -44,6 +44,24 @@ const assertFormsPersistenceCertificationSource = () => {
   }
 };
 
+const assertFormsPersistenceCertificationResponse = (payload) => {
+  const certification = payload.data?.persistenceCertification;
+  const legacyCertification = payload.persistenceCertification;
+  assert(certification, `Forms API response must include data.persistenceCertification: ${JSON.stringify(payload).slice(0, 700)}`);
+  assert(legacyCertification, `Forms API response must include legacy persistenceCertification: ${JSON.stringify(payload).slice(0, 700)}`);
+  assert(certification.schemaVersion === 'backy.forms-persistence-certification.v1', `Unexpected Forms persistence certification schema: ${JSON.stringify(certification)}`);
+  assert(certification.status === 'external-database-gate', `Unexpected Forms persistence certification status: ${JSON.stringify(certification)}`);
+  assert(certification.selectedSiteId === SITE_ID, `Forms persistence certification must identify the selected site: ${JSON.stringify(certification)}`);
+  assert(certification.databaseGate === 'npm run test:forms-postgres --workspace @backy/db', `Forms persistence certification missing database gate: ${JSON.stringify(certification)}`);
+  assert(certification.ciGate === 'npm run ci:forms-postgres', `Forms persistence certification missing CI gate: ${JSON.stringify(certification)}`);
+  assert(certification.workflow === '.github/workflows/forms-postgres-contract.yml', `Forms persistence certification missing workflow: ${JSON.stringify(certification)}`);
+  assert(Array.isArray(certification.requiredDatabaseEnv) && certification.requiredDatabaseEnv.includes('BACKY_DATABASE_URL') && certification.requiredDatabaseEnv.includes('DATABASE_URL'), `Forms persistence certification missing database env aliases: ${JSON.stringify(certification)}`);
+  assert(Array.isArray(certification.targetGuards) && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), `Forms persistence certification missing target guards: ${JSON.stringify(certification)}`);
+  assert(Array.isArray(certification.requires) && certification.requires.includes('disposable migrated Supabase/Postgres database') && certification.requires.includes('disposable_database_confirmed=true'), `Forms persistence certification missing disposable database requirements: ${JSON.stringify(certification)}`);
+  assert(typeof certification.secretHandling === 'string' && certification.secretHandling.includes('Database URLs stay in server/CI environment variables'), `Forms persistence certification must describe non-secret handling: ${JSON.stringify(certification)}`);
+  assert(JSON.stringify(legacyCertification) === JSON.stringify(certification), `Legacy Forms persistence certification must mirror data.persistenceCertification: ${JSON.stringify({ certification, legacyCertification })}`);
+};
+
 const startWebhookReceiver = async ({ failFirstFormSubmission = false } = {}) => new Promise((resolve, reject) => {
   const deliveries = [];
   let failedFormSubmission = false;
@@ -303,6 +321,7 @@ const smokeFrontendDesignContract = () => ({
 
 const listForms = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms`);
+  assertFormsPersistenceCertificationResponse(payload);
   return payload.data?.forms || payload.forms || [];
 };
 
