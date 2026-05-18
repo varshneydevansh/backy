@@ -31,6 +31,11 @@ const publicPackage = read('../package.json');
 const templateRegistrySmoke = read('template-registry-smoke.ts');
 const apiContracts = read('../../../specs/backy-api-contracts.md');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
+const adminSiteDetailPage = read('../../../apps/admin/src/routes/sites.$siteId.tsx');
+const adminFormsPage = read('../../../apps/admin/src/routes/forms.tsx');
+const adminProductsPage = read('../../../apps/admin/src/routes/products.tsx');
+const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.tsx');
+const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-sections.tsx');
 
 assert(
   manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
@@ -73,6 +78,22 @@ assert(
     apiContracts.includes('templateRegistry') &&
     apiContracts.includes('endpoints.templates'),
   'Admin frontend-design responses must advertise the normalized template registry endpoint and clone summary.',
+);
+
+assert(
+  adminSiteDetailPage.includes('search: { siteId: targetSiteId, frontendTemplate: template.id }') &&
+    adminSiteDetailPage.includes('draft: "new"') &&
+    adminSiteDetailPage.includes('frontendTemplate: template.id') &&
+    adminFormsPage.includes('frontendTemplate: normalizedSearchString(search.frontendTemplate)') &&
+    adminFormsPage.includes('activeFrontendTemplateId === template.id') &&
+    adminProductsPage.includes('frontendTemplate: normalizedSearchString(search.frontendTemplate)') &&
+    adminProductsPage.includes('activeFrontendTemplateId === template.id') &&
+    adminReusableSectionsPage.includes('frontendTemplate: normalizedSearchString(search.frontendTemplate)') &&
+    adminReusableSectionsPage.includes('activeFrontendTemplateId === template.id') &&
+    adminCollectionsPage.includes('frontendTemplate: normalizedSearchString(search.frontendTemplate)') &&
+    adminCollectionsPage.includes("resetCollectionForm({ frontendTemplateId: routeSearch.frontendTemplate || '' })") &&
+    adminCollectionsPage.includes('activeFrontendTemplateId === template.id'),
+  'Admin template registry actions must deep-link non-page templates with frontendTemplate search state and preserve collection draft selection.',
 );
 
 assert(

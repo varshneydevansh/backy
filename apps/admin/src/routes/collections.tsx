@@ -2588,7 +2588,7 @@ function CollectionsPage() {
     };
   }, [currentAdmin?.id]);
 
-  const resetCollectionForm = (options: { draftMode?: boolean } = {}) => {
+  const resetCollectionForm = (options: { draftMode?: boolean; frontendTemplateId?: string } = {}) => {
     collectionInteractionVersionRef.current += 1;
     setCollectionDraftMode(options.draftMode ?? true);
     setSelectedCollectionId(null);
@@ -2619,7 +2619,7 @@ function CollectionsPage() {
       description: '',
       status: 'published',
       permissions: DEFAULT_PERMISSIONS,
-      frontendDesignTemplateId: '',
+      frontendDesignTemplateId: options.frontendTemplateId || '',
       dynamicTemplates: defaultDynamicTemplates(),
       visitorWritePolicy: defaultVisitorWritePolicy(),
       fields: [createStarterField()],
@@ -2801,7 +2801,7 @@ function CollectionsPage() {
     const routeRequestsNewDraft = routeSearch.draft === 'new' && !routeSearch.collectionId;
     if (routeRequestsNewDraft) {
       if (!collectionDraftModeRef.current || selectedCollectionId) {
-        resetCollectionForm();
+        resetCollectionForm({ frontendTemplateId: routeSearch.frontendTemplate || '' });
       }
       return;
     }
@@ -2834,6 +2834,7 @@ function CollectionsPage() {
     routeSearch.draft,
     routeSearch.fieldKey,
     routeSearch.fieldValue,
+    routeSearch.frontendTemplate,
     routeSearch.limit,
     routeSearch.offset,
     routeSearch.recordId,
