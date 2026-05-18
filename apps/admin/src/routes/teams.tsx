@@ -3,6 +3,7 @@ import { Activity, Check, Copy, RefreshCw, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Notice } from '@/components/ui/Notice';
 import TeamManagement, { type Team, type TeamRole } from '@/components/teams/TeamManagement';
 import {
@@ -404,16 +405,15 @@ function TeamsPage() {
             Loading teams...
           </div>
         ) : teams.length === 0 ? (
-          <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed px-6 text-center">
-            <Users className="mb-3 size-8 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">No teams yet</h2>
-            <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              Create a team to start assigning members and roles. Team writes require database mode.
-            </p>
-            <div className="mt-4">
-              <TeamManagement
-                teams={teams}
-                currentTeamId={currentTeamId}
+          <EmptyState
+            icon={Users}
+            title="No teams yet"
+            description="Create a team to start assigning members, roles, sites, and workspace ownership. Team writes require database mode."
+            action={(
+              <div className="mt-2">
+                <TeamManagement
+                  teams={teams}
+                  currentTeamId={currentTeamId}
                 currentAdminId={currentAdmin?.id}
                 currentAdminEmail={currentAdmin?.email}
                 canManageTeams={canManageTeams}
@@ -424,11 +424,12 @@ function TeamsPage() {
                 onDeleteTeam={handleDeleteTeam}
                 onInviteMember={handleInviteMember}
                 onUpdateMemberRole={handleUpdateMemberRole}
-                onRemoveMember={handleRemoveMember}
-                onSwitchTeam={setCurrentTeamId}
-              />
-            </div>
-          </div>
+                  onRemoveMember={handleRemoveMember}
+                  onSwitchTeam={setCurrentTeamId}
+                />
+              </div>
+            )}
+          />
         ) : (
           <TeamManagement
             teams={teams}

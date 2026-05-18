@@ -18,6 +18,13 @@ const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
+const assertTeamsRouteSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/teams.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Teams route must use the shared EmptyState component for the primary no-teams state');
+  assert(source.includes('title="No teams yet"'), 'Teams empty state must keep the no-teams title visible');
+  assert(source.includes('assigning members, roles, sites, and workspace ownership'), 'Teams empty state must explain what the first team unlocks');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -82,15 +89,25 @@ const expectApiError = async (endpoint, options = {}, expectedCode) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_TEAMS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -467,6 +484,23 @@ const installBrowserAuthPreload = async (client, sessionToken, user) => client.s
   source: authStorageScript(sessionToken, user),
 });
 
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
+
+const setBrowserAuth = async (client, sessionToken, user) => {
+  await seedBrowserSessionCookie(client, sessionToken);
+  await setBrowserAuthStorage(client, sessionToken, user);
+};
+
 const removeBrowserPreload = async (client, preload) => {
   if (preload?.identifier) {
     await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: preload.identifier });
@@ -606,6 +640,7 @@ const main = async () => {
   let adminUserId = '';
 
   try {
+    assertTeamsRouteSourceContract();
     const adminSession = await loginAdminApi();
     adminUserId = adminSession.user?.id || '';
     if (adminUserId) {
@@ -718,6 +753,7 @@ const main = async () => {
     await client.opened;
     await client.send('Runtime.enable');
     await client.send('Page.enable');
+    await seedBrowserSessionCookie(client, adminSession.session.token);
     activeAuthPreload = await installBrowserAuthPreload(client, adminSession.session.token, adminSession.user);
 
     await navigate(
@@ -931,7 +967,7 @@ const main = async () => {
     const adminRoleSession = await acceptInvite(adminAccount.invite.token);
     await removeBrowserPreload(client, activeAuthPreload);
     activeAuthPreload = await installBrowserAuthPreload(client, adminRoleSession.session.token, adminRoleSession.user);
-    await setBrowserAuthStorage(client, adminRoleSession.session.token, adminRoleSession.user);
+    await setBrowserAuth(client, adminRoleSession.session.token, adminRoleSession.user);
     await navigate(
       client,
       `${ADMIN_BASE_URL}/teams`,
@@ -982,7 +1018,7 @@ const main = async () => {
     const editorRoleSession = await acceptInvite(editorAccount.invite.token);
     await removeBrowserPreload(client, activeAuthPreload);
     activeAuthPreload = await installBrowserAuthPreload(client, editorRoleSession.session.token, editorRoleSession.user);
-    await setBrowserAuthStorage(client, editorRoleSession.session.token, editorRoleSession.user);
+    await setBrowserAuth(client, editorRoleSession.session.token, editorRoleSession.user);
     await navigate(
       client,
       `${ADMIN_BASE_URL}/teams`,
@@ -1021,7 +1057,7 @@ const main = async () => {
     const defaultViewerSession = await acceptInvite(defaultViewerAccount.invite.token);
     await removeBrowserPreload(client, activeAuthPreload);
     activeAuthPreload = await installBrowserAuthPreload(client, defaultViewerSession.session.token, defaultViewerSession.user);
-    await setBrowserAuthStorage(client, defaultViewerSession.session.token, defaultViewerSession.user);
+    await setBrowserAuth(client, defaultViewerSession.session.token, defaultViewerSession.user);
     await navigate(
       client,
       `${ADMIN_BASE_URL}/teams`,
@@ -1065,7 +1101,7 @@ const main = async () => {
     const readOnlySession = await acceptInvite(readOnlyAccount.invite.token);
     await removeBrowserPreload(client, activeAuthPreload);
     activeAuthPreload = await installBrowserAuthPreload(client, readOnlySession.session.token, readOnlySession.user);
-    await setBrowserAuthStorage(client, readOnlySession.session.token, readOnlySession.user);
+    await setBrowserAuth(client, readOnlySession.session.token, readOnlySession.user);
     await navigate(
       client,
       `${ADMIN_BASE_URL}/teams`,
