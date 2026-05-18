@@ -427,6 +427,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Fixed `RichTextFormatting.tsx` syntax corruption and stabilized it as a compile-safe editing control.
 - Fixed a Vite/parser regression in `Canvas.tsx` (`||` + `??` precedence issue).
 - Added list un-toggle/restore and list-item indent controls plumbing in `ActiveEditorContext` (`toggleList`, `indentList`, `outdentList`) with safer block-type restoration.
+- Imported or object-backed list item indentation now clamps to the editor's depth-8 contract before canvas/public rendering, preventing external content from creating runaway list offsets.
 - Fixed style panel zero-value handling for opacity (`opacity` now uses nullish-safe `??` defaults instead of `||` fallback).
 - Added text-style-aware panel behavior in `PropertyPanel`:
   - `StyleProperties` now supports text-style sections only for text-capable elements (`text`, `heading`, `paragraph`, `quote`, `button`, `link`, `list`, `icon`).

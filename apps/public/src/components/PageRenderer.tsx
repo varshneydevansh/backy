@@ -698,6 +698,8 @@ type ListItemEntry = {
   indent?: number;
 };
 
+const LIST_MAX_INDENT = 8;
+
 function getLength(value: unknown, fallback = ''): string {
   if (value === undefined || value === null) {
     return fallback;
@@ -902,7 +904,7 @@ const toListItemIndent = (value: unknown): number | undefined => {
     return undefined;
   }
 
-  return Math.max(0, Math.floor(indent));
+  return Math.max(0, Math.min(LIST_MAX_INDENT, Math.floor(indent)));
 };
 
 function parseListItemEntries(raw: unknown, content: unknown): ListItemEntry[] {

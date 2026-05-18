@@ -11,6 +11,8 @@ export type ListItemEntry = {
   indent?: number;
 };
 
+const LIST_MAX_INDENT = 8;
+
 const normalizeListType = (listType: unknown): ListType =>
   listType === 'number' || listType === 'ordered' || listType === 'decimal' ? 'number' : 'bullet';
 
@@ -52,7 +54,7 @@ const toListItemIndent = (value: unknown): number | undefined => {
     return undefined;
   }
 
-  return Math.max(0, Math.floor(indent));
+  return Math.max(0, Math.min(LIST_MAX_INDENT, Math.floor(indent)));
 };
 
 export const buildListContentFromItems = (items: unknown = [], listType: ListType = 'bullet'): unknown[] => {

@@ -244,16 +244,31 @@ assert.deepEqual(normalizedDeepEntries.map((entry) => entry.indent), [
 const objectBackedList = listUtils.buildListContentFromItems([
   { label: 'Parent object' },
   { text: 'Child object', indent: 2 },
+  { text: 'Imported deep child', indent: '99' },
 ], 'number');
 assert.equal(objectBackedList[0].type, 'ol');
 assert.equal(objectBackedList[0].children[1].indent, 2);
+assert.equal(objectBackedList[0].children[2].indent, 8);
 assert.deepEqual(listUtils.extractListItemEntriesFromSlate(objectBackedList), [
   { text: 'Parent object' },
   { text: 'Child object', indent: 2 },
+  { text: 'Imported deep child', indent: 8 },
+]);
+
+const extractedDeepListUtilsEntries = listUtils.extractListItemEntriesFromSlate([{
+  type: 'ul',
+  children: [
+    { type: 'li', children: [{ text: 'Imported parent' }] },
+    { type: 'li', indent: '42', children: [{ text: 'Imported child' }] },
+  ],
+}]);
+assert.deepEqual(extractedDeepListUtilsEntries, [
+  { text: 'Imported parent' },
+  { text: 'Imported child', indent: 8 },
 ]);
 
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 70,
+  cases: 76,
 }));

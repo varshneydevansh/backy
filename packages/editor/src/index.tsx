@@ -823,7 +823,7 @@ export const BackyEditor = ({
         }
 
         if (type === 'li') {
-            const indent = Number((element as any)?.indent || 0);
+            const indent = readListIndent(element) ?? 0;
             const getListItemPath = () => ReactEditor.findPath(editor as any, element);
             const getListItemPathFromHandle = (event: MouseEvent) => {
                 const target = event.currentTarget instanceof Element
