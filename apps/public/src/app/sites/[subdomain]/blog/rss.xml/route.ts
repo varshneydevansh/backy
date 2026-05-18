@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getBlogPosts,
   getSiteByIdOrSlug,
@@ -23,11 +23,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const site = getSiteByIdOrSlug(subdomain);
 
   if (!site || !site.isPublished) {
-    return new NextResponse('Not found', {
+    return publicContractResponse('Not found', {
+      request,
+      requestId,
       status: 404,
+      cache: 'error',
+      siteId: site?.id,
+    }, {
       headers: {
         'content-type': 'text/plain; charset=utf-8',
-        'cache-control': 'no-store',
       },
     });
   }

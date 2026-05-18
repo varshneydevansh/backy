@@ -110,13 +110,28 @@ function assertInteractiveContractSource() {
   assert(registrySource.includes("default-src 'none'"), 'Interactive manifest contract must expose sandbox CSP directives');
   assert(registrySource.includes('camera=()') && registrySource.includes('microphone=()'), 'Interactive manifest contract must expose denied browser permissions');
   assert(openApiSource.includes('sandboxResponseHeaders'), 'OpenAPI must declare sandbox response headers');
-  assert(openApiSource.includes("'Content-Security-Policy'"), 'OpenAPI must declare sandbox CSP response header');
-  assert(openApiSource.includes("'Permissions-Policy'"), 'OpenAPI must declare sandbox permissions response header');
-  assert(openApiSource.includes("'403': { description: 'Component disabled', headers: sandboxResponseHeaders }"), 'OpenAPI disabled sandbox response must carry header contract');
-  assert(openApiSource.includes("'404': { description: 'Site or component not found', headers: sandboxResponseHeaders }"), 'OpenAPI missing sandbox response must carry header contract');
+  assert(openApiSource.includes('"Content-Security-Policy"') || openApiSource.includes("'Content-Security-Policy'"), 'OpenAPI must declare sandbox CSP response header');
+  assert(openApiSource.includes('"Permissions-Policy"') || openApiSource.includes("'Permissions-Policy'"), 'OpenAPI must declare sandbox permissions response header');
+  assert(openApiSource.includes('"403":') && openApiSource.includes('description: "Component disabled"') && openApiSource.includes('headers: sandboxResponseHeaders'), 'OpenAPI disabled sandbox response must carry header contract');
+  assert(openApiSource.includes('"404":') && openApiSource.includes('description: "Site or component not found"') && openApiSource.includes('headers: sandboxResponseHeaders'), 'OpenAPI missing sandbox response must carry header contract');
   assert(sdkSource.includes('responseHeaders: {'), 'SDK manifest type must require sandbox response headers');
   assert(sdkSource.includes('contentSecurityPolicy: string[]'), 'SDK manifest type must expose sandbox CSP directives');
   assert(sdkSource.includes('permissionsPolicy: string[]'), 'SDK manifest type must expose sandbox permissions policy directives');
+}
+
+function assertHostedFeedErrorContractSource() {
+  const hostedFeedRoutes = [
+    ['hosted sitemap route', '../src/app/sites/[subdomain]/sitemap.xml/route.ts'],
+    ['hosted robots route', '../src/app/sites/[subdomain]/robots.txt/route.ts'],
+    ['hosted RSS route', '../src/app/sites/[subdomain]/blog/rss.xml/route.ts'],
+  ];
+
+  for (const [label, routePath] of hostedFeedRoutes) {
+    const source = fs.readFileSync(new URL(routePath, import.meta.url), 'utf8');
+    assert(source.includes("publicContractResponse('Not found'"), `${label} must return contract-wrapped 404 text`);
+    assert(source.includes("cache: 'error'"), `${label} 404 must use the public error cache scope`);
+    assert(!source.includes("new NextResponse('Not found'"), `${label} must not return bare 404 text`);
+  }
 }
 
 function assertSiteSettingsLocalizationSource() {
@@ -609,6 +624,7 @@ async function cleanup() {
 if (process.env.BACKY_ADMIN_CONTRACT_SOURCE_GUARD === '1') {
   assertInteractiveSandboxRouteSource();
   assertInteractiveContractSource();
+  assertHostedFeedErrorContractSource();
   assertSiteSettingsLocalizationSource();
   assertAdminSettingsContractSource();
   console.log(JSON.stringify({ ok: true, guard: 'admin-contract-source' }));
@@ -617,6 +633,7 @@ if (process.env.BACKY_ADMIN_CONTRACT_SOURCE_GUARD === '1') {
 
 try {
   assertInteractiveSandboxRouteSource();
+  assertHostedFeedErrorContractSource();
   assertSiteSettingsLocalizationSource();
   await loginAdminApi();
   const initialSettings = await request('/api/admin/settings');

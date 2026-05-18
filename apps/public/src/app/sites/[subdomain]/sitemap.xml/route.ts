@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
 import { buildSeoDiscovery, buildSitemapXml, getHostedRouteUrl, sitemapRoutes } from '@/lib/seoDiscovery';
 import { createPublicCacheRevision, publicContractResponse } from '@/lib/publicContractResponse';
@@ -15,11 +15,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
   if (!site || !site.isPublished) {
-    return new NextResponse('Not found', {
+    return publicContractResponse('Not found', {
+      request,
+      requestId,
       status: 404,
+      cache: 'error',
+      siteId: site?.id,
+    }, {
       headers: {
         'content-type': 'text/plain; charset=utf-8',
-        'cache-control': 'no-store',
       },
     });
   }
