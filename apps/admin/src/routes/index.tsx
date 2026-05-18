@@ -2541,8 +2541,12 @@ function Index() {
                   ))}
                 </div>
               ) : (
-                <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
-                  No deployment preflight has run in this dashboard session.
+                <div className="mt-3">
+                  <EmptyState
+                    icon={ClipboardList}
+                    title="No deployment preflight runs yet"
+                    description="Run a deployment preflight to capture readiness, domain, cache, and frontend delivery evidence for this dashboard session."
+                  />
                 </div>
               )}
             </div>
@@ -3398,8 +3402,12 @@ function Index() {
             </div>
 
             {infrastructureDiagnostics.length === 0 ? (
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
-                No dashboard infrastructure check has run in this session. Use the check to reveal exact missing runtime fields for Supabase, storage, database persistence, and Vercel deployment.
+              <div className="mt-4">
+                <EmptyState
+                  icon={Database}
+                  title="No infrastructure diagnostics yet"
+                  description="Run the infrastructure check to reveal missing runtime fields for Supabase, storage, database persistence, and Vercel deployment."
+                />
               </div>
             ) : (
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

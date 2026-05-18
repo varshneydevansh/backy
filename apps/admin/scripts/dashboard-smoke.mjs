@@ -33,6 +33,10 @@ const assertDashboardSourceContracts = () => {
     'frontendHandoffText',
     'Download JSON',
     "import { EmptyState } from '@/components/ui/EmptyState';",
+    'title="No deployment preflight runs yet"',
+    'Run a deployment preflight to capture readiness, domain, cache, and frontend delivery evidence for this dashboard session.',
+    'title="No infrastructure diagnostics yet"',
+    'Run the infrastructure check to reveal missing runtime fields for Supabase, storage, database persistence, and Vercel deployment.',
     'title="No backend activity yet"',
     'title="No publish blockers found"',
   ]) {
