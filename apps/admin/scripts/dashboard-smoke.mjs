@@ -495,6 +495,11 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Contract coverage') &&
       document.body?.innerText?.includes('Credentials') &&
       document.body?.innerText?.includes('Access changes'),
+    hasPersistenceReadiness: Boolean(document.querySelector('[data-testid="dashboard-persistence-readiness"]')) &&
+      document.body?.innerText?.includes('Persistence and Supabase readiness') &&
+      document.body?.innerText?.includes('Database runtime') &&
+      document.body?.innerText?.includes('Supabase connection') &&
+      document.body?.innerText?.includes('Storage and blockers'),
     hasReadiness: Boolean(document.querySelector('#dashboard-readiness')) && document.body?.innerText?.includes('Backy platform readiness'),
     hasInfrastructureDiagnostics: Boolean(document.querySelector('[data-testid="dashboard-infrastructure-diagnostics"]') && document.body?.innerText?.includes('Infrastructure diagnostics')),
     hasWorkflows: Boolean(document.querySelector('#dashboard-workflows')) && document.body?.innerText?.includes('Build and manage'),
@@ -518,6 +523,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasOperationsSignals &&
       layout.hasAggregateAnalytics &&
       layout.hasApiConsumers &&
+      layout.hasPersistenceReadiness &&
       layout.hasReadiness &&
       layout.hasInfrastructureDiagnostics &&
       layout.hasWorkflows &&
@@ -549,6 +555,7 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
       ['operationsSignals', '[data-testid="dashboard-operations-signal-board"]'],
       ['aggregateAnalytics', '[data-testid="dashboard-aggregate-analytics"]'],
       ['apiConsumers', '[data-testid="dashboard-api-consumers"]'],
+      ['persistenceReadiness', '[data-testid="dashboard-persistence-readiness"]'],
       ['readiness', '#dashboard-readiness'],
       ['infrastructureDiagnostics', '[data-testid="dashboard-infrastructure-diagnostics"]'],
       ['workflows', '#dashboard-workflows'],

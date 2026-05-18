@@ -30,7 +30,7 @@ The dashboard must answer four questions without requiring the operator to hunt 
 - Product commerce health: product count, inventory warnings, checkout/payment setup, orders needing attention.
 - Form/comment moderation queue: pending submissions, spam reports, approval throughput.
 - Deployment health: Vercel project status, last deploy, domain verification, cache invalidation/rebuild status.
-- Supabase connectivity: selected database provider, migration state, RLS status, repository mode, backup status.
+- Supabase connectivity: implemented for runtime-visible persistence state. The dashboard now renders database mode/provider/configuration, repository mode, Supabase project/database/auth/service-role readiness, storage bucket, missing runtime env, and explicit migration/RLS/backup external-gate labels instead of fake connected states.
 - API consumers: implemented for the current Settings/API contract slice. The dashboard now renders API consumer readiness with public/admin endpoint counts, API key configured state, active/revoked named service-key counts, rotation/revocation history counts, recent API access audit events, and the same non-secret counts in the downloadable handoff JSON.
 
 ## UX rules

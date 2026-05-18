@@ -319,6 +319,11 @@ const DASHBOARD_CONTROL_AREAS = [
     detail: 'Check keys, service clients, endpoint coverage, and recent API access changes.',
     href: '#dashboard-api-consumers',
   },
+  {
+    title: 'Persistence',
+    detail: 'Inspect database, Supabase, repository mode, storage bucket, and missing runtime env.',
+    href: '#dashboard-persistence',
+  },
 ] as const;
 
 const DASHBOARD_MODULES = [
@@ -1104,6 +1109,37 @@ function Index() {
     dashboard.settings?.deliveryMode,
     frontendContractUrls,
   ]);
+  const persistenceReadiness = useMemo(() => {
+    const missing = [
+      ...(database?.missing || []),
+      ...(supabase?.missing || []),
+    ].filter(Boolean);
+    const configuredChecks = [
+      Boolean(database?.configured),
+      Boolean(supabase?.configured),
+      Boolean(supabase?.databaseUrlConfigured || database?.configured),
+      Boolean(supabase?.serviceRoleConfigured),
+      Boolean(supabase?.storageBucket || storage?.bucket),
+    ];
+    const readyCount = configuredChecks.filter(Boolean).length;
+
+    return {
+      score: Math.round((readyCount / configuredChecks.length) * 100),
+      databaseMode: database?.mode || 'unknown',
+      databaseProvider: database?.provider || 'unknown',
+      databaseConfigured: Boolean(database?.configured),
+      databaseTarget: database?.host || database?.path || database?.database || 'not configured',
+      repositoryMode: database?.mode === 'database' && database?.configured ? 'database-backed' : 'demo/local fallback',
+      supabaseConfigured: Boolean(supabase?.configured),
+      supabaseProject: supabase?.projectRef || supabase?.projectUrl || 'not configured',
+      supabaseDatabase: Boolean(supabase?.databaseUrlConfigured || database?.configured),
+      supabaseAuth: Boolean(supabase?.anonKeyConfigured || supabase?.serviceRoleConfigured),
+      serviceRole: Boolean(supabase?.serviceRoleConfigured),
+      storageBucket: supabase?.storageBucket || storage?.bucket || 'not configured',
+      missing: missing.slice(0, 6),
+      note: database?.note || database?.error || '',
+    };
+  }, [database, storage?.bucket, supabase]);
   const dashboardWorkflowActions = [
     { label: 'New site', to: '/sites/new' as const, icon: Globe, detail: 'Website container', visible: canCreateSites },
     { label: 'New page', to: '/pages/new' as const, icon: Layout, detail: 'Visual canvas', visible: canEditPages },
@@ -1160,6 +1196,19 @@ function Index() {
       rotationEvents: apiConsumerReadiness.rotationEvents,
       revocationEvents: apiConsumerReadiness.revocationEvents,
       recentApiAuditEvents: apiConsumerReadiness.apiAuditEvents,
+    },
+    persistence: {
+      score: persistenceReadiness.score,
+      databaseMode: persistenceReadiness.databaseMode,
+      databaseProvider: persistenceReadiness.databaseProvider,
+      databaseConfigured: persistenceReadiness.databaseConfigured,
+      repositoryMode: persistenceReadiness.repositoryMode,
+      supabaseConfigured: persistenceReadiness.supabaseConfigured,
+      supabaseDatabase: persistenceReadiness.supabaseDatabase,
+      supabaseAuth: persistenceReadiness.supabaseAuth,
+      serviceRoleConfigured: persistenceReadiness.serviceRole,
+      storageBucket: persistenceReadiness.storageBucket,
+      missing: persistenceReadiness.missing,
     },
     controlRoutes: {
       sites: '/sites',
@@ -1236,6 +1285,7 @@ function Index() {
     frontendContractUrls,
     ordersCollection,
     productsCollection,
+    persistenceReadiness,
     readinessErrors,
     readinessWarnings,
     storage,
@@ -2396,6 +2446,115 @@ function Index() {
               </p>
             </div>
           </div>
+        </section>
+
+        <section
+          id="dashboard-persistence"
+          className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+          data-testid="dashboard-persistence-readiness"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Database className="size-4 text-primary" />
+                <h2 className="font-semibold">Persistence and Supabase readiness</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Shows the runtime persistence path Backy can actually see: database mode, Supabase keys, service role, storage bucket, and missing environment configuration.
+              </p>
+            </div>
+            <span className={cn(
+              'rounded-full px-2.5 py-1 text-xs font-semibold',
+              persistenceReadiness.score >= 80 ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+            )}>
+              {persistenceReadiness.score}% persistent
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <Link
+              to="/settings"
+              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Database runtime</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Repository mode and selected database provider used by admin/public APIs.
+                  </p>
+                </div>
+                <Database className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Mode" value={persistenceReadiness.databaseMode} />
+                <SignalMetric label="Provider" value={persistenceReadiness.databaseProvider} />
+                <SignalMetric label="Configured" value={persistenceReadiness.databaseConfigured ? 'Yes' : 'No'} />
+                <SignalMetric label="Repository" value={persistenceReadiness.repositoryMode} />
+              </div>
+              <p className="mt-3 break-all rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Target: {persistenceReadiness.databaseTarget}
+              </p>
+            </Link>
+
+            <Link
+              to="/settings"
+              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Supabase connection</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Project, database URL, auth key, and service-role readiness for Supabase-backed operation.
+                  </p>
+                </div>
+                <KeyRound className="size-4 text-success" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Project" value={persistenceReadiness.supabaseConfigured ? 'Configured' : 'Missing'} />
+                <SignalMetric label="Database URL" value={persistenceReadiness.supabaseDatabase ? 'Ready' : 'Missing'} />
+                <SignalMetric label="Auth key" value={persistenceReadiness.supabaseAuth ? 'Ready' : 'Missing'} />
+                <SignalMetric label="Service role" value={persistenceReadiness.serviceRole ? 'Ready' : 'Missing'} />
+              </div>
+              <p className="mt-3 break-all rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Project: {persistenceReadiness.supabaseProject}
+              </p>
+            </Link>
+
+            <Link
+              to="/settings"
+              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Storage and blockers</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Supabase storage bucket plus missing runtime values that block durable operation.
+                  </p>
+                </div>
+                <HardDrive className="size-4 text-warning" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Bucket" value={persistenceReadiness.storageBucket} />
+                <SignalMetric label="Missing" value={`${persistenceReadiness.missing.length}`} />
+                <SignalMetric label="Migrations" value={persistenceReadiness.databaseConfigured ? 'External gate' : 'Not verified'} />
+                <SignalMetric label="RLS/backup" value="Runbook gate" />
+              </div>
+              <p className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                persistenceReadiness.missing.length > 0 ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success',
+              )}>
+                {persistenceReadiness.missing.length > 0
+                  ? `Missing: ${persistenceReadiness.missing.join(', ')}`
+                  : 'No missing persistence environment values reported by Settings runtime diagnostics.'}
+              </p>
+            </Link>
+          </div>
+
+          {persistenceReadiness.note && (
+            <p className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              {persistenceReadiness.note}
+            </p>
+          )}
         </section>
 
         <section id="dashboard-readiness" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
