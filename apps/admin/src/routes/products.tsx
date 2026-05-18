@@ -4910,10 +4910,20 @@ function ProductsRoute() {
                       <div className="mt-1 truncate text-sm font-medium text-foreground">{selectedProductProviderSync?.price?.id || 'Pending'}</div>
                     </div>
                   </div>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    {selectedProductProviderSync?.syncedAt ? `Last run ${formatDate(selectedProductProviderSync.syncedAt)}` : 'No provider catalog run recorded.'}
-                    {selectedProductProviderSync?.reason ? ` ${selectedProductProviderSync.reason}` : ''}
-                  </div>
+                  {selectedProductProviderSync?.syncedAt ? (
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      Last run {formatDate(selectedProductProviderSync.syncedAt)}
+                      {selectedProductProviderSync.reason ? ` ${selectedProductProviderSync.reason}` : ''}
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      <EmptyState
+                        icon={Package}
+                        title="No provider catalog run recorded"
+                        description="Save a product and run a provider sync to store checkout catalog metadata, handoff status, and provider product or price IDs."
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Field label="Tax class">

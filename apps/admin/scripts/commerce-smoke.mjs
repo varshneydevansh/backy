@@ -869,12 +869,17 @@ const assertProductsApiContractsSource = () => {
     'title="No product automation events"',
     "title={products.length === 0 ? 'No products yet' : 'No products match this view'}",
     'title="No subscription orders yet"',
+    'title="No provider catalog run recorded"',
   ]) {
     assert(
       source.includes(emptyStateTitle),
       `Products route must keep shared empty state visible: ${emptyStateTitle}`,
     );
   }
+  assert(
+    source.includes('Save a product and run a provider sync to store checkout catalog metadata, handoff status, and provider product or price IDs.'),
+    "Products provider-sync empty state must explain how catalog handoff metadata is created",
+  );
   assert(
     source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),
     "Products handoff manifest must expose API response contracts for custom frontends",
