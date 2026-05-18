@@ -26,6 +26,13 @@ const assert = (condition, message) => {
   }
 };
 
+const assertBlogCreateSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/blog.new.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog create route must use the shared EmptyState component');
+  assert(source.includes('title="No blog templates captured yet"'), 'Blog create frontend template panel must keep the empty template title visible');
+  assert(source.includes('Save a frontend design contract with blog post templates to seed this article from the connected custom frontend.'), 'Blog create frontend template empty state must explain how templates are captured');
+};
+
 const isIgnorableBrowserLogError = (event) => (
   event.method === 'Log.entryAdded' &&
   event.params?.entry?.source === 'intervention' &&
@@ -70,7 +77,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -78,9 +85,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_BLOG_CREATE_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -235,6 +252,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -1222,6 +1251,7 @@ const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
 };
 
 const main = async () => {
+  assertBlogCreateSourceContract();
   await loginAdminApi();
   const slug = `blog-create-smoke-${Date.now().toString(36)}`;
   const { childProcess, userDataDir } = launchChrome();
@@ -1242,6 +1272,7 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(apiAdminSessionToken),
     });
