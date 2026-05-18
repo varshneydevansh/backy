@@ -1116,25 +1116,27 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
 
-    const shouldApplyHeader = rows.some((row: any) => {
-      const rowChildren = Array.isArray(row?.children) ? row.children : [];
-      const cell = rowChildren[context.cellIndex];
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const selectedEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    const headerVisualColumnIndex = selectedEntry ? selectedEntry.columnStart : context.cellIndex;
+    const columnEntries = tableGrid.entries.filter((entry) => (
+      entry.columnStart <= headerVisualColumnIndex &&
+      entry.columnEnd >= headerVisualColumnIndex
+    ));
+    const uniqueColumnEntries = columnEntries.filter((entry, index, entries) => (
+      entries.findIndex((candidate) => isSamePath(candidate.path, entry.path)) === index
+    ));
+    const shouldApplyHeader = uniqueColumnEntries.some((entry) => {
+      const cell = Node.get(editor as any, entry.path) as any;
       return cell?.type === 'td';
     });
 
     let didToggleColumn = false;
-    for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
-      const rowPath = [...context.tablePath, rowIndex];
-      const rowNode = Node.get(editor as any, rowPath) as any;
-      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
-      if (context.cellIndex >= rowChildren.length) {
-        continue;
-      }
-
-      const cell = rowChildren[context.cellIndex];
+    for (const entry of uniqueColumnEntries) {
+      const cell = Node.get(editor as any, entry.path) as any;
       if (cell?.type === 'td' || cell?.type === 'th') {
         Transforms.setNodes(editor as any, { type: shouldApplyHeader ? 'th' : 'td' } as any, {
-          at: [...rowPath, context.cellIndex],
+          at: entry.path,
         });
         didToggleColumn = true;
       }
@@ -1146,7 +1148,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after header-column toggle.
     }
     return didToggleColumn;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext, isSamePath]);
 
   const toggleSelectedTableHeaderCell = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -1177,14 +1179,23 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
 
-    const rowChildren = Array.isArray((context.rowNode as any).children) ? (context.rowNode as any).children : [];
-    const rightCellIndex = context.cellIndex + 1;
-    if (rightCellIndex >= rowChildren.length) {
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const currentEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    if (!currentEntry) {
       return false;
     }
 
     const cellNode = Node.get(editor as any, context.cellPath) as any;
-    const rightCellNode = Node.get(editor as any, [...context.rowPath, rightCellIndex]) as any;
+    const rightEntry = tableGrid.entries.find((entry) => (
+      entry.rowStart === currentEntry.rowStart &&
+      entry.rowEnd === currentEntry.rowEnd &&
+      entry.columnStart === currentEntry.columnEnd + 1
+    ));
+    if (!rightEntry) {
+      return false;
+    }
+
+    const rightCellNode = Node.get(editor as any, rightEntry.path) as any;
     if ((cellNode?.type !== 'td' && cellNode?.type !== 'th') || (rightCellNode?.type !== 'td' && rightCellNode?.type !== 'th')) {
       return false;
     }
@@ -1200,7 +1211,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       ],
     } as any;
 
-    Transforms.removeNodes(editor as any, { at: [...context.rowPath, rightCellIndex] });
+    Transforms.removeNodes(editor as any, { at: rightEntry.path });
     Transforms.removeNodes(editor as any, { at: context.cellPath });
     Transforms.insertNodes(editor as any, mergedCell, { at: context.cellPath });
 
@@ -1210,7 +1221,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after table cell merge.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext, isSamePath]);
 
   const mergeSelectedTableCellDown = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -1218,31 +1229,32 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
 
-    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
     const cellNode = Node.get(editor as any, context.cellPath) as any;
     if (cellNode?.type !== 'td' && cellNode?.type !== 'th') {
       return false;
     }
 
-    const currentRowSpan = Number.isInteger(cellNode.rowSpan) && cellNode.rowSpan > 1 ? cellNode.rowSpan : 1;
-    const targetRowIndex = context.rowIndex + currentRowSpan;
-    if (targetRowIndex >= rows.length) {
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const currentEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    if (!currentEntry) {
       return false;
     }
 
-    const targetRowPath = [...context.tablePath, targetRowIndex];
-    const targetRowNode = Node.get(editor as any, targetRowPath) as any;
-    const targetRowChildren = Array.isArray(targetRowNode?.children) ? targetRowNode.children : [];
-    if (context.cellIndex >= targetRowChildren.length) {
+    const targetEntry = tableGrid.entries.find((entry) => (
+      entry.columnStart === currentEntry.columnStart &&
+      entry.columnEnd === currentEntry.columnEnd &&
+      entry.rowStart === currentEntry.rowEnd + 1
+    ));
+    if (!targetEntry) {
       return false;
     }
 
-    const targetCellPath = [...targetRowPath, context.cellIndex];
-    const targetCellNode = Node.get(editor as any, targetCellPath) as any;
+    const targetCellNode = Node.get(editor as any, targetEntry.path) as any;
     if (targetCellNode?.type !== cellNode.type) {
       return false;
     }
 
+    const currentRowSpan = Number.isInteger(cellNode.rowSpan) && cellNode.rowSpan > 1 ? cellNode.rowSpan : currentEntry.rowSpan;
     const targetRowSpan = Number.isInteger(targetCellNode.rowSpan) && targetCellNode.rowSpan > 1 ? targetCellNode.rowSpan : 1;
     const mergedCell = {
       ...JSON.parse(JSON.stringify(cellNode)),
@@ -1253,7 +1265,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       ],
     } as any;
 
-    Transforms.removeNodes(editor as any, { at: targetCellPath });
+    Transforms.removeNodes(editor as any, { at: targetEntry.path });
     Transforms.removeNodes(editor as any, { at: context.cellPath });
     Transforms.insertNodes(editor as any, mergedCell, { at: context.cellPath });
 
@@ -1263,7 +1275,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after table cell merge.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext, isSamePath]);
 
   const splitSelectedTableCell = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
