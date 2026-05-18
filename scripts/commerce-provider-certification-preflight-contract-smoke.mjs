@@ -560,6 +560,10 @@ includesAll(
 includesAll(
   productsRoute,
   [
+    "schemaVersion: 'backy.commerce-provider-certification-handoff.v1'",
+    "requiredFor: 'live-commerce-provider-launch'",
+    'providerCertificationSummary.schemaVersion',
+    'Schema',
     'provider-sync result for Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento',
     'Live marketplace certification remains backend rollout work',
     "['shopify', 'Shopify']",
@@ -574,6 +578,10 @@ includesAll(
 includesAll(
   ordersRoute,
   [
+    "schemaVersion: 'backy.commerce-provider-certification-handoff.v1'",
+    "requiredFor: 'live-commerce-provider-launch'",
+    'providerCertificationSummary.schemaVersion',
+    'Schema',
     'orders-provider-readiness',
     'providerReadinessChecks',
     'Stripe checkout/refund',
@@ -601,6 +609,8 @@ includesAll(
     'Public manifest commerce module',
     'backy.commerce-provider-certification-handoff.v1',
     'external-live-provider-gate',
+    "requiredFor: 'live-commerce-provider-launch'",
+    'Schema',
     'ci:commerce-provider-smoke',
     'ci:commerce-provider-certification',
     'live-commerce-provider-launch',
@@ -628,6 +638,8 @@ includesAll(
     'Shippo mock',
     'provider refund',
     'Paddle refund',
+    "requiredFor: 'live-commerce-provider-launch'",
+    'Schema',
     'createPaddleRefundMockServer',
     'Razorpay refund',
     'providerReadiness',

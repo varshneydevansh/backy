@@ -1395,7 +1395,9 @@ function ProductsRoute() {
     products,
   ]);
   const providerCertificationSummary = useMemo(() => ({
+    schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
     status: 'external-live-provider-gate',
+    requiredFor: 'live-commerce-provider-launch',
     selectedSiteId: activeSiteId,
     localMockGate: 'ci:commerce-provider-smoke',
     liveCertificationGate: 'ci:commerce-provider-certification',
@@ -3391,7 +3393,11 @@ function ProductsRoute() {
                       External credentials
                     </span>
                   </div>
-                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="font-medium text-foreground">Schema</div>
+                      <div className="mt-1 break-words font-mono text-[11px] text-muted-foreground">{providerCertificationSummary.schemaVersion}</div>
+                    </div>
                     <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
                       <div className="font-medium text-foreground">Mock gate</div>
                       <div className="mt-1 font-mono text-[11px] text-muted-foreground">{providerCertificationSummary.localMockGate}</div>

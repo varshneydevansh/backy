@@ -873,12 +873,15 @@ const assertProductsApiContractsSource = () => {
   );
   assert(
     source.includes("providerCertification") &&
+      source.includes("schemaVersion: 'backy.commerce-provider-certification-handoff.v1'") &&
+      source.includes("requiredFor: 'live-commerce-provider-launch'") &&
       source.includes("ci:commerce-provider-smoke") &&
       source.includes("ci:commerce-provider-certification") &&
       source.includes("requiredInputs"),
     "Products handoff manifest must expose mock and live provider certification gates",
   );
   for (const providerLabel of [
+    "Schema",
     "TaxJar",
     "Avalara",
     "EasyPost",

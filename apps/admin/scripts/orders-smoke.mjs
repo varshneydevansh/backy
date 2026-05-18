@@ -139,12 +139,15 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
     source.includes('providerCertification') &&
+      source.includes("schemaVersion: 'backy.commerce-provider-certification-handoff.v1'") &&
+      source.includes("requiredFor: 'live-commerce-provider-launch'") &&
       source.includes('ci:commerce-provider-smoke') &&
       source.includes('ci:commerce-provider-certification') &&
       source.includes('requiredInputs'),
     'Orders handoff manifest must expose mock and live provider certification gates',
   );
   for (const providerLabel of [
+    'Schema',
     'Stripe webhooks',
     'TaxJar',
     'Avalara',
