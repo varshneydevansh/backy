@@ -260,9 +260,9 @@ jobs:
           {
             echo "## Backy Commerce Provider Certification"
             echo ""
-            echo "| Gate | Requested | Non-secret target evidence |"
-            echo "| --- | --- | --- |"
-            echo "| Commerce providers | true | external target configured: $commerce_external |"
+            echo "| Partial row | Gate | Requested | Non-secret target evidence |"
+            echo "| --- | --- | --- | --- |"
+            echo "| /products and /orders | npm run ci:commerce-provider-certification | true | external target configured: $commerce_external |"
             echo ""
             echo "| Selector | Value |"
             echo "| --- | --- |"

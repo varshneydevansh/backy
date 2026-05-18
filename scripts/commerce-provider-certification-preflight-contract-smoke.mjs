@@ -319,6 +319,8 @@ includesAll(
     'npm run doctor:release-certification',
     'Write non-secret Commerce certification summary',
     'GITHUB_STEP_SUMMARY',
+    '| Partial row | Gate | Requested | Non-secret target evidence |',
+    '| /products and /orders | npm run ci:commerce-provider-certification | true |',
     'commerce_external=false',
     'external target configured:',
     'payment_provider',
