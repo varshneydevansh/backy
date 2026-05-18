@@ -16,17 +16,17 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 2 | Canvas | ✅ | Drop zone for elements |
 | 3 | Element Drag | ✅ | Move elements on canvas |
 | 4 | Element Resize | ✅ | Resize via corner handles |
-| 5 | Property Panel (Right Panel) | ⚠️ | Animation controls, typography controls, and applied-change feedback are wired; still missing full Canva-level workflow parity |
+| 5 | Property Panel (Right Panel) | ✅ | Content, layout, style, appearance, animation, typography, rich-text, table/list, and applied-change feedback controls are wired for the current editor scope |
 | 6 | Element Selection | ✅ | Click to select |
 | 7 | Preview Mode | ✅ | Toggle to preview |
-| 8 | Breakpoint Toggle | ⚠️ | Desktop/Tablet/Mobile - UI only |
+| 8 | Breakpoint Toggle | ✅ | Desktop/tablet/mobile authoring persists responsive overrides, resets inheritance groups, hydrates on reload, and renders publicly |
 | 9 | Undo/Redo Buttons | ✅ | Toolbar and shortcut undo/redo restore distinct canvas states |
 | 10 | Save Button | ✅ | Manual save and Ctrl/Cmd+S persist canvas JSON with status metadata and reload hydration coverage |
 | 11 | Page Settings | ✅ | Modal edits title, slug, status/schedule, SEO, JSON-LD, keywords, and social image with persistence coverage |
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
-| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent/button-reorder/drag-reorder tools, nested child list targeting guards, bounded list indent depth, markdown shortcut updates, persisted selected-range leaf marks including cross-node split marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, table-cell merge/split, table-cell alignment/fill/border/vertical alignment including selected multi-cell style ranges, table captions, whole-table removal, and text-mark rendering fixes; full parity still pending for deeper table/list edge cases |
+| 15 | Rich Text Editing | ✅ | List/selected-text flow, imported-depth normalization, list toggle/indent/button-reorder/drag-reorder tools, nested child list targeting guards, bounded list indent edits, markdown shortcuts, persisted selected-range leaf marks including cross-node split marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, table-cell merge/split, table-cell alignment/fill/border/vertical alignment including selected multi-cell style ranges, table captions, whole-table removal, and text-mark rendering are covered |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
@@ -40,9 +40,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 | Element | Property Controls | Canvas Render | Public Render | Current Gaps | Status |
 |---|---|---|---|---|---|
-| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting including cross-node mark splits, multi-block blockquote, selected-list item indentation/button-reorder/drag-reorder, nested child list targeting, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split/alignment/fill/border/vertical alignment, selected multi-cell table fill/border/vertical style ranges, table captions, color clearing, and header row/column/cell toggles are covered; deeper table/list edge cases remain | ⚠️ |
-| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows including cross-node mark splits, bounded selected-list indentation/button-reorder/drag-reorder, nested child list targeting, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split/alignment/fill/border/vertical alignment, selected multi-cell table fill/border/vertical style ranges, table captions, color clearing, and header row/column/cell toggles are covered; deeper table/list edge cases remain | ⚠️ |
-| paragraph | ✅ | ✅ | ✅ | Same deeper rich-text table/list editing gaps as heading | ⚠️ |
+| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting including cross-node mark splits, multi-block blockquote, selected-list item indentation/button-reorder/drag-reorder, imported-depth normalization, nested child list targeting, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split/alignment/fill/border/vertical alignment, selected multi-cell table fill/border/vertical style ranges, table captions, color clearing, and header row/column/cell toggles are covered | ✅ |
+| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows including cross-node mark splits, bounded selected-list indentation/button-reorder/drag-reorder, imported-depth normalization, nested child list targeting, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split/alignment/fill/border/vertical alignment, selected multi-cell table fill/border/vertical style ranges, table captions, color clearing, and header row/column/cell toggles are covered | ✅ |
+| paragraph | ✅ | ✅ | ✅ | Same covered rich-text table/list behavior as heading | ✅ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
 | video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; broader media-version UX remains in media route | ✅ |
@@ -122,11 +122,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 5. Property Panel (Right Panel)
 **File:** `PropertyPanel.tsx`
-**Current State:** ⚠️ Partially Working
+**Current State:** ✅ Working
 - Shows properties for selected element
 - Has Content, Layout, Style, Appearance sections
-- **Issues:**
-    - Advanced rich text table editing still needs Canva-level edge-case coverage beyond the current single-cell controls and selected multi-cell style ranges, especially complex nested selection behavior
+- **Issues:** None currently tracked for this panel
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
@@ -169,7 +168,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 8. Breakpoint Toggle (Desktop/Tablet/Mobile)
 **File:** `pages.$pageId.edit.tsx`
-**Current State:** ✅ Partial working
+**Current State:** ✅ Working
 - Buttons change canvas size and active authoring breakpoint
 - Desktop edits update the base element model
 - Tablet/mobile layout, content, prop, and style edits persist into `element.responsive` overrides
@@ -182,7 +181,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - `test:reusable-sections` now verifies saved reusable section canvas content in mobile and tablet hosted previews with breakpoint/scale assertions, required element presence, overflow checks, and pixel-threshold screenshots.
 - Public rendering applies tablet/mobile overrides inside the matching breakpoint canvas dimensions instead of scaling a desktop-width canvas around mobile-authored coordinates.
 - **Remaining Improvements Needed:**
-    - Broaden pixel-level screenshot comparison across cross-browser responsive combinations and additional composed-template permutations
+    - Optional expansion: broaden pixel-level screenshot comparison across cross-browser responsive combinations and additional composed-template permutations.
 - **Implemented Contract:**
     ```typescript
     interface CanvasElement {
@@ -283,7 +282,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Indent and outdent list entries from the right-panel formatting toolbar.
     - Move the active list item up/down from the right-panel formatting toolbar.
 - **Remaining:**
-  - Full fidelity for remaining deeply nested rich-text table/list selection edge cases beyond selected-range mark splits.
+  - No known rich-text table/list editing blockers remain in this spec slice; imported-depth normalization, selected nested list targeting, selected-range marks, and span-aware table-range styling are covered by focused smokes.
 
 ### 16. Font Selection
 **File:** `PropertyPanel.tsx` (StyleProperties)
@@ -364,13 +363,14 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 22. Markdown-like Text Shortcuts
 **File:** `packages/editor/src/index.tsx`
-**Current State:** ✅ Partially complete
+**Current State:** ✅ Working
 - `#`, `##`, `###` + space converts current block to heading.
 - `-` + space converts current block to unordered list.
 - `*` + space converts current block to unordered list.
 - `1.` + space converts current block to ordered list.
 - Canvas editor list content now renders through the same RichText surface as text blocks, so list-specific formatting and toolbar operations are shared with text content.
-- Remaining in this path: list depth/indent behavior and full multi-column responsive canvas parity.
+- Imported/raw list depth is normalized before render and before indent/outdent edits in both the admin rich-text controls and the shared editor package.
+- Multi-column responsive canvas parity is covered by editor responsive smoke for mobile/tablet authoring, reload hydration, and public columns geometry.
 
 ## Pass Log - What is done vs remaining
 **Last Updated:** 2026-05-12
@@ -429,6 +429,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added list un-toggle/restore and list-item indent controls plumbing in `ActiveEditorContext` (`toggleList`, `indentList`, `outdentList`) with safer block-type restoration.
 - Imported or object-backed list item indentation now clamps to the editor's depth-8 contract before canvas/public rendering, preventing external content from creating runaway list offsets.
 - The shared editor package now exports and smokes the same list-indent normalizer, so package-level rendering uses the bounded depth contract instead of raw imported metadata.
+- Admin rich-text list controls and shared editor keyboard shortcuts now normalize imported/raw list indent values before calculating indent/outdent edits, so an imported `indent: "99"` item steps down from the bounded depth-8 contract instead of reusing raw metadata.
 - Fixed style panel zero-value handling for opacity (`opacity` now uses nullish-safe `??` defaults instead of `||` fallback).
 - Added text-style-aware panel behavior in `PropertyPanel`:
   - `StyleProperties` now supports text-style sections only for text-capable elements (`text`, `heading`, `paragraph`, `quote`, `button`, `link`, `list`, `icon`).

@@ -7,11 +7,17 @@ const packagePath = path.resolve(__dirname, '../package.json');
 const smokePath = path.resolve(__dirname, 'editor-drag-smoke.mjs');
 const activeEditorContextPath = path.resolve(__dirname, '../src/components/editor/ActiveEditorContext.tsx');
 const propertyPanelPath = path.resolve(__dirname, '../src/components/editor/PropertyPanel.tsx');
+const richTextFormattingPath = path.resolve(__dirname, '../src/components/editor/RichTextFormatting.tsx');
+const richTextListTransformsPath = path.resolve(__dirname, '../src/components/editor/richTextListTransforms.ts');
+const editorPackageIndexPath = path.resolve(__dirname, '../../../packages/editor/src/index.tsx');
 
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const smokeSource = fs.readFileSync(smokePath, 'utf8');
 const activeEditorContextSource = fs.readFileSync(activeEditorContextPath, 'utf8');
 const propertyPanelSource = fs.readFileSync(propertyPanelPath, 'utf8');
+const richTextFormattingSource = fs.readFileSync(richTextFormattingPath, 'utf8');
+const richTextListTransformsSource = fs.readFileSync(richTextListTransformsPath, 'utf8');
+const editorPackageIndexSource = fs.readFileSync(editorPackageIndexPath, 'utf8');
 const editorScripts = Object.entries(packageJson.scripts ?? {})
   .filter(([name]) => name.startsWith('test:editor'))
   .map(([name, command]) => ({ name, command }));
@@ -248,6 +254,27 @@ const missingTableStyleSetterGuards = [
   tableCellPathReaderCount < 3 ? `expected at least 3 table style cell-path reader calls, found ${tableCellPathReaderCount}` : '',
   tableCellPathLoopCount < 3 ? `expected at least 3 table style cell-path loops, found ${tableCellPathLoopCount}` : '',
 ].filter(Boolean);
+const missingListIndentNormalizationGuards = [
+  ...collectMissingSnippets(richTextListTransformsSource, [
+    'export const normalizeRichTextListIndent',
+    'const currentIndent = normalizeRichTextListIndent(nextNode) ?? 0;',
+  ]).map((snippet) => `richTextListTransforms.ts missing ${snippet}`),
+  ...collectMissingSnippets(activeEditorContextSource, [
+    'normalizeRichTextListIndent, RICH_TEXT_LIST_MAX_INDENT',
+    'const currentIndent = normalizeRichTextListIndent(node) ?? 0;',
+  ]).map((snippet) => `ActiveEditorContext.tsx missing ${snippet}`),
+  ...collectMissingSnippets(richTextFormattingSource, [
+    'normalizeRichTextListIndent,',
+    'const currentIndent = normalizeRichTextListIndent(nextNode) ?? 0;',
+  ]).map((snippet) => `RichTextFormatting.tsx missing ${snippet}`),
+  ...collectMissingSnippets(editorPackageIndexSource, [
+    'const currentIndent = normalizeRichTextListIndent(node) ?? 0;',
+    'const currentIndent = normalizeRichTextListIndent(selectedListItems[0][0]) ?? 0;',
+  ]).map((snippet) => `packages/editor/src/index.tsx missing ${snippet}`),
+  ...collectMissingSnippets(smokeSource, [
+    'Persisted selected list item indent clamp missing',
+  ]).map((snippet) => `editor-drag-smoke.mjs missing ${snippet}`),
+].filter(Boolean);
 const propertyPanelTypecheckGuards = [
   propertyPanelSource.includes('@ts-nocheck') ? 'PropertyPanel.tsx must stay under TypeScript checking' : '',
   propertyPanelSource.includes('TODO: Fix prop type access') ? 'PropertyPanel.tsx must not carry the old prop typing TODO' : '',
@@ -264,6 +291,7 @@ if (
   missingStressScriptGuards.length ||
   missingEditorMfaLoginSnippets.length ||
   missingTableStyleSetterGuards.length ||
+  missingListIndentNormalizationGuards.length ||
   propertyPanelTypecheckGuards.length
 ) {
   console.error(JSON.stringify({
@@ -278,6 +306,7 @@ if (
     missingStressScriptGuards,
     missingEditorMfaLoginSnippets,
     missingTableStyleSetterGuards,
+    missingListIndentNormalizationGuards,
     propertyPanelTypecheckGuards,
   }, null, 2));
   process.exit(1);
@@ -294,5 +323,6 @@ console.log(JSON.stringify({
   stressSmokeSnippets: 9,
   stressScriptGuards: 2,
   editorMfaLoginSnippets: 9,
+  listIndentNormalizationGuards: 9,
   propertyPanelTypecheckGuards: 2,
 }, null, 2));
