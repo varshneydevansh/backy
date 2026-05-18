@@ -16,7 +16,9 @@ import {
   ExternalLink,
   Globe,
   AlertTriangle,
+  History,
   Link2,
+  LayoutTemplate,
   Menu,
   Plus,
   RefreshCw,
@@ -29,6 +31,7 @@ import {
 import { useStore } from "@/stores/mockStore";
 import { PageShell } from "@/components/layout/PageShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
 import {
   deleteSite as deleteSiteFromApi,
@@ -6370,9 +6373,11 @@ function EditSitePage() {
                     })}
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed bg-background px-3 py-2 text-sm text-muted-foreground">
-                  No templates captured yet.
-                </div>
+                <EmptyState
+                  icon={LayoutTemplate}
+                  title="No frontend templates captured yet"
+                  description="Save a frontend design contract with page, blog, form, product, collection, or section templates to populate this registry."
+                />
               )}
               {frontendDesignState.frontendDesign.templates.length > 8 && (
                 <div className="text-xs text-muted-foreground">
@@ -7784,9 +7789,12 @@ function EditSitePage() {
               Loading site audit activity...
             </div>
           ) : auditState.logs.length === 0 ? (
-            <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
-              No site audit events yet. Save navigation, redirects, SEO,
-              frontend design, or site settings to create request-id activity.
+            <div className="mt-4">
+              <EmptyState
+                icon={History}
+                title="No site audit events yet"
+                description="Save navigation, redirects, SEO, frontend design, or site settings to create request-id activity for this site."
+              />
             </div>
           ) : (
             <div className="mt-4 overflow-x-auto rounded-lg border border-border">

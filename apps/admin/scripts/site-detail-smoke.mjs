@@ -20,6 +20,15 @@ const assert = (condition, message) => {
   }
 };
 
+const assertSiteDetailSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/sites.$siteId.tsx', import.meta.url), 'utf8');
+  assert(source.includes('import { EmptyState } from "@/components/ui/EmptyState";'), 'Site detail route must use the shared EmptyState component');
+  assert(source.includes('title="No frontend templates captured yet"'), 'Site detail template registry must keep the empty template title visible');
+  assert(source.includes('Save a frontend design contract with page, blog, form, product, collection, or section templates to populate this registry.'), 'Site detail template registry empty state must explain how templates are captured');
+  assert(source.includes('title="No site audit events yet"'), 'Site detail audit panel must keep the empty audit title visible');
+  assert(source.includes('Save navigation, redirects, SEO, frontend design, or site settings to create request-id activity for this site.'), 'Site detail audit empty state must explain which actions populate activity');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -62,7 +71,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -70,9 +79,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_SITE_DETAIL_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -115,6 +134,14 @@ const acceptInviteToken = async (token) => {
 const deleteUser = async (userId) => {
   if (!userId) return;
   await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
+};
+
+const updateUser = async (userId, input) => {
+  const payload = await requestApi(`/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.user || payload.user;
 };
 
 const listSites = async () => {
@@ -325,6 +352,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
 }))});
 `;
 
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
+
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -498,6 +537,21 @@ const waitForNavigationEditorReady = async (client) => {
 const assertSiteDetailLayout = async (client, siteName) => {
   const layout = await evaluate(client, `(() => {
     const body = document.body?.innerText || '';
+    const text = document.body?.textContent || body;
+    const frontendPanel = document.querySelector('[data-testid="site-frontend-design-panel"]');
+    const frontendText = frontendPanel?.textContent || text;
+    const frontendDesign = {
+      hasPanel: Boolean(frontendPanel),
+      hasRegistrySummary: Boolean(document.querySelector('[data-testid="site-template-registry-summary"]')),
+      hasTemplateList: Boolean(document.querySelector('[data-testid="site-template-registry-template-list"]')),
+      hasContractTitle: frontendText.includes('Frontend design contract'),
+      hasCaptureAction: frontendText.includes('Capture current design'),
+      hasSaveAction: frontendText.includes('Save contract'),
+      hasRegistryTitle: frontendText.includes('Template registry'),
+      hasCapturedTemplatesLabel: frontendText.includes('Captured templates'),
+      hasCloneField: frontendText.includes('frontendDesignTemplateId'),
+      hasSchema: frontendText.includes('backy.template-registry.v1'),
+    };
     return {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -520,16 +574,8 @@ const assertSiteDetailLayout = async (client, siteName) => {
         body.includes('Add endpoint') &&
         body.includes('Save webhooks'),
       hasNavigation: Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) && body.includes('Site navigation') && body.includes('Primary menu') && body.includes('Footer menu'),
-      hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) &&
-        Boolean(document.querySelector('[data-testid="site-template-registry-summary"]')) &&
-        Boolean(document.querySelector('[data-testid="site-template-registry-template-list"]')) &&
-        body.includes('Frontend design contract') &&
-        body.includes('Capture current design') &&
-        body.includes('Save contract') &&
-        body.includes('Template registry') &&
-        body.includes('Captured templates') &&
-        body.includes('frontendDesignTemplateId') &&
-        body.includes('backy.template-registry.v1'),
+      frontendDesign,
+      hasFrontendDesign: Object.values(frontendDesign).every(Boolean),
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
       hasSeo: Boolean(document.querySelector('[data-testid="site-seo-panel"]')) && body.includes('SEO defaults') && body.includes('JSON-LD defaults'),
       hasSettings: body.includes('Site Name') && body.includes('Custom Domain'),
@@ -1812,7 +1858,9 @@ const main = async () => {
   };
 
   try {
+    assertSiteDetailSourceContract();
     await loginAdminApi();
+    await updateUser('user-admin', { role: 'admin', status: 'active' });
     const existing = await findSiteBySlug(slug);
     assert(!existing, `Temporary site already exists: ${slug}`);
     const owner = await createUser({
@@ -1851,6 +1899,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToSites(client, siteName);
@@ -1898,6 +1947,7 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    await updateUser('user-admin', { role: 'owner', status: 'active' }).catch(() => {});
     if (siteId && seoPageId) {
       await deletePage(siteId, seoPageId).catch(() => {});
     }
