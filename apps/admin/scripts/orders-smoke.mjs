@@ -3607,6 +3607,8 @@ const main = async () => {
       assert(persistedProviderPayload.action === 'payments.refunds.create', `Provider refund payload did not persist the Mollie refund action: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Mollie execution: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Mollie refund id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.amount?.value === expectedProviderTotal.toFixed(2), `Provider refund payload did not preserve the returned Mollie amount value: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.amount?.currency === 'USD', `Provider refund payload did not preserve the returned Mollie amount currency: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.executionMode === 'mollie-api', `Provider refund payload did not persist Mollie execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     } else if (providerRefundExecutionProvider === 'razorpay') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
@@ -3692,6 +3694,10 @@ const main = async () => {
       const refreshedProviderPayload = JSON.parse(String(refreshedProviderRefundRecord.values.providerrefundpayload || '{}'));
       assert(refreshedProviderPayload.refresh?.ok === true, `Provider refund refresh payload did not persist a successful refresh: ${JSON.stringify(refreshedProviderPayload)}`);
       assert(refreshedProviderPayload.refresh?.executionMode === `${providerRefundExecutionProvider}-api`, `Provider refund refresh payload did not persist the execution mode: ${JSON.stringify(refreshedProviderPayload)}`);
+      if (providerRefundExecutionProvider === 'mollie') {
+        assert(refreshedProviderPayload.refresh?.payload?.amount?.value === '12.34', `Mollie refund refresh payload did not preserve amount.value: ${JSON.stringify(refreshedProviderPayload)}`);
+        assert(refreshedProviderPayload.refresh?.payload?.amount?.currency === 'USD', `Mollie refund refresh payload did not preserve amount.currency: ${JSON.stringify(refreshedProviderPayload)}`);
+      }
       const providerRefundMockServer = providerRefundExecutionProvider === 'paypal'
         ? paypalRefundMockServer
         : providerRefundExecutionProvider === 'paddle'

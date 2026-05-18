@@ -706,7 +706,10 @@ const safeAdyenErrorPayload = (value: Record<string, unknown>) => ({
 const safeMollieRefundPayload = (value: Record<string, unknown>) => ({
   id: textValue(value.id),
   status: textValue(value.status),
-  amount: safeSquareMoneyPayload(value.amount),
+  amount: {
+    value: textValue(toRecord(value.amount).value),
+    currency: textValue(toRecord(value.amount).currency),
+  },
   paymentId: textValue(value.paymentId),
   description: textValue(value.description),
   createdAt: textValue(value.createdAt),
