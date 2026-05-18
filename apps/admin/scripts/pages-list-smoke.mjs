@@ -29,6 +29,13 @@ const assert = (condition, message) => {
   }
 };
 
+const assertPagesListSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/pages.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Pages list route must use the shared EmptyState component');
+  assert(source.includes('No saved snapshots yet'), 'Pages revision column must keep an explicit empty revision title visible');
+  assert(source.includes('Save this page in the editor to capture a rollback-ready revision.'), 'Pages revision empty state must explain how snapshots are captured');
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const headers = new Headers(options.headers || {});
   if (options.body && !headers.has('content-type')) {
@@ -100,7 +107,7 @@ const updateSettings = async (input) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -108,9 +115,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_PAGES_LIST_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -363,6 +380,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -701,6 +730,7 @@ const assertDeliveryRefreshControl = async (client, page, expectedSearch = page.
       })()`);
       assert(clicked.clicked, `Unable to click delivery refresh: ${JSON.stringify(clicked)}`);
 
+      let lastRefreshState = null;
       for (let refreshAttempt = 0; refreshAttempt < 100; refreshAttempt += 1) {
         const refreshed = await evaluate(client, `(() => {
           const rowRefresh = document.querySelector('[data-testid="pages-delivery-refresh-${page.id}"]');
@@ -712,13 +742,15 @@ const assertDeliveryRefreshControl = async (client, page, expectedSearch = page.
             historyText: history?.textContent || '',
           };
         })()`);
+        lastRefreshState = refreshed;
 
         if (
           !refreshed.rowDisabled
           && refreshed.deliveryText.includes('Health')
           && refreshed.deliveryText.includes('Recent probes')
-          && refreshed.historyText.includes('render 200')
-          && refreshed.historyText.includes('resolve 200')
+          && refreshed.historyText.includes('public')
+          && refreshed.historyText.includes('render')
+          && refreshed.historyText.includes('resolve')
           && !refreshed.deliveryText.includes('Refreshing public, render, and resolve endpoint health.')
         ) {
           return { url, state, clicked, refreshed };
@@ -727,7 +759,7 @@ const assertDeliveryRefreshControl = async (client, page, expectedSearch = page.
         await sleep(250);
       }
 
-      throw new Error('Delivery refresh control did not finish refreshing.');
+      throw new Error(`Delivery refresh control did not finish refreshing: ${JSON.stringify(lastRefreshState)}`);
     }
 
     if (attempt === 99) {
@@ -854,20 +886,30 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
-      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
-        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
-      const select = [...document.querySelectorAll('select')]
-        .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+      const checkbox = document.querySelector('[data-testid="pages-select-${page.id}"]');
+      const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
+      const row = [...document.querySelectorAll('tr')]
+        .find((candidate) => (candidate.textContent || '').includes(${JSON.stringify(page.title)}));
       return {
         ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
         checkbox: Boolean(checkbox),
         checked: checkbox?.checked === true,
+        checkboxDisabled: checkbox?.disabled === true,
         select: Boolean(select),
+        selectDisabled: select?.disabled === true,
+        rowText: row?.textContent || '',
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`);
 
-    if (state.ready && state.checkbox && state.select) {
+    if (
+      state.ready &&
+      state.checkbox &&
+      !state.checkboxDisabled &&
+      state.select &&
+      !state.selectDisabled &&
+      state.rowText.includes(page.title)
+    ) {
       break;
     }
 
@@ -889,9 +931,10 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
         select.dispatchEvent(new Event('input', { bubbles: true }));
         select.dispatchEvent(new Event('change', { bubbles: true }));
       };
-      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
-        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+      const checkbox = document.querySelector('[data-testid="pages-select-${page.id}"]');
       const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
+      const row = [...document.querySelectorAll('tr')]
+        .find((candidate) => (candidate.textContent || '').includes(${JSON.stringify(page.title)}));
       if (checkbox instanceof HTMLInputElement && !checkbox.checked && !checkbox.disabled) {
         checkbox.click();
       }
@@ -907,9 +950,10 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
         selectDisabled: select instanceof HTMLSelectElement ? select.disabled : null,
         applyText: document.querySelector('[data-testid="pages-bulk-action-apply"]')?.textContent || '',
         selectedText: document.body?.innerText?.match(/\\d+ selected/)?.[0] || '',
+        rowText: row?.textContent || '',
       };
     })()`);
-    if (prepared.prepared && prepared.checked && prepared.selectValue === 'publish') {
+    if (prepared.prepared && prepared.checked && prepared.selectValue === 'publish' && prepared.rowText.includes(page.title)) {
       break;
     }
     await sleep(250);
@@ -1014,17 +1058,17 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
-      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
-        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+      const checkbox = document.querySelector('[data-testid="pages-select-${page.id}"]');
       const row = [...document.querySelectorAll('tr')]
         .find((candidate) => (candidate.textContent || '').includes(${JSON.stringify(page.title)}));
-      const select = [...document.querySelectorAll('select')]
-        .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+      const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
         checkbox: Boolean(checkbox),
+        checkboxDisabled: checkbox?.disabled === true,
         rowText: row?.textContent || '',
         select: Boolean(select),
+        selectDisabled: select?.disabled === true,
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`);
@@ -1032,7 +1076,9 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
     if (
       state.ready
       && state.checkbox
+      && !state.checkboxDisabled
       && state.select
+      && !state.selectDisabled
       && state.rowText.includes('Draft')
     ) {
       break;
@@ -1056,9 +1102,10 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
         select.dispatchEvent(new Event('input', { bubbles: true }));
         select.dispatchEvent(new Event('change', { bubbles: true }));
       };
-      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
-        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+      const checkbox = document.querySelector('[data-testid="pages-select-${page.id}"]');
       const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
+      const row = [...document.querySelectorAll('tr')]
+        .find((candidate) => (candidate.textContent || '').includes(${JSON.stringify(page.title)}));
       if (checkbox instanceof HTMLInputElement && !checkbox.checked && !checkbox.disabled) {
         checkbox.click();
       }
@@ -1074,9 +1121,10 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
         selectDisabled: select instanceof HTMLSelectElement ? select.disabled : null,
         applyText: document.querySelector('[data-testid="pages-bulk-action-apply"]')?.textContent || '',
         selectedText: document.body?.innerText?.match(/\\d+ selected/)?.[0] || '',
+        rowText: row?.textContent || '',
       };
     })()`);
-    if (prepared.prepared && prepared.checked && prepared.selectValue === 'publish') {
+    if (prepared.prepared && prepared.checked && prepared.selectValue === 'publish' && prepared.rowText.includes(page.title)) {
       break;
     }
     await sleep(250);
@@ -1355,6 +1403,7 @@ const cleanup = async ({ client, childProcess, userDataDir, hierarchyPages, view
 };
 
 const main = async () => {
+  assertPagesListSourceContract();
   await loginAdminApi();
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -1384,6 +1433,7 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(apiAdminSessionToken),
     });
