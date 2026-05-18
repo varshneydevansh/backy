@@ -257,6 +257,13 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(source.includes('Clear the search or switch categories to find layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
 };
 
+const assertMediaLibraryModalEmptyStateSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/MediaLibraryModal.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor media library modal must use the shared EmptyState component');
+  assert(source.includes('title="No media matches this view"'), 'Editor media library modal empty state must keep the shared title visible');
+  assert(source.includes('Upload assets to this site or clear filters to attach existing files.'), 'Editor media library modal empty state must explain how to recover from filters');
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -13979,6 +13986,7 @@ const main = async () => {
   assertEditorInteractiveSandboxPreviewSource();
   assertInteractiveRegistryVersionPinningSource();
   assertComponentLibraryEmptyStateSource();
+  assertMediaLibraryModalEmptyStateSource();
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
   const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
