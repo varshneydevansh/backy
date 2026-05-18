@@ -259,6 +259,12 @@ const collectFailures = (group) => group.checks
 
 const failures = [
   ...(database.requested && !database.ready ? ['database URL'] : []),
+  ...(settings.required && ![
+    settings.requested.storage,
+    settings.requested.rotation,
+    settings.requested.vercelSecrets,
+    settings.requested.notification,
+  ].some(Boolean) ? ['settings provider group selection'] : []),
   ...(commerce.required && ![
     commerce.requested.payment,
     commerce.requested.tax,

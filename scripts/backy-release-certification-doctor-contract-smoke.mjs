@@ -117,6 +117,18 @@ const missingDatabaseJson = parseJson(missingDatabase, 'missing database doctor'
 assert(missingDatabaseJson.ok === false, 'Doctor required database mode should report ok=false.');
 assert(missingDatabaseJson.failures.includes('database URL'), 'Doctor required database mode should report database URL failure.');
 
+const missingSettingsGroup = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(missingSettingsGroup.code === 1, `Doctor required Settings mode should exit 1 without provider groups, got ${missingSettingsGroup.code}.`);
+const missingSettingsGroupJson = parseJson(missingSettingsGroup, 'missing settings group doctor');
+assert(missingSettingsGroupJson.ok === false, 'Doctor required Settings mode should report ok=false.');
+assert(
+  missingSettingsGroupJson.failures.includes('settings provider group selection'),
+  'Doctor required Settings mode should report settings provider group selection failure.',
+);
+
 const missingCommerceGroup = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
