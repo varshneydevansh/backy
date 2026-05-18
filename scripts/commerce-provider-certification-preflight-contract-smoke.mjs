@@ -545,6 +545,16 @@ includesAll(
 includesAll(
   commerceSmoke,
   [
+    'assertCommerceProviderCertificationResponse',
+    'Public order contract',
+    'Public catalog contract',
+    'Public manifest commerce module',
+    'backy.commerce-provider-certification-handoff.v1',
+    'external-live-provider-gate',
+    'ci:commerce-provider-smoke',
+    'ci:commerce-provider-certification',
+    'live-commerce-provider-launch',
+    'Provider credentials stay in server environment/configuration',
     'Shopify product provider sync',
     'BigCommerce product provider sync',
     'WooCommerce product provider sync',

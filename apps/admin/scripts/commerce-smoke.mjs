@@ -951,6 +951,74 @@ const assertProductsApiContractsSource = () => {
   );
 };
 
+const assertCommerceProviderCertificationResponse = (commerce, label) => {
+  const certification = commerce?.providerCertification;
+  assert(
+    certification,
+    `${label} must expose commerce provider certification metadata: ${JSON.stringify(commerce).slice(0, 700)}`,
+  );
+  assert(
+    certification.schemaVersion === "backy.commerce-provider-certification-handoff.v1",
+    `${label} provider certification schema drifted: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    certification.status === "external-live-provider-gate",
+    `${label} provider certification status drifted: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    certification.localMockGate === "ci:commerce-provider-smoke",
+    `${label} provider certification missing mock gate: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    certification.liveCertificationGate === "ci:commerce-provider-certification",
+    `${label} provider certification missing live gate: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    certification.requiredFor === "live-commerce-provider-launch",
+    `${label} provider certification must name the live launch requirement: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    typeof certification.secretHandling === "string" &&
+      certification.secretHandling.includes("Provider credentials stay in server environment/configuration"),
+    `${label} provider certification must describe non-secret handling: ${JSON.stringify(certification)}`,
+  );
+  const groups = Array.isArray(certification.groups) ? certification.groups : [];
+  const families = groups.map((group) => group.family);
+  const providers = groups.flatMap((group) =>
+    Array.isArray(group.providers) ? group.providers : [],
+  );
+  for (const family of [
+    "Checkout and payment settlement",
+    "Tax quote providers",
+    "Shipping rate, label, and tracking providers",
+    "Discount quote providers",
+    "Catalog sync providers",
+    "Subscription lifecycle providers",
+    "Mock provider regression",
+  ]) {
+    assert(
+      families.includes(family),
+      `${label} provider certification missing family ${family}: ${JSON.stringify(certification)}`,
+    );
+  }
+  for (const provider of [
+    "Stripe webhooks",
+    "TaxJar",
+    "Avalara",
+    "EasyPost",
+    "Shippo",
+    "Stripe promotion codes",
+    "Magento",
+    "Razorpay",
+    "Local provider mocks",
+  ]) {
+    assert(
+      providers.includes(provider),
+      `${label} provider certification missing provider ${provider}: ${JSON.stringify(certification)}`,
+    );
+  }
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) =>
   new Promise((resolve) => {
     if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
@@ -2451,6 +2519,14 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (
   };
 
   try {
+    const orderReadinessPayload = await requestApi(
+      `/api/sites/${SITE_ID}/commerce/orders`,
+    );
+    assertCommerceProviderCertificationResponse(
+      orderReadinessPayload.data?.commerce || orderReadinessPayload.commerce,
+      "Public order contract",
+    );
+
     await updateCollectionPermissions(
       ordersCollection,
       exposedUpdatePermissions,
@@ -2461,6 +2537,10 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (
     );
     const catalogCommerce =
       catalogPayload.data?.commerce || catalogPayload.commerce;
+    assertCommerceProviderCertificationResponse(
+      catalogCommerce,
+      "Public catalog contract",
+    );
     assert(
       catalogCommerce?.capabilities?.catalog === true,
       `Catalog capability should remain available: ${JSON.stringify(catalogCommerce)}`,
@@ -2472,6 +2552,7 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (
 
     const manifestPayload = await requestApi(`/api/sites/${SITE_ID}/manifest`);
     const manifestCommerce =
+      manifestPayload.data?.modules?.commerce ||
       manifestPayload.data?.site?.commerce ||
       manifestPayload.site?.commerce ||
       manifestPayload.data?.commerce ||
@@ -2485,6 +2566,10 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (
             },
           }
         : undefined);
+    assertCommerceProviderCertificationResponse(
+      manifestCommerce,
+      "Public manifest commerce module",
+    );
     assert(
       manifestCommerce?.capabilities?.orderIntake === false,
       `Manifest advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(manifestCommerce)}`,
