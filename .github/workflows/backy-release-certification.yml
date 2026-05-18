@@ -377,16 +377,20 @@ jobs:
         run: |
           settings_external=false
           commerce_external=false
+          settings_admin_key_configured=false
+          commerce_admin_key_configured=false
           if [ -n "$BACKY_SETTINGS_CERTIFICATION_BASE_URL" ]; then settings_external=true; fi
           if [ -n "$BACKY_COMMERCE_CERTIFICATION_BASE_URL" ]; then commerce_external=true; fi
+          if [ -n "${BACKY_ADMIN_API_KEY:-${BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY:-}}" ]; then settings_admin_key_configured=true; fi
+          if [ -n "${BACKY_ADMIN_API_KEY:-${BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY:-}}" ]; then commerce_admin_key_configured=true; fi
           {
             echo "## Backy Release Certification"
             echo ""
             echo "| Gate | Requested | Non-secret target evidence |"
             echo "| --- | --- | --- |"
             echo "| Database | ${{ inputs.certify_database }} | expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
-            echo "| Settings providers | ${{ inputs.certify_settings_providers }} | external target configured: $settings_external |"
-            echo "| Commerce providers | ${{ inputs.certify_commerce_providers }} | external target configured: $commerce_external |"
+            echo "| Settings providers | ${{ inputs.certify_settings_providers }} | external target configured: $settings_external; admin key configured: $settings_admin_key_configured |"
+            echo "| Commerce providers | ${{ inputs.certify_commerce_providers }} | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
             echo ""
             echo "| Partial row | Gate |"
             echo "| --- | --- |"

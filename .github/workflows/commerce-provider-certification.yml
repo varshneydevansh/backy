@@ -258,13 +258,15 @@ jobs:
       - name: Write non-secret Commerce certification summary
         run: |
           commerce_external=false
+          commerce_admin_key_configured=false
           if [ -n "$BACKY_COMMERCE_CERTIFICATION_BASE_URL" ]; then commerce_external=true; fi
+          if [ -n "${BACKY_ADMIN_API_KEY:-${BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY:-}}" ]; then commerce_admin_key_configured=true; fi
           {
             echo "## Backy Commerce Provider Certification"
             echo ""
             echo "| Partial row | Gate | Requested | Non-secret target evidence |"
             echo "| --- | --- | --- | --- |"
-            echo "| /products and /orders | npm run ci:commerce-provider-certification | true | external target configured: $commerce_external |"
+            echo "| /products and /orders | npm run ci:commerce-provider-certification | true | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
             echo ""
             echo "| Selector | Value |"
             echo "| --- | --- |"
