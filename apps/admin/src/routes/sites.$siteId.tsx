@@ -7245,10 +7245,12 @@ function EditSitePage() {
                   </button>
                 </div>
                 {(seoState.seo.routeOverrides || []).length === 0 ? (
-                  <div className="mt-3 rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-                    No route-level overrides. Use them for custom canonical
-                    paths, campaign landing pages, and dynamic collection route
-                    SEO.
+                  <div className="mt-3">
+                    <EmptyState
+                      icon={Link2}
+                      title="No route-level SEO overrides"
+                      description="Add route overrides for custom canonical paths, campaign landing pages, and dynamic collection route SEO."
+                    />
                   </div>
                 ) : (
                   <div className="mt-3 space-y-3">
