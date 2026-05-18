@@ -11,9 +11,22 @@ const SITE_ID = process.env.BACKY_REUSABLE_SECTIONS_SMOKE_SITE_ID || 'site-demo'
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_REUSABLE_SECTIONS_CDP_PORT || 9387);
 const SCREENSHOT_PATH = process.env.BACKY_REUSABLE_SECTIONS_SCREENSHOT || path.join(os.tmpdir(), 'backy-reusable-sections-smoke.png');
+const RESPONSIVE_SCREENSHOT_DIR = process.env.BACKY_REUSABLE_SECTIONS_RESPONSIVE_SCREENSHOT_DIR || os.tmpdir();
 const FRONTEND_SECTION_TEMPLATE_ID = 'smoke-section-contract-template';
 const FRONTEND_SECTION_TEMPLATE_NAME = 'Smoke Frontend Hero Section';
 let apiAdminSessionToken = '';
+
+const RESPONSIVE_VIEWPORTS = [
+  { key: 'mobile', width: 390, height: 900, expectedBreakpoint: 'mobile' },
+  { key: 'tablet', width: 820, height: 1024, expectedBreakpoint: 'tablet' },
+];
+
+const RESPONSIVE_SCREENSHOT_THRESHOLDS = {
+  minSampledPixels: 45000,
+  minLumaRange: 90,
+  minCanvasNonWhiteRatio: 0.003,
+  minCanvasDarkRatio: 0.00045,
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -65,7 +78,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -73,9 +86,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_REUSABLE_SECTIONS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -278,6 +301,28 @@ const createDemoPageWithReusableSectionInstance = async (section, pageIds = []) 
   return page;
 };
 
+const createPreviewPageFromReusableSectionContent = async (section, pageIds = []) => {
+  const suffix = Date.now().toString(36);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Reusable section responsive preview ${suffix}`,
+      slug: `reusable-section-responsive-preview-${suffix}`,
+      status: 'draft',
+      content: {
+        elements: section.content?.elements || [],
+        canvasSize: section.content?.canvasSize || { width: 1200, height: 540 },
+        customCSS: section.content?.customCSS || '',
+      },
+      seo: {},
+    }),
+  });
+  const page = payload.data?.page;
+  assert(page?.id, `Unable to create reusable section responsive preview page: ${JSON.stringify(payload).slice(0, 500)}`);
+  pageIds.push(page.id);
+  return page;
+};
+
 const deleteDemoPage = async (pageId) => {
   if (!pageId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, { method: 'DELETE' });
@@ -372,6 +417,106 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const captureScreenshotData = async (client, screenshotPath) => {
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return {
+    screenshotPath,
+    data: screenshot.data,
+  };
+};
+
+const assertScreenshotPixelThresholds = async (client, label, screenshotData) => {
+  const metrics = await evaluate(client, `(async () => {
+    const image = new Image();
+    image.src = ${JSON.stringify(`data:image/png;base64,${screenshotData}`)};
+    await image.decode();
+
+    const scale = Math.min(1, 360 / image.width, 360 / image.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, 0, 0, image.width, image.height, 0, 0, canvas.width, canvas.height);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+    let nonWhitePixels = 0;
+    let darkPixels = 0;
+    let sampledPixels = 0;
+    let minLuma = 255;
+    let maxLuma = 0;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3];
+      if (alpha < 16) continue;
+
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      const luma = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
+      sampledPixels += 1;
+      minLuma = Math.min(minLuma, luma);
+      maxLuma = Math.max(maxLuma, luma);
+
+      if ((Math.abs(255 - red) + Math.abs(255 - green) + Math.abs(255 - blue)) > 36) {
+        nonWhitePixels += 1;
+      }
+
+      if (luma < 190) {
+        darkPixels += 1;
+      }
+    }
+
+    return {
+      width: image.width,
+      height: image.height,
+      sampledPixels,
+      nonWhiteRatio: sampledPixels > 0 ? nonWhitePixels / sampledPixels : 0,
+      darkRatio: sampledPixels > 0 ? darkPixels / sampledPixels : 0,
+      minLuma: Math.round(minLuma),
+      maxLuma: Math.round(maxLuma),
+      lumaRange: Math.round(maxLuma - minLuma),
+    };
+  })()`);
+
+  assert(metrics.sampledPixels >= RESPONSIVE_SCREENSHOT_THRESHOLDS.minSampledPixels, `${label} screenshot sample was too small: ${JSON.stringify(metrics)}`);
+  assert(metrics.nonWhiteRatio >= RESPONSIVE_SCREENSHOT_THRESHOLDS.minCanvasNonWhiteRatio, `${label} screenshot appears visually blank: ${JSON.stringify(metrics)}`);
+  assert(metrics.darkRatio >= RESPONSIVE_SCREENSHOT_THRESHOLDS.minCanvasDarkRatio, `${label} screenshot is missing rendered text/detail contrast: ${JSON.stringify(metrics)}`);
+  assert(metrics.lumaRange >= RESPONSIVE_SCREENSHOT_THRESHOLDS.minLumaRange, `${label} screenshot is missing visual contrast range: ${JSON.stringify(metrics)}`);
+  return metrics;
+};
+
+const requestPagePreview = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ ttlSeconds: 600 }),
+  });
+  const preview = payload.data || {};
+  assert(preview.hostedUrl && preview.previewToken, `Unable to create page preview: ${JSON.stringify(payload).slice(0, 500)}`);
+  return preview;
+};
+
+const openPublicPreviewTab = async (parentClient, url, viewport) => {
+  const target = await parentClient.send('Target.createTarget', { url: 'about:blank' });
+  const page = (await fetchJson('/json/list')).find((candidate) => candidate.id === target.targetId);
+  assert(page?.webSocketDebuggerUrl, `No Chrome target found for public preview check ${target.targetId}`);
+
+  const client = connectCdp(page.webSocketDebuggerUrl);
+  await client.opened;
+  await client.send('Runtime.enable');
+  await client.send('Page.enable');
+  await client.send('DOM.enable');
+  await client.send('Log.enable');
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: viewport.width,
+    height: viewport.height,
+    deviceScaleFactor: 1,
+    mobile: viewport.expectedBreakpoint === 'mobile',
+  });
+  await client.send('Page.navigate', { url });
+  return client;
 };
 
 const navigateToReusableSections = async (client) => {
@@ -628,6 +773,126 @@ const createFrontendTemplateSectionThroughUi = async (client) => {
   throw new Error('Frontend template reusable section was not created');
 };
 
+const assertReusableSectionHostedResponsiveRender = async (parentClient, section, pageIds = []) => {
+  const page = await createPreviewPageFromReusableSectionContent(section, pageIds);
+  const preview = await requestPagePreview(page.id);
+  const requiredElementIds = ['smoke-section-root', 'smoke-section-heading', 'smoke-section-copy'];
+  const results = {};
+
+  try {
+    for (const viewport of RESPONSIVE_VIEWPORTS) {
+      let publicClient = null;
+      try {
+        publicClient = await openPublicPreviewTab(parentClient, preview.hostedUrl, viewport);
+        let renderState = null;
+
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          renderState = await evaluate(publicClient, `(() => {
+            const root = document.querySelector('[data-backy-render-breakpoint]');
+            const canvas = document.querySelector('.backy-canvas');
+            const elements = Array.from(document.querySelectorAll('[data-element-id]'));
+            const requiredElementIds = ${JSON.stringify(requiredElementIds)};
+            const byId = new Map(elements.map((element) => [element.getAttribute('data-element-id'), element]));
+            const requiredRects = requiredElementIds.map((id) => {
+              const element = byId.get(id);
+              const rect = element?.getBoundingClientRect();
+              return {
+                id,
+                present: Boolean(element),
+                width: Math.round(rect?.width || 0),
+                height: Math.round(rect?.height || 0),
+                left: Math.round(rect?.left || 0),
+                top: Math.round(rect?.top || 0),
+              };
+            });
+            const canvasRect = canvas?.getBoundingClientRect();
+            const body = document.body?.innerText || '';
+            return {
+              viewport: { width: window.innerWidth, height: window.innerHeight },
+              breakpoint: root?.getAttribute('data-backy-render-breakpoint') || '',
+              renderScale: Number(root?.getAttribute('data-backy-render-scale') || 0),
+              canvasScale: Number(document.querySelector('[data-backy-canvas-scale]')?.getAttribute('data-backy-canvas-scale') || 0),
+              canvasWidth: Math.round(canvasRect?.width || 0),
+              canvasHeight: Math.round(canvasRect?.height || 0),
+              renderedElementCount: elements.length,
+              missingElementIds: requiredRects.filter((rect) => !rect.present).map((rect) => rect.id),
+              collapsedElementIds: requiredRects.filter((rect) => rect.present && (rect.width <= 0 || rect.height <= 0)).map((rect) => rect.id),
+              requiredRects,
+              horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+              hasFrontendHeading: body.includes('Design-preserved backend section'),
+              hasFrontendCopy: body.includes('Backy should retain frontend section structure'),
+              notFoundVisible: /not found|could not find|404/i.test(body),
+              body: body.slice(0, 360),
+            };
+          })()`);
+
+          if (
+            renderState.breakpoint === viewport.expectedBreakpoint
+            && renderState.renderedElementCount >= requiredElementIds.length
+            && renderState.missingElementIds.length === 0
+            && renderState.collapsedElementIds.length === 0
+            && renderState.canvasWidth > 0
+            && renderState.canvasHeight > 0
+            && renderState.renderScale > 0
+            && renderState.canvasScale > 0
+            && renderState.horizontalOverflow <= 4
+            && renderState.hasFrontendHeading
+            && renderState.hasFrontendCopy
+            && !renderState.notFoundVisible
+          ) {
+            break;
+          }
+
+          if (attempt === 99) {
+            throw new Error(`Reusable section hosted ${viewport.key} preview did not render expected content: ${JSON.stringify(renderState)}`);
+          }
+
+          await sleep(200);
+        }
+
+        const screenshotPath = path.join(RESPONSIVE_SCREENSHOT_DIR, `backy-reusable-section-public-${viewport.key}.png`);
+        const screenshot = await captureScreenshotData(publicClient, screenshotPath);
+        const screenshotMetrics = await assertScreenshotPixelThresholds(
+          publicClient,
+          `Reusable section hosted ${viewport.key} preview`,
+          screenshot.data,
+        );
+
+        results[viewport.key] = {
+          ...renderState,
+          screenshotPath,
+          screenshotMetrics,
+        };
+      } finally {
+        if (publicClient) {
+          try {
+            await publicClient.send('Page.close');
+          } catch {
+            // The target may already be closed by Chrome during cleanup.
+          }
+          publicClient.close();
+        }
+      }
+    }
+  } finally {
+    await deleteDemoPage(page.id);
+    const pageIndex = pageIds.indexOf(page.id);
+    if (pageIndex !== -1) {
+      pageIds.splice(pageIndex, 1);
+    }
+  }
+
+  return {
+    pageId: page.id,
+    preview: {
+      hostedUrl: preview.hostedUrl,
+      renderUrl: preview.renderUrl,
+      expiresAt: preview.expiresAt,
+    },
+    results,
+  };
+};
+
 const exerciseReusableSectionWorkflows = async (client, section, pageIds = []) => {
   const visualSaved = await clickReusableSectionControl(client, 'editor-save-page');
   assert(visualSaved.ok, `Unable to save reusable section through visual editor: ${JSON.stringify(visualSaved)}`);
@@ -820,6 +1085,7 @@ const main = async () => {
     }
     const section = await createFrontendTemplateSectionThroughUi(client);
     sectionIds.push(section.id);
+    const hostedResponsiveRender = await assertReusableSectionHostedResponsiveRender(client, section, pageIds);
     await exerciseReusableSectionWorkflows(client, section, pageIds);
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
@@ -838,6 +1104,7 @@ const main = async () => {
       frontendSectionId: section.id,
       frontendSectionSlug: section.slug,
       frontendTemplateId: FRONTEND_SECTION_TEMPLATE_ID,
+      hostedResponsiveRender,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
