@@ -28,6 +28,22 @@ const assert = (condition, message) => {
   }
 };
 
+const assertFormsPersistenceCertificationSource = () => {
+  const source = fs.readFileSync(new URL('../src/routes/forms.tsx', import.meta.url), 'utf8');
+  assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
+  assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
+  for (const label of [
+    'npm run test:forms --workspace @backy-cms/admin',
+    'npm run test:repositories --workspace @backy/db',
+    'npm run test:forms-postgres --workspace @backy/db',
+    'BACKY_DATABASE_URL',
+    'DATABASE_URL',
+    'external-database-gate',
+  ]) {
+    assert(source.includes(label), `Forms persistence certification must name ${label}`);
+  }
+};
+
 const startWebhookReceiver = async ({ failFirstFormSubmission = false } = {}) => new Promise((resolve, reject) => {
   const deliveries = [];
   let failedFormSubmission = false;
@@ -1955,13 +1971,16 @@ const assertLayout = async (client) => {
     hasAccountContract: Boolean(document.querySelector('[data-testid="forms-account-contract"]')) &&
       document.body?.innerText?.includes('Registration/account handoff') &&
       document.body?.innerText?.includes('Create registration form'),
+    hasPersistenceCertification: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')) &&
+      document.body?.innerText?.includes('Persistence certification') &&
+      document.body?.innerText?.includes('test:forms-postgres'),
     hasDeliveryPanel: Boolean(document.querySelector('[data-testid="forms-webhook-delivery-panel"]')) &&
       document.body?.innerText?.includes('Webhook delivery'),
     hasTemplates: document.body?.innerText?.includes('Form templates') || false,
     hasInbox: document.body?.innerText?.includes('Submission inbox') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -2006,6 +2025,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  assertFormsPersistenceCertificationSource();
   await loginAdminApi();
   const suffix = Date.now().toString(36);
   await assertFormsPermissionOverridesAreEnforced();

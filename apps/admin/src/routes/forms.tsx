@@ -443,6 +443,30 @@ const FORM_ACCOUNT_HANDOFF_STEPS = [
   },
 ] as const;
 
+const FORM_PERSISTENCE_CERTIFICATION_CHECKS = [
+  {
+    key: 'local-ui-api',
+    title: 'Local UI/API smoke',
+    gate: 'npm run test:forms --workspace @backy-cms/admin',
+    status: 'covered-locally',
+    detail: 'Exercises the Forms workspace, public definition/submission APIs, moderation, delivery, analytics, contacts, collections, and handoff export in demo mode.',
+  },
+  {
+    key: 'repository-contract',
+    title: 'Repository contract',
+    gate: 'npm run test:repositories --workspace @backy/db',
+    status: 'covered-locally',
+    detail: 'Covers repository primitives used by form definitions, submissions, contacts, collections, audit, and delivery records.',
+  },
+  {
+    key: 'postgres-service',
+    title: 'Supabase/Postgres service smoke',
+    gate: 'npm run test:forms-postgres --workspace @backy/db',
+    status: 'external-database-gate',
+    detail: 'Requires BACKY_DATABASE_URL or DATABASE_URL against a configured Supabase/Postgres target before the Forms row can move from Partial to Ready.',
+  },
+] as const;
+
 const FORM_EXPORT_COLUMNS = [
   'form_id',
   'active_site_id',
@@ -867,6 +891,15 @@ function FormsRoute() {
   const selectedFormContactsUrl = selectedForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/contacts?limit=100`
     : '';
+  const formPersistenceCertification = useMemo(() => ({
+    status: 'external-database-gate',
+    selectedSiteId: activeSiteId,
+    requiredDatabaseEnv: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+    localEvidence: ['npm run test:forms --workspace @backy-cms/admin', 'npm run test:repositories --workspace @backy/db'],
+    databaseGate: 'npm run test:forms-postgres --workspace @backy/db',
+    secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
+    checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
+  }), [activeSiteId]);
   const formsHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -915,6 +948,7 @@ function FormsRoute() {
       currentCapability: 'Backy can capture, moderate, export, and route registration submissions into contacts or collections.',
       remainingAccountMilestone: 'Authenticated member accounts, password/session lifecycle, and role assignment are still handled by the Users/Auth roadmap.',
     },
+    persistenceCertification: formPersistenceCertification,
     metrics,
     templates: FORM_TEMPLATES.map((template) => buildTemplateManifest(template)),
     frontendDesign: frontendDesign ? {
@@ -1007,6 +1041,7 @@ function FormsRoute() {
     frontendDesign,
     frontendFormTemplates,
     formDestinationFilter,
+    formPersistenceCertification,
     formCommandReadiness.checks,
     formCommandReadiness.score,
     formReadinessFilter,
@@ -2383,6 +2418,43 @@ function FormsRoute() {
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">{step.detail}</p>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="forms-persistence-certification">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Persistence certification</h3>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Forms are covered by local UI/API and repository checks. The remaining launch gate is the Supabase/Postgres service smoke with a configured database URL.
+              </p>
+            </div>
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+              Database gate
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            {formPersistenceCertification.checks.map((check) => (
+              <div key={check.key} className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">{check.title}</div>
+                    <div className="mt-1 font-mono text-[11px] text-muted-foreground">{check.gate}</div>
+                  </div>
+                  <span className={cn(
+                    'shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold',
+                    check.status === 'external-database-gate' ? 'bg-amber-50 text-amber-700' : 'bg-success/10 text-success',
+                  )}
+                  >
+                    {check.status === 'external-database-gate' ? 'External' : 'Local'}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Required database env: {formPersistenceCertification.requiredDatabaseEnv.join(' or ')}. Secrets stay in server/CI environment variables and are not included in the forms handoff manifest.
           </div>
         </div>
       </section>
