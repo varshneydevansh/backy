@@ -187,6 +187,25 @@ export function MediaLibraryModal({
     setReplacementBinaryComparison(null);
   }, [canCreate, canView, initialTab, initialUploadFilter, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleDialogKeyDown, true);
+  }, [isOpen, onClose]);
+
   const allowedTypesSet = useMemo(() => {
     if (allowedTypes === 'any') return new Set(['image', 'video', 'audio', 'file', 'font', 'other']);
     if (allowedTypes === 'file') return new Set(['file']);

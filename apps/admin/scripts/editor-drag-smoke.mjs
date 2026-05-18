@@ -322,6 +322,62 @@ const setAdminPermissionOverrides = async (overrides) => {
   });
 };
 
+const readAdminSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings || null;
+};
+
+const updateAdminSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings || null;
+};
+
+const storageSettingsFor = (settings) => {
+  const integrations = settings?.integrations && typeof settings.integrations === 'object'
+    ? settings.integrations
+    : {};
+  return integrations.storage && typeof integrations.storage === 'object'
+    ? integrations.storage
+    : {};
+};
+
+const allowAllMediaTypesForEditorMediaSmoke = async () => {
+  const settings = await readAdminSettings();
+  const integrations = settings?.integrations && typeof settings.integrations === 'object'
+    ? settings.integrations
+    : {};
+  const storage = storageSettingsFor(settings);
+
+  if (!storage.allowedFileTypes) {
+    return settings;
+  }
+
+  await updateAdminSettings({
+    integrations: {
+      ...integrations,
+      storage: {
+        ...storage,
+        allowedFileTypes: '',
+      },
+    },
+  });
+
+  return settings;
+};
+
+const restoreEditorMediaSmokeSettings = async (settings) => {
+  if (!settings) return;
+
+  await updateAdminSettings({
+    deliveryMode: settings.deliveryMode,
+    auth: settings.auth,
+    integrations: settings.integrations || {},
+  });
+};
+
 const createSmokePage = async () => {
   const slug = `editor-drag-smoke-${Date.now().toString(36)}`;
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages`, {
@@ -10802,6 +10858,25 @@ const waitForUploadedMediaItem = async (client, filename) => {
   throw new Error(`Uploaded media item did not appear in library: ${JSON.stringify(lastState)}`);
 };
 
+const waitForMediaLibraryClosed = async (client, label) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    lastState = await evaluate(client, `(() => ({
+      modalOpen: Boolean(document.querySelector('[data-testid="media-library-modal"]')),
+      activeElement: document.activeElement?.getAttribute?.('data-testid') || document.activeElement?.tagName || '',
+    }))()`);
+
+    if (!lastState.modalOpen) {
+      return lastState;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`Media library did not close after ${label}: ${JSON.stringify(lastState)}`);
+};
+
 const clickMediaLibraryItemByName = async (client, filename) => {
   const clicked = await evaluate(client, `(() => {
     const item = Array.from(document.querySelectorAll('[data-testid="media-library-item"]'))
@@ -11227,7 +11302,8 @@ const testMediaUploadModalControls = async (client, pageId) => {
         replacementComparison.hasReplacementCropBox,
       `Image picker did not show replacement comparison for current asset: ${JSON.stringify(replacementComparison)}`,
     );
-    await clickControlBySelector(client, 'button[aria-label="Close media library"]', 'close image replacement picker');
+    await pressKey(client, 'Escape');
+    const escapeClosedReplacementPicker = await waitForMediaLibraryClosed(client, 'Escape on image replacement picker');
     await clickSave(client);
     const savedStatus = await waitForEditorMutationReady(client, 'after media upload smoke save');
     const persisted = await waitForPersistedImageMediaSelection(pageId, selected);
@@ -11373,6 +11449,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
         imageSource,
         savedStatus,
         persisted,
+        escapeClosedReplacementPicker,
       },
       video: {
         opened: videoOpened,
@@ -13743,11 +13820,16 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let resetPageEditPermission = false;
+  let editorMediaSmokeSettings = null;
 
   try {
     if (VIEW_ONLY_SMOKE) {
       await setAdminPermissionOverrides({ 'pages.edit': 'deny' });
       resetPageEditPermission = true;
+    }
+
+    if (MEDIA_UPLOAD_SMOKE) {
+      editorMediaSmokeSettings = await allowAllMediaTypesForEditorMediaSmoke();
     }
 
     await waitForCdp();
@@ -15040,6 +15122,13 @@ const main = async () => {
         await setAdminPermissionOverrides({ 'pages.edit': null });
       } catch (error) {
         console.warn('Unable to reset editor smoke page edit permission override:', error instanceof Error ? error.message : error);
+      }
+    }
+    if (editorMediaSmokeSettings) {
+      try {
+        await restoreEditorMediaSmokeSettings(editorMediaSmokeSettings);
+      } catch (error) {
+        console.warn('Unable to restore editor media smoke settings:', error instanceof Error ? error.message : error);
       }
     }
     await cleanup({ client, childProcess, userDataDir });
