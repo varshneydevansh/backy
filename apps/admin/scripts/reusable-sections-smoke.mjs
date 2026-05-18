@@ -41,6 +41,10 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Reusable sections route must use the shared EmptyState component for library empty states');
   assert(source.includes("'No reusable sections yet'"), 'Reusable sections empty state must distinguish a new library from filtered results');
   assert(source.includes('frontend handoff APIs'), 'Reusable sections empty state must explain the frontend handoff value');
+  assert(source.includes('title="No section versions yet"'), 'Reusable sections workflow must keep the empty version-history title visible');
+  assert(source.includes('Save this reusable section or restore an imported version to start building a backend version history.'), 'Reusable sections empty version history must explain how versions are created');
+  assert(source.includes('title="Version history not loaded"'), 'Reusable sections workflow must keep the unloaded version-history title visible');
+  assert(source.includes('Load workflow state to inspect saved versions before restoring a captured section.'), 'Reusable sections unloaded version history must explain the next action');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -837,7 +841,7 @@ const assertReusableSectionHostedResponsiveRender = async (parentClient, section
               missingElementIds: requiredRects.filter((rect) => !rect.present).map((rect) => rect.id),
               collapsedElementIds: requiredRects.filter((rect) => rect.present && (rect.width <= 0 || rect.height <= 0)).map((rect) => rect.id),
               requiredRects,
-              horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+              horizontalOverflow: (document.documentElement?.scrollWidth || window.innerWidth) - window.innerWidth,
               hasFrontendHeading: body.includes('Design-preserved backend section'),
               hasFrontendCopy: body.includes('Backy should retain frontend section structure'),
               notFoundVisible: /not found|could not find|404/i.test(body),

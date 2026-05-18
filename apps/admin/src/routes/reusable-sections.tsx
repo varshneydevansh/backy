@@ -1469,10 +1469,18 @@ function ReusableSectionsRoute() {
                     </div>
                   ))}
                   {sectionVersions && sectionVersions.versions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No versions are available yet.</p>
+                    <EmptyState
+                      icon={History}
+                      title="No section versions yet"
+                      description="Save this reusable section or restore an imported version to start building a backend version history."
+                    />
                   ) : null}
                   {!sectionVersions ? (
-                    <p className="text-xs text-muted-foreground">Load workflow state to inspect versions.</p>
+                    <EmptyState
+                      icon={History}
+                      title="Version history not loaded"
+                      description="Load workflow state to inspect saved versions before restoring a captured section."
+                    />
                   ) : null}
                 </div>
               </div>
