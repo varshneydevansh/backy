@@ -90,9 +90,14 @@ interface DashboardData {
 
 interface DashboardCommerceMetrics {
   productCount: number;
+  loadedProductCount: number;
+  lowStockProductCount: number;
+  outOfStockProductCount: number;
+  checkoutConfiguredProductCount: number;
   orderCount: number;
   openOrderCount: number;
   paidOrderCount: number;
+  failedOrderCount: number;
   loadedOrderValue: number;
   currency: string;
 }
@@ -186,9 +191,14 @@ const dashboardPermissionReason = (
 
 const emptyCommerceMetrics = (): DashboardCommerceMetrics => ({
   productCount: 0,
+  loadedProductCount: 0,
+  lowStockProductCount: 0,
+  outOfStockProductCount: 0,
+  checkoutConfiguredProductCount: 0,
   orderCount: 0,
   openOrderCount: 0,
   paidOrderCount: 0,
+  failedOrderCount: 0,
   loadedOrderValue: 0,
   currency: 'USD',
 });
@@ -434,25 +444,64 @@ const orderRecordCurrency = (record: CollectionRecord) => {
   return typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : '';
 };
 
+const readProductRecordValue = (record: CollectionRecord, canonicalKey: string, legacyKey?: string) => {
+  if (record.values[canonicalKey] !== undefined) return record.values[canonicalKey];
+  if (legacyKey && record.values[legacyKey] !== undefined) return record.values[legacyKey];
+  return undefined;
+};
+
+const productRecordNumber = (record: CollectionRecord, canonicalKey: string, legacyKey?: string, fallback = 0) => {
+  const value = readProductRecordValue(record, canonicalKey, legacyKey);
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const productRecordString = (record: CollectionRecord, canonicalKey: string, legacyKey?: string) => {
+  const value = readProductRecordValue(record, canonicalKey, legacyKey);
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const productRecordStockState = (record: CollectionRecord) => {
+  const productType = productRecordString(record, 'producttype', 'productType') || 'physical';
+  const inventoryPolicy = productRecordString(record, 'inventorypolicy', 'inventoryPolicy') || 'deny';
+  const inventory = productRecordNumber(record, 'inventory', undefined, 0);
+  const lowStockThreshold = Math.max(0, productRecordNumber(record, 'lowstockthreshold', 'lowStockThreshold', 5) || 5);
+  const isPhysical = productType === 'physical';
+  const inStock = !isPhysical || inventory > 0 || inventoryPolicy !== 'deny';
+
+  return {
+    lowStock: isPhysical && inventory > 0 && inventory <= lowStockThreshold,
+    outOfStock: !inStock,
+    checkoutConfigured: productRecordString(record, 'checkouturl', 'checkoutUrl').length > 0,
+  };
+};
+
 const loadCommerceMetricsForDashboard = async (
   collections: Collection[],
 ): Promise<DashboardCommerceMetrics> => {
   const productCollections = collections.filter((collection) => collection.slug === 'products');
   const orderCollections = collections.filter((collection) => collection.slug === 'orders');
   const productResults = await Promise.all(productCollections.map((collection) => (
-    listCollectionRecords(collection.siteId, collection.id, { limit: 1 }).catch(() => null)
+    listCollectionRecords(collection.siteId, collection.id, { limit: 100 }).catch(() => null)
   )));
   const orderResults = await Promise.all(orderCollections.map((collection) => (
     listCollectionRecords(collection.siteId, collection.id, { limit: 100 }).catch(() => null)
   )));
+  const productRecords = productResults.flatMap((result) => result?.records || []);
   const orderRecords = orderResults.flatMap((result) => result?.records || []);
   const currency = orderRecords.map(orderRecordCurrency).find(Boolean) || 'USD';
+  const stockStates = productRecords.map(productRecordStockState);
 
   return {
     productCount: productResults.reduce((total, result) => total + (result?.pagination.total ?? 0), 0),
+    loadedProductCount: productRecords.length,
+    lowStockProductCount: stockStates.filter((state) => state.lowStock).length,
+    outOfStockProductCount: stockStates.filter((state) => state.outOfStock).length,
+    checkoutConfiguredProductCount: stockStates.filter((state) => state.checkoutConfigured).length,
     orderCount: orderResults.reduce((total, result) => total + (result?.pagination.total ?? 0), 0),
     openOrderCount: orderRecords.filter(isOpenOrderRecord).length,
     paidOrderCount: orderRecords.filter((record) => orderStatusValue(record, 'paymentstatus') === 'paid').length,
+    failedOrderCount: orderRecords.filter((record) => orderStatusValue(record, 'paymentstatus') === 'failed').length,
     loadedOrderValue: orderRecords.reduce((total, record) => total + orderRecordTotal(record), 0),
     currency,
   };
@@ -1013,6 +1062,7 @@ function Index() {
   const database = dashboard.settings?.runtimeDatabase;
   const supabase = dashboard.settings?.runtimeSupabase;
   const vercel = dashboard.settings?.runtimeVercel;
+  const commerceRuntime = dashboard.settings?.runtimeCommerce;
   const apiKeysConfigured = Boolean(
     dashboard.settings?.apiKeys.publicApiKey && dashboard.settings?.apiKeys.adminApiKey
   );
@@ -1233,9 +1283,14 @@ function Index() {
       catalogEndpoint: frontendContractUrls.products,
       orderIntakeEndpoint: frontendContractUrls.orderIntake,
       productCount: dashboard.commerce.productCount,
+      loadedProductCount: dashboard.commerce.loadedProductCount,
+      lowStockProductCount: dashboard.commerce.lowStockProductCount,
+      outOfStockProductCount: dashboard.commerce.outOfStockProductCount,
+      checkoutConfiguredProductCount: dashboard.commerce.checkoutConfiguredProductCount,
       orderCount: dashboard.commerce.orderCount,
       openOrderCount: dashboard.commerce.openOrderCount,
       paidOrderCount: dashboard.commerce.paidOrderCount,
+      failedOrderCount: dashboard.commerce.failedOrderCount,
       loadedOrderValue: dashboard.commerce.loadedOrderValue,
       currency: dashboard.commerce.currency,
       productsCollection: productsCollection
@@ -1538,6 +1593,61 @@ function Index() {
     currency: dashboard.commerce.currency || 'USD',
     maximumFractionDigits: 0,
   }).format(dashboard.commerce.loadedOrderValue);
+  const commerceHealth = useMemo(() => {
+    const paymentProvider = commerceRuntime?.paymentProvider || 'none';
+    const taxProvider = commerceRuntime?.taxProvider || 'manual';
+    const shippingProvider = commerceRuntime?.shippingProvider || 'manual';
+    const discountProvider = commerceRuntime?.discountProvider || 'manual';
+    const paymentReady = paymentProvider === 'stripe'
+      ? Boolean(commerceRuntime?.stripeSecretConfigured)
+      : paymentProvider === 'manual';
+    const taxReady = taxProvider === 'manual'
+      || (taxProvider === 'http' && Boolean(dashboard.settings?.integrations?.commerce?.taxProviderUrl))
+      || (taxProvider === 'stripe' && Boolean(commerceRuntime?.stripeSecretConfigured))
+      || (taxProvider === 'taxjar' && Boolean(commerceRuntime?.taxJarApiKeyConfigured))
+      || (taxProvider === 'avalara' && Boolean(
+        commerceRuntime?.avalaraAccountConfigured &&
+        commerceRuntime?.avalaraLicenseKeyConfigured &&
+        commerceRuntime?.avalaraCompanyCodeConfigured
+      ));
+    const shippingReady = shippingProvider === 'manual'
+      || (shippingProvider === 'http' && Boolean(dashboard.settings?.integrations?.commerce?.shippingProviderUrl))
+      || (shippingProvider === 'easypost' && Boolean(commerceRuntime?.easyPostApiKeyConfigured))
+      || (shippingProvider === 'shippo' && Boolean(commerceRuntime?.shippoApiKeyConfigured));
+    const discountReady = discountProvider === 'manual'
+      || (discountProvider === 'http' && Boolean(dashboard.settings?.integrations?.commerce?.discountProviderUrl))
+      || (discountProvider === 'stripe' && Boolean(commerceRuntime?.stripeSecretConfigured));
+    const checkoutSampleSize = dashboard.commerce.loadedProductCount || dashboard.commerce.productCount;
+    const checkoutCoverage = checkoutSampleSize > 0
+      ? Math.round((dashboard.commerce.checkoutConfiguredProductCount / checkoutSampleSize) * 100)
+      : 0;
+    const readyCount = [paymentReady, taxReady, shippingReady, discountReady].filter(Boolean).length;
+
+    return {
+      paymentProvider,
+      taxProvider,
+      shippingProvider,
+      discountProvider,
+      paymentReady,
+      taxReady,
+      shippingReady,
+      discountReady,
+      checkoutSampleSize,
+      checkoutCoverage,
+      setupScore: Math.round((readyCount / 4) * 100),
+      inventoryWarnings: dashboard.commerce.lowStockProductCount + dashboard.commerce.outOfStockProductCount,
+    };
+  }, [
+    commerceRuntime,
+    dashboard.commerce.checkoutConfiguredProductCount,
+    dashboard.commerce.loadedProductCount,
+    dashboard.commerce.lowStockProductCount,
+    dashboard.commerce.outOfStockProductCount,
+    dashboard.commerce.productCount,
+    dashboard.settings?.integrations?.commerce?.discountProviderUrl,
+    dashboard.settings?.integrations?.commerce?.shippingProviderUrl,
+    dashboard.settings?.integrations?.commerce?.taxProviderUrl,
+  ]);
   const aggregateAnalytics = useMemo(() => {
     const pageStatusCounts = countDashboardStatuses(dashboard.pages);
     const postStatusCounts = countDashboardStatuses(dashboard.posts);
@@ -2292,6 +2402,137 @@ function Index() {
                   : 'No failed workflow signals in loaded activity.'}
               </div>
             </Link>
+          </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-border bg-card p-5 shadow-sm"
+          data-testid="dashboard-commerce-health"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Package className="size-4 text-primary" />
+                <h2 className="font-semibold">Product commerce health</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Inventory warnings, checkout setup, provider readiness, and orders needing attention for the active storefront catalog.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/products"
+                search={getDashboardRouteSearch('/products')}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Products
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
+                to="/orders"
+                search={getDashboardRouteSearch('/orders')}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Orders
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
+                to="/settings"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Settings
+                <ArrowUpRight className="size-4" />
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Inventory warnings</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Low-stock and out-of-stock counts from the loaded products collection sample.
+                  </p>
+                </div>
+                <Package className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Product count" value={`${dashboard.commerce.productCount}`} />
+                <SignalMetric label="Loaded sample" value={`${dashboard.commerce.loadedProductCount}`} />
+                <SignalMetric label="Low stock" value={`${dashboard.commerce.lowStockProductCount}`} />
+                <SignalMetric label="Out of stock" value={`${dashboard.commerce.outOfStockProductCount}`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                commerceHealth.inventoryWarnings > 0 ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success',
+              )}>
+                {commerceHealth.inventoryWarnings > 0
+                  ? `${commerceHealth.inventoryWarnings} product inventory warning${commerceHealth.inventoryWarnings === 1 ? '' : 's'} need review.`
+                  : 'No inventory warnings in the loaded product sample.'}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Checkout setup</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Per-product checkout URL coverage and runtime provider readiness.
+                  </p>
+                </div>
+                <ShoppingCart className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Checkout URLs" value={`${dashboard.commerce.checkoutConfiguredProductCount}/${commerceHealth.checkoutSampleSize}`} />
+                <SignalMetric label="Coverage" value={`${commerceHealth.checkoutCoverage}%`} />
+                <SignalMetric label="Payment" value={commerceHealth.paymentProvider} />
+                <SignalMetric label="Setup score" value={`${commerceHealth.setupScore}%`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                commerceHealth.paymentReady && commerceHealth.taxReady && commerceHealth.shippingReady && commerceHealth.discountReady
+                  ? 'border-success/25 bg-success/10 text-success'
+                  : 'border-warning/25 bg-warning/10 text-warning',
+              )}>
+                {commerceHealth.paymentReady && commerceHealth.taxReady && commerceHealth.shippingReady && commerceHealth.discountReady
+                  ? `Payment, tax, shipping, and discount providers are ready for ${commerceHealth.paymentProvider} checkout.`
+                  : `Review ${[
+                    commerceHealth.paymentReady ? '' : 'payment',
+                    commerceHealth.taxReady ? '' : 'tax',
+                    commerceHealth.shippingReady ? '' : 'shipping',
+                    commerceHealth.discountReady ? '' : 'discount',
+                  ].filter(Boolean).join(', ')} setup before handoff.`}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Orders needing attention</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Open fulfillment, failed payments, paid orders, and loaded order value from order records.
+                  </p>
+                </div>
+                <ClipboardList className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Open orders" value={`${dashboard.commerce.openOrderCount}`} />
+                <SignalMetric label="Failed orders" value={`${dashboard.commerce.failedOrderCount}`} />
+                <SignalMetric label="Paid orders" value={`${dashboard.commerce.paidOrderCount}`} />
+                <SignalMetric label="Loaded value" value={commerceValueLabel} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                dashboard.commerce.openOrderCount || dashboard.commerce.failedOrderCount
+                  ? 'border-warning/25 bg-warning/10 text-warning'
+                  : 'border-success/25 bg-success/10 text-success',
+              )}>
+                {dashboard.commerce.openOrderCount || dashboard.commerce.failedOrderCount
+                  ? 'Review open fulfillment and failed payment orders before launch.'
+                  : 'No open or failed orders in the loaded order queue.'}
+              </div>
+            </div>
           </div>
         </section>
 
