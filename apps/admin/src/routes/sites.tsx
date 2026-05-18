@@ -1891,9 +1891,11 @@ function SitesListView() {
         />
         <PanelContent>
           {!selectedApiSite || !selectedBillingQuota ? (
-            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-              Create a site to assign a plan and track quota usage.
-            </div>
+            <EmptyState
+              icon={CreditCard}
+              title="No billing workspace selected"
+              description="Create or select a site to assign a plan, track quota usage, and review billing ownership."
+            />
           ) : (
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-lg border border-border bg-background p-4">

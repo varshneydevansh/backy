@@ -30,6 +30,8 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('Record a preview, production promotion, or rollback to keep Vercel delivery history attached to this site.'), 'Sites deploy history empty state must explain how to populate handoff history');
   assert(source.includes('title="No billing or quota events yet"'), 'Sites billing history must keep the empty quota title visible');
   assert(source.includes('Change plans or refresh usage to build a quota history for this workspace.'), 'Sites billing history empty state must explain how to populate quota history');
+  assert(source.includes('title="No billing workspace selected"'), 'Sites billing workspace must keep the no-site selected empty title visible');
+  assert(source.includes('Create or select a site to assign a plan, track quota usage, and review billing ownership.'), 'Sites billing workspace empty state must explain how to start billing setup');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
