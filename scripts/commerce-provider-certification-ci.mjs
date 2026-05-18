@@ -37,6 +37,12 @@ const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
+const isHttpUrl = (url) => /^https?:\/\//i.test(url);
+
+if (requireCertification && externalBaseUrl && !isHttpUrl(externalBaseUrl)) {
+  throw new Error('BACKY_COMMERCE_CERTIFICATION_BASE_URL must be an http:// or https:// URL when Commerce provider certification targets an external deployment.');
+}
+
 if (requireCertification && externalBaseUrl && !providedAdminKey) {
   throw new Error('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 with BACKY_COMMERCE_CERTIFICATION_BASE_URL requires BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY.');
 }

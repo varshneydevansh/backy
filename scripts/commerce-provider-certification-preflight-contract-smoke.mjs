@@ -191,6 +191,7 @@ includesAll(
   [
     'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED',
     'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'must be an http:// or https:// URL when Commerce provider certification targets an external deployment',
     'requires at least one BACKY_COMMERCE_CERTIFY_* provider group flag',
     'BACKY_COMMERCE_CERTIFY_PAYMENT',
     'BACKY_COMMERCE_CERTIFY_TAX',

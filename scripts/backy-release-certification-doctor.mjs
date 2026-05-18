@@ -8,6 +8,7 @@ const hasAny = (names) => names.some(has);
 const hasCompleteAlternative = (fields) => fields.every((names) => hasAny(names));
 const selected = (name, fallback = 'auto') => value(name).toLowerCase() || fallback;
 const requested = (name, fallback = false) => (env[name] === undefined ? fallback : env[name] === '1' || env[name] === 'true');
+const isHttpUrl = (name) => /^https?:\/\//i.test(value(name));
 
 const check = (label, names, enabled = true) => {
   const missing = enabled ? names.filter((name) => !has(name)) : [];
@@ -263,12 +264,14 @@ const collectFailures = (group) => group.checks
 
 const failures = [
   ...(database.requested && !database.ready ? ['database URL'] : []),
+  ...(settings.required && settings.target.externalBaseUrlConfigured && !isHttpUrl('BACKY_SETTINGS_CERTIFICATION_BASE_URL') ? ['Settings external base URL'] : []),
   ...(settings.required && ![
     settings.requested.storage,
     settings.requested.rotation,
     settings.requested.vercelSecrets,
     settings.requested.notification,
   ].some(Boolean) ? ['settings provider group selection'] : []),
+  ...(commerce.required && commerce.target.externalBaseUrlConfigured && !isHttpUrl('BACKY_COMMERCE_CERTIFICATION_BASE_URL') ? ['Commerce external base URL'] : []),
   ...(commerce.required && ![
     commerce.requested.payment,
     commerce.requested.tax,

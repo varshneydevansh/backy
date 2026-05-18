@@ -34,8 +34,14 @@ const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
+const isHttpUrl = (url) => /^https?:\/\//i.test(url);
+
 if (requireCertification && !adminKey) {
   throw new Error('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 requires BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY.');
+}
+
+if (requireCertification && externalBaseUrl && !isHttpUrl(externalBaseUrl)) {
+  throw new Error('BACKY_SETTINGS_CERTIFICATION_BASE_URL must be an http:// or https:// URL when Settings provider certification targets an external deployment.');
 }
 
 if (requireCertification && externalBaseUrl && !providedAdminKey) {

@@ -170,6 +170,24 @@ assert(
   `Doctor external Settings mode should accept BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY, got ${settingsExternalAdminAliasReady.code}.`,
 );
 
+const invalidSettingsExternalBaseUrl = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFICATION_BASE_URL: 'backy-settings.example.test',
+  BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY: 'settings-external-admin-key',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  invalidSettingsExternalBaseUrl.code === 1,
+  `Doctor external Settings mode should exit 1 with invalid base URL, got ${invalidSettingsExternalBaseUrl.code}.`,
+);
+const invalidSettingsExternalBaseUrlJson = parseJson(invalidSettingsExternalBaseUrl, 'invalid Settings external base URL doctor');
+assert(invalidSettingsExternalBaseUrlJson.ok === false, 'Doctor invalid external Settings URL mode should report ok=false.');
+assert(
+  invalidSettingsExternalBaseUrlJson.failures.includes('Settings external base URL'),
+  'Doctor invalid external Settings URL mode should report Settings external base URL failure.',
+);
+
 const missingCommerceExternalAdminKey = await runDoctor({
   BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_COMMERCE_CERTIFY_TAX: '1',
@@ -199,6 +217,25 @@ const commerceExternalAdminAliasReady = await runDoctor({
 assert(
   commerceExternalAdminAliasReady.code === 0,
   `Doctor external Commerce mode should accept BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY, got ${commerceExternalAdminAliasReady.code}.`,
+);
+
+const invalidCommerceExternalBaseUrl = await runDoctor({
+  BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFY_TAX: '1',
+  BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'http',
+  BACKY_COMMERCE_CERTIFICATION_BASE_URL: 'backy-commerce.example.test',
+  BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY: 'commerce-external-admin-key',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  invalidCommerceExternalBaseUrl.code === 1,
+  `Doctor external Commerce mode should exit 1 with invalid base URL, got ${invalidCommerceExternalBaseUrl.code}.`,
+);
+const invalidCommerceExternalBaseUrlJson = parseJson(invalidCommerceExternalBaseUrl, 'invalid Commerce external base URL doctor');
+assert(invalidCommerceExternalBaseUrlJson.ok === false, 'Doctor invalid external Commerce URL mode should report ok=false.');
+assert(
+  invalidCommerceExternalBaseUrlJson.failures.includes('Commerce external base URL'),
+  'Doctor invalid external Commerce URL mode should report Commerce external base URL failure.',
 );
 
 await assertMissingProvider({

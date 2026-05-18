@@ -52,6 +52,7 @@ includesAll(
     'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED',
     'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
     'providedAdminKey',
+    'must be an http:// or https:// URL when Settings provider certification targets an external deployment',
     'with BACKY_SETTINGS_CERTIFICATION_BASE_URL requires BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
     'BACKY_SETTINGS_CERTIFY_STORAGE',
     'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
