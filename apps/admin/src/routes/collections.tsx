@@ -5740,7 +5740,11 @@ function CollectionsPage() {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-cyan-900/70">No saved capture history yet.</p>
+                          <EmptyState
+                            icon={History}
+                            title="No list template capture history"
+                            description="Capture a list canvas to create rollback-ready versions for generated collection index pages."
+                          />
                         )}
                       </div>
                       <AuthoredTemplateComparePanel
@@ -5898,7 +5902,11 @@ function CollectionsPage() {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-cyan-900/70">No saved capture history yet.</p>
+                          <EmptyState
+                            icon={History}
+                            title="No item template capture history"
+                            description="Capture an item canvas to create rollback-ready versions for generated collection detail pages."
+                          />
                         )}
                       </div>
                       <AuthoredTemplateComparePanel

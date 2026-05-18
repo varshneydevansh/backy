@@ -34,6 +34,10 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('Add a reference or multi-reference field to connect this schema to another collection.'), 'Collections outgoing relationship empty state must explain how to connect schemas');
   assert(source.includes('title="No incoming relationships"'), 'Collections relationship browser must keep the incoming empty-state title visible');
   assert(source.includes('No saved collections currently point at this schema.'), 'Collections incoming relationship empty state must explain why the graph is empty');
+  assert(source.includes('title="No list template capture history"'), 'Collections list template history must use a shared empty-state title');
+  assert(source.includes('Capture a list canvas to create rollback-ready versions for generated collection index pages.'), 'Collections list template history empty state must explain the capture workflow');
+  assert(source.includes('title="No item template capture history"'), 'Collections item template history must use a shared empty-state title');
+  assert(source.includes('Capture an item canvas to create rollback-ready versions for generated collection detail pages.'), 'Collections item template history empty state must explain the capture workflow');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -2042,6 +2046,10 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
         const select = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template-select"]`)});
         const panel = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template"]`)});
         const bodyText = document.body?.innerText || '';
+        const panelText = panel?.textContent || '';
+        if (panelText.includes('Captured') && panelText.includes('root elements')) {
+          return { ok: true, reason: 'captured', selected: select instanceof HTMLSelectElement ? select.value : '', text: panelText };
+        }
         if (!(select instanceof HTMLSelectElement)) {
           return { ok: false, reason: 'select-missing' };
         }
@@ -2071,12 +2079,19 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
             body: bodyText.slice(0, 1200),
           };
         }
+        window.__backyCollectionsCaptureClicks = window.__backyCollectionsCaptureClicks || {};
+        const lastClickAt = Number(window.__backyCollectionsCaptureClicks[${JSON.stringify(kind)}] || 0);
+        if (lastClickAt && Date.now() - lastClickAt < 2500) {
+          return { ok: false, reason: 'waiting-after-click', selected: select.value, text: panelText };
+        }
+        window.__backyCollectionsCaptureClicks[${JSON.stringify(kind)}] = Date.now();
         button.click();
         return {
-          ok: true,
+          ok: false,
+          reason: 'capture-clicked',
           selected: select.value,
           buttonText: button.textContent || '',
-          text: panel?.textContent || '',
+          text: panelText,
         };
       })()`);
       if (captured.ok) break;
