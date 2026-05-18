@@ -157,9 +157,9 @@ For that cron to authenticate, configure `CRON_SECRET` to the same server-only v
 
 ## Security status notes
 
-- Current local auth flow in `apps/admin` uses `mockStore` + mocked login helper for fast dev.
-- SSO providers are scaffolded through environment settings and the auth package, but admin login is not yet production-grade.
-- Public endpoints are also mostly scaffolded on top of mock data today and should be switched to DB-backed auth + RBAC before launch.
+- Admin auth is backend-backed through `apps/public` auth routes. The admin app signs in through the API, receives an httpOnly `backy_admin_session` cookie, and supports invite acceptance, password recovery/reset, session rotation/revocation, MFA challenges, and audit events.
+- Supabase Auth is supported when `BACKY_SUPABASE_URL` plus anon/service credentials are configured; local seeded accounts remain a development/demo fallback and are blocked in production unless the local-auth allow flag is set intentionally.
+- Admin API mutations are guarded by server-side RBAC and site/team scoping, with `npm run test:admin-rbac-coverage --workspace @backy/public`, `npm run test:admin-site-scope --workspace @backy/public`, and `npm run test:admin-auth --workspace @backy/public` covering the security contract. Remaining production hardening is tracked through the release certification gates for database/provider-backed environments.
 
 ## Custom frontend and domain model
 

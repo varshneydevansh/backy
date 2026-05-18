@@ -13,6 +13,11 @@ const includesAll = (source, snippets, label) => {
   assert(missing.length === 0, `${label} missing snippets: ${missing.join(', ')}`);
 };
 
+const excludesAll = (source, snippets, label) => {
+  const present = snippets.filter((snippet) => source.includes(snippet));
+  assert(present.length === 0, `${label} still contains stale snippets: ${present.join(', ')}`);
+};
+
 const extractChoiceOptions = (source, inputName) => {
   const match = source.match(new RegExp(`\\n\\s{6}${inputName}:\\n[\\s\\S]*?\\n\\s{8}options:\\n((?:\\s{10}- .+\\n)+)`));
   assert(match, `Workflow input ${inputName} is missing a choice options block.`);
@@ -358,6 +363,32 @@ includesAll(
     'Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento',
   ],
   'Backy release certification setup documentation',
+);
+
+includesAll(
+  setup,
+  [
+    'Admin auth is backend-backed through `apps/public` auth routes',
+    'httpOnly `backy_admin_session` cookie',
+    'Supabase Auth is supported',
+    'local seeded accounts remain a development/demo fallback',
+    'blocked in production unless the local-auth allow flag is set intentionally',
+    'server-side RBAC and site/team scoping',
+    'npm run test:admin-rbac-coverage --workspace @backy/public',
+    'npm run test:admin-site-scope --workspace @backy/public',
+    'npm run test:admin-auth --workspace @backy/public',
+  ],
+  'Backy security status setup documentation',
+);
+
+excludesAll(
+  setup,
+  [
+    'mockStore` + mocked login helper',
+    'admin login is not yet production-grade',
+    'Public endpoints are also mostly scaffolded on top of mock data today',
+  ],
+  'Backy security status setup documentation',
 );
 
 includesAll(
