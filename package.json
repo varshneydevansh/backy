@@ -31,6 +31,7 @@
     "doctor:release-certification": "node scripts/backy-release-certification-doctor.mjs",
     "test:sdk-postgres-preflight-contract": "npm run test:sdk-postgres-preflight-contract --workspace @backy/public",
     "test:forms-postgres-preflight-contract": "npm run test:forms-postgres-preflight-contract --workspace @backy/db",
+    "test:partial-gate-preflights": "npm run test:forms-postgres-preflight-contract && npm run test:sdk-postgres-preflight-contract && npm run test:settings-provider-certification-preflight-contract && npm run test:commerce-provider-certification-preflight-contract && npm run test:release-certification-doctor-contract && npm run test:release-certification-preflight-contract",
     "ci:sdk-smoke": "npm run test:sdk-postgres-preflight-contract && node scripts/sdk-smoke-ci.mjs",
     "ci:sdk-postgres-smoke": "npm run test:sdk-postgres-preflight-contract && BACKY_SDK_REQUIRE_DATABASE=1 node scripts/sdk-smoke-ci.mjs",
     "ci:commerce-provider-smoke": "node scripts/commerce-provider-smoke-ci.mjs",

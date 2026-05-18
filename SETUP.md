@@ -96,6 +96,7 @@ On Linux CI it expects Chrome at `/usr/bin/google-chrome`; locally set `CHROME_B
 The manual **Backy Release Certification** workflow (`.github/workflows/backy-release-certification.yml`) is the current production-readiness gate. It runs the local source preflights first, then optionally runs the database, Settings provider, and Commerce provider certification gates:
 
 ```bash
+npm run test:partial-gate-preflights
 npm run test:release-certification-preflight-contract
 npm run test:release-certification-doctor-contract
 ```
