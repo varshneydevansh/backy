@@ -2353,13 +2353,11 @@ function CommentsRoute() {
 
             <div className="grid gap-2">
               {threadSummaries.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-                  <MessageSquare className="mx-auto size-8 text-muted-foreground" />
-                  <div className="mt-3 text-sm font-medium text-foreground">No comment threads yet</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    Page and blog comments will appear here with parent and reply counts once submitted.
-                  </div>
-                </div>
+                <EmptyState
+                  icon={MessageSquare}
+                  title="No comment threads yet"
+                  description="Page and blog comments will appear here with parent and reply counts once submitted."
+                />
               ) : threadSummaries.slice(0, 6).map((thread) => (
                 <ThreadSummaryRow
                   key={thread.id}
@@ -2455,13 +2453,11 @@ function CommentsRoute() {
 
               <div className="mt-4 space-y-2">
                 {filteredBlocklist.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-                    <CircleSlash className="mx-auto size-8 text-muted-foreground" />
-                    <div className="mt-3 text-sm font-medium text-foreground">No blocked authors match this view</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      Block a comment to create an appealable author identity entry.
-                    </div>
-                  </div>
+                  <EmptyState
+                    icon={CircleSlash}
+                    title="No blocked authors match this view"
+                    description="Block a comment to create an appealable author identity entry."
+                  />
                 ) : filteredBlocklist.map((entry) => {
                   const isDeleting = deletingBlocklistIds.includes(entry.id);
                   return (

@@ -36,6 +36,10 @@ const assertCommentsRouteSourceContract = () => {
   assert(source.includes('Comment notification, webhook, retry, and handoff events will appear here after moderation activity.'), 'Comments delivery empty state must explain which events populate delivery history');
   assert(source.includes('title="No comment audit entries yet"'), 'Comments audit panel must keep the empty audit title visible');
   assert(source.includes('Policy updates, moderation decisions, thread changes, retries, and blocklist actions will appear here.'), 'Comments audit empty state must explain which actions populate activity');
+  assert(source.includes('title="No comment threads yet"'), 'Comments thread triage panel must keep the empty thread title visible');
+  assert(source.includes('Page and blog comments will appear here with parent and reply counts once submitted.'), 'Comments thread empty state must explain what will populate triage');
+  assert(source.includes('title="No blocked authors match this view"'), 'Comments blocklist panel must keep the filtered empty title visible');
+  assert(source.includes('Block a comment to create an appealable author identity entry.'), 'Comments blocklist empty state must explain blocklist recovery');
 };
 
 const requestApi = async (endpoint, options = {}) => {
