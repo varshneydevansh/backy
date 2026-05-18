@@ -91,6 +91,43 @@ assert.equal(selectedMoveUp.nodes[0].type, 'ol');
 assert.equal(selectedMoveUp.nodes[0].children[0].indent, 8);
 assert.equal(selectedMoveUp.nodes[1].type, 'ul');
 
+const nestedSelectionSource = [{
+  type: 'ul',
+  children: [
+    {
+      type: 'li',
+      children: [
+        { text: 'Parent item' },
+        {
+          type: 'ul',
+          children: [
+            { type: 'li', indent: 2, children: [{ text: 'Child target' }] },
+            { type: 'li', children: [{ text: 'Child sibling' }] },
+          ],
+        },
+      ],
+    },
+    { type: 'li', children: [{ text: 'Outer sibling' }] },
+  ],
+}];
+const nestedSelectedTypeChange = helper.applyListTypeToSelectedListItemNodes(nestedSelectionSource, 'ol', 'Child target');
+assert.equal(nestedSelectedTypeChange.changed, true);
+assert.equal(nestedSelectedTypeChange.nodes[0].type, 'ul');
+assert.equal(nestedSelectedTypeChange.nodes[0].children[0].children[0].text, 'Parent item');
+assert.equal(nestedSelectedTypeChange.nodes[0].children[0].children[1].type, 'ol');
+assert.equal(nestedSelectedTypeChange.nodes[0].children[0].children[1].children[0].indent, 2);
+assert.equal(nestedSelectedTypeChange.nodes[0].children[0].children[2].type, 'ul');
+assert.equal(nestedSelectedTypeChange.nodes[0].children[1].children[0].text, 'Outer sibling');
+
+const nestedSelectedMoveDown = helper.moveSelectedListItemNodes(nestedSelectionSource, 'Child target', 1);
+assert.equal(nestedSelectedMoveDown.changed, true);
+const movedNestedChildren = nestedSelectedMoveDown.nodes[0].children[0].children[1].children;
+assert.equal(movedNestedChildren[0].children[0].text, 'Child sibling');
+assert.equal(movedNestedChildren[1].children[0].text, 'Child target');
+assert.equal(movedNestedChildren[1].indent, 2);
+assert.equal(nestedSelectedMoveDown.nodes[0].children[0].children[0].text, 'Parent item');
+assert.equal(nestedSelectedMoveDown.nodes[0].children[1].children[0].text, 'Outer sibling');
+
 const outdented = helper.applyListIndentToNodes(existingOrdered, -2);
 assert.equal(outdented[0].children[0].indent, undefined);
 assert.equal(outdented[0].children[1].indent, undefined);
@@ -199,5 +236,5 @@ assert.deepEqual(listUtils.extractListItemEntriesFromSlate(objectBackedList), [
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 43,
+  cases: 57,
 }));

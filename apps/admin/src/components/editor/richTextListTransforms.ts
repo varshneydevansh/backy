@@ -48,6 +48,31 @@ const getNodeText = (node: unknown): string => {
   return children.map((child) => getNodeText(child)).join('');
 };
 
+const getListItemOwnText = (node: unknown): string => {
+  if (!isRecord(node)) {
+    return '';
+  }
+
+  if (typeof node.text === 'string') {
+    return node.text;
+  }
+
+  const children = Array.isArray(node.children) ? node.children : [];
+  return children
+    .filter((child) => !isRecord(child) || !isListType(child.type))
+    .map((child) => getNodeText(child))
+    .join('');
+};
+
+const listItemMatchesText = (node: unknown, needle: string): boolean => {
+  if (!isRecord(node) || node.type !== 'li') {
+    return false;
+  }
+
+  const ownText = getListItemOwnText(node).trim();
+  return ownText === needle || ownText.includes(needle);
+};
+
 export const getRootListTypeFromNodes = (nodes: unknown[]): RichTextListType | null => {
   if (!nodes.length || !isRecord(nodes[0])) {
     return null;
@@ -161,7 +186,7 @@ export const applyListTypeToSelectedListItemNodes = (
       const children = Array.isArray(node.children) ? node.children : null;
       if (isListType(node.type) && children) {
         const selectedIndex = children.findIndex((child) => (
-          isRecord(child) && child.type === 'li' && getNodeText(child).trim().includes(needle)
+          listItemMatchesText(child, needle)
         ));
 
         if (selectedIndex >= 0) {
@@ -214,14 +239,14 @@ export const moveSelectedListItemNodes = (
       isRecord(node) &&
       isListType(node.type) &&
       Array.isArray(node.children) &&
-      node.children.some((child) => isRecord(child) && child.type === 'li' && getNodeText(child).trim().includes(needle))
+      node.children.some((child) => listItemMatchesText(child, needle))
     ));
 
     if (listIndex >= 0) {
       const listNode = values[listIndex] as Record<string, unknown>;
       const children = Array.isArray(listNode.children) ? listNode.children.map((child) => cloneNode(child)) : [];
       const itemIndex = children.findIndex((child) => (
-        isRecord(child) && child.type === 'li' && getNodeText(child).trim().includes(needle)
+        listItemMatchesText(child, needle)
       ));
       const targetIndex = itemIndex + direction;
 
