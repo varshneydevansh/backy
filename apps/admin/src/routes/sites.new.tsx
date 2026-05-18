@@ -298,7 +298,7 @@ function NewSitePage() {
   const statusSeedsPublishedPages = formData.status === 'published';
   const canSeedStarterPages = !starterPagesSelected || (canEditPages && (!statusSeedsPublishedPages || canPublishPages));
   const creationFormDisabled = isCreateBusy || !canCreateSites;
-  const starterPageControlsDisabled = creationFormDisabled || !canEditPages;
+  const starterPageControlsDisabled = creationFormDisabled || !canEditPages || (statusSeedsPublishedPages && !canPublishPages);
   const creationDisabledTitle = isPermissionMatrixPending
     ? 'Loading site creation permissions...'
     : !canCreateSites

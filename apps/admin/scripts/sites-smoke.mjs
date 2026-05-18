@@ -22,6 +22,7 @@ const assert = (condition, message) => {
 
 const assertSitesRouteSourceContract = () => {
   const source = fs.readFileSync(new URL('../src/routes/sites.tsx', import.meta.url), 'utf8');
+  const createSource = fs.readFileSync(new URL('../src/routes/sites.new.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Sites route must use the shared EmptyState component');
   assert(source.includes('validateSearch') && source.includes('siteMatchesIdentifier(site, requestedSiteId)'), 'Sites route must allow selecting the API handoff site from the siteId search param');
   assert(source.includes('title="No site audit events yet"'), 'Sites audit panel must keep the empty audit title visible');
@@ -36,6 +37,14 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('Create or select a site to prepare custom-domain DNS records and track verification status.'), 'Sites domain verification empty state must explain how to start DNS setup');
   assert(source.includes('title="No deployment workspace selected"'), 'Sites deployment workspace must keep the no-site selected empty title visible');
   assert(source.includes('Create or select a site to prepare Vercel handoff commands, target URLs, and deploy history.'), 'Sites deployment empty state must explain how to start deployment setup');
+  assert(
+    createSource.includes('const starterPageControlsDisabled = creationFormDisabled || !canEditPages || (statusSeedsPublishedPages && !canPublishPages);'),
+    'Site create blueprint controls must disable starter-page blueprints when published page seeding lacks pages.publish',
+  );
+  assert(
+    createSource.includes('Published starter page seeding needs pages.publish.'),
+    'Site create route must explain the pages.publish requirement for published starter pages',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
