@@ -14308,13 +14308,111 @@ const main = async () => {
           expectedWidth: 440,
           testLayerOverride: false,
         }),
+        commentMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-comment', {
+          breakpoint: 'mobile',
+          expectedX: 22,
+          expectedWidth: 330,
+          testLayerOverride: false,
+        }),
+        commentTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-comment', {
+          breakpoint: 'tablet',
+          expectedX: 88,
+          expectedWidth: 460,
+          testLayerOverride: false,
+        }),
+        repeaterMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-repeater', {
+          breakpoint: 'mobile',
+          expectedX: 24,
+          expectedWidth: 340,
+          testLayerOverride: false,
+        }),
+        repeaterTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-repeater', {
+          breakpoint: 'tablet',
+          expectedX: 100,
+          expectedWidth: 520,
+          testLayerOverride: false,
+        }),
+        embedMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-embed', {
+          breakpoint: 'mobile',
+          expectedX: 30,
+          expectedWidth: 320,
+          testLayerOverride: false,
+        }),
+        embedTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-embed', {
+          breakpoint: 'tablet',
+          expectedX: 120,
+          expectedWidth: 420,
+          testLayerOverride: false,
+        }),
+        interactiveMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-interactive', {
+          breakpoint: 'mobile',
+          expectedX: 28,
+          expectedWidth: 330,
+          testLayerOverride: false,
+        }),
+        interactiveTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-interactive', {
+          breakpoint: 'tablet',
+          expectedX: 110,
+          expectedWidth: 480,
+          testLayerOverride: false,
+        }),
+        checkboxMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-checkbox', {
+          breakpoint: 'mobile',
+          expectedX: 30,
+          expectedWidth: 320,
+          testLayerOverride: false,
+        }),
+        checkboxTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-checkbox', {
+          breakpoint: 'tablet',
+          expectedX: 96,
+          expectedWidth: 360,
+          testLayerOverride: false,
+        }),
+        selectMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-select', {
+          breakpoint: 'mobile',
+          expectedX: 34,
+          expectedWidth: 300,
+          testLayerOverride: false,
+        }),
+        selectTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-select', {
+          breakpoint: 'tablet',
+          expectedX: 112,
+          expectedWidth: 360,
+          testLayerOverride: false,
+        }),
+        radioMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-radio', {
+          breakpoint: 'mobile',
+          expectedX: 32,
+          expectedWidth: 320,
+          testLayerOverride: false,
+        }),
+        radioTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-radio', {
+          breakpoint: 'tablet',
+          expectedX: 102,
+          expectedWidth: 360,
+          testLayerOverride: false,
+        }),
       };
 
       let reloadClient = null;
       let reloadedResponsiveEditing = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-columns', 'smoke-nav', 'smoke-form']);
+        await waitForEditorElements(reloadClient, [
+          'smoke-heading',
+          'smoke-image',
+          'smoke-box',
+          'smoke-columns',
+          'smoke-nav',
+          'smoke-form',
+          'smoke-comment',
+          'smoke-repeater',
+          'smoke-embed',
+          'smoke-interactive',
+          'smoke-select',
+          'smoke-checkbox',
+          'smoke-radio',
+        ]);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
             reloadClient,
@@ -14448,6 +14546,160 @@ const main = async () => {
               testLayerOverride: false,
             },
           ),
+          commentMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-comment',
+            {
+              breakpoint: 'mobile',
+              expectedX: 22,
+              expectedWidth: 330,
+              testLayerOverride: false,
+            },
+          ),
+          commentTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-comment',
+            {
+              breakpoint: 'tablet',
+              expectedX: 88,
+              expectedWidth: 460,
+              testLayerOverride: false,
+            },
+          ),
+          repeaterMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-repeater',
+            {
+              breakpoint: 'mobile',
+              expectedX: 24,
+              expectedWidth: 340,
+              testLayerOverride: false,
+            },
+          ),
+          repeaterTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-repeater',
+            {
+              breakpoint: 'tablet',
+              expectedX: 100,
+              expectedWidth: 520,
+              testLayerOverride: false,
+            },
+          ),
+          embedMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-embed',
+            {
+              breakpoint: 'mobile',
+              expectedX: 30,
+              expectedWidth: 320,
+              testLayerOverride: false,
+            },
+          ),
+          embedTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-embed',
+            {
+              breakpoint: 'tablet',
+              expectedX: 120,
+              expectedWidth: 420,
+              testLayerOverride: false,
+            },
+          ),
+          interactiveMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-interactive',
+            {
+              breakpoint: 'mobile',
+              expectedX: 28,
+              expectedWidth: 330,
+              testLayerOverride: false,
+            },
+          ),
+          interactiveTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-interactive',
+            {
+              breakpoint: 'tablet',
+              expectedX: 110,
+              expectedWidth: 480,
+              testLayerOverride: false,
+            },
+          ),
+          checkboxMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-checkbox',
+            {
+              breakpoint: 'mobile',
+              expectedX: 30,
+              expectedWidth: 320,
+              testLayerOverride: false,
+            },
+          ),
+          checkboxTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-checkbox',
+            {
+              breakpoint: 'tablet',
+              expectedX: 96,
+              expectedWidth: 360,
+              testLayerOverride: false,
+            },
+          ),
+          selectMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-select',
+            {
+              breakpoint: 'mobile',
+              expectedX: 34,
+              expectedWidth: 300,
+              testLayerOverride: false,
+            },
+          ),
+          selectTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-select',
+            {
+              breakpoint: 'tablet',
+              expectedX: 112,
+              expectedWidth: 360,
+              testLayerOverride: false,
+            },
+          ),
+          radioMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-radio',
+            {
+              breakpoint: 'mobile',
+              expectedX: 32,
+              expectedWidth: 320,
+              testLayerOverride: false,
+            },
+          ),
+          radioTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-radio',
+            {
+              breakpoint: 'tablet',
+              expectedX: 102,
+              expectedWidth: 360,
+              testLayerOverride: false,
+            },
+          ),
         };
       } finally {
         if (reloadClient) {
@@ -14484,7 +14736,35 @@ const main = async () => {
           reloadedResponsiveEditing.formMobile.breakpointAfter.x === responsiveEditing.formMobile.breakpointAfter.x &&
           reloadedResponsiveEditing.formMobile.breakpointAfter.width === responsiveEditing.formMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.formTablet.breakpointAfter.x === responsiveEditing.formTablet.breakpointAfter.x &&
-          reloadedResponsiveEditing.formTablet.breakpointAfter.width === responsiveEditing.formTablet.breakpointAfter.width,
+          reloadedResponsiveEditing.formTablet.breakpointAfter.width === responsiveEditing.formTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.commentMobile.breakpointAfter.x === responsiveEditing.commentMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.commentMobile.breakpointAfter.width === responsiveEditing.commentMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.commentTablet.breakpointAfter.x === responsiveEditing.commentTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.commentTablet.breakpointAfter.width === responsiveEditing.commentTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.repeaterMobile.breakpointAfter.x === responsiveEditing.repeaterMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.repeaterMobile.breakpointAfter.width === responsiveEditing.repeaterMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.repeaterTablet.breakpointAfter.x === responsiveEditing.repeaterTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.repeaterTablet.breakpointAfter.width === responsiveEditing.repeaterTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.embedMobile.breakpointAfter.x === responsiveEditing.embedMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.embedMobile.breakpointAfter.width === responsiveEditing.embedMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.embedTablet.breakpointAfter.x === responsiveEditing.embedTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.embedTablet.breakpointAfter.width === responsiveEditing.embedTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.interactiveMobile.breakpointAfter.x === responsiveEditing.interactiveMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.interactiveMobile.breakpointAfter.width === responsiveEditing.interactiveMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.interactiveTablet.breakpointAfter.x === responsiveEditing.interactiveTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.interactiveTablet.breakpointAfter.width === responsiveEditing.interactiveTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.checkboxMobile.breakpointAfter.x === responsiveEditing.checkboxMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.checkboxMobile.breakpointAfter.width === responsiveEditing.checkboxMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.checkboxTablet.breakpointAfter.x === responsiveEditing.checkboxTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.checkboxTablet.breakpointAfter.width === responsiveEditing.checkboxTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.selectMobile.breakpointAfter.x === responsiveEditing.selectMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.selectMobile.breakpointAfter.width === responsiveEditing.selectMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.selectTablet.breakpointAfter.x === responsiveEditing.selectTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.selectTablet.breakpointAfter.width === responsiveEditing.selectTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.radioMobile.breakpointAfter.x === responsiveEditing.radioMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.radioMobile.breakpointAfter.width === responsiveEditing.radioMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.radioTablet.breakpointAfter.x === responsiveEditing.radioTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.radioTablet.breakpointAfter.width === responsiveEditing.radioTablet.breakpointAfter.width,
         `Responsive smoke reload did not hydrate saved overrides: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
       );
 
@@ -14551,6 +14831,118 @@ const main = async () => {
           elementId: 'smoke-form',
           expectedX: 92,
           expectedWidth: 440,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'commentMobile',
+          label: 'Public mobile comment responsive geometry',
+          elementId: 'smoke-comment',
+          expectedX: 22,
+          expectedWidth: 330,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'commentTablet',
+          label: 'Public tablet comment responsive geometry',
+          elementId: 'smoke-comment',
+          expectedX: 88,
+          expectedWidth: 460,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'repeaterMobile',
+          label: 'Public mobile repeater responsive geometry',
+          elementId: 'smoke-repeater',
+          expectedX: 24,
+          expectedWidth: 340,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'repeaterTablet',
+          label: 'Public tablet repeater responsive geometry',
+          elementId: 'smoke-repeater',
+          expectedX: 100,
+          expectedWidth: 520,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'embedMobile',
+          label: 'Public mobile embed responsive geometry',
+          elementId: 'smoke-embed',
+          expectedX: 30,
+          expectedWidth: 320,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'embedTablet',
+          label: 'Public tablet embed responsive geometry',
+          elementId: 'smoke-embed',
+          expectedX: 120,
+          expectedWidth: 420,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'interactiveMobile',
+          label: 'Public mobile interactive responsive geometry',
+          elementId: 'smoke-interactive',
+          expectedX: 28,
+          expectedWidth: 330,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'interactiveTablet',
+          label: 'Public tablet interactive responsive geometry',
+          elementId: 'smoke-interactive',
+          expectedX: 110,
+          expectedWidth: 480,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'checkboxMobile',
+          label: 'Public mobile checkbox responsive geometry',
+          elementId: 'smoke-checkbox',
+          expectedX: 30,
+          expectedWidth: 320,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'checkboxTablet',
+          label: 'Public tablet checkbox responsive geometry',
+          elementId: 'smoke-checkbox',
+          expectedX: 96,
+          expectedWidth: 360,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'selectMobile',
+          label: 'Public mobile select responsive geometry',
+          elementId: 'smoke-select',
+          expectedX: 34,
+          expectedWidth: 300,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'selectTablet',
+          label: 'Public tablet select responsive geometry',
+          elementId: 'smoke-select',
+          expectedX: 112,
+          expectedWidth: 360,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'radioMobile',
+          label: 'Public mobile radio responsive geometry',
+          elementId: 'smoke-radio',
+          expectedX: 32,
+          expectedWidth: 320,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'radioTablet',
+          label: 'Public tablet radio responsive geometry',
+          elementId: 'smoke-radio',
+          expectedX: 102,
+          expectedWidth: 360,
           viewport: { width: 820, height: 1024 },
         },
       ]);

@@ -21,7 +21,7 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 - status: ready baseline with deeper parity hardening
 - done: drag/resize, selection, multi-select, grouping/ungrouping with Cmd/Ctrl+G, nested-group safeguards, undo/redo, copy/cut/paste/duplicate/delete, layer ordering, responsive overrides, long-session stress smoke, save/reload, revision-aware conflict guardrails, rich-text selected range marks, list indentation/reordering, table row/column operations, spans, captions, and selected multi-cell table styling
-- remaining: expand the last rich-text table/list edge-case coverage and broader responsive pixel-level QA across remaining component combinations such as comments, repeaters, embeds, interactive components, and choice inputs
+- remaining: expand the last rich-text table/list edge-case coverage and broader responsive pixel-level QA across remaining utility/media combinations such as maps, code components, video/icon blocks, and deeply nested component states
 
 ### Phase C — Forms and comments production module
 
