@@ -14260,6 +14260,30 @@ const main = async () => {
           expectedX: 96,
           expectedWidth: 280,
         }),
+        videoMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-video', {
+          breakpoint: 'mobile',
+          expectedX: 38,
+          expectedWidth: 300,
+          testLayerOverride: false,
+        }),
+        videoTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-video', {
+          breakpoint: 'tablet',
+          expectedX: 104,
+          expectedWidth: 420,
+          testLayerOverride: false,
+        }),
+        iconMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-icon', {
+          breakpoint: 'mobile',
+          expectedX: 44,
+          expectedWidth: 84,
+          testLayerOverride: false,
+        }),
+        iconTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-icon', {
+          breakpoint: 'tablet',
+          expectedX: 128,
+          expectedWidth: 96,
+          testLayerOverride: false,
+        }),
         boxMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-box', {
           breakpoint: 'mobile',
           expectedX: 42,
@@ -14344,6 +14368,18 @@ const main = async () => {
           expectedWidth: 420,
           testLayerOverride: false,
         }),
+        mapMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-map', {
+          breakpoint: 'mobile',
+          expectedX: 36,
+          expectedWidth: 320,
+          testLayerOverride: false,
+        }),
+        mapTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-map', {
+          breakpoint: 'tablet',
+          expectedX: 124,
+          expectedWidth: 440,
+          testLayerOverride: false,
+        }),
         interactiveMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-interactive', {
           breakpoint: 'mobile',
           expectedX: 28,
@@ -14354,6 +14390,30 @@ const main = async () => {
           breakpoint: 'tablet',
           expectedX: 110,
           expectedWidth: 480,
+          testLayerOverride: false,
+        }),
+        codeComponentMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-code-component', {
+          breakpoint: 'mobile',
+          expectedX: 26,
+          expectedWidth: 330,
+          testLayerOverride: false,
+        }),
+        codeComponentTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-code-component', {
+          breakpoint: 'tablet',
+          expectedX: 118,
+          expectedWidth: 480,
+          testLayerOverride: false,
+        }),
+        childButtonMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-child-button', {
+          breakpoint: 'mobile',
+          expectedX: 34,
+          expectedWidth: 180,
+          testLayerOverride: false,
+        }),
+        childButtonTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-child-button', {
+          breakpoint: 'tablet',
+          expectedX: 76,
+          expectedWidth: 220,
           testLayerOverride: false,
         }),
         checkboxMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-checkbox', {
@@ -14401,6 +14461,8 @@ const main = async () => {
         await waitForEditorElements(reloadClient, [
           'smoke-heading',
           'smoke-image',
+          'smoke-video',
+          'smoke-icon',
           'smoke-box',
           'smoke-columns',
           'smoke-nav',
@@ -14408,7 +14470,10 @@ const main = async () => {
           'smoke-comment',
           'smoke-repeater',
           'smoke-embed',
+          'smoke-map',
           'smoke-interactive',
+          'smoke-code-component',
+          'smoke-child-button',
           'smoke-select',
           'smoke-checkbox',
           'smoke-radio',
@@ -14456,6 +14521,50 @@ const main = async () => {
               expectedX: 96,
               expectedWidth: 280,
               expectExistingLayerOverride: true,
+            },
+          ),
+          videoMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-video',
+            {
+              breakpoint: 'mobile',
+              expectedX: 38,
+              expectedWidth: 300,
+              testLayerOverride: false,
+            },
+          ),
+          videoTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-video',
+            {
+              breakpoint: 'tablet',
+              expectedX: 104,
+              expectedWidth: 420,
+              testLayerOverride: false,
+            },
+          ),
+          iconMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-icon',
+            {
+              breakpoint: 'mobile',
+              expectedX: 44,
+              expectedWidth: 84,
+              testLayerOverride: false,
+            },
+          ),
+          iconTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-icon',
+            {
+              breakpoint: 'tablet',
+              expectedX: 128,
+              expectedWidth: 96,
+              testLayerOverride: false,
             },
           ),
           boxMobile: await assertResponsiveBreakpointEditing(
@@ -14612,6 +14721,28 @@ const main = async () => {
               testLayerOverride: false,
             },
           ),
+          mapMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-map',
+            {
+              breakpoint: 'mobile',
+              expectedX: 36,
+              expectedWidth: 320,
+              testLayerOverride: false,
+            },
+          ),
+          mapTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-map',
+            {
+              breakpoint: 'tablet',
+              expectedX: 124,
+              expectedWidth: 440,
+              testLayerOverride: false,
+            },
+          ),
           interactiveMobile: await assertResponsiveBreakpointEditing(
             reloadClient,
             tempPageId,
@@ -14631,6 +14762,50 @@ const main = async () => {
               breakpoint: 'tablet',
               expectedX: 110,
               expectedWidth: 480,
+              testLayerOverride: false,
+            },
+          ),
+          codeComponentMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-code-component',
+            {
+              breakpoint: 'mobile',
+              expectedX: 26,
+              expectedWidth: 330,
+              testLayerOverride: false,
+            },
+          ),
+          codeComponentTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-code-component',
+            {
+              breakpoint: 'tablet',
+              expectedX: 118,
+              expectedWidth: 480,
+              testLayerOverride: false,
+            },
+          ),
+          childButtonMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-child-button',
+            {
+              breakpoint: 'mobile',
+              expectedX: 34,
+              expectedWidth: 180,
+              testLayerOverride: false,
+            },
+          ),
+          childButtonTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-child-button',
+            {
+              breakpoint: 'tablet',
+              expectedX: 76,
+              expectedWidth: 220,
               testLayerOverride: false,
             },
           ),
@@ -14721,6 +14896,14 @@ const main = async () => {
           reloadedResponsiveEditing.imageMobile.breakpointAfter.width === responsiveEditing.imageMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.imageTablet.breakpointAfter.x === responsiveEditing.imageTablet.breakpointAfter.x &&
           reloadedResponsiveEditing.imageTablet.breakpointAfter.width === responsiveEditing.imageTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.videoMobile.breakpointAfter.x === responsiveEditing.videoMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.videoMobile.breakpointAfter.width === responsiveEditing.videoMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.videoTablet.breakpointAfter.x === responsiveEditing.videoTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.videoTablet.breakpointAfter.width === responsiveEditing.videoTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.iconMobile.breakpointAfter.x === responsiveEditing.iconMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.iconMobile.breakpointAfter.width === responsiveEditing.iconMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.iconTablet.breakpointAfter.x === responsiveEditing.iconTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.iconTablet.breakpointAfter.width === responsiveEditing.iconTablet.breakpointAfter.width &&
           reloadedResponsiveEditing.boxMobile.breakpointAfter.x === responsiveEditing.boxMobile.breakpointAfter.x &&
           reloadedResponsiveEditing.boxMobile.breakpointAfter.width === responsiveEditing.boxMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.boxTablet.breakpointAfter.x === responsiveEditing.boxTablet.breakpointAfter.x &&
@@ -14749,10 +14932,22 @@ const main = async () => {
           reloadedResponsiveEditing.embedMobile.breakpointAfter.width === responsiveEditing.embedMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.embedTablet.breakpointAfter.x === responsiveEditing.embedTablet.breakpointAfter.x &&
           reloadedResponsiveEditing.embedTablet.breakpointAfter.width === responsiveEditing.embedTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.mapMobile.breakpointAfter.x === responsiveEditing.mapMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.mapMobile.breakpointAfter.width === responsiveEditing.mapMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.mapTablet.breakpointAfter.x === responsiveEditing.mapTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.mapTablet.breakpointAfter.width === responsiveEditing.mapTablet.breakpointAfter.width &&
           reloadedResponsiveEditing.interactiveMobile.breakpointAfter.x === responsiveEditing.interactiveMobile.breakpointAfter.x &&
           reloadedResponsiveEditing.interactiveMobile.breakpointAfter.width === responsiveEditing.interactiveMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.interactiveTablet.breakpointAfter.x === responsiveEditing.interactiveTablet.breakpointAfter.x &&
           reloadedResponsiveEditing.interactiveTablet.breakpointAfter.width === responsiveEditing.interactiveTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.codeComponentMobile.breakpointAfter.x === responsiveEditing.codeComponentMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.codeComponentMobile.breakpointAfter.width === responsiveEditing.codeComponentMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.codeComponentTablet.breakpointAfter.x === responsiveEditing.codeComponentTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.codeComponentTablet.breakpointAfter.width === responsiveEditing.codeComponentTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.childButtonMobile.breakpointAfter.x === responsiveEditing.childButtonMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.childButtonMobile.breakpointAfter.width === responsiveEditing.childButtonMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.childButtonTablet.breakpointAfter.x === responsiveEditing.childButtonTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.childButtonTablet.breakpointAfter.width === responsiveEditing.childButtonTablet.breakpointAfter.width &&
           reloadedResponsiveEditing.checkboxMobile.breakpointAfter.x === responsiveEditing.checkboxMobile.breakpointAfter.x &&
           reloadedResponsiveEditing.checkboxMobile.breakpointAfter.width === responsiveEditing.checkboxMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.checkboxTablet.breakpointAfter.x === responsiveEditing.checkboxTablet.breakpointAfter.x &&
@@ -14769,6 +14964,38 @@ const main = async () => {
       );
 
       const publicResponsiveRendering = await assertPublicResponsiveRendering(client, tempPageId, [
+        {
+          key: 'videoMobile',
+          label: 'Public mobile video responsive geometry',
+          elementId: 'smoke-video',
+          expectedX: 38,
+          expectedWidth: 300,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'videoTablet',
+          label: 'Public tablet video responsive geometry',
+          elementId: 'smoke-video',
+          expectedX: 104,
+          expectedWidth: 420,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'iconMobile',
+          label: 'Public mobile icon responsive geometry',
+          elementId: 'smoke-icon',
+          expectedX: 44,
+          expectedWidth: 84,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'iconTablet',
+          label: 'Public tablet icon responsive geometry',
+          elementId: 'smoke-icon',
+          expectedX: 128,
+          expectedWidth: 96,
+          viewport: { width: 820, height: 1024 },
+        },
         {
           key: 'boxMobile',
           label: 'Public mobile box responsive geometry',
@@ -14882,6 +15109,22 @@ const main = async () => {
           viewport: { width: 820, height: 1024 },
         },
         {
+          key: 'mapMobile',
+          label: 'Public mobile map responsive geometry',
+          elementId: 'smoke-map',
+          expectedX: 36,
+          expectedWidth: 320,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'mapTablet',
+          label: 'Public tablet map responsive geometry',
+          elementId: 'smoke-map',
+          expectedX: 124,
+          expectedWidth: 440,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
           key: 'interactiveMobile',
           label: 'Public mobile interactive responsive geometry',
           elementId: 'smoke-interactive',
@@ -14895,6 +15138,38 @@ const main = async () => {
           elementId: 'smoke-interactive',
           expectedX: 110,
           expectedWidth: 480,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'codeComponentMobile',
+          label: 'Public mobile code component responsive geometry',
+          elementId: 'smoke-code-component',
+          expectedX: 26,
+          expectedWidth: 330,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'codeComponentTablet',
+          label: 'Public tablet code component responsive geometry',
+          elementId: 'smoke-code-component',
+          expectedX: 118,
+          expectedWidth: 480,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'childButtonMobile',
+          label: 'Public mobile nested button responsive geometry',
+          elementId: 'smoke-child-button',
+          expectedX: 34,
+          expectedWidth: 180,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'childButtonTablet',
+          label: 'Public tablet nested button responsive geometry',
+          elementId: 'smoke-child-button',
+          expectedX: 76,
+          expectedWidth: 220,
           viewport: { width: 820, height: 1024 },
         },
         {
