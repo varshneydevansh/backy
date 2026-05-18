@@ -138,10 +138,10 @@ Backy has the right direction but lacks the production maturity.
 
 ### Public app
 
-- Site/page resolution works against seeded and DB-backed site settings for slug, path, redirects, gone routes, dynamic lists/items, and unpublished guards; domain and locale routing are still incomplete.
+- Site/page resolution works against seeded and DB-backed site settings for slug, custom-domain discovery, path, redirects, gone routes, dynamic lists/items, and unpublished guards. The public manifest now advertises delivery domains, locale strategy, locale route variants, sitemap/robots URLs, and canonical bases; remaining delivery risk is hosted custom-domain/edge deployment certification rather than missing manifest metadata.
 - Public renderer exists; needs to consume the canonical content contract rather than local types.
 - Forms/comments are backend-backed with moderation, delivery, analytics, RBAC, repository coverage, and public/admin API contracts; remaining Forms risk is executing the configured Supabase/Postgres smoke against a migrated disposable database.
-- Public API has manifest/OpenAPI/SDK coverage and configurable navigation backed by a dedicated admin endpoint; it still needs CORS policy, domain/locale variants, stronger cache invalidation, and preview token auditing.
+- Public API has manifest/OpenAPI/SDK coverage, configurable navigation backed by a dedicated admin endpoint, configured-origin CORS handling, locale/domain delivery variants, and discovery cache headers with ETag/revision support; remaining work is stronger preview-token auditing, hosted-domain certification, and propagating the envelope/cache contract to any remaining legacy feeds.
 
 ### Shared packages
 
