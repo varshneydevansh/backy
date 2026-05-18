@@ -134,6 +134,25 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(!source.includes('const updatedOrders = await Promise.all(selectedOrders.map((order) => ('), 'Orders bulk workflow must not collapse all selected updates into one generic Promise.all failure');
   assert(source.includes('providerAnalytics: orderAnalytics?.providerOperations || null'), 'Orders handoff manifest must expose provider analytics for custom admin frontends');
   assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
+  assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
+  assert(
+    source.includes('providerCertification') &&
+      source.includes('ci:commerce-provider-smoke') &&
+      source.includes('ci:commerce-provider-certification'),
+    'Orders handoff manifest must expose mock and live provider certification gates',
+  );
+  for (const providerLabel of [
+    'Stripe webhooks',
+    'TaxJar',
+    'Avalara',
+    'EasyPost labels',
+    'Shippo tracking',
+    'Adyen refunds',
+    'Mollie refunds',
+    'Razorpay refunds',
+  ]) {
+    assert(source.includes(providerLabel), `Orders certification handoff must name ${providerLabel}`);
+  }
   for (const schemaVersion of [
     'backy.order-analytics.v1',
     'backy.order-quote.v1',
