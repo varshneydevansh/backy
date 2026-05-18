@@ -28,6 +28,7 @@ const generatedSdkSmoke = read('../../../packages/sdk-js/scripts/generated-contr
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const rootPackage = read('../../../package.json');
 const publicPackage = read('../package.json');
+const templateRegistrySmoke = read('template-registry-smoke.ts');
 const apiContracts = read('../../../specs/backy-api-contracts.md');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
 
@@ -65,6 +66,10 @@ assert(
     adminFrontendDesignRoute.includes('templates: `/api/admin/sites/${site.id}/templates`') &&
     adminFrontendDesignRoute.includes('templateRegistry:') &&
     adminFrontendDesignRoute.includes('cloneTargets: templateRegistry.cloneTargets') &&
+    publicPackage.includes('"test:template-registry": "tsx --tsconfig tsconfig.json scripts/template-registry-smoke.ts"') &&
+    templateRegistrySmoke.includes('buildTemplateRegistry("site-template-smoke", frontendDesign') &&
+    templateRegistrySmoke.includes('contract: "backy.template-registry.v1"') &&
+    templateRegistrySmoke.includes('registry.cloneTargets.product') &&
     apiContracts.includes('templateRegistry') &&
     apiContracts.includes('endpoints.templates'),
   'Admin frontend-design responses must advertise the normalized template registry endpoint and clone summary.',

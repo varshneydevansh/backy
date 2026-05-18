@@ -89,6 +89,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Query filters: `type=page|blogPost|form|product|collection|section`, `search`.
   - Returns `backy.template-registry.v1` with template groups by type, content summaries, binding hint counts, canvas metadata, and exact clone targets for `POST /pages`, `/blog`, `/forms`, `/reusable-sections`, `/collections`, and `/collections/products/records`.
   - Each entry includes a `clone` block with `method`, `endpoint`, and a starter body using `frontendDesignTemplateId`, so admin surfaces and custom frontends can create new pages, blog posts, forms, reusable sections, collections, and products from the same captured template registry without reverse-engineering the full frontend-design payload.
+  - `npm run test:template-registry --workspace @backy/public` behavior-tests grouping, filtering, summaries, and clone payloads for page, form, and product templates.
 
 - `GET /api/admin/sites/:siteId/interactive-components/:componentKey/:version/usage`
   - Admin-only usage inventory for registry-backed `interactiveFigure` and `codeComponent` versions before delete, rollback, review approval, or migration.

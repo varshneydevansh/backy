@@ -12,6 +12,7 @@
         "test:ai-contract-examples": "node scripts/validate-ai-contract-examples.mjs",
         "test:preview-contract": "node scripts/preview-contract-smoke.mjs",
         "test:frontend-contract": "node scripts/frontend-contract-smoke.mjs",
+        "test:template-registry": "tsx --tsconfig tsconfig.json scripts/template-registry-smoke.ts",
         "test:blog-api": "npm run test:preview-contract && npm run test:admin-contract && npm run test:public-security",
         "test:admin-auth": "node scripts/admin-auth-smoke.mjs",
         "test:admin-site-scope": "node scripts/admin-site-scope-smoke.mjs",
