@@ -130,6 +130,10 @@ const assert = (condition, message) => {
 
 const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   const source = fs.readFileSync(new URL('../src/routes/orders.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Orders route must use the shared EmptyState component');
+  assert(source.includes('title="No order notification events"'), 'Orders notification delivery empty state must keep the shared title visible');
+  assert(source.includes("title={orders.length === 0 ? 'No orders yet' : 'No orders match this view'}"), 'Orders list empty state must keep the shared dynamic title visible');
+  assert(source.includes('title="No line items yet"'), 'Orders line-item empty state must keep the shared title visible');
   assert(source.includes('failedResults'), 'Orders bulk workflow must collect failed per-order updates');
   assert(source.includes('updatedOrders.length === 0'), 'Orders bulk workflow must distinguish total failure from partial success');
   assert(source.includes('could not be updated'), 'Orders bulk workflow must report partial failures to admins');
@@ -1781,10 +1785,11 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
     const labels = Array.from(root.querySelectorAll('label'));
     const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
     const labelTextFor = (candidate) => normalized(candidate.querySelector('span')?.textContent || candidate.textContent);
-    const label = labels.find((candidate) => {
+    const matches = labels.filter((candidate) => {
       const text = labelTextFor(candidate);
       return exact ? text === labelText : text.includes(labelText);
     });
+    const label = ${JSON.stringify(Boolean(options.last))} ? matches.at(-1) : matches[0];
     if (!(label instanceof HTMLLabelElement)) {
       return {
         ok: false,
@@ -1809,8 +1814,10 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
         ? HTMLTextAreaElement.prototype
         : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    const previousValue = control.value;
     setter?.call(control, String(value));
-    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control._valueTracker?.setValue(previousValue);
+    control.dispatchEvent(new InputEvent('input', { bubbles: true, data: String(value), inputType: 'insertText' }));
     control.dispatchEvent(new Event('change', { bubbles: true }));
     return { ok: true, labelText, value: control.value, tag: control.tagName };
   })()`);
@@ -1838,6 +1845,59 @@ const setNthEditorSelect = async (client, index, value, label) => {
   })()`);
   assert(result.ok, `Unable to set ${label}: ${JSON.stringify(result)}`);
   await sleep(75);
+  return result;
+};
+
+const typeLabeledControl = async (client, labelText, value, options = {}) => {
+  const focusResult = await evaluate(client, `(() => {
+    const labelText = ${JSON.stringify(labelText)};
+    const exact = ${JSON.stringify(Boolean(options.exact))};
+    const rootSelector = ${JSON.stringify(options.rootSelector || '#orders-editor')};
+    const root = document.querySelector(rootSelector) || document;
+    const labels = Array.from(root.querySelectorAll('label'));
+    const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+    const labelTextFor = (candidate) => normalized(candidate.querySelector('span')?.textContent || candidate.textContent);
+    const matches = labels.filter((candidate) => {
+      const text = labelTextFor(candidate);
+      return exact ? text === labelText : text.includes(labelText);
+    });
+    const label = ${JSON.stringify(Boolean(options.last))} ? matches.at(-1) : matches[0];
+    const control = label?.querySelector('input, textarea');
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement)) {
+      return {
+        ok: false,
+        reason: 'control-not-found',
+        labelText,
+        labels: labels.map((candidate) => labelTextFor(candidate)).slice(0, 80),
+      };
+    }
+    if (control.disabled) {
+      return { ok: false, reason: 'control-disabled', labelText };
+    }
+    control.focus();
+    control.select();
+    return { ok: true, labelText, previous: control.value, tag: control.tagName };
+  })()`);
+  assert(focusResult.ok, `Unable to focus ${labelText}: ${JSON.stringify(focusResult)}`);
+
+  if (String(value).length > 0) {
+    await client.send('Input.insertText', { text: String(value) });
+  } else {
+    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+  }
+
+  const result = await evaluate(client, `(() => {
+    const active = document.activeElement;
+    active?.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      ok: active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement,
+      value: active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active.value : null,
+      tag: active?.tagName || null,
+    };
+  })()`);
+  assert(result.ok && result.value === String(value), `Unable to type ${labelText}: ${JSON.stringify(result)}`);
+  await sleep(125);
   return result;
 };
 
@@ -2388,13 +2448,99 @@ const selectOrderForBulk = async (client, orderNumber) => {
   return result;
 };
 
+const waitForOrderEditorSelection = async (client, orderNumber) => {
+  let previousSignature = '';
+  let stableCount = 0;
+  let state = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const editor = document.querySelector('#orders-editor');
+      const labels = Array.from(editor?.querySelectorAll('label') || []);
+      const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+      const controlFor = (labelText, last = false) => {
+        const matches = labels.filter((candidate) => normalized(candidate.querySelector('span')?.textContent || candidate.textContent) === labelText);
+        const label = last ? matches.at(-1) : matches[0];
+        const control = label?.querySelector('input, select, textarea');
+        return control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+          ? control.value
+          : null;
+      };
+      return {
+        orderNumber: controlFor('Order number'),
+        refundAmount: controlFor('Refund amount'),
+        refundReason: controlFor('Refund reason'),
+        notes: controlFor('Notes', true),
+        payment: controlFor('Payment'),
+      };
+    })()`);
+    const signature = JSON.stringify(state);
+    stableCount = signature === previousSignature ? stableCount + 1 : 0;
+    previousSignature = signature;
+    if (state.orderNumber === orderNumber && stableCount >= 4) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`Order editor did not settle on ${orderNumber}: ${JSON.stringify(state)}`);
+};
+
 const editOrderAfterWorkflow = async (client, orderNumber) => {
   await clickOrderCardButton(client, orderNumber, 'Edit');
-  await setLabeledControl(client, 'Refund amount', '5', { exact: true });
-  await setLabeledControl(client, 'Refund reason', 'Smoke refund adjustment', { exact: true });
-  await setLabeledControl(client, 'Notes', 'Order smoke edited private note after fulfillment.', { exact: true });
+  await waitForOrderEditorSelection(client, orderNumber);
   await setLabeledControl(client, 'Payment', 'refunded', { exact: true });
-  await clickByText(client, 'Save Order', { exact: true });
+  await typeLabeledControl(client, 'Refund amount', '5', { exact: true });
+  await typeLabeledControl(client, 'Refund reason', 'Smoke refund adjustment', { exact: true });
+  await typeLabeledControl(client, 'Notes', 'Order smoke edited private note after fulfillment.', { exact: true, last: true });
+  const editorState = await evaluate(client, `(() => {
+    const editor = document.querySelector('#orders-editor');
+    const labels = Array.from(editor?.querySelectorAll('label') || []);
+    const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+    const controlFor = (labelText, last = false) => {
+      const matches = labels.filter((candidate) => normalized(candidate.querySelector('span')?.textContent || candidate.textContent) === labelText);
+      const label = last ? matches.at(-1) : matches[0];
+      const control = label?.querySelector('input, select, textarea');
+      return control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+        ? control.value
+        : null;
+    };
+    return {
+      refundAmount: controlFor('Refund amount'),
+      refundReason: controlFor('Refund reason'),
+      notes: controlFor('Notes', true),
+      payment: controlFor('Payment'),
+    };
+  })()`);
+  assert(
+    editorState.refundAmount === '5' &&
+      editorState.refundReason === 'Smoke refund adjustment' &&
+      editorState.notes === 'Order smoke edited private note after fulfillment.' &&
+      editorState.payment === 'refunded',
+    `Order editor controls did not receive smoke edit values: ${JSON.stringify(editorState)}`,
+  );
+  const saveResult = await evaluate(client, `(() => {
+    const editor = document.querySelector('#orders-editor');
+    const form = editor?.querySelector('form');
+    const buttons = Array.from(editor?.querySelectorAll('button') || []);
+    const button = buttons.find((candidate) => (candidate.textContent || '').trim() === 'Save Order');
+    if (!(form instanceof HTMLFormElement)) {
+      return { ok: false, reason: 'form-missing' };
+    }
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'button-missing',
+        buttons: buttons.map((candidate) => (candidate.textContent || '').trim()).slice(0, 40),
+      };
+    }
+    if (button.disabled) {
+      return { ok: false, reason: 'button-disabled' };
+    }
+    form.requestSubmit(button);
+    return { ok: true };
+  })()`);
+  assert(saveResult.ok, `Unable to submit order editor: ${JSON.stringify(saveResult)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({
@@ -2402,7 +2548,7 @@ const editOrderAfterWorkflow = async (client, orderNumber) => {
       refundVisible: document.body?.innerText?.includes('Refund $5.00') || false,
       body: document.body?.innerText?.slice(0, 1000) || '',
     }))()`);
-    if (state.updated || state.refundVisible) {
+    if (state.refundVisible) {
       return state;
     }
     if (attempt === 79) {

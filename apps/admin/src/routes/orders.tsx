@@ -3720,8 +3720,12 @@ function OrdersRoute() {
                       {orderDeliveryError}
                     </div>
                   ) : orderDeliveryEvents.length === 0 ? (
-                    <div className="mt-3 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
-                      No commerce order notification events recorded yet.
+                    <div className="mt-3">
+                      <EmptyState
+                        icon={FileText}
+                        title="No order notification events"
+                        description="Checkout emails and workflow webhook handoffs will appear after orders trigger delivery events."
+                      />
                     </div>
                   ) : (
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -3911,20 +3915,19 @@ function OrdersRoute() {
               </div>
 
               {filteredOrders.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
-                  <div className="text-sm font-medium text-foreground">
-                    {orders.length === 0 ? 'No orders yet' : 'No orders match this view'}
-                  </div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {orders.length === 0
+                <div>
+                  <EmptyState
+                    icon={Receipt}
+                    title={orders.length === 0 ? 'No orders yet' : 'No orders match this view'}
+                    description={orders.length === 0
                       ? 'Create or import the first order to begin payment and fulfillment tracking.'
                       : 'Change the search, workflow, payment, fulfillment, or source filters to broaden the queue.'}
-                  </div>
-                  {orders.length > 0 && hasActiveOrderFilters && (
-                    <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersAccessBusy || !canViewOrders} className="mt-4">
-                      Clear filters
-                    </Button>
-                  )}
+                    action={orders.length > 0 && hasActiveOrderFilters ? (
+                      <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersAccessBusy || !canViewOrders}>
+                        Clear filters
+                      </Button>
+                    ) : undefined}
+                  />
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -4657,9 +4660,11 @@ function OrdersRoute() {
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-dashed border-border bg-background px-3 py-4 text-center text-sm text-muted-foreground">
-                      Add line items for manual orders, or they will appear here when checkout posts structured cart data.
-                    </div>
+                    <EmptyState
+                      icon={ShoppingCart}
+                      title="No line items yet"
+                      description="Add line items for manual orders, or they will appear here when checkout posts structured cart data."
+                    />
                   )}
 
                   <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_80px_100px_auto]">
