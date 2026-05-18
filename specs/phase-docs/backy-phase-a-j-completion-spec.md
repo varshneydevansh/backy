@@ -9,7 +9,7 @@
 - Deliver a headless Wix/Canva/WordPress-class CMS platform where `backy-admin` is the authoring control plane and **any UI/UX can be used** as frontend consumer by relying only on stable `backy-public` contracts.
 - Note: this is alphabetic slicing; for numeric roadmap conversion see `backy-alpha-vs-numeric-phase-progress-2026-02-27.md`.
 
-Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md` tracks **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. Remaining Partial work is external certification: configured Forms/SDK Supabase/Postgres service-data smokes, live Settings/Commerce provider execution, and live provider-managed webhook/billing certification. Local editor follow-up is now depth hardening around remaining rich-text table/list edge cases and broader responsive pixel QA, not basic drag/drop/grouping/persistence.
+Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md` tracks **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. Remaining Partial work is external certification: configured Forms/SDK Supabase/Postgres service-data smokes, live Settings/Commerce provider execution, and live provider-managed webhook/billing certification. Local editor follow-up is now depth hardening around remaining rich-text table/list edge cases and broader responsive pixel QA; long-session stress has focused smoke coverage through `npm run test:editor-stress --workspace @backy-cms/admin`.
 
 ### Phase A — Contracts, persistence boundary, auth
 
@@ -20,7 +20,7 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 ### Phase B — Editor action wiring
 
 - status: ready baseline with deeper parity hardening
-- done: drag/resize, selection, multi-select, grouping/ungrouping with Cmd/Ctrl+G, nested-group safeguards, undo/redo, copy/cut/paste/duplicate/delete, layer ordering, responsive overrides, save/reload, revision-aware conflict guardrails, rich-text selected range marks, list indentation/reordering, table row/column operations, spans, captions, and selected multi-cell table styling
+- done: drag/resize, selection, multi-select, grouping/ungrouping with Cmd/Ctrl+G, nested-group safeguards, undo/redo, copy/cut/paste/duplicate/delete, layer ordering, responsive overrides, long-session stress smoke, save/reload, revision-aware conflict guardrails, rich-text selected range marks, list indentation/reordering, table row/column operations, spans, captions, and selected multi-cell table styling
 - remaining: expand the last rich-text table/list edge-case coverage and broader responsive pixel-level QA across full page templates
 
 ### Phase C — Forms and comments production module

@@ -31,6 +31,9 @@ const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE =
 const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
 const RESIZE_SMOKE = process.env.BACKY_EDITOR_RESIZE_SMOKE === '1';
 const RENDER_PARITY_SMOKE = process.env.BACKY_EDITOR_RENDER_PARITY_SMOKE === '1';
+const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === '1';
+const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);
+const STRESS_ITERATIONS = Math.max(4, Math.min(Number.isFinite(parsedStressIterations) ? parsedStressIterations : 10, 40));
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -7086,6 +7089,120 @@ const expectPageSaveConflict = async (client, pageId) => {
   };
 };
 
+const readEditorRuntimeHealth = async (client, label = 'editor runtime health') => {
+  const health = await evaluate(client, `(() => {
+    const root = document.querySelector('[data-testid="canvas-editor"]') || document.querySelector('[data-testid="editor-canvas"]') || document.body;
+    const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
+    const memory = performance.memory && typeof performance.memory.usedJSHeapSize === 'number'
+      ? {
+          usedJSHeapSize: performance.memory.usedJSHeapSize,
+          totalJSHeapSize: performance.memory.totalJSHeapSize,
+          jsHeapSizeLimit: performance.memory.jsHeapSizeLimit,
+        }
+      : null;
+
+    return {
+      label: ${JSON.stringify(label)},
+      hasRoot: Boolean(root),
+      elementCount: root ? root.querySelectorAll('[data-element-id]').length : 0,
+      selectedCount: root ? root.querySelectorAll('[data-selected="true"], [aria-selected="true"]').length : 0,
+      pendingChanges: Number(saveStatus?.getAttribute('data-pending-changes') || 0),
+      saveState: saveStatus?.getAttribute('data-save-state') || '',
+      memory,
+    };
+  })()`);
+
+  assert(health.hasRoot, `${label}: editor root is missing: ${JSON.stringify(health)}`);
+  assert(health.elementCount >= 4, `${label}: editor element count unexpectedly low: ${JSON.stringify(health)}`);
+  assert(
+    !health.memory || health.memory.usedJSHeapSize < health.memory.jsHeapSizeLimit * 0.85,
+    `${label}: browser heap is too close to the limit: ${JSON.stringify(health.memory)}`,
+  );
+
+  return health;
+};
+
+const testLongSessionEditorStress = async (client, pageId, editorPath) => {
+  const elementIds = ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-columns'];
+  const initialState = await readEditorElementState(client, elementIds);
+  const healthSamples = [await readEditorRuntimeHealth(client, 'stress-start')];
+  const iterationSnapshots = [];
+
+  for (let iteration = 0; iteration < STRESS_ITERATIONS; iteration += 1) {
+    const elementId = elementIds[iteration % elementIds.length];
+    await selectElement(client, elementId);
+    await blurActiveElement(client);
+    await pressKey(client, iteration % 2 === 0 ? 'ArrowRight' : 'ArrowDown', { shiftKey: iteration % 3 === 0 });
+    const afterNudge = (await readEditorElementState(client, [elementId]))[elementId];
+    assert(afterNudge, `Stress iteration ${iteration} could not read ${elementId} after nudge`);
+
+    if (iteration % 3 === 1) {
+      await waitForEditorMutationReady(client, `before stress undo ${iteration}`);
+      await pressKey(client, 'z', { ctrlKey: true });
+      const afterUndo = (await readEditorElementState(client, [elementId]))[elementId];
+      await waitForEditorMutationReady(client, `before stress redo ${iteration}`);
+      await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+      const afterRedo = (await readEditorElementState(client, [elementId]))[elementId];
+      assertElementState({ [elementId]: afterRedo }, { [elementId]: afterNudge }, `stress redo ${iteration}`);
+      iterationSnapshots.push({ iteration, elementId, afterNudge, afterUndo, afterRedo });
+    } else {
+      iterationSnapshots.push({ iteration, elementId, afterNudge });
+    }
+
+    if (iteration === Math.floor(STRESS_ITERATIONS / 2)) {
+      const responsive = await assertResponsiveBreakpointEditing(client, pageId, 'smoke-box', {
+        breakpoint: 'mobile',
+        expectedX: 42,
+        expectedWidth: 260,
+        testLayerOverride: false,
+      });
+      await clickButtonByAriaLabel(client, 'Desktop canvas');
+      await waitForEditorBreakpoint(client, 'desktop');
+      iterationSnapshots.push({ iteration, responsive });
+    }
+
+    if (iteration % 2 === 0) {
+      healthSamples.push(await readEditorRuntimeHealth(client, `stress-iteration-${iteration}`));
+    }
+  }
+
+  const finalState = await readEditorElementState(client, elementIds);
+  await clickSave(client);
+  const savedStatus = await waitForEditorMutationReady(client, 'after long-session stress save');
+  const persistedState = await waitForPersistedCanvasState(pageId, finalState);
+
+  let reloadClient = null;
+  let reloadedState = null;
+  try {
+    reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
+    await waitForEditorElements(reloadClient, elementIds);
+    reloadedState = await readEditorElementState(reloadClient, elementIds);
+  } finally {
+    if (reloadClient) {
+      try {
+        await reloadClient.send('Page.close');
+      } catch {
+        // The target may already be closed by Chrome during cleanup.
+      }
+      reloadClient.close();
+    }
+  }
+
+  assertElementState(reloadedState, finalState, 'long-session stress reload');
+  healthSamples.push(await readEditorRuntimeHealth(client, 'stress-finish'));
+
+  return {
+    iterations: STRESS_ITERATIONS,
+    initialState,
+    finalState,
+    persistedState,
+    reloadedState,
+    savedStatus,
+    healthSamples,
+    iterationSnapshots,
+  };
+};
+
 const waitForEditorMutationReady = async (client, label = 'editor mutation readiness') => {
   let lastState = null;
 
@@ -13813,7 +13930,7 @@ const main = async () => {
   assertInteractiveRegistryVersionPinningSource();
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -14337,6 +14454,19 @@ const main = async () => {
         responsiveEditing,
         reloadedResponsiveEditing,
         publicResponsiveRendering,
+      }, null, 2));
+      return;
+    }
+
+    if (STRESS_SMOKE) {
+      assert(!EDITOR_PATH, 'Long-session stress smoke currently requires an internally created smoke page');
+      const stress = await testLongSessionEditorStress(client, tempPageId, editorPath);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'stress',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        stress,
       }, null, 2));
       return;
     }

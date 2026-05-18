@@ -45,7 +45,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 - Undo/redo, copy/cut/paste/duplicate/delete/grouping, multi-select, layer hierarchy preservation, save conflict handling, and reload/recover paths are covered by editor smoke and audit evidence.
 
 **Remaining parity**
-- Expand rich-text table/list edge-case coverage, responsive breakpoint pixel QA, and long-session editor stress coverage.
+- Continue expanding rich-text table/list edge-case coverage and responsive breakpoint pixel QA across full page templates. Long-session editor stress coverage now has a focused smoke path through `npm run test:editor-stress --workspace @backy-cms/admin`.
 - Keep publish/rollback provider-backed certification tied to the release certification workflow.
 
 ### Forms/comments module — **Partially complete**

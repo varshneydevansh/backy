@@ -500,6 +500,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
   - Mobile and tablet persistence plus thresholded editor/public visual geometry are covered for heading, image, and box/nested-container elements by responsive smoke; still needs broader pixel-level comparison across complete page templates/components.
 - Responsive smoke now also covers mobile/tablet columns layout overrides, reload hydration, and public preview CSS/visual geometry with clipped screenshots and hit-testing.
+- Long-session stress smoke now covers repeated keyboard edits across multiple elements, undo/redo recovery, a midpoint mobile responsive override edit, save/reload persistence, and runtime health sampling via `npm run test:editor-stress --workspace @backy-cms/admin`.
 - Public `PageRenderer` now uses the active breakpoint canvas size for tablet/mobile scaling so responsive overrides are positioned in the same coordinate system authored in the editor.
 - Editor smoke login now supports seeded admin MFA through `BACKY_EDITOR_SMOKE_MFA_CODE`, `BACKY_ADMIN_MFA_CODE`, or `BACKY_ADMIN_2FA_CODE` and seeds the httpOnly admin session cookie for browser-driven editor routes, matching the other admin smoke suites.
 - ✅ Media upload modal

@@ -138,6 +138,23 @@ const missingResponsiveSmokeSnippets = collectMissingSnippets(smokeSource, [
   "key: 'columnsTablet'",
   "label: 'Public tablet columns responsive geometry'",
 ]);
+const missingStressSmokeSnippets = collectMissingSnippets(smokeSource, [
+  'const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === \'1\';',
+  'const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);',
+  'const STRESS_ITERATIONS = Math.max(4, Math.min(Number.isFinite(parsedStressIterations) ? parsedStressIterations : 10, 40));',
+  'const readEditorRuntimeHealth = async (client, label = \'editor runtime health\') => {',
+  'const testLongSessionEditorStress = async (client, pageId, editorPath) => {',
+  'for (let iteration = 0; iteration < STRESS_ITERATIONS; iteration += 1) {',
+  'await assertResponsiveBreakpointEditing(client, pageId, \'smoke-box\'',
+  'assertElementState(reloadedState, finalState, \'long-session stress reload\');',
+  'mode: \'stress\'',
+]);
+const stressScript = packageJson.scripts?.['test:editor-stress'] ?? '';
+const stressWorkflow = packageJson.scripts?.['test:editor-workflows'] ?? '';
+const missingStressScriptGuards = [
+  stressScript.includes('BACKY_EDITOR_STRESS_SMOKE=1') ? '' : 'test:editor-stress must set BACKY_EDITOR_STRESS_SMOKE=1',
+  stressWorkflow.includes('test:editor-stress') ? '' : 'test:editor-workflows must include test:editor-stress',
+].filter(Boolean);
 const missingEditorMfaLoginSnippets = collectMissingSnippets(smokeSource, [
   'const login = (twoFactorCode) => fetch',
   'BACKY_EDITOR_SMOKE_MFA_CODE',
@@ -167,6 +184,8 @@ if (
   missingTableRangeSourceSnippets.length ||
   missingTableRangeSmokeSnippets.length ||
   missingResponsiveSmokeSnippets.length ||
+  missingStressSmokeSnippets.length ||
+  missingStressScriptGuards.length ||
   missingEditorMfaLoginSnippets.length ||
   missingTableStyleSetterGuards.length ||
   propertyPanelTypecheckGuards.length
@@ -179,6 +198,8 @@ if (
     missingTableRangeSourceSnippets,
     missingTableRangeSmokeSnippets,
     missingResponsiveSmokeSnippets,
+    missingStressSmokeSnippets,
+    missingStressScriptGuards,
     missingEditorMfaLoginSnippets,
     missingTableStyleSetterGuards,
     propertyPanelTypecheckGuards,
@@ -194,6 +215,8 @@ console.log(JSON.stringify({
   tableRangeSourceSnippets: 42,
   tableRangeSmokeSnippets: 10,
   responsiveSmokeSnippets: 14,
+  stressSmokeSnippets: 9,
+  stressScriptGuards: 2,
   editorMfaLoginSnippets: 9,
   propertyPanelTypecheckGuards: 2,
 }, null, 2));
