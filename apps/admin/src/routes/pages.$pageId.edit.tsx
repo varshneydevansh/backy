@@ -1668,8 +1668,14 @@ function PageEditorRoute() {
               )}
 
               {revisions.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                  No saved revisions yet.
+                <div className="flex items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground">
+                  <History className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                  <div>
+                    <div className="font-medium text-foreground">No saved revisions yet</div>
+                    <div className="mt-0.5">
+                      Save this canvas to create a rollback point before publishing or restoring designs.
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="grid gap-2">

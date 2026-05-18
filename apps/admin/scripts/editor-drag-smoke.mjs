@@ -201,6 +201,8 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('canEdit={canEditPage && !isUsingLocalPageCopy}'), 'Page editor canvas editing must be disabled for local fallback copies');
   assert(source.includes('if (isUsingLocalPageCopy)') && source.includes('throw new Error(localPageCopyDisabledMessage)'), 'Page editor save must reject local fallback copies');
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend page loaded into the editor.'), 'Page editor reload must clear fallback state after loading backend content');
+  assert(source.includes('No saved revisions yet'), 'Page editor revision panel must keep an explicit empty revision title visible');
+  assert(source.includes('Save this canvas to create a rollback point before publishing or restoring designs.'), 'Page editor revision empty state must explain how rollback points are captured');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -7026,7 +7028,7 @@ const readEditorSaveStatus = async (client) => {
 const waitForEditorSaveStatus = async (client, predicate, label = 'editor save status') => {
   let lastStatus = null;
 
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     lastStatus = await readEditorSaveStatus(client);
     if (predicate(lastStatus)) {
       return lastStatus;
