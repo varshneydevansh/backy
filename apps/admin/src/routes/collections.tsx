@@ -50,6 +50,7 @@ import {
 } from '@/lib/adminContentApi';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { PageShell } from '@/components/layout/PageShell';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
@@ -4855,28 +4856,32 @@ function CollectionsPage() {
           </div>
           <div className="divide-y divide-border">
             {collections.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                <Database className="mx-auto mb-3 h-8 w-8" />
-                <div className="font-medium text-foreground">No collections yet</div>
-                <p className="mx-auto mt-1 max-w-56">
-                  Start a draft schema, add fields, then save it to create your first collection.
-                </p>
-                <button
-                  type="button"
-                  onClick={beginNewCollection}
-                  disabled={schemaMutationDisabled}
-                  title={newCollectionButtonTitle}
-                  className="mx-auto mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                  data-testid="collections-empty-new-collection-button"
-                >
-                  <Plus className="h-4 w-4" />
-                  {newCollectionButtonLabel}
-                </button>
-                {newCollectionDisabledReason && (
-                  <p className="mt-2 text-xs font-medium text-amber-700">
-                    {newCollectionDisabledReason}
-                  </p>
-                )}
+              <div className="px-4 py-4">
+                <EmptyState
+                  icon={Database}
+                  title="No collections yet"
+                  description="Start a draft schema, add fields, and save it to create reusable CMS data for pages, APIs, and custom frontends."
+                  action={(
+                    <>
+                      <button
+                        type="button"
+                        onClick={beginNewCollection}
+                        disabled={schemaMutationDisabled}
+                        title={newCollectionButtonTitle}
+                        className="mx-auto mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-testid="collections-empty-new-collection-button"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {newCollectionButtonLabel}
+                      </button>
+                      {newCollectionDisabledReason && (
+                        <p className="mt-2 text-xs font-medium text-amber-700">
+                          {newCollectionDisabledReason}
+                        </p>
+                      )}
+                    </>
+                  )}
+                />
               </div>
             ) : collections.map((collection) => (
               <button

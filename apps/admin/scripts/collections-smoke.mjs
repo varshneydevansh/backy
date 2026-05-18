@@ -23,6 +23,13 @@ const assert = (condition, message) => {
   }
 };
 
+const assertCollectionsRouteSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/collections.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Collections route must use the shared EmptyState component for the primary no-collections state');
+  assert(source.includes('title="No collections yet"'), 'Collections empty state must keep the no-collections title visible');
+  assert(source.includes('reusable CMS data for pages, APIs, and custom frontends'), 'Collections empty state must explain what the first schema unlocks');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -92,7 +99,7 @@ const requestApiRaw = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -100,9 +107,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_COLLECTIONS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -671,6 +688,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -2295,6 +2324,7 @@ const main = async () => {
   const recordTitle = `Smoke record ${suffix}`;
 
   try {
+    assertCollectionsRouteSourceContract();
     await loginAdminApi();
     await assertCollectionBillingLimitEnforced(suffix);
     const emptyCollectionsSite = await createSite({
@@ -2376,6 +2406,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToEmptyCollections(client, emptyCollectionsSiteId);
