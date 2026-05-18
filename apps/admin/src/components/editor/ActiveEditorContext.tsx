@@ -397,50 +397,29 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  const getSelectedTableCellPaths = useCallback((editor: PlateEditor) => {
-    const context = getSelectedTableContext(editor);
-    const selection = (editor as any).selection;
-    if (!context || !selection || !Range.isRange(selection)) {
-      return [];
-    }
+  type TableCellGridEntry = {
+    path: number[];
+    rowStart: number;
+    rowEnd: number;
+    columnStart: number;
+    columnEnd: number;
+    colSpan: number;
+    rowSpan: number;
+  };
 
-    const readCellPathAtPoint = (point: { path: number[]; offset: number }) => {
-      const cellEntry = Editor.above(editor as any, {
-        at: point,
-        match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
-      });
-      return cellEntry ? (cellEntry[1] as number[]) : null;
-    };
-    const isSamePath = (left: number[], right: number[]) => (
-      left.length === right.length && left.every((part, index) => part === right[index])
-    );
+  const isSamePath = useCallback((left: number[], right: number[]) => (
+    left.length === right.length && left.every((part, index) => part === right[index])
+  ), []);
 
-    const anchorCellPath = readCellPathAtPoint(selection.anchor) || context.cellPath;
-    const focusCellPath = readCellPathAtPoint(selection.focus) || context.cellPath;
-    const anchorTablePath = anchorCellPath.slice(0, -2);
-    const focusTablePath = focusCellPath.slice(0, -2);
-    if (!isSamePath(anchorTablePath, focusTablePath) || !isSamePath(anchorTablePath, context.tablePath)) {
-      return [context.cellPath];
-    }
+  const boundedTableSpan = useCallback((value: unknown) => (
+    Number.isInteger(value) && Number(value) > 1 ? Math.min(Number(value), 100) : 1
+  ), []);
 
-    const minRowIndex = Math.min(anchorCellPath[anchorCellPath.length - 2] || 0, focusCellPath[focusCellPath.length - 2] || 0);
-    const maxRowIndex = Math.max(anchorCellPath[anchorCellPath.length - 2] || 0, focusCellPath[focusCellPath.length - 2] || 0);
-    const minCellIndex = Math.min(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
-    const maxCellIndex = Math.max(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
-    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
-    type TableCellGridEntry = {
-      path: number[];
-      rowStart: number;
-      rowEnd: number;
-      columnStart: number;
-      columnEnd: number;
-    };
+  const buildTableCellGrid = useCallback((tableNode: SlateElement, tablePath: number[]) => {
+    const rows = Array.isArray((tableNode as any).children) ? (tableNode as any).children : [];
     const grid: (number[] | undefined)[][] = [];
     const entries: TableCellGridEntry[] = [];
-    const boundedSpan = (value: unknown) => (
-      Number.isInteger(value) && Number(value) > 1 ? Math.min(Number(value), 100) : 1
-    );
-    const pathKey = (path: number[]) => path.join('.');
+    let maxColumnCount = 0;
 
     rows.forEach((row: unknown, rowIndex: number) => {
       const rowCells = Array.isArray((row as { children?: unknown[] } | undefined)?.children)
@@ -459,17 +438,20 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           visualColumnIndex += 1;
         }
 
-        const cellPath = [...context.tablePath, rowIndex, cellIndex];
-        const colSpan = boundedSpan((cell as { colSpan?: unknown }).colSpan);
-        const rowSpan = boundedSpan((cell as { rowSpan?: unknown }).rowSpan);
-        const entry = {
+        const colSpan = boundedTableSpan((cell as { colSpan?: unknown }).colSpan);
+        const rowSpan = boundedTableSpan((cell as { rowSpan?: unknown }).rowSpan);
+        const cellPath = [...tablePath, rowIndex, cellIndex];
+        const entry: TableCellGridEntry = {
           path: cellPath,
           rowStart: rowIndex,
           rowEnd: rowIndex + rowSpan - 1,
           columnStart: visualColumnIndex,
           columnEnd: visualColumnIndex + colSpan - 1,
+          colSpan,
+          rowSpan,
         };
         entries.push(entry);
+        maxColumnCount = Math.max(maxColumnCount, entry.columnEnd + 1);
 
         for (let occupiedRow = entry.rowStart; occupiedRow <= entry.rowEnd; occupiedRow += 1) {
           const occupiedGridRow = grid[occupiedRow] || [];
@@ -482,6 +464,44 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         visualColumnIndex = entry.columnEnd + 1;
       });
     });
+
+    return {
+      entries,
+      grid,
+      maxColumnCount,
+    };
+  }, [boundedTableSpan]);
+
+  const getSelectedTableCellPaths = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    const selection = (editor as any).selection;
+    if (!context || !selection || !Range.isRange(selection)) {
+      return [];
+    }
+
+    const readCellPathAtPoint = (point: { path: number[]; offset: number }) => {
+      const cellEntry = Editor.above(editor as any, {
+        at: point,
+        match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
+      });
+      return cellEntry ? (cellEntry[1] as number[]) : null;
+    };
+
+    const anchorCellPath = readCellPathAtPoint(selection.anchor) || context.cellPath;
+    const focusCellPath = readCellPathAtPoint(selection.focus) || context.cellPath;
+    const anchorTablePath = anchorCellPath.slice(0, -2);
+    const focusTablePath = focusCellPath.slice(0, -2);
+    if (!isSamePath(anchorTablePath, focusTablePath) || !isSamePath(anchorTablePath, context.tablePath)) {
+      return [context.cellPath];
+    }
+
+    const minRowIndex = Math.min(anchorCellPath[anchorCellPath.length - 2] || 0, focusCellPath[focusCellPath.length - 2] || 0);
+    const maxRowIndex = Math.max(anchorCellPath[anchorCellPath.length - 2] || 0, focusCellPath[focusCellPath.length - 2] || 0);
+    const minCellIndex = Math.min(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
+    const maxCellIndex = Math.max(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const pathKey = (path: number[]) => path.join('.');
+    const { entries } = buildTableCellGrid(context.tableNode, context.tablePath);
 
     const anchorEntry = entries.find((entry) => isSamePath(entry.path, anchorCellPath));
     const focusEntry = entries.find((entry) => isSamePath(entry.path, focusCellPath));
@@ -516,7 +536,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     return cellPaths.length > 0 ? cellPaths : [context.cellPath];
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext, isSamePath]);
 
   const insertTableRowBelow = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -528,9 +548,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       ...context.rowPath.slice(0, -1),
       context.rowPath[context.rowPath.length - 1] + 1,
     ];
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
     const rowNode = {
       type: 'tr',
-      children: Array.from({ length: context.columnCount }, () => createEmptyTableCellNode()),
+      children: Array.from({ length: Math.max(context.columnCount, tableGrid.maxColumnCount || 1) }, () => createEmptyTableCellNode()),
     } as any;
 
     Transforms.insertNodes(editor as any, rowNode, { at: nextRowPath, select: true });
@@ -540,7 +561,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after row insertion.
     }
     return true;
-  }, [createEmptyTableCellNode, getSelectedTableContext]);
+  }, [buildTableCellGrid, createEmptyTableCellNode, getSelectedTableContext]);
 
   const insertTableColumnRight = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -548,25 +569,64 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
 
-    const insertIndex = context.cellIndex + 1;
-    const rowCount = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children.length : 0;
-    for (let rowIndex = rowCount - 1; rowIndex >= 0; rowIndex -= 1) {
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const selectedEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    const insertVisualColumnIndex = selectedEntry ? selectedEntry.columnEnd + 1 : context.cellIndex + 1;
+    const expandedSpanOrigins = new Set<string>();
+    let selectedRowInsertIndex = context.cellIndex + 1;
+    let didInsertColumn = false;
+
+    for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
       const rowPath = [...context.tablePath, rowIndex];
       const rowNode = Node.get(editor as any, rowPath) as any;
       const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
-      const boundedInsertIndex = Math.max(0, Math.min(insertIndex, rowChildren.length));
+      const rowEntries = tableGrid.entries.filter((entry) => entry.rowStart === rowIndex);
+      const spanningEntry = tableGrid.entries.find((entry) => (
+        entry.rowStart <= rowIndex &&
+        entry.rowEnd >= rowIndex &&
+        entry.columnStart < insertVisualColumnIndex &&
+        entry.columnEnd >= insertVisualColumnIndex
+      ));
+
+      if (spanningEntry) {
+        const key = spanningEntry.path.join('.');
+        if (!expandedSpanOrigins.has(key)) {
+          expandedSpanOrigins.add(key);
+          const spanCell = Node.get(editor as any, spanningEntry.path) as any;
+          const currentColSpan = Number.isInteger(spanCell?.colSpan) && spanCell.colSpan > 1 ? spanCell.colSpan : 1;
+          Transforms.setNodes(editor as any, { colSpan: currentColSpan + 1 } as any, {
+            at: spanningEntry.path,
+          });
+          didInsertColumn = true;
+        }
+        continue;
+      }
+
+      const nextEntry = rowEntries.find((entry) => entry.columnStart >= insertVisualColumnIndex);
+      const boundedInsertIndex = Math.max(0, Math.min(
+        nextEntry ? nextEntry.path[nextEntry.path.length - 1] : rowChildren.length,
+        rowChildren.length,
+      ));
       Transforms.insertNodes(editor as any, createEmptyTableCellNode(), {
         at: [...rowPath, boundedInsertIndex],
       });
+      if (rowIndex === context.rowIndex) {
+        selectedRowInsertIndex = boundedInsertIndex;
+      }
+      didInsertColumn = true;
     }
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, insertIndex]));
+      const nextRowNode = Node.get(editor as any, context.rowPath) as any;
+      const nextRowChildren = Array.isArray(nextRowNode?.children) ? nextRowNode.children : [];
+      const nextCellIndex = Math.max(0, Math.min(selectedRowInsertIndex, nextRowChildren.length - 1));
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, nextCellIndex]));
     } catch {
       // Selection is best-effort after column insertion.
     }
-    return rowCount > 0;
-  }, [createEmptyTableCellNode, getSelectedTableContext]);
+    return didInsertColumn;
+  }, [buildTableCellGrid, createEmptyTableCellNode, getSelectedTableContext, isSamePath]);
 
   const duplicateSelectedTableRow = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -763,32 +823,67 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
-    const canRemoveColumn = rows.some((row: any) => Array.isArray(row?.children) && row.children.length > 1);
-    if (!canRemoveColumn || context.columnCount <= 1) {
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const selectedEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    const removeVisualColumnIndex = selectedEntry ? selectedEntry.columnStart : context.cellIndex;
+    const canRemoveColumn = tableGrid.maxColumnCount > 1 && rows.some((row: any) => Array.isArray(row?.children) && row.children.length > 0);
+    if (!canRemoveColumn) {
       return false;
     }
 
-    const removeIndex = context.cellIndex;
+    const handledOrigins = new Set<string>();
+    let didRemoveColumn = false;
     for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
-      const rowPath = [...context.tablePath, rowIndex];
-      const rowNode = Node.get(editor as any, rowPath) as any;
-      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
-      if (rowChildren.length <= 1) {
+      const coveringEntry = tableGrid.entries.find((entry) => (
+        entry.rowStart <= rowIndex &&
+        entry.rowEnd >= rowIndex &&
+        entry.columnStart <= removeVisualColumnIndex &&
+        entry.columnEnd >= removeVisualColumnIndex
+      ));
+      if (!coveringEntry) {
         continue;
       }
 
-      const boundedRemoveIndex = Math.max(0, Math.min(removeIndex, rowChildren.length - 1));
-      Transforms.removeNodes(editor as any, { at: [...rowPath, boundedRemoveIndex] });
+      const key = coveringEntry.path.join('.');
+      if (handledOrigins.has(key)) {
+        continue;
+      }
+      handledOrigins.add(key);
+
+      const cellNode = Node.get(editor as any, coveringEntry.path) as any;
+      const currentColSpan = Number.isInteger(cellNode?.colSpan) && cellNode.colSpan > 1 ? cellNode.colSpan : 1;
+      if (currentColSpan > 1) {
+        const nextColSpan = currentColSpan - 1;
+        if (nextColSpan > 1) {
+          Transforms.setNodes(editor as any, { colSpan: nextColSpan } as any, {
+            at: coveringEntry.path,
+          });
+        } else {
+          Transforms.unsetNodes(editor as any, 'colSpan' as any, {
+            at: coveringEntry.path,
+          } as any);
+        }
+      } else {
+        Transforms.removeNodes(editor as any, { at: coveringEntry.path });
+      }
+      didRemoveColumn = true;
     }
 
     try {
-      const nextColumnIndex = Math.max(0, Math.min(removeIndex, context.columnCount - 2));
-      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, nextColumnIndex]));
+      const nextTableNode = Node.get(editor as any, context.tablePath) as SlateElement;
+      const nextRows = Array.isArray((nextTableNode as any).children) ? (nextTableNode as any).children : [];
+      const nextRowIndex = Math.max(0, Math.min(context.rowIndex, nextRows.length - 1));
+      const nextRow = nextRows[nextRowIndex] as any;
+      const nextRowChildren = Array.isArray(nextRow?.children) ? nextRow.children : [];
+      const nextCellIndex = Math.max(0, Math.min(context.cellIndex, nextRowChildren.length - 1));
+      if (nextRowChildren.length > 0) {
+        Transforms.select(editor as any, Editor.start(editor as any, [...context.tablePath, nextRowIndex, nextCellIndex]));
+      }
     } catch {
       // Selection is best-effort after column removal.
     }
-    return true;
-  }, [getSelectedTableContext]);
+    return didRemoveColumn;
+  }, [buildTableCellGrid, getSelectedTableContext, isSamePath]);
 
   const moveSelectedTableRow = useCallback((editor: PlateEditor, direction: -1 | 1) => {
     const context = getSelectedTableContext(editor);

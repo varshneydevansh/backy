@@ -69,6 +69,8 @@ const countOccurrences = (source, snippet) => source.split(snippet).length - 1;
 
 const missingTableRangeSourceSnippets = collectMissingSnippets(activeEditorContextSource, [
   'const getSelectedTableCellPaths = useCallback',
+  'const buildTableCellGrid = useCallback',
+  'maxColumnCount',
   'const anchorCellPath = readCellPathAtPoint(selection.anchor) || context.cellPath;',
   'const focusCellPath = readCellPathAtPoint(selection.focus) || context.cellPath;',
   'if (!isSamePath(anchorTablePath, focusTablePath) || !isSamePath(anchorTablePath, context.tablePath)) {',
@@ -81,6 +83,11 @@ const missingTableRangeSourceSnippets = collectMissingSnippets(activeEditorConte
   'for (let cellIndex = minCellIndex; cellIndex <= maxCellIndex; cellIndex += 1) {',
   'cellPaths.push([...context.tablePath, rowIndex, cellIndex]);',
   'return cellPaths.length > 0 ? cellPaths : [context.cellPath];',
+  'const insertVisualColumnIndex = selectedEntry ? selectedEntry.columnEnd + 1 : context.cellIndex + 1;',
+  'const removeVisualColumnIndex = selectedEntry ? selectedEntry.columnStart : context.cellIndex;',
+  'const expandedSpanOrigins = new Set<string>();',
+  'const handledOrigins = new Set<string>();',
+  'Transforms.setNodes(editor as any, { colSpan:',
   '__backySelectActiveEditorTableCellRange',
 ]);
 const missingTableRangeSmokeSnippets = collectMissingSnippets(smokeSource, [
@@ -164,7 +171,7 @@ console.log(JSON.stringify({
   editorSmokeEnvCount: envNames.length,
   editorComponentSmokeCount: componentHandlerNames.length,
   editorWorkflowScriptCount: editorScripts.length - workflowExclusions.size,
-  tableRangeSourceSnippets: 14,
+  tableRangeSourceSnippets: 21,
   tableRangeSmokeSnippets: 10,
   responsiveSmokeSnippets: 14,
   editorMfaLoginSnippets: 9,
