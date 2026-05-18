@@ -109,6 +109,7 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
 ] as const;
 
 const providerCertificationContract = () => ({
+  schemaVersion: 'backy.settings-provider-certification-handoff.v1',
   status: 'external-live-provider-gate',
   settingsGate: 'npm run ci:settings-provider-certification',
   commerceGate: 'npm run ci:commerce-provider-certification',

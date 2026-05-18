@@ -346,6 +346,7 @@ includesAll(
 includesAll(
   settingsContract,
   [
+    'backy.settings-provider-certification-handoff.v1',
     'Admin settings executable provider operation contract',
     'settings.media_storage.provisioning_probe',
     'settings.media_storage.credential_rotation_probe',
@@ -354,6 +355,9 @@ includesAll(
     'executable provider-operation actions for storage provisioning',
     'providerCertificationRequiredInputs',
     'missing provider certification required input',
+    'BACKY_DATABASE_URL or DATABASE_URL',
+    'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER',
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
   ],
   'Settings admin contract provider operation coverage',
 );
@@ -362,7 +366,9 @@ includesAll(
   apiContracts,
   [
     'data.settings.providerCertification',
+    'backy.settings-provider-certification-handoff.v1',
     'external-live-provider-gate',
+    'BACKY_DATABASE_URL`/`DATABASE_URL',
     'BACKY_SUPABASE_SERVICE_ROLE_KEY`/`SUPABASE_SERVICE_ROLE_KEY',
     'BACKY_S3_SECRET_ACCESS_KEY`/`AWS_SECRET_ACCESS_KEY',
     'VERCEL_PROJECT_ID`/`BACKY_VERCEL_PROJECT_ID',

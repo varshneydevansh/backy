@@ -182,19 +182,39 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('runtimeCommerce: getCommerceRuntimeSummary(settings)'), 'Admin settings response must include commerce runtime diagnostics');
   assert(source.includes('runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary()'), 'Admin settings response must include interactive runtime diagnostics');
   assert(source.includes('providerCertification: providerCertificationContract()'), 'Admin settings response must include provider certification metadata');
+  assert(source.includes('backy.settings-provider-certification-handoff.v1'), 'Admin settings provider certification must expose a stable handoff schema');
   assert(source.includes('external-live-provider-gate'), 'Admin settings provider certification must expose external live-provider status');
   assert(source.includes('npm run ci:settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider gate');
   assert(source.includes('npm run ci:commerce-provider-certification'), 'Admin settings provider certification must expose the Commerce provider gate');
   for (const providerLabel of [
     'Supabase/Postgres',
+    'BACKY_DATABASE_URL or DATABASE_URL',
+    'BACKY_SUPABASE_URL or SUPABASE_URL',
+    'BACKY_SUPABASE_ANON_KEY or SUPABASE_ANON_KEY',
     'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+    'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER',
+    'BACKY_SUPABASE_STORAGE_BUCKET or BACKY_STORAGE_BUCKET',
+    'BACKY_S3_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID',
     'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
+    'BACKY_S3_REGION or AWS_REGION',
+    'BACKY_MEDIA_SCAN_PROVIDER',
     'Vercel env secret manager',
+    'VERCEL_TOKEN or BACKY_VERCEL_TOKEN',
     'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID',
+    'VERCEL_TEAM_ID or BACKY_VERCEL_TEAM_ID',
+    'VERCEL_API_BASE_URL or BACKY_VERCEL_API_BASE_URL',
     'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
     'BACKY_RESEND_API_KEY or RESEND_API_KEY',
+    'BACKY_SMTP_HOST or SMTP_HOST',
+    'BACKY_SMTP_USER or SMTP_USER',
+    'BACKY_SMTP_PASSWORD or SMTP_PASSWORD',
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+    'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+    'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+    'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
     'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
     'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+    'provider-specific catalog/payment credentials',
     'Magento',
   ]) {
     assert(source.includes(providerLabel), `Admin settings provider certification must name ${providerLabel}`);
@@ -228,6 +248,7 @@ function assertAdminSettingsContractSource() {
   assert(apiContracts.includes('settings.api_keys.issue'), 'API contracts must document service key issue audit events');
   assert(apiContracts.includes('settings.api_keys.revoke'), 'API contracts must document service key revoke audit events');
   assert(apiContracts.includes('data.settings.providerCertification'), 'API contracts must document admin Settings provider certification handoff');
+  assert(apiContracts.includes('backy.settings-provider-certification-handoff.v1'), 'API contracts must document Settings provider certification schema');
   assert(apiContracts.includes('BACKY_COMMERCE_WEBHOOK_SECRET`/`COMMERCE_WEBHOOK_SECRET'), 'API contracts must document provider certification alias families');
 }
 
@@ -7152,24 +7173,56 @@ try {
     assert(Array.isArray(json?.data?.settings?.runtimeVercel?.missing), `${url} missing runtime Vercel missing list`);
     assert(!JSON.stringify(json.data.settings.runtimeStorage).includes('SECRET'), `${url} exposed storage secret names or values`);
     assert(!JSON.stringify(json.data.settings.runtimeSupabase).includes('SERVICE_ROLE'), `${url} exposed Supabase secret env names or values`);
-    assert(json?.data?.settings?.providerCertification?.status === 'external-live-provider-gate', `${url} missing provider certification status`);
-    assert(json?.data?.settings?.providerCertification?.settingsGate === 'npm run ci:settings-provider-certification', `${url} missing Settings provider certification gate`);
-    assert(json?.data?.settings?.providerCertification?.commerceGate === 'npm run ci:commerce-provider-certification', `${url} missing Commerce provider certification gate`);
-    assert(Array.isArray(json?.data?.settings?.providerCertification?.groups), `${url} missing provider certification groups`);
+    const providerCertification = json?.data?.settings?.providerCertification;
+    assert(providerCertification?.schemaVersion === 'backy.settings-provider-certification-handoff.v1', `${url} missing provider certification schema version`);
+    assert(providerCertification?.status === 'external-live-provider-gate', `${url} missing provider certification status`);
+    assert(providerCertification?.settingsGate === 'npm run ci:settings-provider-certification', `${url} missing Settings provider certification gate`);
+    assert(providerCertification?.commerceGate === 'npm run ci:commerce-provider-certification', `${url} missing Commerce provider certification gate`);
+    assert(providerCertification?.localPreflight === 'npm run test:settings-provider-certification-preflight-contract', `${url} missing Settings provider local preflight`);
+    assert(providerCertification?.releasePreflight === 'npm run test:release-certification-preflight-contract', `${url} missing Settings provider release preflight`);
     assert(
-      json.data.settings.providerCertification.groups.some((group) => group.family === 'Database and Supabase') &&
-        json.data.settings.providerCertification.groups.some((group) => group.family === 'Commerce providers'),
+      typeof providerCertification?.secretHandling === 'string' &&
+        providerCertification.secretHandling.includes('Provider credentials stay in deployment or CI environment variables'),
+      `${url} missing provider certification secret-handling guidance`,
+    );
+    assert(Array.isArray(providerCertification?.groups), `${url} missing provider certification groups`);
+    assert(
+      providerCertification.groups.some((group) => group.family === 'Database and Supabase') &&
+        providerCertification.groups.some((group) => group.family === 'Storage and media delivery') &&
+        providerCertification.groups.some((group) => group.family === 'Vercel deployment and secrets') &&
+        providerCertification.groups.some((group) => group.family === 'Notifications') &&
+        providerCertification.groups.some((group) => group.family === 'Commerce providers'),
       `${url} missing provider certification family coverage`,
     );
-    const providerCertificationRequiredInputs = json.data.settings.providerCertification.groups
+    const providerCertificationRequiredInputs = providerCertification.groups
       .flatMap((group) => Array.isArray(group.requiredInputs) ? group.requiredInputs : []);
     for (const requiredInput of [
+      'BACKY_DATABASE_URL or DATABASE_URL',
+      'BACKY_SUPABASE_URL or SUPABASE_URL',
+      'BACKY_SUPABASE_ANON_KEY or SUPABASE_ANON_KEY',
       'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+      'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER',
+      'BACKY_SUPABASE_STORAGE_BUCKET or BACKY_STORAGE_BUCKET',
+      'BACKY_S3_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID',
       'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
+      'BACKY_S3_REGION or AWS_REGION',
+      'BACKY_MEDIA_SCAN_PROVIDER',
+      'VERCEL_TOKEN or BACKY_VERCEL_TOKEN',
       'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID',
+      'VERCEL_TEAM_ID or BACKY_VERCEL_TEAM_ID',
+      'VERCEL_API_BASE_URL or BACKY_VERCEL_API_BASE_URL',
       'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
       'BACKY_RESEND_API_KEY or RESEND_API_KEY',
+      'BACKY_SMTP_HOST or SMTP_HOST',
+      'BACKY_SMTP_USER or SMTP_USER',
+      'BACKY_SMTP_PASSWORD or SMTP_PASSWORD',
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+      'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+      'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+      'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
       'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+      'provider-specific catalog/payment credentials',
     ]) {
       assert(
         providerCertificationRequiredInputs.includes(requiredInput),
