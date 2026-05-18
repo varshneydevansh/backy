@@ -70,8 +70,15 @@ const assertSettingsSourceContracts = () => {
     'ci:settings-provider-certification',
     'ci:commerce-provider-certification',
     'data-testid="settings-provider-certification"',
+    'data-testid="settings-provider-certification-download-button"',
+    'data-testid="settings-provider-certification-copy-button"',
     'providerCertification',
+    'providerCertificationHandoff',
+    'runtimeEvidence',
+    'metadataEvidence',
     'backy.settings-provider-certification-handoff.v1',
+    'backy-settings-provider-certification-handoff.json',
+    'Provider certification handoff downloaded.',
     'npm run test:settings-provider-certification-preflight-contract',
     'external-live-provider-gate',
     'Required inputs',
@@ -1710,6 +1717,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationSettingsGate: runbookText.includes('certify_settings_providers') && runbookText.includes('ci:settings-provider-certification'),
     hasReleaseCertificationCommerceGate: runbookText.includes('certify_commerce_providers') && runbookText.includes('ci:commerce-provider-certification'),
     hasProviderCertificationMatrix: Boolean(document.querySelector('[data-testid="settings-provider-certification"]')),
+    hasProviderCertificationDownloadButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-download-button"]')),
+    hasProviderCertificationCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-copy-button"]')),
     hasProviderCertificationSettings: runbookText.includes('Provider certification matrix') && runbookText.includes('npm run ci:settings-provider-certification'),
     hasProviderCertificationCommerce: runbookText.includes('npm run ci:commerce-provider-certification') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
     hasProviderCertificationFamilies: runbookText.includes('Supabase/Postgres') && runbookText.includes('Vercel env secret manager') && runbookText.includes('Resend') && runbookText.includes('Magento'),
@@ -1774,6 +1783,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationSettingsGate &&
       infrastructureState.hasReleaseCertificationCommerceGate &&
       infrastructureState.hasProviderCertificationMatrix &&
+      infrastructureState.hasProviderCertificationDownloadButton &&
+      infrastructureState.hasProviderCertificationCopyButton &&
       infrastructureState.hasProviderCertificationSettings &&
       infrastructureState.hasProviderCertificationCommerce &&
       infrastructureState.hasProviderCertificationFamilies &&

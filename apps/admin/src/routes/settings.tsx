@@ -1615,6 +1615,55 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
   ]);
+  const providerCertificationHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 'backy.settings-provider-certification-handoff.v1',
+    status: 'external-live-provider-gate',
+    settingsGate: 'npm run ci:settings-provider-certification',
+    commerceGate: 'npm run ci:commerce-provider-certification',
+    localPreflight: 'npm run test:settings-provider-certification-preflight-contract',
+    releasePreflight: 'npm run test:release-certification-preflight-contract',
+    secretHandling: 'Provider credentials stay in deployment or CI environment variables; Settings handoff manifests only expose non-secret provider families, gate names, and readiness evidence.',
+    runtimeEvidence: {
+      database: runtimeDatabase || null,
+      storage: runtimeStorage || null,
+      supabase: runtimeSupabase || null,
+      vercel: runtimeVercel || null,
+      mediaScanner: runtimeMediaScanner || null,
+      notifications: runtimeNotifications || null,
+      commerce: runtimeCommerce || null,
+      interactiveComponents: runtimeInteractiveComponents || null,
+    },
+    metadataEvidence: {
+      storage: integrations.storage || null,
+      supabase: integrations.supabase || null,
+      vercel: integrations.vercel || null,
+      notifications: integrations.notifications || null,
+      commerce: integrations.commerce || null,
+    },
+    groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
+      family: group.family,
+      providers: [...group.providers],
+      gate: group.gate,
+      requiredInputs: [...group.requiredInputs],
+      evidence: group.evidence,
+    })),
+  }), [
+    integrations.commerce,
+    integrations.notifications,
+    integrations.storage,
+    integrations.supabase,
+    integrations.vercel,
+    runtimeCommerce,
+    runtimeDatabase,
+    runtimeInteractiveComponents,
+    runtimeMediaScanner,
+    runtimeNotifications,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+  ]);
+
   const settingsHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     delivery: {
@@ -1708,22 +1757,7 @@ function SettingsPage() {
           'HTTP commerce endpoint aliases including COMMERCE_TAX_PROVIDER_URL, COMMERCE_SHIPPING_PROVIDER_URL, COMMERCE_PRODUCT_SYNC_URL, and COMMERCE_SUBSCRIPTION_ACTION_URL',
         ],
       },
-      providerCertification: {
-        schemaVersion: 'backy.settings-provider-certification-handoff.v1',
-        status: 'external-live-provider-gate',
-        settingsGate: 'npm run ci:settings-provider-certification',
-        commerceGate: 'npm run ci:commerce-provider-certification',
-        localPreflight: 'npm run test:settings-provider-certification-preflight-contract',
-        releasePreflight: 'npm run test:release-certification-preflight-contract',
-        secretHandling: 'Provider credentials stay in deployment or CI environment variables; Settings handoff manifests only expose non-secret provider families, gate names, and readiness evidence.',
-        groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
-          family: group.family,
-          providers: [...group.providers],
-          gate: group.gate,
-          requiredInputs: [...group.requiredInputs],
-          evidence: group.evidence,
-        })),
-      },
+      providerCertification: providerCertificationHandoff,
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
     frontendApiCapabilities: FRONTEND_API_CAPABILITIES,
@@ -1787,6 +1821,7 @@ function SettingsPage() {
     infrastructureEnvContract,
     notificationSettings,
     platformReadiness,
+    providerCertificationHandoff,
     publicApiBase,
     publicApiKey,
     runtimeDatabase,
@@ -1803,6 +1838,7 @@ function SettingsPage() {
     siteSettingsScope,
   ]);
   const settingsHandoffText = useMemo(() => JSON.stringify(settingsHandoff, null, 2), [settingsHandoff]);
+  const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationHandoff, null, 2), [providerCertificationHandoff]);
 
   const copySettingsHandoffText = async (value: string, label: string) => {
     if (isSaving) return;
@@ -1836,6 +1872,25 @@ function SettingsPage() {
     anchor.remove();
     URL.revokeObjectURL(url);
     setNotice('Settings handoff manifest downloaded.');
+  };
+
+  const downloadProviderCertificationHandoff = () => {
+    if (isSaving) return;
+    if (!canConfigureSettings) {
+      setNotice(configurePermissionTitle || 'Your account cannot export settings handoff manifests.');
+      return;
+    }
+
+    const blob = new Blob([providerCertificationHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'backy-settings-provider-certification-handoff.json';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Provider certification handoff downloaded.');
   };
 
   const updateNotificationSettings = (next: Partial<NotificationSettingsConfig>) => {
@@ -2182,6 +2237,10 @@ function SettingsPage() {
             envContract={infrastructureEnvContract}
             disabled={infrastructureFormDisabled}
             mediaOnly={isMediaOnlyInfrastructureEditor}
+            providerCertificationControlsDisabled={isSaving || !canConfigureSettings}
+            providerCertificationControlsTitle={configurePermissionTitle}
+            onCopyProviderCertificationHandoff={() => void copySettingsHandoffText(providerCertificationHandoffText, 'Provider certification handoff')}
+            onDownloadProviderCertificationHandoff={downloadProviderCertificationHandoff}
             onChange={setIntegrations}
           />
         )}
@@ -5346,6 +5405,10 @@ function InfrastructureSettings({
   envContract,
   disabled = false,
   mediaOnly = false,
+  providerCertificationControlsDisabled = false,
+  providerCertificationControlsTitle,
+  onCopyProviderCertificationHandoff,
+  onDownloadProviderCertificationHandoff,
   onChange,
 }: {
   integrations: IntegrationSettings;
@@ -5361,6 +5424,10 @@ function InfrastructureSettings({
   envContract: InfrastructureEnvContract[];
   disabled?: boolean;
   mediaOnly?: boolean;
+  providerCertificationControlsDisabled?: boolean;
+  providerCertificationControlsTitle?: string;
+  onCopyProviderCertificationHandoff: () => void;
+  onDownloadProviderCertificationHandoff: () => void;
   onChange: Dispatch<SetStateAction<IntegrationSettings>>;
 }) {
   const storage: StorageSettings = integrations.storage || {};
@@ -5747,6 +5814,32 @@ function InfrastructureSettings({
           title="Release certification runbook"
           description="Use this gate before treating Backy as production-ready for a real Supabase/Postgres database and live providers."
           icon={<CheckCircle2 className="size-4" />}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={providerCertificationControlsDisabled}
+                title={providerCertificationControlsTitle}
+                onClick={onCopyProviderCertificationHandoff}
+                iconStart={<Copy className="size-4" />}
+                data-testid="settings-provider-certification-copy-button"
+              >
+                Copy provider handoff
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={providerCertificationControlsDisabled}
+                title={providerCertificationControlsTitle}
+                onClick={onDownloadProviderCertificationHandoff}
+                iconStart={<Download className="size-4" />}
+                data-testid="settings-provider-certification-download-button"
+              >
+                Download provider JSON
+              </Button>
+            </div>
+          }
         />
         <PanelContent>
           <div className="grid gap-4 lg:grid-cols-3">
