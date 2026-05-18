@@ -128,14 +128,65 @@ export function RichTextBlock({
         });
     }, [storeSelection]);
 
-    const handleBlur = useCallback(() => {
+    const lastPointerTargetRef = useRef<EventTarget | null>(null);
+
+    useEffect(() => {
+        if (!isEditable || typeof document === 'undefined') {
+            lastPointerTargetRef.current = null;
+            return;
+        }
+
+        const handlePointerStart = (event: Event) => {
+            lastPointerTargetRef.current = event.target;
+            window.setTimeout(() => {
+                if (lastPointerTargetRef.current === event.target) {
+                    lastPointerTargetRef.current = null;
+                }
+            }, 500);
+        };
+
+        document.addEventListener('mousedown', handlePointerStart, true);
+        document.addEventListener('pointerdown', handlePointerStart, true);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerStart, true);
+            document.removeEventListener('pointerdown', handlePointerStart, true);
+        };
+    }, [isEditable]);
+
+    const shouldKeepEditingForTarget = useCallback((target: EventTarget | null | undefined) => {
+        if (!(target instanceof Element)) {
+            return false;
+        }
+
+        if (editorHostRef.current?.contains(target)) {
+            return true;
+        }
+
+        return !!target.closest('[data-testid="editor-inspector"], .ignore-click-outside\\/toolbar');
+    }, []);
+
+    const handleBlur = useCallback((event?: React.FocusEvent) => {
         if (!isEditable) {
             return;
         }
 
         storeSelection();
-        onBlur?.();
-    }, [isEditable, onBlur, storeSelection]);
+        if (shouldKeepEditingForTarget(event?.relatedTarget) || shouldKeepEditingForTarget(lastPointerTargetRef.current)) {
+            return;
+        }
+
+        if (typeof window === 'undefined') {
+            onBlur?.();
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
+            if (shouldKeepEditingForTarget(document.activeElement)) {
+                return;
+            }
+            onBlur?.();
+        });
+    }, [isEditable, onBlur, shouldKeepEditingForTarget, storeSelection]);
 
     // Ensure content is valid Slate JSON
     const initialValue = useMemo(() => {

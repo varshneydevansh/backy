@@ -36,7 +36,7 @@ export type BackyEditorProps = {
     readOnly?: boolean;
     className?: string;
     placeholder?: string;
-    onBlur?: () => void;
+    onBlur?: (event?: React.FocusEvent) => void;
     /** Show inline toolbar (default: false for canvas use) */
     showToolbar?: boolean;
     /** Render portal toolbar to PropertyPanel (when editing) */

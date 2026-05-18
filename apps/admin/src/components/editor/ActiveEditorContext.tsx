@@ -184,6 +184,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
   const activeEditorRef = useRef<PlateEditor | null>(null);
   const activeEditorElementIdRef = useRef<string | null>(null);
   const storedSelection = useRef<BaseSelection | null>(null);
+  const storedSelectionElementId = useRef<string | null>(null);
   const contentSyncCallbacks = useRef(new Map<string, {
     editor: PlateEditor;
     sync: (editor: PlateEditor) => void;
@@ -229,6 +230,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
 
   const setStoredSelection = useCallback((selection: BaseSelection | null) => {
     storedSelection.current = cloneSelection(selection);
+    storedSelectionElementId.current = selection ? activeEditorElementIdRef.current : null;
     setSelectionRevision((value) => value + 1);
   }, [cloneSelection]);
 
@@ -1300,13 +1302,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
 
   const setActiveEditor = useCallback((editor: PlateEditor | null, elementId: string | null = null) => {
     const normalizedElementId = editor ? elementId || null : null;
-    const previousEditor = activeEditorRef.current;
-    const previousElementId = activeEditorElementIdRef.current;
     const incomingSelection = editor?.selection || null;
     const storedRange = storedSelection.current;
     const shouldPreserveStoredRange = !!editor
-      && previousEditor === editor
-      && previousElementId === normalizedElementId
+      && storedSelectionElementId.current === normalizedElementId
       && storedRange
       && Range.isRange(storedRange)
       && !Range.isCollapsed(storedRange)
@@ -1345,8 +1344,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     setActiveEditorElementId(null);
     activeEditorRef.current = null;
     setActiveEditorState(null);
-    setStoredSelection(null);
-  }, [setStoredSelection, activeEditor, debug]);
+  }, [activeEditor, debug]);
 
   // Store current selection
   const storeSelection = useCallback(() => {

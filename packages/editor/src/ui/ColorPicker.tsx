@@ -131,7 +131,10 @@ export const ColorPicker = ({
   const popover = open ? (
     <div
       ref={popoverRef}
-      className="fixed z-[10000] bg-popover rounded-lg shadow-lg border border-border p-2 animate-in fade-in zoom-in-95 duration-100"
+      className="ignore-click-outside/toolbar fixed z-[10000] bg-popover rounded-lg shadow-lg border border-border p-2 animate-in fade-in zoom-in-95 duration-100"
+      onMouseDown={(e) => {
+        e.stopPropagation();
+      }}
       style={{
         left: `${popoverLeft}px`,
         top: `${popoverTop}px`,
@@ -153,6 +156,12 @@ export const ColorPicker = ({
                 style={{ backgroundColor: color }}
                 onMouseDown={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
+                  handleColorSelect(color);
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   handleColorSelect(color);
                 }}
                 title={color}
@@ -191,6 +200,7 @@ export const ColorPicker = ({
         data-testid={testId ? `${testId}-clear` : undefined}
         onMouseDown={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           onChange('');
           setOpen(false);
         }}
@@ -206,6 +216,7 @@ export const ColorPicker = ({
         type="button"
         onMouseDown={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           setOpen(!open);
         }}
         className="p-1.5 rounded-md hover:bg-muted/80 transition-all flex items-center justify-center h-7 w-7 relative"

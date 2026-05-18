@@ -790,7 +790,7 @@ export function RichTextFormatting({
       return walk(normalizedElementContent, format);
     };
 
-    if (!isTargetEditorInEditableMode() || !hasTargetRangeSelection()) {
+    if (!canTargetEditorControlContent() || !hasTargetRangeSelection()) {
       return readContentMark();
     }
 
@@ -875,7 +875,7 @@ export function RichTextFormatting({
     }
   }, [
     getActiveEditor,
-    isTargetEditorActive,
+    canTargetEditorControlContent,
     MARK_ABSENT,
     MARK_MIXED,
     readTextMarkState,
@@ -1231,7 +1231,22 @@ export function RichTextFormatting({
         return true;
       }
 
-      if (shouldRemove) {
+      const shouldSplitStyleRange = format === 'backgroundColor' || format === 'color' || format === 'fontFamily' || format === 'fontSize';
+      if (shouldSplitStyleRange) {
+        if (shouldRemove) {
+          Transforms.unsetNodes(editor as any, [format], {
+            at: editor.selection,
+            match: Text.isText,
+            split: true,
+          });
+        } else {
+          Transforms.setNodes(editor as any, { [format]: value } as Record<string, unknown>, {
+            at: editor.selection,
+            match: Text.isText,
+            split: true,
+          });
+        }
+      } else if (shouldRemove) {
         Editor.removeMark(editor as any, format);
       } else {
         Editor.addMark(editor as any, format, value);
@@ -1444,6 +1459,52 @@ export function RichTextFormatting({
     syncActiveEditorContentAfterCommand();
   }, [getActiveEditor, syncActiveEditorContentAfterCommand]);
 
+  const applyListItemIndentToSnapshotNodes = useCallback((
+    nodes: unknown[],
+    snapshot: { text: string; indent: number } | null
+  ): unknown[] => {
+    if (!snapshot?.text || snapshot.indent <= 0) {
+      return nodes;
+    }
+
+    let didApply = false;
+    const patchNode = (node: unknown): unknown => {
+      if (!node || typeof node !== 'object') {
+        return node;
+      }
+
+      const record = node as Record<string, unknown>;
+      const children = Array.isArray(record.children)
+        ? record.children.map((child) => patchNode(child))
+        : null;
+      const nextNode: Record<string, unknown> = children ? { ...record, children } : { ...record };
+
+      if (!didApply && nextNode.type === 'li') {
+        const text = Array.isArray(nextNode.children)
+          ? nextNode.children.map((child) => {
+              if (!child || typeof child !== 'object') {
+                return '';
+              }
+              const childRecord = child as Record<string, unknown>;
+              if (typeof childRecord.text === 'string') {
+                return childRecord.text;
+              }
+              return '';
+            }).join('')
+          : '';
+
+        if (text.trim() === snapshot.text || text.includes(snapshot.text)) {
+          nextNode.indent = snapshot.indent;
+          didApply = true;
+        }
+      }
+
+      return nextNode;
+    };
+
+    return nodes.map((node) => patchNode(node));
+  }, []);
+
   const toggleElementListType = useCallback((format: 'ul' | 'ol') => {
     const selectedListItemIndentSnapshot = readSelectedListItemIndentSnapshot();
     const editorBeforeListTypeChange = getActiveEditor();
@@ -1463,16 +1524,23 @@ export function RichTextFormatting({
 
       const editor = getActiveEditor();
       if (!editor) {
-        onElementContentChange?.(selectedListTypeChange.nodes);
+        onElementContentChange?.(applyListItemIndentToSnapshotNodes(
+          selectedListTypeChange.nodes,
+          selectedListItemIndentSnapshot,
+        ));
         return;
       }
 
-      (editor as unknown as { children: unknown[] }).children = JSON.parse(JSON.stringify(selectedListTypeChange.nodes));
+      const nextNodes = applyListItemIndentToSnapshotNodes(
+        selectedListTypeChange.nodes,
+        selectedListItemIndentSnapshot,
+      );
+      (editor as unknown as { children: unknown[] }).children = JSON.parse(JSON.stringify(nextNodes));
       try {
         (editor as { onChange?: () => void }).onChange?.();
       } catch {
       }
-      onElementContentChange?.(selectedListTypeChange.nodes);
+      onElementContentChange?.(nextNodes);
       syncActiveEditorContentAfterCommand();
     };
 
@@ -1500,6 +1568,7 @@ export function RichTextFormatting({
     }
   }, [
     applyListTypeToElementContent,
+    applyListItemIndentToSnapshotNodes,
     getActiveEditor,
     isTargetEditorUsable,
     onElementContentChange,
@@ -1663,14 +1732,17 @@ export function RichTextFormatting({
 
   const runMark = useCallback((format: string, value?: any) => {
     if (canTargetEditorControlContent()) {
-      const didApply = runForTextSelectionOrCaretNoFallback(() => {
-        applyTextMarkToActiveEditor(format, value);
+      let didApplyToActiveEditor = false;
+      const didRunSelectionCommand = runForTextSelectionOrCaretNoFallback(() => {
+        didApplyToActiveEditor = applyTextMarkToActiveEditor(format, value);
       });
 
-      if (!didApply) {
+      if (!didRunSelectionCommand || !didApplyToActiveEditor) {
         logTextAction('runMark.active-editor-apply-failed', {
           format,
           actionName: activePropertyActionRef.current,
+          didRunSelectionCommand,
+          didApplyToActiveEditor,
         });
       }
       return;
@@ -1681,11 +1753,12 @@ export function RichTextFormatting({
       return;
     }
 
-    const didApply = runForTextSelectionOrCaretNoFallback(() => {
-      applyTextMarkToActiveEditor(format, value);
+    let didApplyToActiveEditor = false;
+    const didRunSelectionCommand = runForTextSelectionOrCaretNoFallback(() => {
+      didApplyToActiveEditor = applyTextMarkToActiveEditor(format, value);
     });
 
-    if (!didApply) {
+    if (!didRunSelectionCommand || !didApplyToActiveEditor) {
       applyTextMarkToElementContent(format, value);
     }
   }, [
@@ -1735,6 +1808,20 @@ export function RichTextFormatting({
     runForTextSelectionOrCaret,
     runForTextSelectionOrCaretNoFallback,
   ]);
+
+  const runSelectedTextCommand = useCallback((actionName: string, action: () => void) => {
+    const execute = () => {
+      restoreSelection({ requireTextSelection: false });
+      action();
+    };
+
+    if (canTargetEditorControlContent()) {
+      runContentProperty(actionName, execute, { requireActiveEditor: false });
+      return;
+    }
+
+    runContentProperty(actionName, execute);
+  }, [canTargetEditorControlContent, restoreSelection, runContentProperty]);
 
   const insertTextAtSelection = useCallback((text: string) => {
     if (!text) {
@@ -1902,15 +1989,23 @@ export function RichTextFormatting({
       value,
     });
     setSelectedFontValue(value);
-    runContentProperty('fontFamily', () => {
+    const applyFontFamily = () => {
+      restoreSelection({ requireTextSelection: false });
       runMark('fontFamily', value === 'inherit' ? '' : value);
-    });
-  }, [runMark, runContentProperty]);
+    };
+
+    if (canTargetEditorControlContent()) {
+      runContentProperty('fontFamily', applyFontFamily, { requireActiveEditor: false });
+      return;
+    }
+
+    runContentProperty('fontFamily', applyFontFamily);
+  }, [canTargetEditorControlContent, restoreSelection, runMark, runContentProperty]);
 
   const onFontSizeChange = useCallback((value: string) => {
     const normalizedValue = value.trim();
 
-    runContentProperty('fontSize', () => {
+    const applyFontSize = () => {
       if (!normalizedValue) {
         runMark('fontSize', '');
         setSelectedFontSizeValue('');
@@ -1921,10 +2016,18 @@ export function RichTextFormatting({
       if (Number.isFinite(size) && size > 0) {
         const clamped = Math.max(8, Math.min(120, Math.round(size)));
         setSelectedFontSizeValue(`${clamped}`);
+        restoreSelection({ requireTextSelection: false });
         runMark('fontSize', `${clamped}px`);
       }
-    });
-  }, [runMark, runContentProperty]);
+    };
+
+    if (canTargetEditorControlContent()) {
+      runContentProperty('fontSize', applyFontSize, { requireActiveEditor: false });
+      return;
+    }
+
+    runContentProperty('fontSize', applyFontSize);
+  }, [canTargetEditorControlContent, restoreSelection, runMark, runContentProperty]);
 
   const onFontSizeCommit = useCallback((value: string) => {
     const normalizedValue = value.trim();
@@ -2218,31 +2321,47 @@ export function RichTextFormatting({
 
   const updateTableCellFillAtSelection = useCallback((color: string) => {
     setSelectedTableCellFillValue(color);
+    if (canTargetEditorControlContent()) {
+      setTableCellBackgroundColor(color);
+      return;
+    }
     runOrActivateTextEditor('table-cell-fill', () => {
       setTableCellBackgroundColor(color);
     });
-  }, [runOrActivateTextEditor, setTableCellBackgroundColor]);
+  }, [canTargetEditorControlContent, runOrActivateTextEditor, setTableCellBackgroundColor]);
 
   const updateTableCellBorderAtSelection = useCallback((color: string) => {
     setSelectedTableCellBorderValue(color);
+    if (canTargetEditorControlContent()) {
+      setTableCellBorderColor(color);
+      return;
+    }
     runOrActivateTextEditor('table-cell-border', () => {
       setTableCellBorderColor(color);
     });
-  }, [runOrActivateTextEditor, setTableCellBorderColor]);
+  }, [canTargetEditorControlContent, runOrActivateTextEditor, setTableCellBorderColor]);
 
   const updateTableCellVerticalAlignAtSelection = useCallback((align: 'top' | 'middle' | 'bottom') => {
     setSelectedTableCellVerticalAlignValue(align);
+    if (canTargetEditorControlContent()) {
+      setTableCellVerticalAlign(align);
+      return;
+    }
     runOrActivateTextEditor('table-cell-vertical-align', () => {
       setTableCellVerticalAlign(align);
     });
-  }, [runOrActivateTextEditor, setTableCellVerticalAlign]);
+  }, [canTargetEditorControlContent, runOrActivateTextEditor, setTableCellVerticalAlign]);
 
   const updateTableCaptionAtSelection = useCallback((caption: string) => {
     setSelectedTableCaptionValue(caption);
+    if (canTargetEditorControlContent()) {
+      setTableCaption(caption);
+      return;
+    }
     runOrActivateTextEditor('table-caption', () => {
       setTableCaption(caption);
     });
-  }, [runOrActivateTextEditor, setTableCaption]);
+  }, [canTargetEditorControlContent, runOrActivateTextEditor, setTableCaption]);
 
   const removeTableAtSelection = useCallback(() => {
     runOrActivateTextEditor('table-remove', () => {
@@ -2400,9 +2519,9 @@ export function RichTextFormatting({
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              runContentProperty('bold', () => {
+              runSelectedTextCommand('bold', () => {
                 toggleTextMark('bold');
-              }, { requireActiveEditor: false });
+              });
             }}
           className={cn(
             "w-8 h-8 rounded border border-border grid place-items-center",
@@ -2419,9 +2538,9 @@ export function RichTextFormatting({
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              runContentProperty('italic', () => {
+              runSelectedTextCommand('italic', () => {
                 toggleTextMark('italic');
-              }, { requireActiveEditor: false });
+              });
             }}
           className={cn(
             "w-8 h-8 rounded border border-border grid place-items-center",
@@ -2438,9 +2557,9 @@ export function RichTextFormatting({
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              runContentProperty('underline', () => {
+              runSelectedTextCommand('underline', () => {
                 toggleTextMark('underline');
-              }, { requireActiveEditor: false });
+              });
             }}
           className={cn(
             "w-8 h-8 rounded border border-border grid place-items-center",
@@ -2457,9 +2576,9 @@ export function RichTextFormatting({
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              runContentProperty('strikethrough', () => {
+              runSelectedTextCommand('strikethrough', () => {
                 toggleTextMark('strikethrough');
-              }, { requireActiveEditor: false });
+              });
             }}
           className={cn(
             "w-8 h-8 rounded border border-border grid place-items-center",
@@ -2476,9 +2595,9 @@ export function RichTextFormatting({
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              runContentProperty('code', () => {
+              runSelectedTextCommand('code', () => {
                 toggleTextMark('code');
-              }, { requireActiveEditor: false });
+              });
             }}
           className={cn(
             "w-8 h-8 rounded border border-border grid place-items-center",
@@ -2552,6 +2671,7 @@ export function RichTextFormatting({
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            storeSelection();
             toggleElementListType('ul');
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
@@ -2565,6 +2685,7 @@ export function RichTextFormatting({
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            storeSelection();
             toggleElementListType('ol');
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
@@ -2653,9 +2774,16 @@ export function RichTextFormatting({
           <span className="text-muted-foreground whitespace-nowrap">Selected Font</span>
           <select
             onChange={(event) => onFontFamilyChange(event.target.value)}
+            onInput={(event) => onFontFamilyChange((event.target as HTMLSelectElement).value)}
             value={selectedFontValue}
             onMouseDown={(event) => {
               storeSelection();
+              const currentFontFamily = readActiveTextMark('fontFamily');
+              if (currentFontFamily === MARK_ABSENT) {
+                setSelectedFontValue('inherit');
+              } else if (typeof currentFontFamily === 'string' && fontFamilies.some((font) => font.value === currentFontFamily)) {
+                setSelectedFontValue(currentFontFamily);
+              }
               event.stopPropagation();
             }}
               className={cn("w-full min-w-0 px-2 py-1.5 text-sm rounded-md border bg-background", "hover:bg-accent")}
@@ -2734,9 +2862,10 @@ export function RichTextFormatting({
               triggerRef={textColorTriggerRef}
               onChange={(c) => {
                 setSelectedFontColorValue(c);
-                runContentProperty('textColor', () => {
+                const applyTextColor = () => {
                   runMark('color', c);
-                });
+                };
+                runSelectedTextCommand('textColor', applyTextColor);
               }}
             />
           </span>
@@ -2755,9 +2884,10 @@ export function RichTextFormatting({
               triggerRef={highlightColorTriggerRef}
               onChange={(c) => {
                 setSelectedHighlightColorValue(c);
-                runContentProperty('highlight', () => {
+                const applyHighlightColor = () => {
                   runMark('backgroundColor', c);
-                });
+                };
+                runSelectedTextCommand('highlight', applyHighlightColor);
               }}
               className="ml-auto"
             />

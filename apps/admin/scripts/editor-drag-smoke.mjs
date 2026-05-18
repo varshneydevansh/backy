@@ -2343,9 +2343,10 @@ const setFormControlByTestId = async (client, testId, value) => {
           ? window.HTMLTextAreaElement.prototype
           : window.HTMLInputElement.prototype;
       const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      control.focus();
       setter?.call(control, ${JSON.stringify(String(value))});
-      control.dispatchEvent(new Event('input', { bubbles: true }));
-      control.dispatchEvent(new Event('change', { bubbles: true }));
+      control.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
       return {
         ok: control.value === ${JSON.stringify(String(value))},
         value: control.value,
@@ -2364,6 +2365,32 @@ const setFormControlByTestId = async (client, testId, value) => {
 
   assert(changed?.ok, `Unable to set ${testId} to ${value}: ${JSON.stringify(changed)}`);
   return changed;
+};
+
+const waitForFormControlValue = async (client, testId, value, options = {}) => {
+  const attempts = options.attempts || 30;
+  const intervalMs = options.intervalMs || 100;
+  let state = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const control = document.querySelector('[data-testid="${testId}"]');
+      return {
+        ok: control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement,
+        value: control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+          ? control.value
+          : '',
+        testId: ${JSON.stringify(testId)},
+      };
+    })()`);
+
+    if (state?.ok && state.value === String(value)) {
+      return state;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  assert(false, `Form control ${testId} did not settle to ${value}: ${JSON.stringify(state)}`);
 };
 
 const setInputValueByTestId = async (client, testId, value) => {
@@ -4290,20 +4317,32 @@ const testRichTextInlineMarkdownControls = async (client, elementId = 'smoke-hea
 };
 
 const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) => {
-  await activateTextEditing(client, elementId);
-
-  const state = await evaluate(client, `(() => {
+  const readSelectionState = () => evaluate(client, `(() => {
     let helperResult = null;
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const editorHost = host?.querySelector('[data-backy-text-editor]');
+    if (editorHost?.getAttribute('data-backy-text-editor-editable') === 'false') {
+      return {
+        ok: false,
+        reason: 'missing-editor',
+        editable: editorHost.getAttribute('data-backy-text-editor-editable'),
+        html: host?.innerHTML || '',
+      };
+    }
+
     if (typeof window.__backySelectActiveEditorText === 'function') {
       helperResult = window.__backySelectActiveEditorText(${JSON.stringify(startNeedle)}, ${JSON.stringify(endNeedle)});
-      if (helperResult?.ok) {
+      if (helperResult?.reason === 'missing-editor' || helperResult?.reason === 'missing-active-editor') {
         return helperResult;
       }
     }
 
-    const host = document.querySelector('[data-element-id="${elementId}"]');
     const editor = host?.querySelector('[contenteditable="true"], [role="textbox"]');
     if (!(editor instanceof HTMLElement)) {
+      if (helperResult?.ok) {
+        return helperResult;
+      }
+
       return {
         ok: false,
         reason: 'missing-editor',
@@ -4379,12 +4418,18 @@ const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) 
 
     return {
       ok: true,
+      helperResult,
       fullText,
       selectedText: selection?.toString() || '',
       startIndex,
       absoluteEnd,
     };
   })()`);
+  let state = await readSelectionState();
+  if (state?.reason === 'missing-editor' || state?.helperResult?.reason === 'missing-editor') {
+    await activateTextEditing(client, elementId);
+    state = await readSelectionState();
+  }
 
   assert(state?.ok, `Unable to select editor text range ${startNeedle}..${endNeedle}: ${JSON.stringify(state)}`);
   await sleep(250);
@@ -4418,6 +4463,54 @@ const readRichTextLeafState = async (client, elementId) => {
       marked,
     };
   })()`);
+};
+
+const waitForRichTextLeaf = async (client, elementId, matcher, description) => {
+  let state = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    state = await readRichTextLeafState(client, elementId);
+    if (matcher(state)) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  assert(false, `${description}: ${JSON.stringify(state)}`);
+};
+
+const readRichTextTableState = async (client, elementId) => {
+  return evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const rowCells = rows.map((row) => Array.from(row.querySelectorAll('td, th')));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    return {
+      rowCount: rows.length,
+      firstRowCellCount: rowCells[0]?.length || 0,
+      secondRowCellCount: rowCells[1]?.length || 0,
+      firstCellColSpan: rowCells[0]?.[0]?.getAttribute('colspan') || '',
+      firstCellRowSpan: rowCells[0]?.[0]?.getAttribute('rowspan') || '',
+      firstRowCellTexts: (rowCells[0] || []).map((node) => node.textContent || ''),
+      secondRowCellTexts: (rowCells[1] || []).map((node) => node.textContent || ''),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+};
+
+const waitForRichTextTableState = async (client, elementId, matcher, description) => {
+  let state = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    state = await readRichTextTableState(client, elementId);
+    if (matcher(state)) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  assert(false, `${description}: ${JSON.stringify(state)}`);
 };
 
 const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-heading') => {
@@ -4503,6 +4596,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   await setFormControlByTestId(client, 'rich-text-font-size', '28');
   await sleep(350);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await waitForFormControlValue(client, 'rich-text-font-family', 'inherit');
   await dispatchMouseDownByTestId(client, 'rich-text-font-family');
   await setFormControlByTestId(client, 'rich-text-font-family', 'Georgia, serif');
   await sleep(350);
@@ -4514,11 +4608,32 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   await sleep(250);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
   await selectColorPickerValue(client, 'rich-text-text-color', '#ff0000');
+  await waitForRichTextLeaf(
+    client,
+    elementId,
+    (state) => state.marked.some((candidate) => (
+      candidate.text.includes('Beta') && candidate.color === 'rgb(255, 0, 0)'
+    )),
+    'Selected range text color did not settle before highlight setup',
+  );
+  await sleep(500);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
   await selectColorPickerValue(client, 'rich-text-highlight-color', '#ffff00');
-  await sleep(500);
 
-  const clearAllSetupState = await readRichTextLeafState(client, elementId);
+  const clearAllSetupState = await waitForRichTextLeaf(
+    client,
+    elementId,
+    (state) => {
+      const leaf = state.marked.find((candidate) => candidate.text.includes('Beta'));
+      return leaf?.fontSize === '28px' &&
+        leaf?.fontFamily.toLowerCase().includes('georgia') &&
+        leaf?.textDecoration.includes('underline') &&
+        leaf?.textDecoration.includes('line-through') &&
+        leaf?.color === 'rgb(255, 0, 0)' &&
+        leaf?.backgroundColor === 'rgb(255, 255, 0)';
+    },
+    'Selected range setup before clear formatting did not apply all marks',
+  );
   const clearAllSetupBetaLeaf = clearAllSetupState.marked.find((leaf) => leaf.text.includes('Beta'));
   assert(
     clearAllSetupBetaLeaf?.fontSize === '28px' &&
@@ -4547,6 +4662,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
     `Clear formatting did not remove selected range font/decorator/color marks: ${JSON.stringify(clearAllState)}`,
   );
 
+  await activateTextEditing(client, elementId);
   const resetAfterClearAll = await evaluate(client, `(() => {
     if (typeof window.__backySetActiveEditorContent !== 'function') {
       return { ok: false, reason: 'missing-set-content-helper' };
@@ -4581,6 +4697,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
 
   await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await waitForFormControlValue(client, 'rich-text-font-family', 'inherit');
   await dispatchMouseDownByTestId(client, 'rich-text-font-family');
   await setFormControlByTestId(client, 'rich-text-font-family', 'Georgia, serif');
   await sleep(500);
@@ -4616,9 +4733,15 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
   await selectColorPickerValue(client, 'rich-text-text-color', '#ff0000');
-  await sleep(500);
-
-  const colorState = await readRichTextLeafState(client, elementId);
+  const colorState = await waitForRichTextLeaf(
+    client,
+    elementId,
+    (state) => {
+      const leaf = state.marked.find((candidate) => candidate.text.includes('Alpha'));
+      return leaf?.color === 'rgb(255, 0, 0)';
+    },
+    'Selected range text color did not settle before isolated color assertion',
+  );
   const colorAlphaLeaf = colorState.marked.find((leaf) => leaf.text.includes('Alpha'));
   const colorBetaLeaf = colorState.marked.find((leaf) => leaf.text.includes('Beta'));
   assert(colorAlphaLeaf?.color === 'rgb(255, 0, 0)', `Selected range text color was not applied: ${JSON.stringify(colorState)}`);
@@ -4713,6 +4836,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     await sleep(100);
   }
 
+  await activateTextEditing(client, elementId);
   const listIndentSlateState = await evaluate(client, `(() => {
     if (typeof window.__backyReadActiveEditorTableState !== 'function') {
       return { ok: false, reason: 'missing-active-editor-state-helper' };
@@ -4751,6 +4875,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(selectedListItemBeforeTypeChange.selectedText === 'Nested item', `List item reselection failed before list type change: ${JSON.stringify(selectedListItemBeforeTypeChange)}`);
   let listIndentBeforeTypeChangeState = null;
   for (let attempt = 0; attempt < 20; attempt += 1) {
+    await activateTextEditing(client, elementId);
     listIndentBeforeTypeChangeState = await evaluate(client, `(() => {
       const host = document.querySelector('[data-element-id="${elementId}"]');
       const items = Array.from(host?.querySelectorAll('li') || []);
@@ -5102,6 +5227,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   } else {
     assert(directInsert?.ok, `Direct active-editor table insert failed after toolbar click: ${JSON.stringify(directInsert)}`);
   }
+  await activateTextEditing(client, elementId);
   const insertedTableListState = await evaluate(client, `(() => {
     return typeof window.__backyReadActiveEditorTableState === 'function'
       ? window.__backyReadActiveEditorTableState()
@@ -5230,6 +5356,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   await mouseDownControlByTestId(client, 'rich-text-table-merge-cell-right');
   await sleep(500);
 
+  await activateTextEditing(client, elementId);
   const mergedCellState = await evaluate(client, `(() => {
     const host = document.querySelector('[data-element-id="${elementId}"]');
     const rows = Array.from(host?.querySelectorAll('tr') || []);
@@ -5267,29 +5394,16 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(selectedMergedTableCell?.ok, `Unable to reselect merged table cell before split control: ${JSON.stringify(selectedMergedTableCell)}`);
 
   await mouseDownControlByTestId(client, 'rich-text-table-split-cell');
-  await sleep(500);
 
-  const splitCellState = await evaluate(client, `(() => {
-    const host = document.querySelector('[data-element-id="${elementId}"]');
-    const rows = Array.from(host?.querySelectorAll('tr') || []);
-    const firstRowCells = Array.from(rows[0]?.querySelectorAll('td, th') || []);
-    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
-      ? window.__backyReadActiveEditorTableState()
-      : null;
-    return {
-      firstRowCellCount: firstRowCells.length,
-      firstCellColSpan: firstRowCells[0]?.getAttribute('colspan') || '',
-      firstRowCellTexts: firstRowCells.map((node) => node.textContent || ''),
-      slateState,
-      html: host?.innerHTML || '',
-    };
-  })()`);
-  assert(
-    splitCellState.firstRowCellCount === 2 &&
+  const splitCellState = await waitForRichTextTableState(
+    client,
+    elementId,
+    (splitCellState) =>
+      splitCellState.firstRowCellCount === 2 &&
       splitCellState.firstCellColSpan === '' &&
       splitCellState.firstRowCellTexts[0]?.includes('Column 1') &&
       splitCellState.firstRowCellTexts[1]?.includes('Column 2'),
-    `Table split-cell control did not restore split sibling cells: ${JSON.stringify(splitCellState)}`,
+    'Table split-cell control did not restore split sibling cells',
   );
 
   await activateTextEditing(client, elementId);
@@ -5344,32 +5458,17 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(selectedMergedDownTableCell?.ok, `Unable to reselect row-spanned table cell before split control: ${JSON.stringify(selectedMergedDownTableCell)}`);
 
   await mouseDownControlByTestId(client, 'rich-text-table-split-cell');
-  await sleep(500);
 
-  const splitDownCellState = await evaluate(client, `(() => {
-    const host = document.querySelector('[data-element-id="${elementId}"]');
-    const rows = Array.from(host?.querySelectorAll('tr') || []);
-    const rowCells = rows.map((row) => Array.from(row.querySelectorAll('td, th')));
-    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
-      ? window.__backyReadActiveEditorTableState()
-      : null;
-    return {
-      firstRowCellCount: rowCells[0]?.length || 0,
-      secondRowCellCount: rowCells[1]?.length || 0,
-      firstCellRowSpan: rowCells[0]?.[0]?.getAttribute('rowspan') || '',
-      firstRowCellTexts: (rowCells[0] || []).map((node) => node.textContent || ''),
-      secondRowCellTexts: (rowCells[1] || []).map((node) => node.textContent || ''),
-      slateState,
-      html: host?.innerHTML || '',
-    };
-  })()`);
-  assert(
-    splitDownCellState.firstRowCellCount === 2 &&
+  const splitDownCellState = await waitForRichTextTableState(
+    client,
+    elementId,
+    (splitDownCellState) =>
+      splitDownCellState.firstRowCellCount === 2 &&
       splitDownCellState.secondRowCellCount === 2 &&
       splitDownCellState.firstCellRowSpan === '' &&
       splitDownCellState.firstRowCellTexts[0]?.includes('Column 1') &&
       splitDownCellState.secondRowCellTexts[0]?.includes('Value 1'),
-    `Table split-cell control did not restore row-spanned sibling cells: ${JSON.stringify(splitDownCellState)}`,
+    'Table split-cell control did not restore row-spanned sibling cells',
   );
 
   await activateTextEditing(client, elementId);
@@ -5858,7 +5957,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     selectedRowSpanVisualRange?.ok,
     `Unable to select row-spanned visual table range before style controls: ${JSON.stringify(selectedRowSpanVisualRange)}`,
   );
-  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#eadcf8');
+  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#d9d2e9');
   await sleep(500);
 
   const rowSpanVisualRangeState = await evaluate(client, `(() => {
@@ -5893,12 +5992,12 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(
     rowSpanVisualRangeState.rowSpanned.rowSpan === '2' &&
       rowSpanVisualRangeState.rowSpanned.slateRowSpan === 2 &&
-      rowSpanVisualRangeState.rowSpanned.backgroundColor === 'rgb(234, 220, 248)' &&
-      rowSpanVisualRangeState.column2.backgroundColor === 'rgb(234, 220, 248)' &&
-      rowSpanVisualRangeState.value2.backgroundColor === 'rgb(234, 220, 248)' &&
-      rowSpanVisualRangeState.rowSpanned.slateBackgroundColor === '#eadcf8' &&
-      rowSpanVisualRangeState.column2.slateBackgroundColor === '#eadcf8' &&
-      rowSpanVisualRangeState.value2.slateBackgroundColor === '#eadcf8',
+      rowSpanVisualRangeState.rowSpanned.backgroundColor === 'rgb(217, 210, 233)' &&
+      rowSpanVisualRangeState.column2.backgroundColor === 'rgb(217, 210, 233)' &&
+      rowSpanVisualRangeState.value2.backgroundColor === 'rgb(217, 210, 233)' &&
+      rowSpanVisualRangeState.rowSpanned.slateBackgroundColor === '#d9d2e9' &&
+      rowSpanVisualRangeState.column2.slateBackgroundColor === '#d9d2e9' &&
+      rowSpanVisualRangeState.value2.slateBackgroundColor === '#d9d2e9',
     `Row-spanned visual table range did not style every visually covered cell: ${JSON.stringify(rowSpanVisualRangeState)}`,
   );
 
@@ -5959,6 +6058,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   await mouseDownControlByTestId(client, 'rich-text-table-cell-vertical-middle');
   await sleep(500);
 
+  await activateTextEditing(client, elementId);
   const mergedRangeStyleState = await evaluate(client, `(() => {
     const host = document.querySelector('[data-element-id="${elementId}"]');
     const cells = Array.from(host?.querySelectorAll('td, th') || []);
@@ -6684,6 +6784,15 @@ const selectColorPickerValue = async (client, testId, color) => {
       };
     }
 
+    swatch.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      pointerId: 1,
+      pointerType: 'mouse',
+      view: window,
+    }));
     swatch.dispatchEvent(new MouseEvent('mousedown', {
       bubbles: true,
       cancelable: true,
@@ -6691,6 +6800,23 @@ const selectColorPickerValue = async (client, testId, color) => {
       buttons: 1,
       view: window,
     }));
+    swatch.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 0,
+      view: window,
+    }));
+    swatch.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 0,
+      pointerId: 1,
+      pointerType: 'mouse',
+      view: window,
+    }));
+    swatch.click();
     return { ok: true, color: ${JSON.stringify(color)} };
   })()`);
 
