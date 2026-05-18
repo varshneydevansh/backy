@@ -809,7 +809,7 @@
                 "schemaVersion": { "const": "backy.commerce-settings.v1" },
                 "mode": { "enum": ["catalog-only", "manual-orders", "checkout-provider"] },
                 "currency": { "type": "string", "minLength": 3 },
-                "paymentProvider": { "enum": ["none", "stripe", "manual"] },
+                "paymentProvider": { "enum": ["none", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "manual"] },
                 "providerAccountId": { "type": ["string", "null"] },
                 "provider": {
                   "type": "object",

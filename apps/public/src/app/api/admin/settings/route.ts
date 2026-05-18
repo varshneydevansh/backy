@@ -358,7 +358,10 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
   const resolution = resolveCommerceWebhookSecret(settings);
   const integrations = parseJsonObject(settings) || {};
   const commerce = parseJsonObject(parseJsonObject(integrations.integrations)?.commerce) || {};
-  const paymentProvider = stringValue(commerce.paymentProvider) === 'stripe' ? 'stripe' : stringValue(commerce.paymentProvider) || 'none';
+  const paymentProviderValue = stringValue(commerce.paymentProvider);
+  const paymentProvider = ['stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'manual'].includes(paymentProviderValue)
+    ? paymentProviderValue
+    : 'none';
   const taxProviderValue = stringValue(commerce.taxProvider);
   const taxProvider = ['http', 'stripe', 'taxjar', 'avalara'].includes(taxProviderValue) ? taxProviderValue : 'manual';
   const shippingLabelProvider = ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider))
@@ -1334,7 +1337,7 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
         ? commerceMode
         : 'catalog-only',
       currency: stringValue(commerce.currency).toUpperCase().slice(0, 3),
-      paymentProvider: ['none', 'stripe', 'manual'].includes(paymentProvider)
+      paymentProvider: ['none', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'manual'].includes(paymentProvider)
         ? paymentProvider
         : 'none',
       providerMode: providerMode === 'live' ? 'live' : 'test',

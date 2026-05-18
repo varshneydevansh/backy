@@ -5484,7 +5484,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 currency: { type: "string" },
                 paymentProvider: {
                   type: "string",
-                  enum: ["none", "stripe", "manual"],
+                  enum: [
+                    "none",
+                    "stripe",
+                    "paypal",
+                    "paddle",
+                    "square",
+                    "adyen",
+                    "mollie",
+                    "razorpay",
+                    "manual",
+                  ],
                 },
                 providerAccountId: { type: ["string", "null"] },
                 provider: { type: "object", additionalProperties: true },

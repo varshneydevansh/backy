@@ -6568,6 +6568,12 @@ function CommerceSettings({
               >
                 <option value="none">None yet</option>
                 <option value="stripe">Stripe</option>
+                <option value="paypal">PayPal</option>
+                <option value="paddle">Paddle</option>
+                <option value="square">Square</option>
+                <option value="adyen">Adyen</option>
+                <option value="mollie">Mollie</option>
+                <option value="razorpay">Razorpay</option>
                 <option value="manual">Manual / invoice</option>
               </select>
             </label>

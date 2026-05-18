@@ -1126,6 +1126,10 @@ const manifest = {
 } satisfies GeneratedBackyFrontendManifest;
 
 const commerceStorefrontContract = manifest.modules.commerce satisfies GeneratedBackyOpenApiCommerceStorefrontContract;
+const paddleCommerceStorefrontContract = {
+  ...commerceStorefrontContract,
+  paymentProvider: "paddle",
+} satisfies GeneratedBackyOpenApiCommerceStorefrontContract;
 
 const sdkDeliveryDiscovery = {
   canonicalBaseUrl: "https://demo.example.com",
@@ -3502,6 +3506,9 @@ const invalidCommerceCatalogSchemaVersion = { ...commerceCatalogEnvelope, data: 
 
 // @ts-expect-error commerce catalog envelopes expose storefront provider certification through the commerce contract.
 const invalidCommerceCatalogCertification = { ...commerceCatalogEnvelope, data: { ...commerceCatalogEnvelope.data, commerce: { ...commerceCatalogEnvelope.data.commerce, providerCertification: undefined, }, }, } satisfies GeneratedBackyOpenApiCommerceCatalogEnvelope;
+
+// @ts-expect-error commerce storefront contracts preserve the documented payment-provider handoff enum.
+const invalidCommerceStorefrontPaymentProvider = { ...commerceStorefrontContract, paymentProvider: "braintree", } satisfies GeneratedBackyOpenApiCommerceStorefrontContract;
 
 // @ts-expect-error commerce order creation requires customer identity.
 const invalidCommerceOrderCreateRequest = { items: commerceOrderCreateRequest.items, } satisfies GeneratedBackyOpenApiCommerceOrderCreateRequest;

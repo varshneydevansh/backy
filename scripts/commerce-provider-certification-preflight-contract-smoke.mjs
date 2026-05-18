@@ -36,9 +36,11 @@ const workflow = read('../.github/workflows/commerce-provider-certification.yml'
 const mockWorkflow = read('../.github/workflows/commerce-provider-smoke.yml');
 const rootPackage = read('../package.json');
 const settingsRoute = read('../apps/public/src/app/api/admin/settings/route.ts');
+const settingsUiRoute = read('../apps/admin/src/routes/settings.tsx');
 const providerRefundRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/orders/[orderId]/provider-refund/route.ts');
 const commerceContract = read('../apps/public/src/lib/commerceCatalog.ts');
 const openApiRoute = read('../apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
+const frontendManifestSchema = read('../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const generatedSdkTypes = read('../packages/sdk-js/src/generated-contract-types.ts');
 const sdkSource = read('../packages/sdk-js/src/index.ts');
 const generatedSdkSmoke = read('../packages/sdk-js/scripts/generated-contract-types.ts');
@@ -54,6 +56,8 @@ includesAll(
   commerceContract,
   [
     'providerCertification',
+    "paymentProvider: 'none' | 'stripe' | 'paypal' | 'paddle' | 'square' | 'adyen' | 'mollie' | 'razorpay' | 'manual'",
+    "'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'manual'",
     "schemaVersion: 'backy.commerce-provider-certification-handoff.v1'",
     "status: 'external-live-provider-gate'",
     "localMockGate: 'ci:commerce-provider-smoke'",
@@ -75,6 +79,9 @@ includesAll(
   [
     'CommerceProviderCertification',
     'CommerceStorefrontContract',
+    '"paypal"',
+    '"paddle"',
+    '"razorpay"',
     'backy.commerce-provider-certification-handoff.v1',
     'providerCertification',
     'ci:commerce-provider-certification',
@@ -89,6 +96,7 @@ includesAll(
   [
     'GeneratedBackyOpenApiCommerceProviderCertification',
     'GeneratedBackyOpenApiCommerceStorefrontContract',
+    'paymentProvider: "none" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "manual"',
     'providerCertification: GeneratedBackyOpenApiCommerceProviderCertification',
     '"backy.commerce-provider-certification-handoff.v1"',
     '"ci:commerce-provider-certification"',
@@ -101,6 +109,7 @@ includesAll(
   [
     'GeneratedBackyOpenApiCommerceProviderCertification',
     'GeneratedBackyOpenApiCommerceStorefrontContract',
+    'paymentProvider: "none" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "manual"',
     'providerCertification?:',
     '"backy.commerce-provider-certification-handoff.v1"',
     '"ci:commerce-provider-certification"',
@@ -113,11 +122,21 @@ includesAll(
   [
     'commerceProviderCertification',
     'commerceStorefrontContract',
+    'paddleCommerceStorefrontContract',
+    'invalidCommerceStorefrontPaymentProvider',
     'providerCertification',
     'invalidCommerceCatalogCertification',
     'invalidCommerceOrderContractCertification',
   ],
   'Generated SDK commerce provider certification smoke cases',
+);
+
+includesAll(
+  frontendManifestSchema,
+  [
+    '"paymentProvider": { "enum": ["none", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "manual"] }',
+  ],
+  'Frontend manifest commerce payment provider handoff enum',
 );
 
 includesAll(
@@ -382,6 +401,8 @@ includesAll(
   [
     'const getCommerceRuntimeSummary',
     'runtimeCommerce: getCommerceRuntimeSummary',
+    "'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'manual'",
+    "'none', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'manual'",
     'BACKY_STRIPE_SECRET_KEY',
     'BACKY_TAXJAR_API_KEY',
     'BACKY_AVALARA_ACCOUNT_ID',
@@ -399,6 +420,21 @@ includesAll(
     'Subscription lifecycle execution',
   ],
   'Settings runtime commerce diagnostics contract',
+);
+
+includesAll(
+  settingsUiRoute,
+  [
+    '<option value="stripe">Stripe</option>',
+    '<option value="paypal">PayPal</option>',
+    '<option value="paddle">Paddle</option>',
+    '<option value="square">Square</option>',
+    '<option value="adyen">Adyen</option>',
+    '<option value="mollie">Mollie</option>',
+    '<option value="razorpay">Razorpay</option>',
+    '<option value="manual">Manual / invoice</option>',
+  ],
+  'Settings UI commerce payment provider handoff options',
 );
 
 includesAll(

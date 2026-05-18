@@ -843,7 +843,7 @@ export interface BackyCommerceStorefrontContract {
   schemaVersion: "backy.commerce-settings.v1";
   mode: "catalog-only" | "manual-orders" | "checkout-provider";
   currency: string;
-  paymentProvider: "none" | "stripe" | "manual";
+  paymentProvider: "none" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "manual";
   providerAccountId?: string | null;
   provider?: {
     mode: "test" | "live";

@@ -2191,7 +2191,7 @@ export interface SiteSettingsInput {
     commerce?: {
       mode?: 'catalog-only' | 'manual-orders' | 'checkout-provider';
       currency?: string;
-      paymentProvider?: 'none' | 'stripe' | 'manual';
+      paymentProvider?: 'none' | 'stripe' | 'paypal' | 'paddle' | 'square' | 'adyen' | 'mollie' | 'razorpay' | 'manual';
       providerMode?: 'test' | 'live';
       providerAccountId?: string;
       providerWebhookUrl?: string;
@@ -2346,7 +2346,7 @@ export interface SiteSettingsInput {
     razorpayKeyIdConfigured?: boolean;
     razorpayKeySecretConfigured?: boolean;
     razorpayApiBaseUrl?: string;
-    paymentProvider?: 'none' | 'stripe' | 'manual';
+    paymentProvider?: 'none' | 'stripe' | 'paypal' | 'paddle' | 'square' | 'adyen' | 'mollie' | 'razorpay' | 'manual';
     taxProvider?: 'manual' | 'http' | 'stripe' | 'taxjar' | 'avalara';
     shippingProvider?: 'manual' | 'http' | 'easypost' | 'shippo';
     discountProvider?: 'manual' | 'http' | 'stripe';
