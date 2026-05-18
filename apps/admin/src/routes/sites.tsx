@@ -1656,9 +1656,11 @@ function SitesListView() {
         />
         <PanelContent>
           {!selectedApiSite || !selectedDomainVerification ? (
-            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-              Create a site to prepare custom-domain DNS verification.
-            </div>
+            <EmptyState
+              icon={Server}
+              title="No domain verification workspace selected"
+              description="Create or select a site to prepare custom-domain DNS records and track verification status."
+            />
           ) : (
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-lg border border-border bg-background p-4">
@@ -1756,9 +1758,11 @@ function SitesListView() {
         />
         <PanelContent>
           {!selectedApiSite || !selectedVercelDeployment ? (
-            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
-              Create a site to prepare Vercel deployment handoff state.
-            </div>
+            <EmptyState
+              icon={Server}
+              title="No deployment workspace selected"
+              description="Create or select a site to prepare Vercel handoff commands, target URLs, and deploy history."
+            />
           ) : (
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-lg border border-border bg-background p-4">
