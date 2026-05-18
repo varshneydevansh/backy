@@ -49,6 +49,7 @@ import {
   type Collection,
   type CollectionRecord,
   type FormDefinition,
+  getFormWithSubmissions,
   type SettingsInfrastructureDiagnostic,
   type SiteReadiness,
   type SiteSettingsInput,
@@ -82,6 +83,7 @@ interface DashboardData {
   comments: number;
   pendingComments: number;
   commerce: DashboardCommerceMetrics;
+  moderation: DashboardModerationMetrics;
   settings?: SiteSettingsInput;
   auditLogs: AdminAuditLog[];
   readiness: SiteReadiness[];
@@ -100,6 +102,28 @@ interface DashboardCommerceMetrics {
   failedOrderCount: number;
   loadedOrderValue: number;
   currency: string;
+}
+
+interface DashboardModerationMetrics {
+  formSubmissionCount: number;
+  loadedFormSubmissionCount: number;
+  pendingFormSubmissionCount: number;
+  approvedFormSubmissionCount: number;
+  rejectedFormSubmissionCount: number;
+  spamFormSubmissionCount: number;
+  manualReviewFormCount: number;
+  spamGuardedFormCount: number;
+  commentCount: number;
+  loadedCommentCount: number;
+  pendingCommentCount: number;
+  approvedCommentCount: number;
+  reportedCommentCount: number;
+  spamCommentCount: number;
+  blockedCommentCount: number;
+  moderationAuditEvents: number;
+  approvalThroughputCount: number;
+  reviewQueueCount: number;
+  safetyFlagCount: number;
 }
 
 interface DashboardDeploymentRun {
@@ -203,6 +227,28 @@ const emptyCommerceMetrics = (): DashboardCommerceMetrics => ({
   currency: 'USD',
 });
 
+const emptyModerationMetrics = (): DashboardModerationMetrics => ({
+  formSubmissionCount: 0,
+  loadedFormSubmissionCount: 0,
+  pendingFormSubmissionCount: 0,
+  approvedFormSubmissionCount: 0,
+  rejectedFormSubmissionCount: 0,
+  spamFormSubmissionCount: 0,
+  manualReviewFormCount: 0,
+  spamGuardedFormCount: 0,
+  commentCount: 0,
+  loadedCommentCount: 0,
+  pendingCommentCount: 0,
+  approvedCommentCount: 0,
+  reportedCommentCount: 0,
+  spamCommentCount: 0,
+  blockedCommentCount: 0,
+  moderationAuditEvents: 0,
+  approvalThroughputCount: 0,
+  reviewQueueCount: 0,
+  safetyFlagCount: 0,
+});
+
 const emptyDashboardData = (): DashboardData => ({
   sites: [],
   pages: [],
@@ -215,6 +261,7 @@ const emptyDashboardData = (): DashboardData => ({
   comments: 0,
   pendingComments: 0,
   commerce: emptyCommerceMetrics(),
+  moderation: emptyModerationMetrics(),
   auditLogs: [],
   readiness: [],
   source: 'backend',
@@ -504,6 +551,81 @@ const loadCommerceMetricsForDashboard = async (
     failedOrderCount: orderRecords.filter((record) => orderStatusValue(record, 'paymentstatus') === 'failed').length,
     loadedOrderValue: orderRecords.reduce((total, record) => total + orderRecordTotal(record), 0),
     currency,
+  };
+};
+
+type DashboardCommentListResult = Awaited<ReturnType<typeof listComments>> | null;
+
+const hasFormSpamGuards = (form: FormDefinition) => (
+  Boolean(form.enableHoneypot) ||
+  Boolean(form.enableCaptcha) ||
+  Boolean(form.spamSettings?.blockedTerms?.length) ||
+  Boolean(form.spamSettings?.rateLimitMax)
+);
+
+const isDashboardReportedComment = (comment: Awaited<ReturnType<typeof listComments>>['comments'][number]) => (
+  (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length)
+);
+
+const isDashboardModerationAuditLog = (log: AdminAuditLog) => {
+  const action = log.action.toLowerCase();
+  const entity = log.entity.toLowerCase();
+
+  return (
+    entity === 'comment' ||
+    entity === 'comments' ||
+    entity === 'form' ||
+    entity === 'forms' ||
+    action.includes('moderate') ||
+    action.includes('approve') ||
+    action.includes('reject') ||
+    action.includes('spam') ||
+    action.includes('blocklist') ||
+    action.includes('submission')
+  );
+};
+
+const loadModerationMetricsForDashboard = async (
+  forms: FormDefinition[],
+  commentResults: DashboardCommentListResult[],
+  auditLogs: AdminAuditLog[],
+): Promise<DashboardModerationMetrics> => {
+  const formResults = await Promise.all(forms.map((form) => (
+    getFormWithSubmissions(form.siteId, form.id, { limit: 100 }).catch(() => null)
+  )));
+  const submissions = formResults.flatMap((result) => result?.submissions.data || []);
+  const comments = commentResults.flatMap((result) => result?.comments || []);
+  const pendingFormSubmissionCount = submissions.filter((submission) => submission.status === 'pending').length;
+  const approvedFormSubmissionCount = submissions.filter((submission) => submission.status === 'approved').length;
+  const spamFormSubmissionCount = submissions.filter((submission) => submission.status === 'spam').length;
+  const pendingCommentCount = comments.filter((comment) => comment.status === 'pending').length;
+  const approvedCommentCount = comments.filter((comment) => comment.status === 'approved').length;
+  const reportedCommentCount = comments.filter(isDashboardReportedComment).length;
+  const spamCommentCount = comments.filter((comment) => comment.status === 'spam').length;
+  const blockedCommentCount = comments.filter((comment) => comment.status === 'blocked').length;
+
+  return {
+    formSubmissionCount: formResults.reduce((total, result) => (
+      total + (result?.submissions.pagination?.total ?? result?.submissions.data.length ?? 0)
+    ), 0),
+    loadedFormSubmissionCount: submissions.length,
+    pendingFormSubmissionCount,
+    approvedFormSubmissionCount,
+    rejectedFormSubmissionCount: submissions.filter((submission) => submission.status === 'rejected').length,
+    spamFormSubmissionCount,
+    manualReviewFormCount: forms.filter((form) => form.moderationMode !== 'auto-approve').length,
+    spamGuardedFormCount: forms.filter(hasFormSpamGuards).length,
+    commentCount: commentResults.reduce((total, result) => total + (result?.count ?? 0), 0),
+    loadedCommentCount: comments.length,
+    pendingCommentCount,
+    approvedCommentCount,
+    reportedCommentCount,
+    spamCommentCount,
+    blockedCommentCount,
+    moderationAuditEvents: auditLogs.filter(isDashboardModerationAuditLog).length,
+    approvalThroughputCount: approvedFormSubmissionCount + approvedCommentCount,
+    reviewQueueCount: pendingFormSubmissionCount + pendingCommentCount,
+    safetyFlagCount: spamFormSubmissionCount + reportedCommentCount + spamCommentCount + blockedCommentCount,
   };
 };
 
@@ -973,6 +1095,9 @@ function Index() {
         canViewForms ? forms.map((form) => listContactCountForDashboard(form.siteId, form.id)) : [],
       );
       const commerce = canViewCommerce ? await loadCommerceMetricsForDashboard(collections) : emptyCommerceMetrics();
+      const moderation = canViewForms || canViewComments
+        ? await loadModerationMetricsForDashboard(canViewForms ? forms : [], commentsBySite, auditResult.logs)
+        : emptyModerationMetrics();
 
       const media = mediaBySite.flat();
       const defaultMediaSiteId = getDefaultMediaSiteId();
@@ -990,11 +1115,10 @@ function Index() {
         collections,
         forms,
         contacts: contactCounts.reduce((total, count) => total + count, 0),
-        comments: commentsBySite.reduce((total, result) => total + (result?.count ?? 0), 0),
-        pendingComments: commentsBySite.reduce((total, result) => (
-          total + (result?.comments.filter((comment) => comment.status === 'pending').length ?? 0)
-        ), 0),
+        comments: moderation.commentCount,
+        pendingComments: moderation.pendingCommentCount,
         commerce,
+        moderation,
         settings,
         auditLogs: auditResult.logs,
         readiness: readinessBySite.filter((item): item is SiteReadiness => Boolean(item)),
@@ -1017,6 +1141,7 @@ function Index() {
         comments: 0,
         pendingComments: 0,
         commerce: emptyCommerceMetrics(),
+        moderation: emptyModerationMetrics(),
         auditLogs: fallbackAuditLogs(fallbackStore.sites, fallbackStore.pages, fallbackStore.posts),
         source: 'fallback',
       });
@@ -1300,6 +1425,27 @@ function Index() {
         ? { id: ordersCollection.id, status: ordersCollection.status, publicRead: ordersCollection.permissions.publicRead }
         : null,
     },
+    moderation: {
+      formSubmissionCount: dashboard.moderation.formSubmissionCount,
+      loadedFormSubmissionCount: dashboard.moderation.loadedFormSubmissionCount,
+      pendingFormSubmissionCount: dashboard.moderation.pendingFormSubmissionCount,
+      approvedFormSubmissionCount: dashboard.moderation.approvedFormSubmissionCount,
+      rejectedFormSubmissionCount: dashboard.moderation.rejectedFormSubmissionCount,
+      spamFormSubmissionCount: dashboard.moderation.spamFormSubmissionCount,
+      manualReviewFormCount: dashboard.moderation.manualReviewFormCount,
+      spamGuardedFormCount: dashboard.moderation.spamGuardedFormCount,
+      commentCount: dashboard.moderation.commentCount,
+      loadedCommentCount: dashboard.moderation.loadedCommentCount,
+      pendingCommentCount: dashboard.moderation.pendingCommentCount,
+      approvedCommentCount: dashboard.moderation.approvedCommentCount,
+      reportedCommentCount: dashboard.moderation.reportedCommentCount,
+      spamCommentCount: dashboard.moderation.spamCommentCount,
+      blockedCommentCount: dashboard.moderation.blockedCommentCount,
+      moderationAuditEvents: dashboard.moderation.moderationAuditEvents,
+      approvalThroughputCount: dashboard.moderation.approvalThroughputCount,
+      reviewQueueCount: dashboard.moderation.reviewQueueCount,
+      safetyFlagCount: dashboard.moderation.safetyFlagCount,
+    },
     modules: visibleDashboardModules.map((module) => ({
       title: module.title,
       status: module.status,
@@ -1316,6 +1462,7 @@ function Index() {
       comments: dashboard.comments,
       pendingComments: dashboard.pendingComments,
       contacts: dashboard.contacts,
+      formSubmissions: dashboard.moderation.formSubmissionCount,
       products: dashboard.commerce.productCount,
       orders: dashboard.commerce.orderCount,
     },
@@ -1331,6 +1478,7 @@ function Index() {
     dashboard.commerce,
     dashboard.forms.length,
     dashboard.media.length,
+    dashboard.moderation,
     dashboard.pages.length,
     dashboard.pendingComments,
     dashboard.posts.length,
@@ -1647,6 +1795,32 @@ function Index() {
     dashboard.settings?.integrations?.commerce?.discountProviderUrl,
     dashboard.settings?.integrations?.commerce?.shippingProviderUrl,
     dashboard.settings?.integrations?.commerce?.taxProviderUrl,
+  ]);
+  const moderationHealth = useMemo(() => {
+    const readinessChecks = [
+      dashboard.moderation.reviewQueueCount === 0,
+      dashboard.moderation.safetyFlagCount === 0,
+      dashboard.forms.length === 0 || dashboard.moderation.spamGuardedFormCount > 0,
+      dashboard.moderation.loadedFormSubmissionCount === dashboard.moderation.formSubmissionCount,
+      dashboard.moderation.loadedCommentCount === dashboard.moderation.commentCount,
+    ];
+    const readyCount = readinessChecks.filter(Boolean).length;
+
+    return {
+      score: Math.round((readyCount / readinessChecks.length) * 100),
+      pendingSubmissions: dashboard.moderation.pendingFormSubmissionCount,
+      pendingComments: dashboard.moderation.pendingCommentCount,
+      spamReports: dashboard.moderation.safetyFlagCount,
+      approvalThroughput: dashboard.moderation.approvalThroughputCount,
+      reviewQueue: dashboard.moderation.reviewQueueCount,
+      sampleComplete: (
+        dashboard.moderation.loadedFormSubmissionCount === dashboard.moderation.formSubmissionCount &&
+        dashboard.moderation.loadedCommentCount === dashboard.moderation.commentCount
+      ),
+    };
+  }, [
+    dashboard.forms.length,
+    dashboard.moderation,
   ]);
   const aggregateAnalytics = useMemo(() => {
     const pageStatusCounts = countDashboardStatuses(dashboard.pages);
@@ -2531,6 +2705,116 @@ function Index() {
                 {dashboard.commerce.openOrderCount || dashboard.commerce.failedOrderCount
                   ? 'Review open fulfillment and failed payment orders before launch.'
                   : 'No open or failed orders in the loaded order queue.'}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-border bg-card p-5 shadow-sm"
+          data-testid="dashboard-moderation-queue"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <MessageSquare className="size-4 text-primary" />
+                <h2 className="font-semibold">Form and comment moderation queue</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Pending submissions, spam reports, approval throughput, and safety flags across public forms and comment threads.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/forms"
+                search={getDashboardRouteSearch('/forms')}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Forms
+                <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
+                to="/comments"
+                search={getDashboardRouteSearch('/comments')}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Comments
+                <ArrowUpRight className="size-4" />
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Pending submissions</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Form inbox items and comments waiting for manual review.
+                  </p>
+                </div>
+                <ClipboardList className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Form pending" value={`${moderationHealth.pendingSubmissions}`} />
+                <SignalMetric label="Comment pending" value={`${moderationHealth.pendingComments}`} />
+                <SignalMetric label="Review queue" value={`${moderationHealth.reviewQueue}`} />
+                <SignalMetric label="Readiness" value={`${moderationHealth.score}%`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                moderationHealth.reviewQueue > 0 ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success',
+              )}>
+                {moderationHealth.reviewQueue > 0
+                  ? `${moderationHealth.reviewQueue} moderation item${moderationHealth.reviewQueue === 1 ? '' : 's'} need approval decisions.`
+                  : 'No pending moderation decisions in the loaded queues.'}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Spam reports</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Form spam, reported comments, spam comments, and blocked authors.
+                  </p>
+                </div>
+                <AlertTriangle className="size-4 text-warning" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Form spam" value={`${dashboard.moderation.spamFormSubmissionCount}`} />
+                <SignalMetric label="Reported" value={`${dashboard.moderation.reportedCommentCount}`} />
+                <SignalMetric label="Comment spam" value={`${dashboard.moderation.spamCommentCount}`} />
+                <SignalMetric label="Blocked" value={`${dashboard.moderation.blockedCommentCount}`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                moderationHealth.spamReports > 0 ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success',
+              )}>
+                {moderationHealth.spamReports > 0
+                  ? `${moderationHealth.spamReports} spam or safety flag${moderationHealth.spamReports === 1 ? '' : 's'} need cleanup.`
+                  : 'No spam reports or blocked-comment flags in the loaded queues.'}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Approval throughput</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Approved submissions, approved comments, review-mode forms, and recent moderation audits.
+                  </p>
+                </div>
+                <CheckCircle2 className="size-4 text-success" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Approved forms" value={`${dashboard.moderation.approvedFormSubmissionCount}`} />
+                <SignalMetric label="Approved comments" value={`${dashboard.moderation.approvedCommentCount}`} />
+                <SignalMetric label="Manual forms" value={`${dashboard.moderation.manualReviewFormCount}`} />
+                <SignalMetric label="Audit events" value={`${dashboard.moderation.moderationAuditEvents}`} />
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {moderationHealth.approvalThroughput} approved item{moderationHealth.approvalThroughput === 1 ? '' : 's'} in loaded queues; sample coverage is {moderationHealth.sampleComplete ? 'complete' : 'partial'}.
               </div>
             </div>
           </div>

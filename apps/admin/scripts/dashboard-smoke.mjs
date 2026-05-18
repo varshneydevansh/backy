@@ -490,6 +490,11 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Inventory warnings') &&
       document.body?.innerText?.includes('Checkout setup') &&
       document.body?.innerText?.includes('Orders needing attention'),
+    hasModerationQueue: Boolean(document.querySelector('[data-testid="dashboard-moderation-queue"]')) &&
+      document.body?.innerText?.includes('Form and comment moderation queue') &&
+      document.body?.innerText?.includes('Pending submissions') &&
+      document.body?.innerText?.includes('Spam reports') &&
+      document.body?.innerText?.includes('Approval throughput'),
     hasAggregateAnalytics: Boolean(document.querySelector('[data-testid="dashboard-aggregate-analytics"]')) &&
       document.body?.innerText?.includes('Aggregate analytics') &&
       document.body?.innerText?.includes('Publishing mix') &&
@@ -527,6 +532,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasDeploymentHistory &&
       layout.hasOperationsSignals &&
       layout.hasCommerceHealth &&
+      layout.hasModerationQueue &&
       layout.hasAggregateAnalytics &&
       layout.hasApiConsumers &&
       layout.hasPersistenceReadiness &&
@@ -560,6 +566,7 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
       ['deploymentHistory', '[data-testid="dashboard-deployment-history"]'],
       ['operationsSignals', '[data-testid="dashboard-operations-signal-board"]'],
       ['commerceHealth', '[data-testid="dashboard-commerce-health"]'],
+      ['moderationQueue', '[data-testid="dashboard-moderation-queue"]'],
       ['aggregateAnalytics', '[data-testid="dashboard-aggregate-analytics"]'],
       ['apiConsumers', '[data-testid="dashboard-api-consumers"]'],
       ['persistenceReadiness', '[data-testid="dashboard-persistence-readiness"]'],

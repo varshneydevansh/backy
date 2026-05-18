@@ -28,7 +28,7 @@ The dashboard must answer four questions without requiring the operator to hunt 
 ## Later dashboard modules
 
 - Product commerce health: implemented for the current products/orders/settings slice. The dashboard now renders total and loaded product counts, low-stock/out-of-stock inventory warnings, checkout URL coverage, payment/tax/shipping/discount provider readiness, setup score, open/failed/paid order counts, and loaded order value with direct links to Products, Orders, and Settings.
-- Form/comment moderation queue: pending submissions, spam reports, approval throughput.
+- Form/comment moderation queue: implemented for the current forms/comments slice. The dashboard now renders form submission totals and loaded sample counts, pending form/comment queues, form spam, reported/spam/blocked comments, approval throughput, manual-review form count, moderation audit events, sample coverage, and direct links to Forms and Comments.
 - Deployment health: Vercel project status, last deploy, domain verification, cache invalidation/rebuild status.
 - Supabase connectivity: implemented for runtime-visible persistence state. The dashboard now renders database mode/provider/configuration, repository mode, Supabase project/database/auth/service-role readiness, storage bucket, missing runtime env, and explicit migration/RLS/backup external-gate labels instead of fake connected states.
 - API consumers: implemented for the current Settings/API contract slice. The dashboard now renders API consumer readiness with public/admin endpoint counts, API key configured state, active/revoked named service-key counts, rotation/revocation history counts, recent API access audit events, and the same non-secret counts in the downloadable handoff JSON.
