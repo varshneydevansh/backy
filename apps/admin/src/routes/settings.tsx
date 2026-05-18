@@ -509,6 +509,44 @@ const PLATFORM_BACKLOG = [
   },
 ] as const;
 
+const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
+  {
+    family: 'Database and Supabase',
+    providers: ['Supabase/Postgres', 'Supabase Auth', 'Supabase Storage'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['BACKY_DATABASE_URL or DATABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'BACKY_SUPABASE_URL'],
+    evidence: 'Configured runtime diagnostics plus disposable database/storage/auth provider checks.',
+  },
+  {
+    family: 'Storage and media delivery',
+    providers: ['Local storage', 'Supabase Storage', 'S3/R2-compatible storage', 'Media scanner'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['BACKY_STORAGE_PROVIDER', 'BACKY_MEDIA_STORAGE_PROVIDER', 'AWS_ACCESS_KEY_ID', 'BACKY_MEDIA_SCAN_PROVIDER'],
+    evidence: 'Storage provisioning, read/write/list/stat probes, scanner readiness, and replacement credential rotation checks.',
+  },
+  {
+    family: 'Vercel deployment and secrets',
+    providers: ['Vercel project', 'Vercel team', 'Vercel domains', 'Vercel env secret manager'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['VERCEL_TOKEN or BACKY_VERCEL_TOKEN', 'BACKY_VERCEL_PROJECT_ID', 'BACKY_VERCEL_TEAM_ID'],
+    evidence: 'Project metadata, deployment diagnostics, and non-secret env secret-manager planning evidence.',
+  },
+  {
+    family: 'Notifications',
+    providers: ['Webhook', 'Resend', 'SMTP', 'Local outbox'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL', 'RESEND_API_KEY', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD'],
+    evidence: 'Configured provider readiness plus test-notification delivery proof for the selected channel.',
+  },
+  {
+    family: 'Commerce providers',
+    providers: ['Stripe', 'TaxJar', 'Avalara', 'EasyPost', 'Shippo', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento'],
+    gate: 'npm run ci:commerce-provider-certification',
+    requiredInputs: ['STRIPE_SECRET_KEY', 'TAXJAR_API_KEY', 'COMMERCE_WEBHOOK_SECRET', 'provider-specific catalog/payment credentials'],
+    evidence: 'Payment, tax, shipping, catalog, subscription, refund, and webhook provider readiness for selected live families.',
+  },
+] as const;
+
 const FRONTEND_API_CAPABILITIES: FrontendApiCapability[] = [
   {
     area: 'Site routing and render payloads',
@@ -1638,6 +1676,21 @@ function SettingsPage() {
           'commerce provider aliases including STRIPE_SECRET_KEY, TAXJAR_API_KEY, PAYPAL_ACCESS_TOKEN, SHOPIFY_ADMIN_ACCESS_TOKEN, and COMMERCE_WEBHOOK_SECRET',
           'HTTP commerce endpoint aliases including COMMERCE_TAX_PROVIDER_URL, COMMERCE_SHIPPING_PROVIDER_URL, COMMERCE_PRODUCT_SYNC_URL, and COMMERCE_SUBSCRIPTION_ACTION_URL',
         ],
+      },
+      providerCertification: {
+        status: 'external-live-provider-gate',
+        settingsGate: 'npm run ci:settings-provider-certification',
+        commerceGate: 'npm run ci:commerce-provider-certification',
+        localPreflight: 'npm run test:settings-provider-certification-preflight-contract',
+        releasePreflight: 'npm run test:release-certification-preflight-contract',
+        secretHandling: 'Provider credentials stay in deployment or CI environment variables; Settings handoff manifests only expose non-secret provider families, gate names, and readiness evidence.',
+        groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
+          family: group.family,
+          providers: [...group.providers],
+          gate: group.gate,
+          requiredInputs: [...group.requiredInputs],
+          evidence: group.evidence,
+        })),
       },
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
@@ -5698,6 +5751,40 @@ function InfrastructureSettings({
           <p className="mt-4 text-sm text-muted-foreground">
             Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, storage aliases such as <span className="font-mono">BACKY_STORAGE_PROVIDER</span>/<span className="font-mono">BACKY_MEDIA_STORAGE_PROVIDER</span>, <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, and <span className="font-mono">AWS_ACCESS_KEY_ID</span>, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification aliases such as <span className="font-mono">RESEND_API_KEY</span>, <span className="font-mono">SMTP_HOST</span>, <span className="font-mono">SMTP_USER</span>, <span className="font-mono">SMTP_PASSWORD</span>, and <span className="font-mono">BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL</span>, commerce aliases such as <span className="font-mono">STRIPE_SECRET_KEY</span>, <span className="font-mono">TAXJAR_API_KEY</span>, <span className="font-mono">PAYPAL_ACCESS_TOKEN</span>, <span className="font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</span>, and <span className="font-mono">COMMERCE_WEBHOOK_SECRET</span> for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento, plus HTTP endpoint aliases such as <span className="font-mono">COMMERCE_TAX_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_SHIPPING_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_PRODUCT_SYNC_URL</span>, and <span className="font-mono">COMMERCE_SUBSCRIPTION_ACTION_URL</span>.
           </p>
+          <div className="mt-4 rounded-lg border border-border bg-background p-3" data-testid="settings-provider-certification">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Provider certification matrix</div>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                  Settings keeps provider secrets out of saved metadata. These rows show which live provider families still require credentialed certification before the Settings row can move from Partial to Ready.
+                </p>
+              </div>
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                External providers
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => (
+                <div key={group.family} className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="font-semibold text-foreground">{group.family}</div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {group.gate.includes('commerce') ? 'Commerce' : 'Settings'}
+                    </span>
+                  </div>
+                  <div className="mt-2 font-mono text-[11px] text-muted-foreground">{group.gate}</div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {group.providers.map((provider) => (
+                      <span key={`${group.family}-${provider}`} className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {provider}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-[11px] leading-4 text-muted-foreground">{group.evidence}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </PanelContent>
       </Panel>
 

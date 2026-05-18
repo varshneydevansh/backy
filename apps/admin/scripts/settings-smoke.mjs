@@ -69,6 +69,14 @@ const assertSettingsSourceContracts = () => {
     'ci:sdk-postgres-smoke',
     'ci:settings-provider-certification',
     'ci:commerce-provider-certification',
+    'data-testid="settings-provider-certification"',
+    'providerCertification',
+    'npm run test:settings-provider-certification-preflight-contract',
+    'external-live-provider-gate',
+    'Supabase/Postgres',
+    'Vercel env secret manager',
+    'Resend',
+    'COMMERCE_WEBHOOK_SECRET',
     'releaseCertification',
   ];
 
@@ -1692,6 +1700,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationDatabaseGate: runbookText.includes('certify_database') && runbookText.includes('BACKY_DATABASE_URL') && runbookText.includes('DATABASE_URL'),
     hasReleaseCertificationSettingsGate: runbookText.includes('certify_settings_providers') && runbookText.includes('ci:settings-provider-certification'),
     hasReleaseCertificationCommerceGate: runbookText.includes('certify_commerce_providers') && runbookText.includes('ci:commerce-provider-certification'),
+    hasProviderCertificationMatrix: Boolean(document.querySelector('[data-testid="settings-provider-certification"]')),
+    hasProviderCertificationSettings: runbookText.includes('Provider certification matrix') && runbookText.includes('npm run ci:settings-provider-certification'),
+    hasProviderCertificationCommerce: runbookText.includes('npm run ci:commerce-provider-certification') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
+    hasProviderCertificationFamilies: runbookText.includes('Supabase/Postgres') && runbookText.includes('Vercel env secret manager') && runbookText.includes('Resend') && runbookText.includes('Magento'),
     hasReleaseCertificationStorageAliases: runbookText.includes('BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('SUPABASE_SERVICE_ROLE_KEY') && runbookText.includes('AWS_ACCESS_KEY_ID'),
     hasReleaseCertificationNotificationAliases: runbookText.includes('RESEND_API_KEY') && runbookText.includes('SMTP_HOST') && runbookText.includes('SMTP_USER') && runbookText.includes('SMTP_PASSWORD') && runbookText.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
     hasReleaseCertificationCommerceAliases: runbookText.includes('STRIPE_SECRET_KEY') && runbookText.includes('PAYPAL_ACCESS_TOKEN') && runbookText.includes('SHOPIFY_ADMIN_ACCESS_TOKEN') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
@@ -1750,6 +1762,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationDatabaseGate &&
       infrastructureState.hasReleaseCertificationSettingsGate &&
       infrastructureState.hasReleaseCertificationCommerceGate &&
+      infrastructureState.hasProviderCertificationMatrix &&
+      infrastructureState.hasProviderCertificationSettings &&
+      infrastructureState.hasProviderCertificationCommerce &&
+      infrastructureState.hasProviderCertificationFamilies &&
       infrastructureState.hasReleaseCertificationStorageAliases &&
       infrastructureState.hasReleaseCertificationNotificationAliases &&
       infrastructureState.hasReleaseCertificationCommerceAliases &&
