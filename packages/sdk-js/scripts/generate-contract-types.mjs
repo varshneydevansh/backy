@@ -326,6 +326,7 @@ const sourceLines = [
   '',
   'export interface GeneratedBackyOpenApiDocument {',
   '  openapi: string;',
+  '  "x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification;',
   '  info: { title: string; version: string; description?: string; [key: string]: unknown };',
   '  servers?: Array<{ url: string; [key: string]: unknown }>;',
   '  paths: Record<string, Partial<Record<"get" | "post" | "put" | "patch" | "delete", GeneratedBackyOpenApiOperation>> & Record<string, unknown>>;',

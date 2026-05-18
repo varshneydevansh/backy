@@ -31,6 +31,7 @@ import type {
   GeneratedBackyFrontendDesignContract,
   GeneratedBackyFrontendDesignProvenance,
   GeneratedBackyFrontendManifest,
+  GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
   GeneratedBackyFrontendManifestNavigationItem,
   GeneratedBackyInteractiveControl,
@@ -296,6 +297,34 @@ const editableMap = {
     scope: "element",
   },
 } satisfies GeneratedBackyEditableMap;
+
+const frontendDatabaseCertification = {
+  schemaVersion: "backy.frontend-database-certification.v1",
+  status: "external-database-gate",
+  requiredFor: "production-custom-frontends",
+  gate: {
+    command: "npm run ci:sdk-postgres-smoke",
+    workflow: ".github/workflows/sdk-postgres-smoke.yml",
+    localPreflight: "npm run test:sdk-postgres-preflight-contract",
+    typeContract: "npm run test:frontend-contract-types",
+  },
+  environment: {
+    dataMode: "database",
+    secretAliases: ["BACKY_DATABASE_URL", "DATABASE_URL"],
+    targetGuards: [
+      "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
+      "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",
+    ],
+  },
+  requires: [
+    "disposable migrated Supabase/Postgres database",
+    "disposable_database_confirmed=true",
+    "public schema, RLS policies, indexes, and constraints migrated",
+  ],
+  coverage: ["manifest", "openapi", "render", "collections", "forms"],
+  secretHandling:
+    "Database URLs and service credentials stay in CI/runtime environment.",
+} satisfies GeneratedBackyFrontendManifestDatabaseCertification;
 
 const interactiveControl = {
   key: "rounds",
@@ -589,6 +618,7 @@ const manifest = {
   contract: {
     version: "backy.ai-frontend.v1",
     docs: "/specs/ai-frontend-contract/README.md",
+    databaseCertification: frontendDatabaseCertification,
     schemas: {
       manifest: "frontend-manifest.schema.json",
       renderPayload: "content-payload.schema.json",
@@ -1318,6 +1348,7 @@ const siteListEnvelope = {
 
 const openApi = {
   openapi: "3.1.0",
+  "x-backy-database-certification": frontendDatabaseCertification,
   info: {
     title: "Demo Backy Public API",
     version: "backy-public.v1",
@@ -3117,6 +3148,21 @@ const invalidGeneratedManifestSchemas = {
       ...manifest.contract.schemas,
       // @ts-expect-error generated manifest schema references are URL/string references.
       manifest: 123,
+    },
+  },
+} satisfies GeneratedBackyFrontendManifest;
+
+const invalidGeneratedManifestDatabaseCertification = {
+  ...manifest,
+  contract: {
+    ...manifest.contract,
+    databaseCertification: {
+      ...manifest.contract.databaseCertification,
+      gate: {
+        ...manifest.contract.databaseCertification.gate,
+        // @ts-expect-error generated manifest database certification points at the SDK Postgres smoke gate.
+        command: "npm run ci:local-only-sdk-smoke",
+      },
     },
   },
 } satisfies GeneratedBackyFrontendManifest;

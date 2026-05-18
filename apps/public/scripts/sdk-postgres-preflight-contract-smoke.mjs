@@ -15,11 +15,63 @@ const assert = (condition, message) => {
 };
 
 const sdkSmokeCi = read('../../../scripts/sdk-smoke-ci.mjs');
+const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
+const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
+const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
+const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const rootPackage = read('../../../package.json');
 const sdkPostgresWorkflow = read('../../../.github/workflows/sdk-postgres-smoke.yml');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
 const sdkReadme = read('../../../packages/sdk-js/README.md');
 const apiContracts = read('../../../specs/backy-api-contracts.md');
+
+assert(
+  manifestRoute.includes('frontendDatabaseCertification') &&
+    manifestRoute.includes("schemaVersion: 'backy.frontend-database-certification.v1'") &&
+    manifestRoute.includes("databaseCertification: frontendDatabaseCertification") &&
+    manifestRoute.includes("command: 'npm run ci:sdk-postgres-smoke'") &&
+    manifestRoute.includes("workflow: '.github/workflows/sdk-postgres-smoke.yml'") &&
+    manifestRoute.includes("localPreflight: 'npm run test:sdk-postgres-preflight-contract'") &&
+    manifestRoute.includes("typeContract: 'npm run test:frontend-contract-types'") &&
+    manifestRoute.includes("'BACKY_DATABASE_URL', 'DATABASE_URL'") &&
+    manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'") &&
+    manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'") &&
+    manifestRoute.includes('disposable_database_confirmed=true') &&
+    manifestRoute.includes('Database URLs and service credentials stay in CI/runtime environment'),
+  'Frontend manifest must expose a non-secret SDK Postgres database certification handoff.',
+);
+
+assert(
+  openApiRoute.includes('frontendDatabaseCertification') &&
+    openApiRoute.includes('"x-backy-database-certification": frontendDatabaseCertification') &&
+    openApiRoute.includes('backy.frontend-database-certification.v1') &&
+    openApiRoute.includes('npm run ci:sdk-postgres-smoke') &&
+    openApiRoute.includes('npm run test:frontend-contract-types') &&
+    openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
+    openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
+    openApiRoute.includes('disposable_database_confirmed=true'),
+  'Site-scoped OpenAPI must expose the same non-secret SDK Postgres database certification extension.',
+);
+
+assert(
+  frontendManifestSchema.includes('"databaseCertification"') &&
+    frontendManifestSchema.includes('"backy.frontend-database-certification.v1"') &&
+    frontendManifestSchema.includes('"npm run ci:sdk-postgres-smoke"') &&
+    frontendManifestSchema.includes('"npm run test:frontend-contract-types"') &&
+    frontendManifestSchema.includes('"BACKY_DATABASE_URL"') &&
+    frontendManifestSchema.includes('"DATABASE_URL"') &&
+    frontendManifestSchema.includes('"version", "schemas", "databaseCertification"'),
+  'Frontend manifest schema must require and type the database certification handoff.',
+);
+
+assert(
+  generatedSdkTypes.includes('GeneratedBackyFrontendManifestDatabaseCertification') &&
+    generatedSdkTypes.includes('"x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification') &&
+    generatedSdkTypes.includes('databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification') &&
+    generatedSdkTypes.includes('"npm run ci:sdk-postgres-smoke"') &&
+    generatedSdkTypes.includes('"npm run test:frontend-contract-types"'),
+  'Generated SDK types must export the manifest/OpenAPI database certification contract.',
+);
 
 assert(
   sdkSmokeCi.includes('requiredDatabaseSchema') &&

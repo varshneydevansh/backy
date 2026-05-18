@@ -5,6 +5,58 @@
   "type": "object",
   "additionalProperties": true,
   "$defs": {
+    "databaseCertification": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schemaVersion": { "const": "backy.frontend-database-certification.v1" },
+        "status": { "const": "external-database-gate" },
+        "requiredFor": { "const": "production-custom-frontends" },
+        "gate": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "command": { "const": "npm run ci:sdk-postgres-smoke" },
+            "workflow": { "const": ".github/workflows/sdk-postgres-smoke.yml" },
+            "localPreflight": { "const": "npm run test:sdk-postgres-preflight-contract" },
+            "typeContract": { "const": "npm run test:frontend-contract-types" }
+          },
+          "required": ["command", "workflow", "localPreflight", "typeContract"]
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "dataMode": { "const": "database" },
+            "secretAliases": {
+              "type": "array",
+              "items": { "enum": ["BACKY_DATABASE_URL", "DATABASE_URL"] },
+              "contains": { "const": "BACKY_DATABASE_URL" }
+            },
+            "targetGuards": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
+                  "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE"
+                ]
+              }
+            }
+          },
+          "required": ["dataMode", "secretAliases", "targetGuards"]
+        },
+        "requires": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "coverage": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "secretHandling": { "type": "string", "minLength": 1 }
+      },
+      "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "secretHandling"]
+    },
     "navigationItem": {
       "type": "object",
       "additionalProperties": true,
@@ -166,6 +218,7 @@
           "properties": {
             "version": { "const": "backy.ai-frontend.v1" },
             "docs": { "type": "string", "minLength": 1 },
+            "databaseCertification": { "$ref": "#/$defs/databaseCertification" },
             "schemas": {
               "type": "object",
               "additionalProperties": { "type": "string" },
@@ -180,7 +233,7 @@
               "required": ["manifest", "renderPayload", "themeTokens", "elementActions", "dataBindings", "editableMap"]
             }
           },
-          "required": ["version", "schemas"]
+          "required": ["version", "schemas", "databaseCertification"]
         },
         "capabilities": {
           "type": "object",

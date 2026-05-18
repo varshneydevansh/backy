@@ -18,6 +18,7 @@ export interface GeneratedBackyOpenApiOperation {
 
 export interface GeneratedBackyOpenApiDocument {
   openapi: string;
+  "x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification;
   info: { title: string; version: string; description?: string; [key: string]: unknown };
   servers?: Array<{ url: string; [key: string]: unknown }>;
   paths: Record<string, Partial<Record<"get" | "post" | "put" | "patch" | "delete", GeneratedBackyOpenApiOperation>> & Record<string, unknown>>;
@@ -2272,6 +2273,29 @@ export type GeneratedBackyPublicRenderPayloadEnvelope = {
   };
 };
 
+export type GeneratedBackyFrontendManifestDatabaseCertification = {
+  schemaVersion: "backy.frontend-database-certification.v1";
+  status: "external-database-gate";
+  requiredFor: "production-custom-frontends";
+  gate: {
+    command: "npm run ci:sdk-postgres-smoke";
+    workflow: ".github/workflows/sdk-postgres-smoke.yml";
+    localPreflight: "npm run test:sdk-postgres-preflight-contract";
+    typeContract: "npm run test:frontend-contract-types";
+    [key: string]: unknown;
+  };
+  environment: {
+    dataMode: "database";
+    secretAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL">;
+    targetGuards: Array<"BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST" | "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE">;
+    [key: string]: unknown;
+  };
+  requires: Array<string>;
+  coverage: Array<string>;
+  secretHandling: string;
+  [key: string]: unknown;
+};
+
 export type GeneratedBackyFrontendManifestNavigationItem = {
   id: string;
   type: "page" | "route" | "url";
@@ -2377,6 +2401,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
     contract: {
       version: "backy.ai-frontend.v1";
       docs?: string;
+      databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification;
       schemas: {
         manifest: string;
         renderPayload: string;

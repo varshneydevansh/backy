@@ -31,6 +31,19 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('databaseCertification: frontendDatabaseCertification') &&
+    manifestRoute.includes('backy.frontend-database-certification.v1') &&
+    manifestRoute.includes('npm run ci:sdk-postgres-smoke') &&
+    manifestRoute.includes('npm run test:frontend-contract-types') &&
+    openApiRoute.includes('"x-backy-database-certification": frontendDatabaseCertification') &&
+    generatedSdkTypes.includes('GeneratedBackyFrontendManifestDatabaseCertification') &&
+    generatedSdkTypes.includes('"x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification') &&
+    generatedSdkSmoke.includes('frontendDatabaseCertification') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestDatabaseCertification'),
+  'Frontend manifest, OpenAPI, and generated SDK types must expose the non-secret SDK Postgres certification handoff.',
+);
+
+assert(
   openApiRoute.includes('"/api/sites":') &&
     openApiRoute.includes('operationId: "discoverBackySite"') &&
     openApiRoute.includes('$ref: "#/components/schemas/SiteListEnvelope"') &&

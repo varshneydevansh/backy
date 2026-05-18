@@ -85,6 +85,44 @@ type ManifestDeliverySite = {
   settings?: Pick<SiteSettings, 'domainVerification' | 'localization'> | null;
 };
 
+const frontendDatabaseCertification = {
+  schemaVersion: 'backy.frontend-database-certification.v1',
+  status: 'external-database-gate',
+  requiredFor: 'production-custom-frontends',
+  gate: {
+    command: 'npm run ci:sdk-postgres-smoke',
+    workflow: '.github/workflows/sdk-postgres-smoke.yml',
+    localPreflight: 'npm run test:sdk-postgres-preflight-contract',
+    typeContract: 'npm run test:frontend-contract-types',
+  },
+  environment: {
+    dataMode: 'database',
+    secretAliases: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+    targetGuards: [
+      'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
+      'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
+    ],
+  },
+  requires: [
+    'disposable migrated Supabase/Postgres database',
+    'disposable_database_confirmed=true',
+    'public schema, RLS policies, indexes, and constraints migrated',
+  ],
+  coverage: [
+    'manifest',
+    'openapi',
+    'render',
+    'media',
+    'collections',
+    'reusable-sections',
+    'forms',
+    'comments',
+    'events',
+    'interactive-components',
+  ],
+  secretHandling: 'Database URLs and service credentials stay in CI/runtime environment; the manifest exposes only non-secret gate names and requirements.',
+} as const;
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const hasPublicOrderCollectionAccess = (permissions: {
@@ -533,6 +571,7 @@ const buildRepositoryManifest = (
       contract: {
         version: 'backy.ai-frontend.v1',
         docs: '/specs/ai-frontend-contract/README.md',
+        databaseCertification: frontendDatabaseCertification,
         schemas: {
           manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
           renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
@@ -862,6 +901,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         contract: {
           version: 'backy.ai-frontend.v1',
           docs: '/specs/ai-frontend-contract/README.md',
+          databaseCertification: frontendDatabaseCertification,
           schemas: {
             manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
             renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',

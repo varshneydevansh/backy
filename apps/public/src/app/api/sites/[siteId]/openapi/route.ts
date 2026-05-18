@@ -79,6 +79,45 @@ const formSubmissionValidationCodes = [
   "record_create_failed",
 ];
 
+const frontendDatabaseCertification = {
+  schemaVersion: "backy.frontend-database-certification.v1",
+  status: "external-database-gate",
+  requiredFor: "production-custom-frontends",
+  gate: {
+    command: "npm run ci:sdk-postgres-smoke",
+    workflow: ".github/workflows/sdk-postgres-smoke.yml",
+    localPreflight: "npm run test:sdk-postgres-preflight-contract",
+    typeContract: "npm run test:frontend-contract-types",
+  },
+  environment: {
+    dataMode: "database",
+    secretAliases: ["BACKY_DATABASE_URL", "DATABASE_URL"],
+    targetGuards: [
+      "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
+      "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",
+    ],
+  },
+  requires: [
+    "disposable migrated Supabase/Postgres database",
+    "disposable_database_confirmed=true",
+    "public schema, RLS policies, indexes, and constraints migrated",
+  ],
+  coverage: [
+    "manifest",
+    "openapi",
+    "render",
+    "media",
+    "collections",
+    "reusable-sections",
+    "forms",
+    "comments",
+    "events",
+    "interactive-components",
+  ],
+  secretHandling:
+    "Database URLs and service credentials stay in CI/runtime environment; OpenAPI exposes only non-secret gate names and requirements.",
+} as const;
+
 const pathParameter = (
   name: string,
   description?: string,
@@ -315,6 +354,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return publicContractJson(
       {
         openapi: "3.1.0",
+        "x-backy-database-certification": frontendDatabaseCertification,
         info: {
           title: `${site.name} Backy Public API`,
           version: "backy-public.v1",
