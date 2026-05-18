@@ -102,10 +102,12 @@ npm run test:release-certification-doctor-contract
 
 Current Partial-to-gate map:
 
-- `/forms`: run `npm run ci:forms-postgres` or the Forms Postgres Contract workflow against a disposable migrated Supabase/Postgres database.
-- Frontend manifest/OpenAPI/SDK APIs: run `npm run ci:sdk-postgres-smoke` or the SDK Postgres Smoke workflow against the same disposable migrated Supabase/Postgres target.
-- `/settings` and Settings admin APIs: run `npm run ci:settings-provider-certification` or enable `certify_settings_providers` in the release workflow with the selected storage, Vercel, notification, and provider-family inputs.
-- `/products` and `/orders`: run `npm run ci:commerce-provider-certification` or enable `certify_commerce_providers` in the release workflow with the selected payment, tax, shipping, catalog, subscription, and webhook provider inputs.
+| Partial row | Gate | Standalone workflow or release input |
+| --- | --- | --- |
+| `/forms` | `npm run ci:forms-postgres` | Forms Postgres Contract workflow against a disposable migrated Supabase/Postgres database |
+| Frontend manifest/OpenAPI/SDK APIs | `npm run ci:sdk-postgres-smoke` | SDK Postgres Smoke workflow against the same disposable migrated Supabase/Postgres target |
+| `/settings` and Settings admin APIs | `npm run ci:settings-provider-certification` | Settings provider workflow or `certify_settings_providers` with selected storage, Vercel, notification, and provider-family inputs |
+| `/products` and `/orders` | `npm run ci:commerce-provider-certification` | Commerce provider workflow or `certify_commerce_providers` with selected payment, tax, shipping, catalog, subscription, and webhook provider inputs |
 
 Before running the external gates, use the non-secret readiness doctor to see which database, Settings, and Commerce credential groups are configured or missing. Its JSON also includes `partialGateMap`, the current Partial row to local gate/workflow/input-family map:
 
