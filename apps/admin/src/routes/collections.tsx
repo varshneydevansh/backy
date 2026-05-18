@@ -68,6 +68,7 @@ interface CollectionsSearch {
   siteId?: string;
   collectionId?: string;
   recordId?: string;
+  frontendTemplate?: string;
   draft?: 'new';
   search?: string;
   status?: RecordStatusFilter;
@@ -106,6 +107,7 @@ export const Route = createFileRoute('/collections')({
     siteId: normalizedSearchString(search.siteId),
     collectionId: normalizedSearchString(search.collectionId),
     recordId: normalizedSearchString(search.recordId),
+    frontendTemplate: normalizedSearchString(search.frontendTemplate),
     draft: search.draft === 'new' ? 'new' : undefined,
     search: normalizedSearchString(search.search),
     status: isRecordStatusFilter(search.status) ? search.status : undefined,
@@ -1475,7 +1477,7 @@ function CollectionsPage() {
     description: '',
     status: 'published' as Collection['status'],
     permissions: DEFAULT_PERMISSIONS,
-    frontendDesignTemplateId: '',
+    frontendDesignTemplateId: routeSearch.frontendTemplate || '',
     dynamicTemplates: defaultDynamicTemplates(),
     visitorWritePolicy: defaultVisitorWritePolicy(),
     fields: [createStarterField()],
@@ -1567,6 +1569,7 @@ function CollectionsPage() {
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'collection'),
     [frontendDesign?.templates],
   );
+  const activeFrontendTemplateId = routeSearch.frontendTemplate || '';
   const frontendCollectionTemplateBlueprints = useMemo(
     () => frontendCollectionTemplates.map((template) => ({
       template,
@@ -2191,6 +2194,7 @@ function CollectionsPage() {
     ...(isCollectionDraftMode && !selectedCollectionId ? { draft: 'new' as const } : {}),
     ...(selectedCollectionId ? { collectionId: selectedCollectionId } : {}),
     ...(selectedRecordId ? { recordId: selectedRecordId } : {}),
+    ...(activeFrontendTemplateId ? { frontendTemplate: activeFrontendTemplateId } : {}),
     ...(recordFilters.search.trim() ? { search: recordFilters.search.trim() } : {}),
     ...(recordFilters.status ? { status: recordFilters.status } : {}),
     ...(recordFilters.fieldKey ? { fieldKey: recordFilters.fieldKey } : {}),
@@ -2201,6 +2205,7 @@ function CollectionsPage() {
     ...(recordPagination.offset > 0 ? { offset: recordPagination.offset } : {}),
   }), [
     activeSiteId,
+    activeFrontendTemplateId,
     recordFilters.fieldKey,
     recordFilters.fieldValue,
     recordFilters.search,
@@ -2223,6 +2228,7 @@ function CollectionsPage() {
       siteId: merged.siteId || activeSiteId,
       ...(merged.collectionId ? { collectionId: merged.collectionId } : {}),
       ...(merged.recordId ? { recordId: merged.recordId } : {}),
+      ...(merged.frontendTemplate?.trim() ? { frontendTemplate: merged.frontendTemplate.trim() } : {}),
       ...(merged.draft === 'new' && !merged.collectionId ? { draft: 'new' as const } : {}),
       ...(merged.search?.trim() ? { search: merged.search.trim() } : {}),
       ...(merged.status ? { status: merged.status } : {}),
@@ -4402,7 +4408,16 @@ function CollectionsPage() {
                   }, null, 2);
 
                   return (
-                    <article key={template.id} className="rounded-lg border border-teal-200 bg-background p-4">
+                    <article
+                      key={template.id}
+                      className={cn(
+                        'rounded-lg border bg-background p-4',
+                        activeFrontendTemplateId === template.id
+                          ? 'border-teal-600 ring-1 ring-teal-600'
+                          : 'border-teal-200',
+                      )}
+                      data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h4 className="text-sm font-semibold text-foreground">{template.name}</h4>

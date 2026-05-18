@@ -4714,18 +4714,31 @@ function EditSitePage() {
         });
         return;
       case "form":
-        void navigate({ to: "/forms", search: { siteId: targetSiteId } });
+        void navigate({
+          to: "/forms",
+          search: { siteId: targetSiteId, frontendTemplate: template.id },
+        });
         return;
       case "product":
-        void navigate({ to: "/products", search: { siteId: targetSiteId } });
+        void navigate({
+          to: "/products",
+          search: { siteId: targetSiteId, frontendTemplate: template.id },
+        });
         return;
       case "collection":
-        void navigate({ to: "/collections", search: { siteId: targetSiteId } });
+        void navigate({
+          to: "/collections",
+          search: {
+            siteId: targetSiteId,
+            draft: "new",
+            frontendTemplate: template.id,
+          },
+        });
         return;
       case "section":
         void navigate({
           to: "/reusable-sections",
-          search: { siteId: targetSiteId },
+          search: { siteId: targetSiteId, frontendTemplate: template.id },
         });
         return;
       default:

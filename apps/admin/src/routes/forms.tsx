@@ -86,6 +86,7 @@ const FORMS_PERMISSION_ROLE_DEFAULTS: Record<FormsPermissionKey, Array<AuthUser[
 interface FormsSearch {
   siteId?: string;
   formId?: string;
+  frontendTemplate?: string;
   q?: string;
   source?: FormSourceFilter;
   state?: FormStateFilter;
@@ -203,6 +204,7 @@ export const Route = createFileRoute('/forms')({
   validateSearch: (search: Record<string, unknown>): FormsSearch => ({
     siteId: normalizedSearchString(search.siteId),
     formId: normalizedSearchString(search.formId),
+    frontendTemplate: normalizedSearchString(search.frontendTemplate),
     q: normalizedSearchString(search.q),
     source: isFormSourceFilter(search.source) ? search.source : undefined,
     state: isFormStateFilter(search.state) ? search.state : undefined,
@@ -585,6 +587,7 @@ function FormsRoute() {
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'form'),
     [frontendDesign?.templates],
   );
+  const activeFrontendTemplateId = routeSearch.frontendTemplate || '';
   const frontendTemplateBlueprints = useMemo(
     () => frontendFormTemplates.map((template) => ({
       template,
@@ -1076,6 +1079,7 @@ function FormsRoute() {
   const formsRouteSearch = useMemo<FormsSearch>(() => ({
     siteId: activeSiteId,
     ...(selectedFormId ? { formId: selectedFormId } : {}),
+    ...(activeFrontendTemplateId ? { frontendTemplate: activeFrontendTemplateId } : {}),
     ...(formSearchQuery.trim() ? { q: formSearchQuery.trim() } : {}),
     ...(formSourceFilter !== 'all' ? { source: formSourceFilter } : {}),
     ...(formStateFilter !== 'all' ? { state: formStateFilter } : {}),
@@ -1085,6 +1089,7 @@ function FormsRoute() {
     ...(submissionQuery.trim() ? { submissionQ: submissionQuery.trim() } : {}),
   }), [
     activeSiteId,
+    activeFrontendTemplateId,
     formDestinationFilter,
     formReadinessFilter,
     formSearchQuery,
@@ -1103,6 +1108,7 @@ function FormsRoute() {
     const normalized: FormsSearch = {
       siteId: merged.siteId || activeSiteId,
       ...(merged.formId ? { formId: merged.formId } : {}),
+      ...(merged.frontendTemplate?.trim() ? { frontendTemplate: merged.frontendTemplate.trim() } : {}),
       ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
       ...(merged.source && merged.source !== 'all' ? { source: merged.source } : {}),
       ...(merged.state && merged.state !== 'all' ? { state: merged.state } : {}),
@@ -2731,7 +2737,16 @@ function FormsRoute() {
                     }, null, 2);
 
                     return (
-                      <div key={template.id} className="rounded-lg border border-teal-200 bg-background p-4">
+                      <div
+                        key={template.id}
+                        className={cn(
+                          'rounded-lg border bg-background p-4',
+                          activeFrontendTemplateId === template.id
+                            ? 'border-teal-600 ring-1 ring-teal-600'
+                            : 'border-teal-200',
+                        )}
+                        data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h4 className="text-sm font-semibold text-foreground">{template.name}</h4>

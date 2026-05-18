@@ -71,6 +71,7 @@ const REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS: Record<ReusableSectionPermissio
 interface ReusableSectionsSearch {
   siteId?: string;
   sectionId?: string;
+  frontendTemplate?: string;
   status?: SectionStatusFilter;
   q?: string;
 }
@@ -113,6 +114,7 @@ export const Route = createFileRoute('/reusable-sections')({
   validateSearch: (search: Record<string, unknown>): ReusableSectionsSearch => ({
     siteId: normalizedSearchString(search.siteId),
     sectionId: normalizedSearchString(search.sectionId),
+    frontendTemplate: normalizedSearchString(search.frontendTemplate),
     status: isSectionStatusFilter(search.status) ? search.status : undefined,
     q: normalizedSearchString(search.q),
   }),
@@ -420,6 +422,7 @@ function ReusableSectionsRoute() {
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'section'),
     [frontendDesign?.templates],
   );
+  const activeFrontendTemplateId = routeSearch.frontendTemplate || '';
   const frontendSectionBlueprints = useMemo(
     () => frontendSectionTemplates.map((template) => ({
       template,
@@ -1637,7 +1640,16 @@ function ReusableSectionsRoute() {
                     section: { ...blueprint, metadata },
                   }, null, 2);
                   return (
-                    <article key={template.id} className="rounded-lg border border-teal-200 bg-teal-50/50 p-4">
+                    <article
+                      key={template.id}
+                      className={cn(
+                        'rounded-lg border bg-teal-50/50 p-4',
+                        activeFrontendTemplateId === template.id
+                          ? 'border-teal-600 ring-1 ring-teal-600'
+                          : 'border-teal-200',
+                      )}
+                      data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="text-sm font-semibold text-foreground">{template.name}</h3>

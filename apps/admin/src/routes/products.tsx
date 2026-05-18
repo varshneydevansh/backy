@@ -284,6 +284,7 @@ interface ProductsSearch {
   category?: string;
   q?: string;
   productId?: string;
+  frontendTemplate?: string;
 }
 
 interface ProductFormState {
@@ -364,6 +365,7 @@ export const Route = createFileRoute('/products')({
     category: normalizedSearchString(search.category),
     q: normalizedSearchString(search.q),
     productId: normalizedSearchString(search.productId),
+    frontendTemplate: normalizedSearchString(search.frontendTemplate),
   }),
   component: ProductsRoute,
 });
@@ -1071,6 +1073,7 @@ function ProductsRoute() {
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'product'),
     [frontendDesign?.templates],
   );
+  const activeFrontendTemplateId = routeSearch.frontendTemplate || '';
   const frontendProductTemplateBlueprints = useMemo(
     () => frontendProductTemplates.map((template) => ({
       template,
@@ -1721,7 +1724,8 @@ function ProductsRoute() {
     ...(categoryFilter !== 'all' ? { category: categoryFilter } : {}),
     ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
     ...(selectedProductId ? { productId: selectedProductId } : {}),
-  }), [activeSiteId, categoryFilter, productTypeFilter, searchQuery, selectedProductId, statusFilter, stockFilter]);
+    ...(activeFrontendTemplateId ? { frontendTemplate: activeFrontendTemplateId } : {}),
+  }), [activeFrontendTemplateId, activeSiteId, categoryFilter, productTypeFilter, searchQuery, selectedProductId, statusFilter, stockFilter]);
 
   const updateProductsRouteSearch = (next: ProductsSearch) => {
     const merged: ProductsSearch = {
@@ -1736,6 +1740,7 @@ function ProductsRoute() {
       ...(merged.category && merged.category !== 'all' ? { category: merged.category } : {}),
       ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
       ...(merged.productId ? { productId: merged.productId } : {}),
+      ...(merged.frontendTemplate?.trim() ? { frontendTemplate: merged.frontendTemplate.trim() } : {}),
     };
 
     navigate({ to: '/products', search: normalized, replace: true });
@@ -3083,7 +3088,16 @@ function ProductsRoute() {
                   }, null, 2);
 
                   return (
-                    <div key={template.id} className="rounded-lg border border-teal-200 bg-background p-4">
+                    <div
+                      key={template.id}
+                      className={cn(
+                        'rounded-lg border bg-background p-4',
+                        activeFrontendTemplateId === template.id
+                          ? 'border-teal-600 ring-1 ring-teal-600'
+                          : 'border-teal-200',
+                      )}
+                      data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h4 className="text-sm font-semibold text-foreground">{template.name}</h4>
