@@ -27,6 +27,13 @@ const assert = (condition, message) => {
   }
 };
 
+const assertCommentsRouteSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/comments.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Comments route must use the shared EmptyState component for primary list empty states');
+  assert(source.includes("title={hasComments ? 'No comments match this view' : 'No comments yet'}"), 'Comments queue empty state must distinguish empty queues from filtered views');
+  assert(source.includes('Page and blog comments will appear here for review'), 'Comments queue empty state must tell admins what will populate the queue');
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -103,7 +110,7 @@ const startCommentWebhookReceiver = async ({ failFirstKind } = {}) => new Promis
 });
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -111,9 +118,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_COMMENTS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -740,9 +757,24 @@ const getAuthStorageScript = () => {
   };
   const session = apiAdminSessionData?.session || {
     token: apiAdminSessionToken,
+    issuedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    authMode: 'local-demo',
   };
 
   return `localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({ state: { user, session }, version: 0 }))});`;
+};
+
+const seedBrowserSessionCookie = async (client) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: apiAdminSessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
 };
 
 const evaluate = async (client, expression) => {
@@ -847,6 +879,105 @@ const assertCommentsFilterRouteSearch = async (client, targetId) => {
   return null;
 };
 
+const clearCommentFiltersInUi = async (client) => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const search = document.querySelector('input[aria-label="Search comments"]');
+      const targetType = document.querySelector('select[aria-label="Target type filter"]');
+      const target = document.querySelector('select[aria-label="Specific target filter"]');
+      const triage = document.querySelector('select[aria-label="Comment triage filter"]');
+      const thread = document.querySelector('select[aria-label="Comment queue thread filter"]');
+      const sort = document.querySelector('select[aria-label="Comment sort order"]');
+      const pendingButton = Array.from(document.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').trim().toLowerCase() === 'pending'
+      ));
+      const isDefault = (
+        search instanceof HTMLInputElement &&
+        targetType instanceof HTMLSelectElement &&
+        target instanceof HTMLSelectElement &&
+        triage instanceof HTMLSelectElement &&
+        thread instanceof HTMLSelectElement &&
+        sort instanceof HTMLSelectElement &&
+        search.value === '' &&
+        targetType.value === 'all' &&
+        target.value === 'all' &&
+        triage.value === 'all' &&
+        thread.value === 'all' &&
+        sort.value === 'newest' &&
+        pendingButton instanceof HTMLButtonElement &&
+        pendingButton.getAttribute('aria-pressed') !== 'true'
+      );
+      if (isDefault) return { ok: true };
+      const clear = Array.from(document.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Clear filters'
+      ));
+      if (!(clear instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'clear-missing',
+          search: search instanceof HTMLInputElement ? search.value : null,
+          targetType: targetType instanceof HTMLSelectElement ? targetType.value : null,
+          target: target instanceof HTMLSelectElement ? target.value : null,
+          triage: triage instanceof HTMLSelectElement ? triage.value : null,
+          thread: thread instanceof HTMLSelectElement ? thread.value : null,
+          sort: sort instanceof HTMLSelectElement ? sort.value : null,
+          pendingPressed: pendingButton instanceof HTMLButtonElement ? pendingButton.getAttribute('aria-pressed') : null,
+        };
+      }
+      if (clear.disabled) return { ok: false, reason: 'clear-disabled' };
+      clear.click();
+      return { ok: false, reason: 'clear-clicked' };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 59) {
+      throw new Error(`Unable to clear comment filters in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
+const focusCommentInUi = async (client, { requestId, authorName, targetId }) => {
+  const routeUrl = new URL(`${ADMIN_BASE_URL}/comments`);
+  routeUrl.searchParams.set('siteId', SITE_ID);
+  routeUrl.searchParams.set('q', authorName);
+  routeUrl.searchParams.set('targetType', 'page');
+  routeUrl.searchParams.set('targetId', targetId);
+  await client.send('Page.navigate', { url: routeUrl.toString() });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const card = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => {
+        const text = candidate.textContent || '';
+        return text.includes(${JSON.stringify(requestId)}) && text.includes(${JSON.stringify(authorName)});
+      });
+      return {
+        ready: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
+        found: Boolean(card),
+        text: card?.textContent?.slice(0, 500) || '',
+        body: document.body?.innerText?.slice(0, 900) || '',
+        url: window.location.href,
+      };
+    })()`);
+
+    if (state.ready && state.found) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to focus comment ${requestId}: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const moderateCommentInUi = async (client, authorName, action, reason = '') => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -900,11 +1031,12 @@ const moderateCommentInUi = async (client, authorName, action, reason = '') => {
   }
 };
 
-const resolveReportsInUi = async (client, authorName) => {
+const resolveReportsInUi = async (client, authorName, requestId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
       const card = Array.from(document.querySelectorAll('article')).find((candidate) => (
-        (candidate.textContent || '').includes(${JSON.stringify(authorName)})
+        (candidate.textContent || '').includes(${JSON.stringify(authorName)}) &&
+        (candidate.textContent || '').includes(${JSON.stringify(requestId)})
       ));
       if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 900) || '' };
       const button = Array.from(card.querySelectorAll('button')).find((candidate) => (
@@ -1302,6 +1434,7 @@ const main = async () => {
   let restoredNotifications = false;
 
   try {
+    assertCommentsRouteSourceContract();
     await loginAdminApi();
     await assertCommentsPermissionOverridesAreEnforced();
     webhookReceiver = await startCommentWebhookReceiver({ failFirstKind: 'comment-reported' });
@@ -1491,6 +1624,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
+    await seedBrowserSessionCookie(client);
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: getAuthStorageScript() });
 
     await navigateToComments(client, [
@@ -1502,7 +1636,8 @@ const main = async () => {
       'Comments Smoke Thread Reply',
       'Comments Smoke Move Parent',
     ]);
-    await assertCommentsFilterRouteSearch(client, pageId);
+    await assertCommentsFilterRouteSearch(client, page.id);
+    await clearCommentFiltersInUi(client);
     await navigateToComments(client, [
       'Comments Smoke Approve',
       'Comments Smoke Reject',
@@ -1573,18 +1708,22 @@ const main = async () => {
     });
     assert(reportDisabled.status === 403, `Reports-disabled policy should reject with 403: ${JSON.stringify(reportDisabled)}`);
 
+    await focusCommentInUi(client, { requestId: approveRequestId, authorName: 'Comments Smoke Approve', targetId: page.id });
     await moderateCommentInUi(client, 'Comments Smoke Approve', 'approved');
     const approved = await waitForCommentStatus(approveComment.id, approveRequestId, 'approved');
     assert(approved.reviewedBy, `Approved comment did not record reviewer: ${JSON.stringify(approved)}`);
 
+    await focusCommentInUi(client, { requestId: rejectRequestId, authorName: 'Comments Smoke Reject', targetId: page.id });
     await moderateCommentInUi(client, 'Comments Smoke Reject', 'rejected', 'Rejected by comments smoke.');
     const rejected = await waitForCommentStatus(rejectComment.id, rejectRequestId, 'rejected');
     assert(rejected.rejectionReason === 'Rejected by comments smoke.', `Reject reason did not persist: ${JSON.stringify(rejected)}`);
 
-    await resolveReportsInUi(client, 'Comments Smoke Report');
+    await focusCommentInUi(client, { requestId: reportRequestId, authorName: 'Comments Smoke Report', targetId: page.id });
+    await resolveReportsInUi(client, 'Comments Smoke Report', reportRequestId);
     const resolvedReport = await waitForCommentReports(reportedComment.id, reportRequestId, 0);
     assert(!resolvedReport.reportReasons?.length, `Report reasons were not cleared: ${JSON.stringify(resolvedReport)}`);
 
+    await focusCommentInUi(client, { requestId: blockRequestId, authorName: 'Comments Smoke Block', targetId: page.id });
     await moderateCommentInUi(client, 'Comments Smoke Block', 'blocked', 'harassment');
     const blocked = await waitForCommentStatus(blockedComment.id, blockRequestId, 'blocked');
     assert(blocked.blockReason === 'harassment', `Block reason did not persist: ${JSON.stringify(blocked)}`);

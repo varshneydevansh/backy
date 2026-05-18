@@ -50,6 +50,7 @@ import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
@@ -533,6 +534,7 @@ function CommentsRoute() {
     threadFilter !== 'all' ||
     sortFilter !== 'newest',
   );
+  const hasComments = comments.length > 0;
   const metrics = useMemo(() => ({
     total: comments.length,
     pending: comments.filter((comment) => comment.status === 'pending').length,
@@ -2790,18 +2792,20 @@ function CommentsRoute() {
               <div className="size-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
             </div>
           ) : filteredComments.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
-              <MessageSquare className="mx-auto size-10 text-muted-foreground" />
-              <div className="mt-3 text-sm font-medium text-foreground">No comments match this view</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Try another status, target type, triage state, sort order, or search query.
-              </div>
-              {hasActiveCommentFilters && (
-                <Button variant="outline" onClick={clearCommentFilters} disabled={isCommentsBusy} className="mt-4">
+            <EmptyState
+              icon={MessageSquare}
+              title={hasComments ? 'No comments match this view' : 'No comments yet'}
+              description={
+                hasComments
+                  ? 'Try another status, target type, triage state, sort order, or search query.'
+                  : 'Page and blog comments will appear here for review once visitors start a discussion.'
+              }
+              action={hasActiveCommentFilters ? (
+                <Button variant="outline" onClick={clearCommentFilters} disabled={isCommentsBusy}>
                   Clear filters
                 </Button>
-              )}
-            </div>
+              ) : null}
+            />
           ) : (
             <div className="space-y-3">
               <label className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
