@@ -2925,16 +2925,17 @@ function ContactsRoute() {
               }
             />
           ) : filteredContacts.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
-              <div className="text-sm font-medium text-foreground">No contacts match this view</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Change the search, form, lifecycle, or lead quality filters to broaden the inbox.
-              </div>
-              {hasActiveContactFilters && (
-                <Button variant="outline" onClick={clearContactFilters} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} className="mt-4">
-                  Clear filters
-                </Button>
-              )}
+            <div>
+              <EmptyState
+                icon={Contact}
+                title="No contacts match this view"
+                description="Change the search, form, lifecycle, or lead quality filters to broaden the inbox."
+                action={hasActiveContactFilters ? (
+                  <Button variant="outline" onClick={clearContactFilters} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined}>
+                    Clear filters
+                  </Button>
+                ) : undefined}
+              />
             </div>
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
