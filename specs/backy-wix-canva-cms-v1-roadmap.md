@@ -7,13 +7,14 @@
 
 ## 0) Executive decision
 
-Backy is not yet at Wix/Canva/WordPress parity.  
-Current state is a strong prototype with a lot of UI and route scaffolding, but the real blockers are:
+Backy is not yet at full Wix/Canva/WordPress parity, but the current audit has moved most primary admin/editor/API surfaces out of prototype status. The canonical page-surface audit is `specs/page-completion-audit/backy-page-surface-audit.md`, currently tracking 39 Ready / 6 Partial / 0 Prototype / 0 Missing.
 
-1. Persistence is still mostly mock-backed in both admin and public flows.
-2. Editor/runtime contracts are duplicated and drifting across admin/public boundaries.
-3. The feature surface is incomplete around permissions, moderation, publishing, and workflow controls.
-4. Simple editor/product controls are not connected end-to-end (actions, labels, toggles, and save/publish paths).
+The active blockers are now narrower and should be closed one page or gate at a time:
+
+1. Run the configured Supabase/Postgres service-data gates for Forms and SDK manifests against a disposable migrated database.
+2. Certify live Settings and Commerce providers, including Supabase, Vercel, storage, notification, payment, tax, shipping, catalog, subscription, and provider-managed webhook families.
+3. Keep tightening remaining editor parity depth around advanced rich-text table/list edge cases and broader responsive visual-regression coverage.
+4. Keep product/order live-provider certification separate from mock-provider CI so real TaxJar/Avalara/EasyPost/Shippo/Stripe-discount/subscription behavior is proven without leaking provider secrets.
 
 ## 1) Canonical scope of this spec
 
@@ -30,28 +31,27 @@ This roadmap covers backend CMS parity for:
 
 It explicitly excludes:
 
-1. design-specific pixel-perfect WYSIWYG visual polish (governed by editor UX stories)
-2. heavy e-commerce provider operations such as payment reconciliation, taxes, shipping labels, refunds, subscriptions, and provider-specific fulfillment automation until those modules are explicitly prioritized
+1. design-specific pixel-perfect WYSIWYG visual polish beyond the editor UX and responsive visual-regression stories
+2. declaring live provider or database readiness complete from mock-provider CI alone; the release certification gates remain the authority for external services
 
 ## 2) What is currently present vs missing
 
 ### 2.1 Current strengths
 
-1. route and feature skeleton across core pages in `apps/admin` and `apps/public`
-2. baseline page editor interactions exist (drag, resize, selection, history scaffolds)
-3. basic renderer can display many block types
-4. public/form/comment API routes are declared
-5. shared DB package and migration scaffolding exists
-6. specs already exist for editor and API contracts
+1. backend-backed admin/public routes across most core pages in `apps/admin` and `apps/public`
+2. page editor interactions for drag, resize, selection, multi-select, grouping/ungrouping, layers, shortcuts, responsive overrides, history, save, and publish-state workflows
+3. shared editor/public renderer contracts for the current element and interactive component set
+4. public form/comment/media/manifest/OpenAPI/SDK routes with cache and contract headers
+5. shared DB package, migrations, repository adapters, and repository-mode smoke coverage for the main content/settings modules
+6. release, database, Settings provider, Commerce provider, and mock-provider certification workflows with source-level preflight guards
 
 ### 2.2 Current blockers (high priority)
 
-1. mock store usage remains in main flows
-2. DB schema and editor payload contracts are not fully unified
-3. admin pages are mostly UI shells without authoritative backend linkage
-4. many important UI controls are disconnected or ambiguous
-5. no complete production workflow around publish/versioning/rollback
-6. admin auth is currently mock-based in routes and is not production-secure yet
+1. live Supabase/Postgres certification has not been run in this environment for the remaining database-gated surfaces
+2. live provider certification is still required before Settings, Products, Orders, and external connector APIs can be marked production-certified
+3. product/order subscription and provider-managed tax/shipping/discount workflows still need deeper real-provider execution evidence beyond mock-provider coverage
+4. advanced editor parity remains focused on rich-text table/list edge cases plus broader pixel-level responsive QA
+5. production launch still needs operator-owned release certification runs, provider secrets, disposable database confirmation, and custom deployment/domain verification
 
 ## 3) Complete missing feature map vs Wix/Canva baseline
 

@@ -41,6 +41,7 @@ const doctorContract = read('./backy-release-certification-doctor-contract-smoke
 const rootPackage = read('../package.json');
 const setup = read('../SETUP.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
+const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
 
 includesAll(
   workflow,
@@ -389,6 +390,32 @@ excludesAll(
     'Public endpoints are also mostly scaffolded on top of mock data today',
   ],
   'Backy security status setup documentation',
+);
+
+includesAll(
+  wixCanvaRoadmap,
+  [
+    '39 Ready / 6 Partial / 0 Prototype / 0 Missing',
+    'Run the configured Supabase/Postgres service-data gates',
+    'Certify live Settings and Commerce providers',
+    'grouping/ungrouping',
+    'release, database, Settings provider, Commerce provider, and mock-provider certification workflows',
+    'live provider certification is still required',
+    'mock-provider coverage',
+  ],
+  'Backy Wix/Canva roadmap current-state documentation',
+);
+
+excludesAll(
+  wixCanvaRoadmap,
+  [
+    'Current state is a strong prototype',
+    'Persistence is still mostly mock-backed in both admin and public flows',
+    'mock store usage remains in main flows',
+    'admin pages are mostly UI shells without authoritative backend linkage',
+    'admin auth is currently mock-based in routes and is not production-secure yet',
+  ],
+  'Backy Wix/Canva roadmap current-state documentation',
 );
 
 includesAll(
