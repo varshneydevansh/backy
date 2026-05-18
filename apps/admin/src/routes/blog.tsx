@@ -1859,9 +1859,11 @@ function BlogListView() {
 
             <div className="mt-4 space-y-2">
               {categories.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  No categories yet.
-                </div>
+                <EmptyState
+                  icon={Filter}
+                  title="No categories yet"
+                  description="Create category terms to power blog archive navigation, related-post groups, and frontend feed filters."
+                />
               ) : categories.map((category) => (
                 <div key={category.id} className="rounded-lg border border-border bg-card px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1920,9 +1922,11 @@ function BlogListView() {
 
             <div className="mt-4 space-y-2">
               {tags.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  No tags yet.
-                </div>
+                <EmptyState
+                  icon={Tag}
+                  title="No tags yet"
+                  description="Create tags to expose lightweight topic filters for blog cards, public feeds, and custom frontend chips."
+                />
               ) : tags.map((tag) => (
                 <div key={tag.id} className="rounded-lg border border-border bg-card px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">

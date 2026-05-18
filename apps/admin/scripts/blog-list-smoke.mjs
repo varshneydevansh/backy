@@ -23,6 +23,15 @@ const assert = (condition, message) => {
   }
 };
 
+const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
+  const source = fs.readFileSync(new URL('../src/routes/blog.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog list route must use the shared EmptyState component');
+  assert(source.includes('title="No categories yet"'), 'Blog taxonomy manager must keep the categories empty-state title visible');
+  assert(source.includes('Create category terms to power blog archive navigation'), 'Blog categories empty state must explain frontend archive/filter value');
+  assert(source.includes('title="No tags yet"'), 'Blog taxonomy manager must keep the tags empty-state title visible');
+  assert(source.includes('Create tags to expose lightweight topic filters'), 'Blog tags empty state must explain frontend topic/filter value');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -68,7 +77,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -76,9 +85,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_BLOG_LIST_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -365,6 +384,18 @@ window.open = (url) => {
   return null;
 };
 `;
+
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -988,6 +1019,7 @@ const cleanup = async ({ client, childProcess, userDataDir, postId, categoryId, 
 };
 
 const main = async () => {
+  assertBlogTaxonomyEmptyStatesUseSharedComponent();
   await loginAdminApi();
   let client;
   let childProcess;
@@ -1031,6 +1063,7 @@ const main = async () => {
     await client.opened;
     await client.send('Runtime.enable');
     await client.send('Page.enable');
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Emulation.setDeviceMetricsOverride', {
       width: 1720,
       height: 1180,
