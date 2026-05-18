@@ -1189,6 +1189,29 @@ const configureFrontendDesignThroughUi = async (client, { frontendLabel, fronten
         name: 'Smoke Blog Contract',
         routePattern: '/blog/{slug}',
       },
+      {
+        id: 'smoke-form-contract',
+        type: 'form',
+        name: 'Smoke Form Contract',
+        routePattern: '/contact',
+      },
+      {
+        id: 'smoke-product-contract',
+        type: 'product',
+        name: 'Smoke Product Contract',
+        routePattern: '/products/{slug}',
+      },
+      {
+        id: 'smoke-collection-contract',
+        type: 'collection',
+        name: 'Smoke Collection Contract',
+        routePattern: '/directory/{slug}',
+      },
+      {
+        id: 'smoke-section-contract',
+        type: 'section',
+        name: 'Smoke Section Contract',
+      },
     ], null, 2));
     setNativeValue(editableMap, JSON.stringify([
       {
@@ -1233,6 +1256,30 @@ const configureFrontendDesignThroughUi = async (client, { frontendLabel, fronten
   await waitForText(
     client,
     '[data-testid="site-template-registry-template-list"]',
+    'Smoke Form Contract',
+    'Frontend design template registry list form template',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Smoke Product Contract',
+    'Frontend design template registry list product template',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Smoke Collection Contract',
+    'Frontend design template registry list collection template',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Smoke Section Contract',
+    'Frontend design template registry list section template',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
     '/api/admin/sites/',
     'Frontend design template registry clone target',
   );
@@ -1247,6 +1294,30 @@ const configureFrontendDesignThroughUi = async (client, { frontendLabel, fronten
     '[data-testid="site-template-registry-template-list"]',
     'Create post',
     'Frontend design template registry blog action',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Open forms',
+    'Frontend design template registry form action',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Open products',
+    'Frontend design template registry product action',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Open collections',
+    'Frontend design template registry collection action',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Open sections',
+    'Frontend design template registry section action',
   );
 };
 
