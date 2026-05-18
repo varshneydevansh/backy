@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn } from '@/lib/utils';
 import {
@@ -1501,8 +1502,12 @@ function EditUserPage() {
                 </div>
               </>
             ) : (
-              <div className="mt-5 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                Permission matrix has not loaded yet.
+              <div className="mt-5">
+                <EmptyState
+                  icon={ShieldAlert}
+                  title="Permission matrix unavailable"
+                  description="Reload the user detail page or refresh permissions before changing role overrides."
+                />
               </div>
             )}
           </div>
@@ -1686,8 +1691,12 @@ function EditUserPage() {
                 ))}
               </div>
             ) : userAuditLogs.length === 0 ? (
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                No activity matches the current user activity filters.
+              <div className="mt-4">
+                <EmptyState
+                  icon={History}
+                  title="No matching user activity"
+                  description="Adjust the action, request ID, or activity filter to review this user's audit events."
+                />
               </div>
             ) : (
               <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
@@ -1745,8 +1754,12 @@ function EditUserPage() {
                 ))}
               </div>
             ) : userSessions.length === 0 ? (
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                No active admin sessions are recorded for this user.
+              <div className="mt-4">
+                <EmptyState
+                  icon={Monitor}
+                  title="No active admin sessions"
+                  description="Accepted invites and successful sign-ins will appear here with revocation controls."
+                />
               </div>
             ) : (
               <div className="mt-4 space-y-2">
@@ -1906,8 +1919,12 @@ function EditUserPage() {
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                No invite link has been generated in this session.
+              <div className="mt-4">
+                <EmptyState
+                  icon={Mail}
+                  title="No invite link generated"
+                  description="Set the account to invited, choose an expiry window, then generate a manual invite link."
+                />
               </div>
             )}
             {passwordResetToken ? (
@@ -1962,8 +1979,12 @@ function EditUserPage() {
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                No reset token has been generated in this session.
+              <div className="mt-4">
+                <EmptyState
+                  icon={KeyRound}
+                  title="No reset token generated"
+                  description="Generate a reset token when this account needs a manually delivered recovery link."
+                />
               </div>
             )}
             {(formData.status === 'inactive' || formData.status === 'suspended') && (
@@ -2374,8 +2395,12 @@ function UserDetailAuditEvent({
 function UserDetailAuditEventDetail({ log }: { log: AdminAuditLog | null }) {
   if (!log) {
     return (
-      <aside className="rounded-lg border border-dashed border-border bg-background p-3 text-sm text-muted-foreground" data-testid="user-detail-activity-detail">
-        Select an activity event to inspect request metadata, before/after snapshots, and structured audit context.
+      <aside data-testid="user-detail-activity-detail">
+        <EmptyState
+          icon={History}
+          title="Select an activity event"
+          description="Inspect request metadata, before and after snapshots, and structured audit context for the selected event."
+        />
       </aside>
     );
   }

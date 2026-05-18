@@ -30,9 +30,15 @@ const assert = (condition, message) => {
 
 const assertUsersEmptyStatesUseSharedComponent = () => {
   const source = fs.readFileSync(new URL('../src/routes/users.tsx', import.meta.url), 'utf8');
+  const detailSource = fs.readFileSync(new URL('../src/routes/users.$userId.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Users route must use the shared EmptyState component');
   assert(source.includes('title="No user audit events yet"'), 'Users audit panel must keep the empty audit title visible');
   assert(source.includes('Create, update, import, delete, or review users to populate this access timeline.'), 'Users audit empty state must explain which actions populate the timeline');
+  assert(detailSource.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'User detail route must use the shared EmptyState component');
+  assert(detailSource.includes('title="No active admin sessions"'), 'User detail sessions empty state must keep the shared title visible');
+  assert(detailSource.includes('title="No invite link generated"'), 'User detail invite empty state must keep the shared title visible');
+  assert(detailSource.includes('title="No reset token generated"'), 'User detail reset empty state must keep the shared title visible');
+  assert(detailSource.includes('title="No matching user activity"'), 'User detail activity empty state must keep the shared title visible');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -735,7 +741,7 @@ const navigateToUsers = (client, expectedText = 'Users command center') => navig
 
 const fillInviteForm = async (client, { fullName, email }) => {
   let result = null;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     result = await evaluate(client, `(() => {
       const setInputValue = (input, value) => {
         const previousValue = input.value;
@@ -753,8 +759,14 @@ const fillInviteForm = async (client, { fullName, email }) => {
       if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
         return { ok: false, reason: 'inputs-missing', body: document.body?.innerText?.slice(0, 900) || '' };
       }
-      setInputValue(nameInput, ${JSON.stringify(fullName)});
-      setInputValue(emailInput, ${JSON.stringify(email)});
+      if (nameInput.value !== ${JSON.stringify(fullName)}) {
+        nameInput.focus();
+        setInputValue(nameInput, ${JSON.stringify(fullName)});
+      }
+      if (emailInput.value !== ${JSON.stringify(email)}) {
+        emailInput.focus();
+        setInputValue(emailInput, ${JSON.stringify(email)});
+      }
       if (adminRole instanceof HTMLInputElement && !adminRole.checked) {
         adminRole.click();
       }
