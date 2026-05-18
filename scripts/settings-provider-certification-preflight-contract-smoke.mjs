@@ -43,6 +43,7 @@ const settingsRoute = read('../apps/public/src/app/api/admin/settings/route.ts')
 const settingsUi = read('../apps/admin/src/routes/settings.tsx');
 const settingsSmoke = read('../apps/admin/scripts/settings-smoke.mjs');
 const settingsContract = read('../apps/public/scripts/settings-admin-contract-smoke.mjs');
+const apiContracts = read('../specs/backy-api-contracts.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 
 includesAll(
@@ -265,6 +266,13 @@ includesAll(
     'settings.media_storage.credential_rotation_probe',
     'settings.media_storage.secret_manager',
     'settings.notification_webhook.test',
+    'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+    'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
+    'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID',
+    'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
+    'BACKY_RESEND_API_KEY or RESEND_API_KEY',
+    'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
   ],
   'Settings provider operation API routes',
 );
@@ -342,6 +350,21 @@ includesAll(
 );
 
 includesAll(
+  apiContracts,
+  [
+    'data.settings.providerCertification',
+    'external-live-provider-gate',
+    'BACKY_SUPABASE_SERVICE_ROLE_KEY`/`SUPABASE_SERVICE_ROLE_KEY',
+    'BACKY_S3_SECRET_ACCESS_KEY`/`AWS_SECRET_ACCESS_KEY',
+    'VERCEL_PROJECT_ID`/`BACKY_VERCEL_PROJECT_ID',
+    'BACKY_EMAIL_DELIVERY_ENDPOINT`/`BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
+    'BACKY_RESEND_API_KEY`/`RESEND_API_KEY',
+    'BACKY_COMMERCE_WEBHOOK_SECRET`/`COMMERCE_WEBHOOK_SECRET',
+  ],
+  'Settings admin API provider certification docs',
+);
+
+includesAll(
   audit,
   [
     'Settings provider certification workflow',
@@ -367,6 +390,9 @@ includesAll(
     'full nested Commerce provider env surface',
     'Settings storage alias certification update',
     'runtime-compatible storage aliases',
+    'Settings admin API provider-alias handoff guard',
+    'providerCertification.groups[].requiredInputs',
+    'custom admin clients do not drift behind the credential surface',
     'This closes the previously listed auth/RBAC and site-scoping blocker for the Settings row',
     'Actual Supabase/Vercel/payment-provider connection execution, live billing/provider certification, and external provider-managed webhook certification.',
     'GITHUB_STEP_SUMMARY',

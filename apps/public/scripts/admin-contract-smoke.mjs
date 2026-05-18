@@ -185,7 +185,18 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('external-live-provider-gate'), 'Admin settings provider certification must expose external live-provider status');
   assert(source.includes('npm run ci:settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider gate');
   assert(source.includes('npm run ci:commerce-provider-certification'), 'Admin settings provider certification must expose the Commerce provider gate');
-  for (const providerLabel of ['Supabase/Postgres', 'Vercel env secret manager', 'Resend', 'COMMERCE_WEBHOOK_SECRET', 'Magento']) {
+  for (const providerLabel of [
+    'Supabase/Postgres',
+    'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+    'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
+    'Vercel env secret manager',
+    'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID',
+    'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
+    'BACKY_RESEND_API_KEY or RESEND_API_KEY',
+    'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+    'Magento',
+  ]) {
     assert(source.includes(providerLabel), `Admin settings provider certification must name ${providerLabel}`);
   }
   assert(source.includes('validateSecretReferencePolicy(integrations)'), 'Admin settings route must enforce secret-reference validation');
@@ -216,6 +227,8 @@ function assertAdminSettingsContractSource() {
   assert(apiContracts.includes('"revoke-admin-api-key"'), 'API contracts must document service key revocation');
   assert(apiContracts.includes('settings.api_keys.issue'), 'API contracts must document service key issue audit events');
   assert(apiContracts.includes('settings.api_keys.revoke'), 'API contracts must document service key revoke audit events');
+  assert(apiContracts.includes('data.settings.providerCertification'), 'API contracts must document admin Settings provider certification handoff');
+  assert(apiContracts.includes('BACKY_COMMERCE_WEBHOOK_SECRET`/`COMMERCE_WEBHOOK_SECRET'), 'API contracts must document provider certification alias families');
 }
 
 async function request(pathOrUrl, init) {
