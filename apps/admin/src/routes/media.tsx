@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, CheckSquare, Cloud, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, RefreshCw, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CheckSquare, Cloud, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, RefreshCw, Save, Shield, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -4923,17 +4923,21 @@ function MediaPage() {
             )}
 
             {!canExportMediaActivity ? (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
-                Media activity is hidden until audit export access is granted.
-              </div>
+              <EmptyState
+                icon={Shield}
+                title="Media activity hidden"
+                description="Grant activity.export to review uploads, replacements, transform preparation, bindings, and deletes."
+              />
             ) : isLoadingLibraryAudit ? (
               <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
                 Loading media activity...
               </div>
             ) : libraryAuditLogs.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
-                No media audit records match this view yet.
-              </div>
+              <EmptyState
+                icon={FileText}
+                title="No media audit records"
+                description="Uploads, metadata edits, replacements, bindings, transform preparation, and deletes will appear here."
+              />
             ) : (
               <div className="grid gap-2 lg:grid-cols-2">
                 {libraryAuditLogs.map((log) => {
@@ -6115,9 +6119,11 @@ function MediaPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                    No Backy-served delivery requests have been recorded for this asset yet.
-                  </div>
+                  <EmptyState
+                    icon={Cloud}
+                    title="No Backy delivery requests"
+                    description="File and transform delivery counters will appear after this asset is served through Backy routes."
+                  />
                 )}
 
                 {selectedDeliveryAnalytics && (
@@ -6398,9 +6404,11 @@ function MediaPage() {
                   </div>
 
                   {replacementVersions.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
-                      No replacements have been recorded for this asset yet.
-                    </div>
+                    <EmptyState
+                      icon={Upload}
+                      title="No replacements recorded"
+                      description="Replace this file to retain prior versions while keeping page, post, product, and frontend references stable."
+                    />
                   ) : (
                     <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                       {replacementVersions.map((version, index) => {
@@ -7010,9 +7018,11 @@ function MediaPage() {
                 </div>
 
                 {referencedPages.length === 0 && referencedPosts.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                    No page or post references are tracked for this asset yet.
-                  </div>
+                  <EmptyState
+                    icon={Layout}
+                    title="No page or post references"
+                    description="Bind this asset to pages or blog posts to track usage before cleanup or replacement."
+                  />
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2">
                     {referencedPages.map(({ id, page }) => (
@@ -7146,17 +7156,21 @@ function MediaPage() {
                 )}
 
                 {!canExportMediaActivity ? (
-                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                    Asset activity is hidden until audit export access is granted.
-                  </div>
+                  <EmptyState
+                    icon={Shield}
+                    title="Asset activity hidden"
+                    description="Grant activity.export to inspect this asset's upload, edit, binding, delivery, and deletion history."
+                  />
                 ) : isLoadingAssetAudit ? (
                   <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
                     Loading media activity...
                   </div>
                 ) : assetAuditLogs.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                    No activity has been recorded for this asset yet.
-                  </div>
+                  <EmptyState
+                    icon={FileText}
+                    title="No asset activity yet"
+                    description="Upload, metadata, replacement, binding, transform, quarantine, and delete events for this asset will appear here."
+                  />
                 ) : (
                   <div className="grid gap-2">
                     {assetAuditLogs.map((log) => {

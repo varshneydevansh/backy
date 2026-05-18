@@ -56,6 +56,16 @@ const assert = (condition, message) => {
   }
 };
 
+const assertMediaRouteSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/media.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Media route must use the shared EmptyState component');
+  assert(source.includes('title="No media audit records"'), 'Media library audit empty state must keep the shared title visible');
+  assert(source.includes('title="No Backy delivery requests"'), 'Media asset delivery empty state must keep the shared title visible');
+  assert(source.includes('title="No replacements recorded"'), 'Media asset replacement empty state must keep the shared title visible');
+  assert(source.includes('title="No page or post references"'), 'Media asset reference empty state must keep the shared title visible');
+  assert(source.includes('title="No asset activity yet"'), 'Media asset activity empty state must keep the shared title visible');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -884,7 +894,8 @@ const assertDeniedMediaActivityUi = async (client, searchText, assetName) => {
         return {
           hasPanel: panel instanceof HTMLElement,
           hasDeniedNotice: text.includes('needs activity.export'),
-          hasHiddenState: text.includes('Media activity is hidden until audit export access is granted.'),
+          hasHiddenState: text.includes('Media activity hidden') &&
+            text.includes('Grant activity.export to review uploads'),
           filterDisabled: filter instanceof HTMLSelectElement ? filter.disabled : null,
           refreshDisabled: buttons.some((button) => button.text.includes('Refresh') && button.disabled),
           exportDisabled: buttons.some((button) => button.text.includes('Export audit') && button.disabled),
@@ -922,7 +933,8 @@ const assertDeniedMediaActivityUi = async (client, searchText, assetName) => {
         const text = activitySection?.textContent || document.body?.innerText || '';
         return {
           hasDeniedNotice: text.includes('needs activity.export'),
-          hasHiddenState: text.includes('Asset activity is hidden until audit export access is granted.'),
+          hasHiddenState: text.includes('Asset activity hidden') &&
+            text.includes("Grant activity.export to inspect this asset's upload"),
           filterDisabled: filter instanceof HTMLSelectElement ? filter.disabled : null,
           refreshDisabled: buttons.some((button) => button.text.includes('Refresh') && button.disabled),
           body: text.slice(0, 1800),
@@ -2678,6 +2690,7 @@ const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderIds,
 };
 
 const main = async () => {
+  assertMediaRouteSourceContract();
   let client;
   let childProcess;
   let userDataDir;
