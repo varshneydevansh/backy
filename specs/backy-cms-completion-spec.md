@@ -15,12 +15,17 @@ Backy should be a production-oriented, open-source backend that enables:
 The working implementation roadmap is maintained in:
 - [specs/backy-wix-canva-cms-v1-roadmap.md](specs/backy-wix-canva-cms-v1-roadmap.md)
 
-**Authoritative phase status and roadmap:**
-- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md)
-- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md)
+**Authoritative current status and roadmap:**
+- [specs/page-completion-audit/backy-page-surface-audit.md](specs/page-completion-audit/backy-page-surface-audit.md)
 - [specs/backy-full-parity-roadmap-spec.md](specs/backy-full-parity-roadmap-spec.md)
 - [specs/phase-docs/backy-phase-a-j-completion-spec.md](specs/phase-docs/backy-phase-a-j-completion-spec.md)
+
+**Historical phase notes, superseded by the current audit above:**
+- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md)
+- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md)
 - [specs/phase-docs/backy-alpha-vs-numeric-phase-progress-2026-02-27.md](specs/phase-docs/backy-alpha-vs-numeric-phase-progress-2026-02-27.md)
+
+Current audit baseline: **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. The remaining Partial gates are external certification: configured Forms and SDK Supabase/Postgres service-data smokes plus live Settings and Commerce provider execution.
 
 ## 1.2 Phase A/B/C status snapshot (2026-02-27)
 - **Phase A:** partial completion.
@@ -71,40 +76,36 @@ The goal is parity with “Wix-like editor + WordPress-like content model” for
 ## 3) Current completeness matrix (Admin + Public)
 
 Legend:
-- ✅ done/working
-- ⚠️ partial/broken or placeholder
-- ❌ missing/not implemented
+- ✅ done/working for the current local repo scope
+- ⚠️ externally gated or still needs broader provider/database certification
+- ❌ missing/not implemented in the current local repo scope
 
 ### 3.1 Admin routes (T3A)
 
 #### `/` (`apps/admin/src/routes/index.tsx`)
 - ✅ Dashboard scaffold present
 - ✅ Top-level layout shell and navigation
-- ⚠️ Stats and quick actions are UI-only or static in places
-- ❌ No real site activity metrics from backend (views, publish counts, edits)
-- ❌ No onboarding/quick-start checklist
+- ✅ Admin routes use the backend-backed session/client surface instead of browser-only mock auth.
+- ⚠️ Deeper production analytics and provider-backed activity data remain tied to the broader external certification gates.
 
 #### `/login` (`apps/admin/src/routes/login.tsx`)
-- ✅ login UI
-- ⚠️ local role handling in store exists
-- ❌ No session-backed authentication middleware for protected routes
-- ❌ No login/logout error state coverage or token refresh flow
+- ✅ API-backed login UI with seeded local-demo accounts, Supabase Auth exchange support, MFA challenge handling, and httpOnly `backy_admin_session` cookies.
+- ✅ Session validation, rotation, logout/revocation, invite acceptance, password recovery/reset, and auth audit coverage are implemented.
+- ⚠️ Broader production auth-provider rollout remains an external certification/runtime gate.
 
 #### `/sites` (`sites.tsx`)
-- ✅ list/create site UI surface
-- ⚠️ list and create actions work with local store only
-- ❌ Site creation/publish domain/plan limits/slug uniqueness not persisted
-- ❌ No multi-tenant site ownership and role checks
+- ✅ List/create site UI surface is API-backed for the current audit scope.
+- ✅ Team-scoped ownership and route access checks are covered by admin site-scope tests.
+- ⚠️ Domain/Vercel/provider provisioning still depends on live provider certification.
 
 #### `/sites.new` (`sites.new.tsx`)
-- ✅ form UI for site creation
-- ⚠️ draft creation flow only
-- ❌ API-backed validation and rollback handling
+- ✅ Form UI and API-backed site creation flow exist for the current audit scope.
+- ⚠️ Provider-side domain/project provisioning still depends on external certification.
 
 #### `/sites/$siteId` (`sites.$siteId.tsx`)
-- ✅ details view shell and links to pages/media
-- ⚠️ route exists but reads mock data model
-- ❌ real page/site association, status controls, domain settings, theme assignments missing
+- ✅ Details view links to pages/media and reads the backend-backed site model for the current audit scope.
+- ✅ Page/site association, status, settings, and nested route access are covered by admin site-scope tests.
+- ⚠️ Live domain/provider verification remains externally gated.
 
 #### `/pages` (`pages.tsx`)
 - ✅ table/list scaffold and “New page” navigation
@@ -117,12 +118,8 @@ Legend:
 - ❌ publish workflow, template cloning, per-page settings defaults
 
 #### `/pages/$pageId/edit` (`pages.$pageId.edit.tsx`)
-- ✅ drag/drop editor shell
-- ✅ layer selection/resizing/move/history controls exist in code path
-- ⚠️ save/versioning persistence mostly absent
-- ⚠️ responsive preview is not coupled to true breakpoint styles
-- ⚠️ not fully integrated with global media/theme/font registries
-- ❌ publish action, autosave, conflict handling (draft edit lock), audit trail missing
+- ✅ Drag/drop editor shell, layer selection, resize/move/history, save/publish/reload, conflict handling, responsive breakpoint state, and media/theme/font registry integration are locally guarded.
+- ⚠️ Continue hardening nested block confidence, shared renderer parity, and new-control smoke coverage as editor controls are added.
 
 #### `/blog` (`blog.tsx`)
 - ✅ blog index/editor entry point
@@ -139,14 +136,14 @@ Legend:
 - ⚠️ no revision graph and relation-based publish flow
 - ❌ scheduled publish + author/team attribution + comment options
 
-#### Editor interaction parity (active sprint)
+#### Editor interaction parity
 - ✅ media picker now passes page/post context into the property panel and media uploads
 - ✅ form property panel now supports submit URL, HTTP method, success message/redirect, and honeypot toggle
 - ✅ rich text inline toolbar is enabled during edit and portal container is mounted in property panel
 - ✅ list markdown shortcuts for `-`, `*`, `+`, `1.` and list-specific Enter/Tab handling are now wired in editor key handling
 - ✅ active text editor registration now persists only for editable blocks, preventing toolbar target flicker from read-only fields
 - ✅ rich-text quick actions (format/alignment/list/emoji) now consistently target the active editable text block
-- ⚠️ Right-side text property pane still misses full parity for selected text ranges (e.g., mixed font family/size/color updates, inline link targets, and emoji insertion context)
+- ✅ Right-side rich-text paths are locally guarded for table/list depth, imported list-indent edits, and selected-list indent state.
 - ✅ selection boundary hit-testing improved for canvas elements by using pointer-capture selection and resize-handle exclusion (keeps dragging/selection reliable while preserving edit targets)
 - ✅ non-preview interaction safety pass added: button/link/input/video/embed/map now pass pointer events to wrapper so element selection/dragging is not blocked by child widgets
 - ✅ canvas drop/drag reliability pass added: component drops use canvas-relative coordinates, pasteboard drops are ignored, nested child drag ids are preserved, and selected elements show clearer bounding-box metrics.
@@ -154,66 +151,55 @@ Legend:
 - ✅ users admin API baseline added: team users now persist through `GET/POST/PATCH/DELETE /api/admin/users` and the admin users screens use backend-first flows with local fallback.
 - ✅ settings admin API baseline added: delivery mode and API keys now persist through `GET/PATCH/POST /api/admin/settings`, and the settings page uses backend-first load/save/regenerate flows with local fallback.
 - ✅ list editing now supports marker-level control (`disc`, `circle`, `square`, `decimal`, alpha, roman) from list content panel and renderer
-- ⚠️ remaining parity targets: table/map embed behavior, comment blocks, shared status/action UX, and advanced list nesting behavior (indent/outdent stability at deep levels)
+- ⚠️ Remaining editor work should be treated as regression hardening and new-control coverage, not as a currently counted Partial gate.
 
 #### `/media` (`media.tsx`)
-- ✅ media browser cards/list UI
-- ⚠️ upload input is present but not connected end-to-end to stable storage contract
-- ❌ file upload, MIME checks, per-site quota, CDN pathing, transform variants missing
+- ✅ Central media browser, upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, and binding-aware previews are implemented.
+- ⚠️ Provider-account automation, secret rotation execution, and cross-channel attribution beyond provider feeds remain external/provider hardening work.
 
 #### `/users` (`users.tsx`)
-- ✅ list users UI
-- ⚠️ static/partial role UI
-- ❌ RBAC persistence and invite/invite expiring tokens absent
+- ✅ User list and user API flows cover role/status editing, invite/reset/session lifecycle, team-scoped access, permission previews, and audit activity.
+- ⚠️ Broader external auth-provider rollout remains globally tracked outside this page.
 
 #### `/users.new` (`users.new.tsx`)
-- ✅ create user form
-- ⚠️ no invite token or password policy checks
-- ❌ real provisioning workflow missing
+- ✅ User creation/invite flow is backend-backed with invite token and password policy coverage.
+- ⚠️ External auth-provider rollout remains a certification gate.
 
 #### `/users.$userId` (`users.$userId.tsx`)
-- ✅ edit-profile shell
-- ⚠️ role and permissions editing only partial
-- ❌ audit activity/last-login/devices and team role scope mapping absent
+- ✅ User detail supports role/status editing, permission preview, active sessions, reset-password, session revocation, MFA/recovery-code management, and audit activity.
+- ⚠️ Broader external auth-provider rollout remains globally tracked outside this page.
 
 #### `/settings` (`settings.tsx`)
-- ✅ base admin config shell
-- ⚠️ few controls are placeholders
-- ❌ site-level global defaults (theme, defaults, security headers, SMTP, analytics IDs) missing
+- ✅ Backend-backed delivery mode, API/service keys, security policy, storage/Supabase/Vercel/notification/commerce metadata, provider diagnostics, audit history, and site-scoped settings are implemented.
+- ⚠️ Live Supabase, Vercel, storage, notification, and commerce provider certification remains required before production certification.
 
 ### 3.2 Public routes
 
 #### `/` (`apps/public/src/app/page.tsx`)
-- ✅ basic landing shell
-- ⚠️ mostly static guidance UI and placeholders
-- ❌ no dynamic discovery of public sites from DB/API
+- ✅ Public app is the headless/rendering boundary for seeded and DB-backed site data.
+- ⚠️ Production service-data readiness depends on the configured SDK Postgres gate.
 
 #### `/sites/[subdomain]/[[...path]]` (`apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx`)
-- ⚠️ dynamic route exists but uses TODO stubs (`getSite/getPage`)
-- ❌ no real slug resolution, 404/301 behavior, or unpublished content guard
-- ⚠️ no canonical URL behavior for trailing slash/empty path
-- ❌ no full-page caching strategy
+- ✅ Site/page resolution covers seeded and DB-backed site settings, slug/path lookup, redirects, gone routes, dynamic list/detail routes, preview, and unpublished guards.
+- ⚠️ Domain and locale routing variants plus broader cache-invalidation hardening remain open follow-up work.
 
 #### `/api/sites` (`apps/public/src/app/api/sites/route.ts`)
-- ⚠️ returns demo/static response
-- ❌ should return paged list for public/site bootstrap
+- ✅ Public/admin site discovery is API-backed for the current audit scope, with demo mode retained for local seeded data.
 
 #### `/api/sites/[siteId]/pages` (`.../pages/route.ts`)
-- ⚠️ returns placeholder data
-- ❌ must serve pages by status + path + slug + published constraints
+- ✅ Page read/render contracts are covered through public manifest/OpenAPI/SDK and renderer smokes, with published/preview behavior guarded in public routes.
 
 #### `/api/sites/[siteId]/media` (`.../media/route.ts`)
-- ⚠️ placeholder response
-- ❌ must return media metadata and access-safe URLs
+- ✅ Media APIs expose metadata, folders, bindings, versions, safety state, signed/private delivery, and provider diagnostics under permission gates.
 
 #### `apps/public/src/components/PageRenderer.tsx`
-- ⚠️ supports wider element set than admin catalog
-- ⚠️ style and property handling differs from admin
-- ❌ element contract drift means inconsistent rendering
+- ✅ Renderer coverage includes the current public contract, hidden-element behavior, forms/comments, rich text, commerce, media, reusable sections, interactive components, and generated frontend handoffs.
+- ⚠️ Keep admin/public/editor schema convergence guarded as new block types ship.
 
 #### `apps/public/src/components/PageRenderer.tsx` (form handling)
 - ✅ configurable form method/action/redirect metadata now read from element props
-- ⚠️ comments + captcha providers and server-side form audit trail still missing
+- ✅ Forms/comments include backend-backed moderation, delivery, analytics, RBAC, repository coverage, and public/admin API contracts.
+- ⚠️ Remaining Forms risk is executing the configured Supabase/Postgres smoke against a migrated disposable database.
 
 ---
 
@@ -418,15 +404,11 @@ Acceptance: stable deploy on Vercel with seeded demo and API contract docs.
 ---
 
 ## 7) Critical known blockers (do now)
-- Public rendering mismatch between admin catalog and renderer component types.
-- TODO stubs in public site/page fetch logic.
-- API routes currently return demo/static payloads.
-- Admin routes not consistently gated by authentication/authorization.
-- Missing persistent storage integration in editor actions.
-- No real media upload/storage abstraction.
-- No canonical source for breakpoints and responsive behavior.
-- No published deployment model for admin/public separation and secret boundaries.
-- No finalized auth stack choice (SSO/MFA/audit/security baseline).
+- Run `npm run test:forms-postgres --workspace @backy/db` or `npm run ci:forms-postgres` against a migrated disposable Supabase/Postgres database.
+- Run `npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres database.
+- Run live Settings provider certification for Supabase, Vercel, storage, notification, commerce metadata, provider diagnostics, and secret rotation handoffs.
+- Run live Commerce provider certification for payment, catalog, tax, shipping, discount, subscription lifecycle, and provider-managed webhook paths.
+- Keep editor, renderer, generated SDK, and OpenAPI schema convergence guarded as new block types and page controls are added.
 
 ---
 
@@ -444,34 +426,13 @@ Use this file as the persistent baseline before any implementation pass.
 ## 9) Unresolved UX/UI parity gaps (must be fixed)
 
 ### 9.1 Canvas editor experience
-- Missing/WIP at launch:
-  - Multi-select (shift-click + drag select).
-  - Alignment tools (left/center/right, vertical align, distribute, nudge arrows).
-  - Layer reorder UX (bring front/back, move up/down, lock, hide/show).
-  - Keyboard shortcuts standardization (undo/redo/copy/paste/delete/duplicate/save).
-  - Resize handles completeness (edge + corner; shift-constrain, alt-origin).
-  - Responsive preview with per-breakpoint style inheritance and hiding rules.
-  - Undo/redo history correctness across all operations.
-  - Canvas zoom, panning, rulers, snap-to-guides.
-  - Component rename/labels and searchable component library.
-  - Empty-state guidance and contextual first-run hints.
-  - Visual quality issues to fix:
-    - Inconsistent controls density and spacing around toolbar sections.
-    - Property panel state reset and selection sync reliability.
-    - Preview/edit mode transitions with visible state indicators.
-    - Font/color updates not always reflected across all related components in real-time.
-    - Right-pane rich text formatting must preserve selected text range while applying toolbar actions:
-      - Keep active text selection in canvas context when focus moves into the property panel.
-      - Apply font family/size and color operations to current range only, not whole block.
-      - Keep toolbar actions functional when opening media/link/emoji sub-actions without dropping selection.
-      - Preserve selection when toggling between properties and when opening action drawers in the right pane.
+- Current local editor parity is guarded by focused smoke paths for drag/drop, copy/cut/paste/duplicate/delete/grouping, responsive breakpoint state, rich-text table/list depth, imported list-indent edits, and long-session stress.
+- Remaining editor work should be treated as regression hardening and new-control coverage, not as a currently counted Partial gate.
+- Keep right-pane rich-text selection, media/link sub-actions, and nested block confidence covered whenever related controls are changed.
 
 ### 9.2 Media/asset UX gaps
-- Missing drag/upload UX quality:
-  - upload progress and failure states
-  - batch upload and folder/bucket organization
-  - replace media flow in existing elements
-  - keyboard accessible media chooser + filtering by type
+- Current media coverage includes centralized upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, and binding-aware previews.
+- Remaining media work is provider-account automation, secret rotation execution, and cross-channel attribution beyond provider feeds.
 - Accessibility and discoverability:
   - all media actions need labels, focus rings, and destructive confirmation.
 
@@ -510,16 +471,14 @@ Use this file as the persistent baseline before any implementation pass.
 ## 11) Bug ledger (hard blockers before phase-close)
 
 ### 11.1 Top-priority
-- Admin/public contracts mismatch on renderer element types and style fields.
-- Blog editor and page editor state drift.
-- Unsaved/dirty-state handling during concurrent edits.
-- Missing endpoint contracts for page save/publish and route resolution.
+- Execute the configured Forms and SDK Postgres gates against a migrated disposable database.
+- Execute live Settings and Commerce provider certification with real provider credentials.
+- Keep admin/public/editor contract convergence guarded as new renderer fields ship.
 
 ### 11.2 High
-- Undo/redo inconsistencies across drag, delete, property edits, and multi-select.
-- Breakpoint switching not persisting per-breakpoint overrides.
-- Media insertion not updating canvas metadata atomically (alt/text/style mismatch).
-- Page slug conflicts with reserved paths and locale-path edge cases.
+- Provider-managed tax/shipping/discount/subscription/webhook certification depth.
+- Domain, locale, and cache invalidation hardening for public routing.
+- Continued editor regression coverage for nested blocks and rich text selection flows.
 
 ### 11.3 Medium
 - Slower interactions due to rerenders on each canvas move.

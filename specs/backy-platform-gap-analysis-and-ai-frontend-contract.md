@@ -91,9 +91,9 @@ Backy has the right direction but lacks the production maturity.
    - Keep seed/demo adapters only for local demos and tests, with release certification making provider/database mode explicit.
 
 3. Auth and RBAC
-   - Replace hardcoded mock users with real sessions.
-   - Add site/team scoped roles: owner, admin, editor, viewer.
-   - Gate admin write routes and sensitive read routes.
+   - Maintain backend-backed admin sessions, MFA, Supabase Auth exchange, and invite/reset/session lifecycle coverage.
+   - Keep site/team scoped roles and central `requireAdminAccess` checks applied as new admin routes are added.
+   - Run production auth-provider certification before treating external provider rollout as complete.
 
 4. Public API contract
    - Make `backy-public` the stable read/interact surface.
@@ -140,9 +140,9 @@ Backy has the right direction but lacks the production maturity.
 
 ### Shared packages
 
-- `packages/core` has many useful types, but the editor model does not match the admin/public canvas model.
+- `packages/core` has many useful types, while the remaining contract risk is continued convergence between editor, public renderer, and generated frontend schemas as new blocks are added.
 - `packages/db` and `packages/database` both exist, which creates a decision point. Choose one database package boundary and one ORM/query strategy.
-- Auth/storage packages are placeholders or partial abstractions and need to become real service boundaries.
+- Auth and storage now have real app-level service paths through admin auth, media storage, provider diagnostics, and secret handoff contracts; the remaining package-level work is consolidating those boundaries so shared packages own the reusable provider adapters instead of app-local glue.
 
 ## 7. AI-readable frontend contract area
 

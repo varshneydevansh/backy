@@ -43,6 +43,7 @@ const setup = read('../SETUP.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
 const platformGapAnalysis = read('../specs/backy-platform-gap-analysis-and-ai-frontend-contract.md');
+const completionSpec = read('../specs/backy-cms-completion-spec.md');
 const fullParityRoadmap = read('../specs/backy-full-parity-roadmap-spec.md');
 const phaseCompletionSpec = read('../specs/phase-docs/backy-phase-a-j-completion-spec.md');
 
@@ -441,11 +442,43 @@ excludesAll(
     'The current repo is a strong prototype',
     'Admin persistence still comes from `apps/admin/src/stores/mockStore.ts`',
     'Admin authentication still comes from `apps/admin/src/stores/authStore.ts`, with hardcoded mock users',
+    'Replace hardcoded mock users with real sessions',
     'The page editor route saves page content by calling `updatePage` in the mock store',
     'Settings include a delivery-mode/API display surface, but API keys are local mock settings',
+    'Auth/storage packages are placeholders or partial abstractions',
     'Mock auth; limited roles',
   ],
   'Backy platform gap analysis current-state documentation',
+);
+
+includesAll(
+  completionSpec,
+  [
+    'Current audit baseline: **39 Ready / 6 Partial / 0 Prototype / 0 Missing**',
+    'API-backed login UI with seeded local-demo accounts',
+    'Site/page resolution covers seeded and DB-backed site settings',
+    'Run `npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres database',
+    'Current local editor parity is guarded by focused smoke paths',
+    'Current media coverage includes centralized upload/listing',
+  ],
+  'Backy completion spec current-state documentation',
+);
+
+excludesAll(
+  completionSpec,
+  [
+    'No session-backed authentication middleware for protected routes',
+    'dynamic route exists but uses TODO stubs',
+    'returns placeholder data',
+    'placeholder response',
+    'API routes currently return demo/static payloads',
+    'Admin routes not consistently gated by authentication/authorization',
+    'Missing persistent storage integration in editor actions',
+    'No real media upload/storage abstraction',
+    'No finalized auth stack choice',
+    'Multi-select (shift-click + drag select).',
+  ],
+  'Backy completion spec current-state documentation',
 );
 
 includesAll(
