@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO: Fix prop type access when implementing Page Editor properly
 /**
  * ============================================================================
  * BACKY CMS - PROPERTY PANEL
@@ -651,9 +649,6 @@ export function PropertyPanel({
     );
   }
 
-  // Type-safe props access helper
-  const props = element.props as ElementProps;
-
   const toggleSection = (section: string) => {
     setExpandedSections((prev) =>
       prev.includes(section)
@@ -862,7 +857,7 @@ export function PropertyPanel({
           const currentFallback = element.props.fallback && typeof element.props.fallback === 'object' && !Array.isArray(element.props.fallback)
             ? element.props.fallback
             : {};
-          const nextProps = {
+          const nextProps: ElementProps = {
             ...element.props,
             ...(mediaField === 'interactiveFallbackImage'
               ? {
@@ -877,7 +872,7 @@ export function PropertyPanel({
             mediaScope: media.scope || mediaContext?.scope || 'global',
             mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
           };
-          const nextElementUpdates = {};
+          const nextElementUpdates: Partial<CanvasElement> = {};
 
           if (mediaField === 'src' && element.type === 'image') {
             const currentAlt = typeof element.props.alt === 'string' ? element.props.alt.trim() : '';
@@ -1244,7 +1239,6 @@ function ContentProperties({
   const hasNavContent = normalizedType === 'nav';
   const hasHtmlContent = normalizedType === 'html' || normalizedType === 'table';
   const hasQuoteContent = normalizedType === 'quote';
-  const hasInputContent = normalizedType === 'input';
   const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
   const hasFormContent = normalizedType === 'form';
   const hasCommentContent = normalizedType === 'comment';
@@ -1603,7 +1597,7 @@ function ContentProperties({
             </label>
             <select
               value={element.props.objectFit || 'cover'}
-              onChange={(e) => onChange({ objectFit: e.target.value })}
+              onChange={(e) => onChange({ objectFit: e.target.value as ElementProps['objectFit'] })}
               data-testid="editor-image-object-fit"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -1774,7 +1768,7 @@ function ContentProperties({
             </label>
             <select
               value={element.props.objectFit || 'cover'}
-              onChange={(e) => onChange({ objectFit: e.target.value })}
+              onChange={(e) => onChange({ objectFit: e.target.value as ElementProps['objectFit'] })}
               data-testid="editor-video-object-fit"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -1819,7 +1813,7 @@ function ContentProperties({
             </label>
             <input
               type="text"
-              value={element.props.content || ''}
+              value={typeof element.props.content === 'string' ? element.props.content : ''}
               onChange={(e) => onChange({ content: e.target.value })}
               data-testid="editor-link-text"
               className={cn(
@@ -2223,7 +2217,7 @@ function ContentProperties({
                 </label>
                 <select
                   value={element.props.inputType || 'text'}
-                  onChange={(e) => onChange({ inputType: e.target.value })}
+                  onChange={(e) => onChange({ inputType: e.target.value as ElementProps['inputType'] })}
                   data-testid="editor-input-type"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -4757,7 +4751,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
             </label>
             <select
               value={element.props.textTransform || 'none'}
-              onChange={(e) => onChange({ textTransform: e.target.value })}
+              onChange={(e) => onChange({ textTransform: e.target.value as ElementProps['textTransform'] })}
               data-testid="editor-style-text-transform"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -5324,8 +5318,8 @@ const collectionIdsForFieldPath = (
   const parts = key.split('.').filter(Boolean);
 
   for (let index = 0; index < parts.length - 1; index += 1) {
-    const field = currentCollection?.fields.find((candidate) => candidate.key === parts[index]);
-    const referenceCollectionId = field?.referenceCollectionId || '';
+    const field: CollectionField | undefined = currentCollection.fields.find((candidate) => candidate.key === parts[index]);
+    const referenceCollectionId: string = field?.referenceCollectionId || '';
     if (!referenceCollectionId) break;
     ids.push(referenceCollectionId);
     currentCollection = collections.find((candidate) => candidate.id === referenceCollectionId) || null;
@@ -5438,7 +5432,7 @@ const normalizeSavedCollectionBindingPresets = (value: unknown): SavedCollection
   Array.isArray(value)
     ? value
         .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && !Array.isArray(item)))
-        .map((item, index) => ({
+        .map((item, index): SavedCollectionBindingPreset => ({
           id: typeof item.id === 'string' && item.id.trim() ? item.id : `preset_${index}`,
           name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : `Preset ${index + 1}`,
           collectionId: typeof item.collectionId === 'string' ? item.collectionId : '',

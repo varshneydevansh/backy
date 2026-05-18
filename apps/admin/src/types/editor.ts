@@ -100,7 +100,7 @@ export interface CanvasElement {
   locked?: boolean;
 
   // Element-specific props (content, src, href, etc.)
-  props: Record<string, unknown>;
+  props: ElementProps;
 
   // CSS styles (optional)
   styles?: CSSProperties;
@@ -169,11 +169,17 @@ export interface ComponentLibraryChild {
 
 /** Element-specific props union type */
 export interface ElementProps {
-  /** Generic element label */
-  [key: string]: unknown;
+  /**
+   * Extensible editor/plugin prop bag.
+   *
+   * Core props below are typed, but registry-backed, imported, and legacy
+   * elements can carry additional fields that the property panel still needs
+   * to read and write dynamically.
+   */
+  [key: string]: any;
 
   // Text/Heading
-  content?: string;
+  content?: string | unknown[];
   level?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
   fontSize?: number | string;
   fontStyle?: string;
@@ -210,7 +216,7 @@ export interface ElementProps {
 
   // List
   items?: string[];
-  listType?: 'bullet' | 'number';
+  listType?: 'bullet' | 'number' | 'ordered' | 'decimal';
   listMarker?: 'disc' | 'circle' | 'square' | 'decimal' | 'lower-alpha' | 'upper-alpha' | 'lower-roman' | 'upper-roman';
 
   // Appearance
@@ -348,7 +354,7 @@ export interface SelectionBounds {
 
 export interface AnimationConfig {
   trigger: 'load' | 'scroll' | 'hover';
-  type: 'fadeIn' | 'slideIn' | 'scaleIn' | 'bounce' | 'rotate' | 'custom';
+  type: 'none' | 'fadeIn' | 'slideIn' | 'scaleIn' | 'bounce' | 'rotate' | 'custom';
   duration: number;
   delay: number;
   easing: string;
