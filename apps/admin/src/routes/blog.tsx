@@ -18,6 +18,7 @@ import {
   deleteBlogTag,
   getAdminApiBase,
   getBlogPostReadiness,
+  getBlogPostRevisionSummary,
   getUserPermissions,
   listBlogAuthors,
   listBlogCategories,
@@ -34,6 +35,7 @@ import {
   type BlogCategory,
   type BlogPostReadiness,
   type BlogTag,
+  type ContentRevisionSummary,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { useAuthStore, type User } from '@/stores/authStore';
@@ -195,6 +197,10 @@ const BLOG_EXPORT_COLUMNS = [
   'admin_post_url',
   'admin_readiness_url',
   'admin_preview_url',
+  'revision_count',
+  'latest_revision_note',
+  'latest_revision_at',
+  'latest_revision_status',
   'frontend_systems',
 ] as const;
 
@@ -231,6 +237,8 @@ function BlogListView() {
   const [tags, setTags] = useState<BlogTag[]>([]);
   const [authors, setAuthors] = useState<BlogAuthor[]>([]);
   const [commentSummaries, setCommentSummaries] = useState<Record<string, BlogPostCommentSummary>>({});
+  const [revisionSummaryMap, setRevisionSummaryMap] = useState<Record<string, ContentRevisionSummary>>({});
+  const [isRevisionSummaryLoading, setIsRevisionSummaryLoading] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft('#2563eb'));
   const [tagDraft, setTagDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft());
   const [editingCategoryId, setEditingCategoryId] = useState('');
@@ -384,11 +392,14 @@ function BlogListView() {
 
       if (!canViewBlog) {
         setIsLoading(false);
+        setIsRevisionSummaryLoading(false);
+        setRevisionSummaryMap({});
         setError(viewBlogDeniedMessage);
         return;
       }
 
       setIsLoading(true);
+      setIsRevisionSummaryLoading(true);
       setError(null);
 
       try {
@@ -401,16 +412,19 @@ function BlogListView() {
         const commentResult = canViewComments
           ? await listAllComments(siteId, { targetType: 'post', status: 'all', limit: 100 }).catch(() => ({ comments: [] }))
           : { comments: [] };
+        const revisionSummaries = await loadBlogRevisionSummaries(siteId, backendPosts);
         setPosts(backendPosts);
         setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
         setCategories(backendCategories);
         setTags(backendTags);
         setAuthors(backendAuthors);
         setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
+        setRevisionSummaryMap(revisionSummaries);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load posts');
       } finally {
         setIsLoading(false);
+        setIsRevisionSummaryLoading(false);
       }
     },
     [canViewBlog, canViewComments, isPermissionMatrixPending, setPosts, viewBlogDeniedMessage],
@@ -430,11 +444,14 @@ function BlogListView() {
 
       if (!canViewBlog) {
         setIsLoading(false);
+        setIsRevisionSummaryLoading(false);
+        setRevisionSummaryMap({});
         setError(viewBlogDeniedMessage);
         return;
       }
 
       setIsLoading(true);
+      setIsRevisionSummaryLoading(true);
       setError(null);
 
       try {
@@ -447,6 +464,7 @@ function BlogListView() {
         const commentResult = canViewComments
           ? await listAllComments(activeSiteId, { targetType: 'post', status: 'all', limit: 100 }).catch(() => ({ comments: [] }))
           : { comments: [] };
+        const revisionSummaries = await loadBlogRevisionSummaries(activeSiteId, backendPosts);
         if (!cancelled) {
           setPosts(backendPosts);
           setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
@@ -454,6 +472,7 @@ function BlogListView() {
           setTags(backendTags);
           setAuthors(backendAuthors);
           setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
+          setRevisionSummaryMap(revisionSummaries);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -462,6 +481,7 @@ function BlogListView() {
       } finally {
         if (!cancelled) {
           setIsLoading(false);
+          setIsRevisionSummaryLoading(false);
         }
       }
     };
@@ -678,6 +698,7 @@ function BlogListView() {
         expectedUpdatedAt: currentPost.updatedAt,
       });
       updatePost(currentPost.id, updated);
+      void refreshBlogRevisionSummary(activeSiteId, currentPost.id, setRevisionSummaryMap);
       setNotice(`${updated.title} SEO ${key === 'noIndex' ? 'indexing' : 'link following'} updated.`);
     } catch (saveError) {
       if (saveError instanceof AdminContentApiError && saveError.code === 'BLOG_VERSION_CONFLICT') {
@@ -1004,6 +1025,18 @@ function BlogListView() {
       }
     },
     {
+      key: 'updatedAt',
+      label: 'Revisions',
+      render: (post) => (
+        <BlogRevisionCell
+          post={post}
+          summary={revisionSummaryMap[post.id]}
+          isLoading={isRevisionSummaryLoading}
+          activeSiteId={activeSiteId}
+        />
+      )
+    },
+    {
       key: 'publishedAt',
       label: 'Date',
       sortable: true,
@@ -1252,6 +1285,16 @@ function BlogListView() {
       authors: authors.map((author) => ({ id: author.id, name: author.name, postCount: author.postCount })),
     },
     posts: data.map((post) => ({
+      revisions: {
+        count: revisionSummaryMap[post.id]?.count ?? 0,
+        latest: revisionSummaryMap[post.id]?.latest
+          ? {
+              note: revisionSummaryMap[post.id]?.latest?.note || null,
+              createdAt: revisionSummaryMap[post.id]?.latest?.createdAt || null,
+              status: revisionSummaryMap[post.id]?.latest?.snapshotStatus || null,
+            }
+          : null,
+      },
       id: post.id,
       title: post.title,
       slug: post.slug,
@@ -1304,6 +1347,7 @@ function BlogListView() {
     publicPostBySlugUrl,
     publicPostResolveUrl,
     publicPostRenderUrl,
+    revisionSummaryMap,
     searchQuery,
     selectedAuthorId,
     selectedCategoryId,
@@ -1376,6 +1420,8 @@ function BlogListView() {
       const renderUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(postPath)}`;
       const resolveUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(postPath)}`;
       const adminPostUrl = `${adminBlogUrl}/${encodeURIComponent(post.id)}`;
+      const revisionSummary = revisionSummaryMap[post.id];
+      const latestRevision = revisionSummary?.latest || null;
       const postCategoryNames = (post.categoryIds || [])
         .map((id) => categoryById.get(id)?.name)
         .filter(Boolean)
@@ -1408,6 +1454,10 @@ function BlogListView() {
         adminPostUrl,
         `${adminPostUrl}/readiness`,
         `${adminPostUrl}/preview`,
+        revisionSummary?.count ?? 0,
+        latestRevision?.note || '',
+        latestRevision?.createdAt || '',
+        latestRevision?.snapshotStatus || '',
         BLOG_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
       ];
     });
@@ -2364,6 +2414,34 @@ const buildPostCommentSummaries = (comments: AdminComment[]): Record<string, Blo
   }, {})
 );
 
+const loadBlogRevisionSummaries = async (siteId: string, targetPosts: BlogPost[]): Promise<Record<string, ContentRevisionSummary>> => {
+  const results = await Promise.allSettled(
+    targetPosts.map(async (post) => {
+      const summary = await getBlogPostRevisionSummary(post.siteId || siteId, post.id);
+      return [post.id, summary] as const;
+    }),
+  );
+
+  return Object.fromEntries(
+    results
+      .filter((result): result is PromiseFulfilledResult<readonly [string, ContentRevisionSummary]> => result.status === 'fulfilled')
+      .map((result) => result.value),
+  );
+};
+
+const refreshBlogRevisionSummary = async (
+  siteId: string,
+  postId: string,
+  setRevisionSummaryMap: (updater: (current: Record<string, ContentRevisionSummary>) => Record<string, ContentRevisionSummary>) => void,
+) => {
+  try {
+    const summary = await getBlogPostRevisionSummary(siteId, postId);
+    setRevisionSummaryMap((current) => ({ ...current, [postId]: summary }));
+  } catch {
+    // Revision summaries are supportive context; row mutations already report their own failures.
+  }
+};
+
 const getPostSeoSummary = (post: BlogPost) => {
   const meta = post.meta || {};
   const title = typeof meta.title === 'string' ? meta.title.trim() : '';
@@ -2420,6 +2498,58 @@ const slugifyTaxonomyName = (value: string): string => {
 
   return slug || 'taxonomy';
 };
+
+function BlogRevisionCell({
+  post,
+  summary,
+  isLoading,
+  activeSiteId,
+}: {
+  post: BlogPost;
+  summary: ContentRevisionSummary | undefined;
+  isLoading: boolean;
+  activeSiteId: string;
+}) {
+  if (isLoading && !summary) {
+    return <span className="text-xs text-muted-foreground">Checking revisions...</span>;
+  }
+
+  const count = summary?.count ?? 0;
+  const latest = summary?.latest ?? null;
+
+  return (
+    <div className="min-w-48 space-y-1" data-testid={`blog-post-revisions-${post.id}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn(
+          'rounded-full px-2 py-0.5 text-xs font-semibold',
+          count > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+        )}
+        >
+          {count} revision{count === 1 ? '' : 's'}
+        </span>
+        <Link
+          to="/blog/$postId"
+          params={{ postId: post.id }}
+          search={{ siteId: activeSiteId }}
+          hash="blog-editor-revisions"
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          Open history
+        </Link>
+      </div>
+      {latest ? (
+        <div className="text-xs leading-5 text-muted-foreground">
+          <span className="block max-w-56 truncate" title={latest.note || 'Revision snapshot'}>
+            {latest.note || 'Revision snapshot'}
+          </span>
+          <span>{formatDate(latest.createdAt)} · {latest.snapshotStatus}</span>
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground">No saved snapshots yet.</div>
+      )}
+    </div>
+  );
+}
 
 function BlogApiSnippet({ label, value }: { label: string; value: string }) {
   return (

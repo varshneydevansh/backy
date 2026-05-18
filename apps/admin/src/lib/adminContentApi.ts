@@ -5539,6 +5539,21 @@ export async function listBlogPostRevisions(siteId: string, postId: string): Pro
   return payload.data.revisions.map(toContentRevision);
 }
 
+export async function getBlogPostRevisionSummary(siteId: string, postId: string): Promise<ContentRevisionSummary> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/revisions?limit=1`);
+  const payload = await readJson<ApiRevisionListResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load post revisions');
+  }
+
+  const revisions = payload.data.revisions.map(toContentRevision);
+  return {
+    count: payload.data.pagination?.total ?? revisions.length,
+    latest: revisions[0] || null,
+  };
+}
+
 export async function publishBlogPost(siteId: string, postId: string, input: BlogPostStatusMutationInput = {}): Promise<BlogPost> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/publish`, {
     method: 'POST',

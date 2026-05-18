@@ -187,6 +187,20 @@ const createBlogPost = async ({ title, slug, categoryId, tagId, authorId }) => {
   return post;
 };
 
+const recordBlogPostRevision = async ({ postId, excerpt, expectedUpdatedAt }) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/${postId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      excerpt,
+      revisionNote: 'Blog list revision smoke snapshot',
+      expectedUpdatedAt,
+    }),
+  });
+  const post = payload.data?.post || payload.post;
+  assert(post?.id, `Revision snapshot update did not return a post: ${JSON.stringify(payload).slice(0, 500)}`);
+  return post;
+};
+
 const submitBlogComment = async ({ postId, requestId }) => {
   const uniqueSuffix = String(requestId || Date.now()).replace(/[^a-z0-9-]/gi, '').slice(-24) || Date.now().toString(36);
   const uniqueOctet = Math.max(2, Math.min(254, (Number.parseInt(uniqueSuffix.slice(-6), 36) % 253) + 2));
@@ -431,6 +445,8 @@ const assertBlogListLayout = async (client, { title, categoryName, tagName, auth
     editButton: Boolean(Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('title') === 'Edit post')),
     seoToggle: Boolean(document.querySelector('[data-testid^="blog-post-seo-noindex-"]')),
     commentSummary: Boolean(document.querySelector('[data-testid^="blog-post-comments-"]')),
+    revisionSummary: Boolean(document.querySelector('[data-testid^="blog-post-revisions-"]')) &&
+      document.body?.innerText?.includes('Blog list revision smoke snapshot'),
   }))()`);
 
   assert(Object.values(state).every(Boolean), `Blog list layout missing expected regions: ${JSON.stringify(state)}`);
@@ -479,6 +495,7 @@ const assertBlogVisualState = async (client, label, screenshotPath, { title } = 
       hasTaxonomyControls: bodyText.includes('Taxonomy manager') || bodyText.includes('Categories') && bodyText.includes('Tags'),
       hasSeoControls: Boolean(document.querySelector('[data-testid^="blog-post-seo-noindex-"]')),
       hasCommentSummary: Boolean(document.querySelector('[data-testid^="blog-post-comments-"]')),
+      hasRevisionSummary: Boolean(document.querySelector('[data-testid^="blog-post-revisions-"]')) && bodyText.includes('Blog list revision smoke snapshot'),
       hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
       apiSnippetLabels: apiSnippetLabels.slice(0, 1200),
       body: bodyText.slice(0, 3000),
@@ -492,6 +509,7 @@ const assertBlogVisualState = async (client, label, screenshotPath, { title } = 
   assert(state.hasApiContract && state.hasPublicPostsSnippet, `${label} API contract snippets missing: ${JSON.stringify(state)}`);
   assert(state.hasSearchFeedSnippet && state.hasArchiveFeedSnippet, `${label} search/archive feed snippets missing: ${JSON.stringify(state)}`);
   assert(state.hasSeoControls && state.hasCommentSummary, `${label} row SEO/comment controls missing: ${JSON.stringify(state)}`);
+  assert(state.hasRevisionSummary, `${label} row revision summary missing: ${JSON.stringify(state)}`);
   assert(state.horizontalOverflow <= 4, `${label} has horizontal overflow: ${JSON.stringify(state)}`);
   assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
 
@@ -997,6 +1015,11 @@ const main = async () => {
     const authorId = author?.id || 'admin';
     const post = await createBlogPost({ title, slug, categoryId, tagId, authorId });
     postId = post.id;
+    await recordBlogPostRevision({
+      postId,
+      excerpt: 'Temporary blog list smoke excerpt with a saved revision snapshot.',
+      expectedUpdatedAt: post.updatedAt,
+    });
     await submitBlogComment({
       postId,
       requestId: `blog-list-row-comment-${suffix}`,
