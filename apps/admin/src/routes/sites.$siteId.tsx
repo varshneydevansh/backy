@@ -828,6 +828,26 @@ const createFrontendDesignState = (
   notice: null,
 });
 
+const FRONTEND_TEMPLATE_TYPE_LABELS: Record<
+  SiteFrontendDesignContract["templates"][number]["type"],
+  string
+> = {
+  page: "Page",
+  blogPost: "Blog post",
+  form: "Form",
+  product: "Product",
+  collection: "Collection",
+  section: "Section",
+};
+
+const frontendTemplateCloneTarget = (
+  templateType: SiteFrontendDesignContract["templates"][number]["type"],
+  cloneTargets: Record<string, string> | undefined,
+) => {
+  if (!cloneTargets) return "";
+  return cloneTargets[templateType] || "";
+};
+
 const formatJsonLd = (jsonLd: AdminSiteSeoSettings["jsonLd"]): string =>
   Array.isArray(jsonLd) && jsonLd.length > 0
     ? JSON.stringify(jsonLd, null, 2)
@@ -6203,6 +6223,59 @@ function EditSitePage() {
                   {type}
                 </span>
               ))}
+            </div>
+            <div
+              className="mt-4 space-y-2"
+              data-testid="site-template-registry-template-list"
+            >
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Captured templates
+              </div>
+              {frontendDesignState.frontendDesign.templates.length > 0 ? (
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {frontendDesignState.frontendDesign.templates
+                    .slice(0, 8)
+                    .map((template) => {
+                      const cloneTarget = frontendTemplateCloneTarget(
+                        template.type,
+                        frontendDesignState.templateRegistry?.cloneTargets,
+                      );
+                      return (
+                        <div
+                          key={`${template.type}:${template.id}`}
+                          className="rounded-lg border bg-background px-3 py-2"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                              {FRONTEND_TEMPLATE_TYPE_LABELS[template.type]}
+                            </span>
+                            <span className="min-w-0 truncate text-sm font-semibold">
+                              {template.name}
+                            </span>
+                          </div>
+                          <div className="mt-1 break-all text-xs text-muted-foreground">
+                            {cloneTarget || "Clone target available after refresh"}
+                          </div>
+                          {template.routePattern && (
+                            <div className="mt-1 break-all text-xs text-muted-foreground">
+                              {template.routePattern}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed bg-background px-3 py-2 text-sm text-muted-foreground">
+                  No templates captured yet.
+                </div>
+              )}
+              {frontendDesignState.frontendDesign.templates.length > 8 && (
+                <div className="text-xs text-muted-foreground">
+                  +{frontendDesignState.frontendDesign.templates.length - 8} more
+                  templates in the registry endpoint.
+                </div>
+              )}
             </div>
           </div>
 

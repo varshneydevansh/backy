@@ -522,10 +522,12 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasNavigation: Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) && body.includes('Site navigation') && body.includes('Primary menu') && body.includes('Footer menu'),
       hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) &&
         Boolean(document.querySelector('[data-testid="site-template-registry-summary"]')) &&
+        Boolean(document.querySelector('[data-testid="site-template-registry-template-list"]')) &&
         body.includes('Frontend design contract') &&
         body.includes('Capture current design') &&
         body.includes('Save contract') &&
         body.includes('Template registry') &&
+        body.includes('Captured templates') &&
         body.includes('frontendDesignTemplateId') &&
         body.includes('backy.template-registry.v1'),
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
@@ -1215,6 +1217,24 @@ const configureFrontendDesignThroughUi = async (client, { frontendLabel, fronten
     '[data-testid="site-frontend-design-panel"]',
     'Frontend design contract saved and exposed in the public manifest.',
     'Frontend design save notice',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Smoke Page Contract',
+    'Frontend design template registry list page template',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Smoke Blog Contract',
+    'Frontend design template registry list blog template',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    '/api/admin/sites/',
+    'Frontend design template registry clone target',
   );
 };
 
