@@ -549,9 +549,32 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       context.rowPath[context.rowPath.length - 1] + 1,
     ];
     const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const insertVisualRowIndex = context.rowIndex + 1;
+    const expandedRowSpanOrigins = new Set<string>();
+    const coveredColumns = new Set<number>();
+    tableGrid.entries
+      .filter((entry) => entry.rowStart <= context.rowIndex && entry.rowEnd >= insertVisualRowIndex)
+      .forEach((entry) => {
+        const key = entry.path.join('.');
+        if (!expandedRowSpanOrigins.has(key)) {
+          expandedRowSpanOrigins.add(key);
+          const spanCell = Node.get(editor as any, entry.path) as any;
+          const currentRowSpan = Number.isInteger(spanCell?.rowSpan) && spanCell.rowSpan > 1 ? spanCell.rowSpan : entry.rowSpan;
+          Transforms.setNodes(editor as any, { rowSpan: currentRowSpan + 1 } as any, {
+            at: entry.path,
+          });
+        }
+        for (let columnIndex = entry.columnStart; columnIndex <= entry.columnEnd; columnIndex += 1) {
+          coveredColumns.add(columnIndex);
+        }
+      });
+    const visualColumnCount = Math.max(context.columnCount, tableGrid.maxColumnCount || 1);
+    const insertedCells = Array.from({ length: visualColumnCount })
+      .filter((_, columnIndex) => !coveredColumns.has(columnIndex))
+      .map(() => createEmptyTableCellNode());
     const rowNode = {
       type: 'tr',
-      children: Array.from({ length: Math.max(context.columnCount, tableGrid.maxColumnCount || 1) }, () => createEmptyTableCellNode()),
+      children: insertedCells.length > 0 ? insertedCells : [createEmptyTableCellNode()],
     } as any;
 
     Transforms.insertNodes(editor as any, rowNode, { at: nextRowPath, select: true });
@@ -633,6 +656,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     if (!context) {
       return false;
     }
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const tableHasRowSpanningCells = tableGrid.entries.some((entry) => entry.rowSpan > 1);
+    if (tableHasRowSpanningCells) {
+      return false;
+    }
 
     const nextRowPath = [
       ...context.rowPath.slice(0, -1),
@@ -649,7 +677,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after row duplication.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext]);
 
   const duplicateSelectedTableColumn = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -736,6 +764,36 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     if (rows.length <= 1) {
       return false;
     }
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const rowOwnsSpanningCells = tableGrid.entries.some((entry) => (
+      entry.rowStart === context.rowIndex && entry.rowSpan > 1
+    ));
+    if (rowOwnsSpanningCells) {
+      return false;
+    }
+
+    const adjustedRowSpanOrigins = new Set<string>();
+    tableGrid.entries
+      .filter((entry) => entry.rowStart < context.rowIndex && entry.rowEnd >= context.rowIndex)
+      .forEach((entry) => {
+        const key = entry.path.join('.');
+        if (adjustedRowSpanOrigins.has(key)) {
+          return;
+        }
+        adjustedRowSpanOrigins.add(key);
+        const spanCell = Node.get(editor as any, entry.path) as any;
+        const currentRowSpan = Number.isInteger(spanCell?.rowSpan) && spanCell.rowSpan > 1 ? spanCell.rowSpan : entry.rowSpan;
+        const nextRowSpan = currentRowSpan - 1;
+        if (nextRowSpan > 1) {
+          Transforms.setNodes(editor as any, { rowSpan: nextRowSpan } as any, {
+            at: entry.path,
+          });
+        } else {
+          Transforms.unsetNodes(editor as any, 'rowSpan' as any, {
+            at: entry.path,
+          } as any);
+        }
+      });
 
     const nextRowIndex = Math.min(context.rowIndex, rows.length - 2);
     const nextColumnIndex = Math.min(context.cellIndex, Math.max(0, context.columnCount - 1));
@@ -746,7 +804,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after row removal.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext]);
 
   const getFallbackTableEntry = useCallback((editor: PlateEditor) => {
     const tableEntries = Array.from(
@@ -932,7 +990,9 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
 
     const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
     const targetRowIndex = context.rowIndex + direction;
-    if (targetRowIndex < 0 || targetRowIndex >= rows.length) {
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const tableHasRowSpanningCells = tableGrid.entries.some((entry) => entry.rowSpan > 1);
+    if (tableHasRowSpanningCells || targetRowIndex < 0 || targetRowIndex >= rows.length) {
       return false;
     }
 
@@ -951,7 +1011,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after row movement.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext]);
 
   const moveSelectedTableColumn = useCallback((editor: PlateEditor, direction: -1 | 1) => {
     const context = getSelectedTableContext(editor);
