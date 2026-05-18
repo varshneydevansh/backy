@@ -13,7 +13,7 @@ The active blockers are now narrower and should be closed one page or gate at a 
 
 1. Run the configured Supabase/Postgres service-data gates for Forms and SDK manifests against a disposable migrated database.
 2. Certify live Settings and Commerce providers, including Supabase, Vercel, storage, notification, payment, tax, shipping, catalog, subscription, and provider-managed webhook families.
-3. Keep tightening remaining editor parity depth around advanced rich-text table/list edge cases and broader responsive visual-regression coverage.
+3. Keep editor parity protected with focused regression guards for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress.
 4. Keep product/order live-provider certification separate from mock-provider CI so real TaxJar/Avalara/EasyPost/Shippo/Stripe-discount/subscription behavior is proven without leaking provider secrets.
 
 ## 1) Canonical scope of this spec
@@ -50,7 +50,7 @@ It explicitly excludes:
 1. live Supabase/Postgres certification has not been run in this environment for the remaining database-gated surfaces
 2. live provider certification is still required before Settings, Products, Orders, and external connector APIs can be marked production-certified
 3. product/order subscription and provider-managed tax/shipping/discount workflows still need deeper real-provider execution evidence beyond mock-provider coverage
-4. advanced editor parity remains focused on rich-text table/list edge cases plus broader pixel-level responsive QA
+4. editor parity is locally guarded for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress; remaining launch blockers are external certification gates
 5. production launch still needs operator-owned release certification runs, provider secrets, disposable database confirmation, and custom deployment/domain verification
 
 ## 3) Complete missing feature map vs Wix/Canva baseline

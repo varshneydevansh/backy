@@ -21,7 +21,7 @@
 
 ## 1) Phase completion status (current snapshot)
 
-The canonical page-surface audit now tracks the platform at **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. The remaining Partial gates are configured Forms and SDK Supabase/Postgres service-data gates, live Settings and Commerce provider certification, and deeper editor parity around rich-text table/list edge cases and responsive pixel QA.
+The canonical page-surface audit now tracks the platform at **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. The remaining Partial gates are configured Forms and SDK Supabase/Postgres service-data gates plus live Settings and Commerce provider certification. Local editor parity for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress is covered by focused smoke paths and is no longer counted as a Partial gate.
 
 ### Phase 0/1 (Contracts + persistence + auth) — **Ready baseline with external certification gates**
 **Done**
@@ -38,15 +38,15 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 - Certify live Settings provider connections, live Commerce provider flows, and external provider-managed webhooks.
 - Continue shrinking any demo fixtures to non-authoritative local development paths.
 
-### Phase 2 (Editor action wiring) — **Ready baseline with deeper parity work**
+### Phase 2 (Editor action wiring) — **Ready baseline with focused regression guards**
 **Done**
 - Multiple editor UX improvements landed (selection edge handling, rich text control alignment, rich list editing, interaction safety, property panel additions).
 - Comment and block settings carry anti-abuse policy context through public comment payload parsing.
-- Undo/redo, copy/cut/paste/duplicate/delete/grouping, multi-select, layer hierarchy preservation, save conflict handling, and reload/recover paths are covered by editor smoke and audit evidence.
+- Undo/redo, copy/cut/paste/duplicate/delete/grouping, multi-select, layer hierarchy preservation, save conflict handling, reload/recover paths, responsive breakpoint overrides, span-aware rich-text table ranges, selected nested-list edits, imported list-indent normalization, and long-session stress are covered by editor smoke and audit evidence.
 
-**Remaining parity**
-- Continue expanding rich-text table/list edge-case coverage and responsive breakpoint pixel QA across cross-browser responsive combinations and additional composed-template permutations. Long-session editor stress coverage now has a focused smoke path through `npm run test:editor-stress --workspace @backy-cms/admin`.
+**Remaining certification**
 - Keep publish/rollback provider-backed certification tied to the release certification workflow.
+- Optional expansion remains available for additional cross-browser visual-regression breadth, but no known editor-completion blocker remains in this spec slice.
 
 ### Forms/comments module — **Partially complete**
 **Done**

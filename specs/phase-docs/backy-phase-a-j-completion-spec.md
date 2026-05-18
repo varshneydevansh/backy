@@ -9,7 +9,7 @@
 - Deliver a headless Wix/Canva/WordPress-class CMS platform where `backy-admin` is the authoring control plane and **any UI/UX can be used** as frontend consumer by relying only on stable `backy-public` contracts.
 - Note: this is alphabetic slicing; for numeric roadmap conversion see `backy-alpha-vs-numeric-phase-progress-2026-02-27.md`.
 
-Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md` tracks **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. Remaining Partial work is external certification: configured Forms/SDK Supabase/Postgres service-data smokes, live Settings/Commerce provider execution, and live provider-managed webhook/billing certification. Local editor follow-up is now depth hardening around remaining rich-text table/list edge cases and broader responsive pixel QA; long-session stress has focused smoke coverage through `npm run test:editor-stress --workspace @backy-cms/admin`.
+Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md` tracks **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. Remaining Partial work is external certification: configured Forms/SDK Supabase/Postgres service-data smokes, live Settings/Commerce provider execution, and live provider-managed webhook/billing certification. Local editor parity is guarded for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress through focused smoke coverage.
 
 ### Phase A — Contracts, persistence boundary, auth
 
@@ -19,9 +19,9 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 ### Phase B — Editor action wiring
 
-- status: ready baseline with deeper parity hardening
-- done: drag/resize, selection, multi-select, grouping/ungrouping with Cmd/Ctrl+G, nested-group safeguards, undo/redo, copy/cut/paste/duplicate/delete, layer ordering, responsive overrides, long-session stress smoke, save/reload, revision-aware conflict guardrails, rich-text selected range marks, list indentation/reordering, table row/column operations, spans, captions, and selected multi-cell table styling
-- remaining: expand the last rich-text table/list edge-case coverage and broader responsive pixel-level QA across cross-browser responsive combinations and additional composed-template permutations
+- status: ready baseline with focused regression guards
+- done: drag/resize, selection, multi-select, grouping/ungrouping with Cmd/Ctrl+G, nested-group safeguards, undo/redo, copy/cut/paste/duplicate/delete, layer ordering, responsive overrides, long-session stress smoke, save/reload, revision-aware conflict guardrails, rich-text selected range marks, imported list-indent edit normalization, list indentation/reordering, table row/column operations, spans, captions, and selected multi-cell table styling
+- remaining: no known local editor-completion blocker remains in this spec slice; keep regression guards in `test:editor-workflows` as new editor controls are added
 
 ### Phase C — Forms and comments production module
 
@@ -38,7 +38,7 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 - Immediate: run or unblock the configured Forms/SDK Supabase/Postgres service-data gates with a disposable migrated database.
 - Then: run live Settings and Commerce provider certification against configured external services.
-- Next: keep tightening editor depth where local work remains, especially rich-text table/list edge cases and full-template responsive pixel QA.
+- Next: keep editor regression guards current as new controls are added; do not treat optional cross-browser visual-regression expansion as a blocker for the current local editor slice.
 - Final in this phase: update page-surface audit rows only when the corresponding live gate or focused smoke evidence exists.
 
 ### Phase D — Core CMS composition primitives
@@ -87,7 +87,7 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 1. Run the database certification gates for Forms and SDK manifests against a disposable migrated Supabase/Postgres service.
 2. Run live Settings and Commerce provider certification for Supabase, Vercel, storage, notifications, billing/payment, catalog, tax, shipping, subscription, and provider-managed webhook paths.
-3. Continue focused editor hardening on rich-text table/list edge cases and responsive pixel QA.
+3. Keep focused editor regression guards current for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress.
 4. Keep public contract and custom frontend onboarding evidence tied to manifest/OpenAPI/SDK smokes.
 5. Defer broad new feature expansion until the remaining Partial certification rows are closed.
 
