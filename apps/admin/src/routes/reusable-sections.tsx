@@ -1694,7 +1694,11 @@ function ReusableSectionsRoute() {
                 })}
               </div>
             ) : !frontendDesignLoading && !frontendDesignError ? (
-              <p className="text-sm text-muted-foreground">The current frontend contract has no section templates yet.</p>
+              <EmptyState
+                icon={Layers3}
+                title="No frontend section templates captured"
+                description="Save section templates in the connected frontend design contract to create reusable editor blocks with source, tokens, chrome, CSS, and binding hints."
+              />
             ) : null}
           </PanelContent>
         </Panel>

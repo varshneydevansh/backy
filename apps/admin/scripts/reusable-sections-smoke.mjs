@@ -45,6 +45,8 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes('Save this reusable section or restore an imported version to start building a backend version history.'), 'Reusable sections empty version history must explain how versions are created');
   assert(source.includes('title="Version history not loaded"'), 'Reusable sections workflow must keep the unloaded version-history title visible');
   assert(source.includes('Load workflow state to inspect saved versions before restoring a captured section.'), 'Reusable sections unloaded version history must explain the next action');
+  assert(source.includes('title="No frontend section templates captured"'), 'Reusable sections frontend contract panel must keep the empty template title visible');
+  assert(source.includes('Save section templates in the connected frontend design contract to create reusable editor blocks'), 'Reusable sections frontend template empty state must explain how templates are captured');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
