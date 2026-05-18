@@ -3633,7 +3633,11 @@ function OrdersRoute() {
                           </div>
                         ))}
                         {(!orderAnalytics || orderAnalytics.sources.length === 0) && (
-                          <div className="text-sm text-muted-foreground">No order source data yet.</div>
+                          <EmptyState
+                            icon={BarChart3}
+                            title="No order source data yet"
+                            description="Checkout, admin-created, and provider-imported order sources will appear here after analytics records revenue by source."
+                          />
                         )}
                       </div>
                     </div>
@@ -3661,10 +3665,34 @@ function OrdersRoute() {
                   </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     {[
-                      { title: 'Payment providers', items: orderAnalytics?.providerOperations?.paymentProviders || [], empty: 'No payment provider data yet.' },
-                      { title: 'Refund providers', items: orderAnalytics?.providerOperations?.refundProviders || [], empty: 'No provider refund data yet.' },
-                      { title: 'Fulfillment providers', items: orderAnalytics?.providerOperations?.fulfillmentProviders || [], empty: 'No fulfillment dispatch data yet.' },
-                      { title: 'Shipping labels', items: orderAnalytics?.providerOperations?.shippingLabelProviders || [], empty: 'No shipping-label data yet.' },
+                      {
+                        title: 'Payment providers',
+                        icon: CreditCard,
+                        items: orderAnalytics?.providerOperations?.paymentProviders || [],
+                        emptyTitle: 'No payment provider data yet',
+                        emptyDescription: 'Orders with payment provider metadata will show status and revenue mix here.',
+                      },
+                      {
+                        title: 'Refund providers',
+                        icon: RotateCcw,
+                        items: orderAnalytics?.providerOperations?.refundProviders || [],
+                        emptyTitle: 'No provider refund data yet',
+                        emptyDescription: 'Provider refund requests and reconciliation status will appear after refund operations run.',
+                      },
+                      {
+                        title: 'Fulfillment providers',
+                        icon: PackageCheck,
+                        items: orderAnalytics?.providerOperations?.fulfillmentProviders || [],
+                        emptyTitle: 'No fulfillment dispatch data yet',
+                        emptyDescription: 'Fulfillment provider dispatch status will appear after orders move into warehouse or partner queues.',
+                      },
+                      {
+                        title: 'Shipping labels',
+                        icon: Truck,
+                        items: orderAnalytics?.providerOperations?.shippingLabelProviders || [],
+                        emptyTitle: 'No shipping-label data yet',
+                        emptyDescription: 'Shipping label providers and issue counts will appear after labels are quoted or purchased.',
+                      },
                     ].map((group) => (
                       <div key={group.title} className="rounded-lg border border-border bg-card p-3">
                         <h4 className="text-xs font-semibold uppercase text-muted-foreground">{group.title}</h4>
@@ -3687,7 +3715,11 @@ function OrdersRoute() {
                             </div>
                           ))}
                           {group.items.length === 0 && (
-                            <div className="text-sm text-muted-foreground">{group.empty}</div>
+                            <EmptyState
+                              icon={group.icon}
+                              title={group.emptyTitle}
+                              description={group.emptyDescription}
+                            />
                           )}
                         </div>
                       </div>

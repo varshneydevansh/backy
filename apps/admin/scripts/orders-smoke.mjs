@@ -131,6 +131,13 @@ const assert = (condition, message) => {
 const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   const source = fs.readFileSync(new URL('../src/routes/orders.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Orders route must use the shared EmptyState component');
+  assert(source.includes('title="No order source data yet"'), 'Orders source analytics empty state must keep the shared title visible');
+  assert(source.includes('Checkout, admin-created, and provider-imported order sources will appear here after analytics records revenue by source.'), 'Orders source analytics empty state must explain when data appears');
+  assert(source.includes("emptyTitle: 'No payment provider data yet'"), 'Orders payment-provider analytics empty state must keep the shared title visible');
+  assert(source.includes("emptyTitle: 'No provider refund data yet'"), 'Orders refund-provider analytics empty state must keep the shared title visible');
+  assert(source.includes("emptyTitle: 'No fulfillment dispatch data yet'"), 'Orders fulfillment-provider analytics empty state must keep the shared title visible');
+  assert(source.includes("emptyTitle: 'No shipping-label data yet'"), 'Orders shipping-label analytics empty state must keep the shared title visible');
+  assert(source.includes('title={group.emptyTitle}') && source.includes('description={group.emptyDescription}'), 'Orders provider analytics empty states must render through the shared EmptyState component');
   assert(source.includes('title="No order notification events"'), 'Orders notification delivery empty state must keep the shared title visible');
   assert(source.includes("title={orders.length === 0 ? 'No orders yet' : 'No orders match this view'}"), 'Orders list empty state must keep the shared dynamic title visible');
   assert(source.includes('title="No line items yet"'), 'Orders line-item empty state must keep the shared title visible');
