@@ -899,6 +899,8 @@ try {
     assert(publicSiteBySlug.response.status === 200, `${publicSiteBySlug.url} expected 200, got ${publicSiteBySlug.response.status}`);
     assertBackyContract(publicSiteBySlug, 'discovery');
     assert(publicSiteBySlug.response.headers.get('x-backy-site-id') === createdSiteId, `${publicSiteBySlug.url} missing site id header`);
+    const publicSiteBySlugCacheRevision = publicSiteBySlug.response.headers.get('x-backy-cache-revision');
+    assert(publicSiteBySlugCacheRevision, `${publicSiteBySlug.url} missing site discovery cache revision`);
     const publicSiteBySlugEtag = publicSiteBySlug.response.headers.get('etag');
     assert(publicSiteBySlugEtag?.startsWith('"backy-'), `${publicSiteBySlug.url} missing site discovery etag`);
     const revalidatedPublicSiteBySlug = await request(`/api/sites?identifier=${siteSlug}`, {
@@ -906,12 +908,14 @@ try {
     });
     assert(revalidatedPublicSiteBySlug.response.status === 304, `${revalidatedPublicSiteBySlug.url} expected site discovery 304, got ${revalidatedPublicSiteBySlug.response.status}`);
     assert(revalidatedPublicSiteBySlug.response.headers.get('etag') === publicSiteBySlugEtag, `${revalidatedPublicSiteBySlug.url} expected matching site discovery etag`);
+    assert(revalidatedPublicSiteBySlug.response.headers.get('x-backy-cache-revision') === publicSiteBySlugCacheRevision, `${revalidatedPublicSiteBySlug.url} expected matching site discovery cache revision`);
     assert(publicSiteBySlug.json?.success === true, `${publicSiteBySlug.url} expected success envelope`);
     assert(publicSiteBySlug.json?.data?.site?.id === createdSiteId, `${publicSiteBySlug.url} returned wrong site`);
 
     const publicSiteByDomain = await request(`/api/sites?identifier=${customDomain}`);
     assert(publicSiteByDomain.response.status === 200, `${publicSiteByDomain.url} expected 200, got ${publicSiteByDomain.response.status}`);
     assertBackyContract(publicSiteByDomain, 'discovery');
+    assert(publicSiteByDomain.response.headers.get('x-backy-cache-revision'), `${publicSiteByDomain.url} missing domain site discovery cache revision`);
     assert(publicSiteByDomain.json?.data?.site?.id === createdSiteId, `${publicSiteByDomain.url} did not resolve custom domain`);
     assert(publicSiteByDomain.response.headers.get('x-ratelimit-limit'), `${publicSiteByDomain.url} missing discovery rate-limit header`);
 

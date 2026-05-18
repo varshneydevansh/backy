@@ -216,6 +216,17 @@ const rateLimitHeaders = (limit: ReturnType<typeof checkDiscoveryRateLimit>) => 
     ...(limit.limited ? { 'retry-after': String(limit.retryAfterSeconds) } : {}),
 });
 
+const latestDiscoveryCacheRevision = async (
+    repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+    siteId?: string,
+) => {
+    const revision = await repositories.cacheInvalidations.latestRevision({
+        ...(siteId ? { siteId } : {}),
+        scope: 'discovery',
+    });
+    return revision || undefined;
+};
+
 export async function GET(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -240,6 +251,7 @@ export async function GET(request: NextRequest) {
                 }
 
                 const publicSite = publicSiteFromRepositorySite(site);
+                const cacheRevision = await latestDiscoveryCacheRevision(repositories, publicSite.id);
                 return publicContractJson({
                     success: true,
                     requestId,
@@ -250,6 +262,7 @@ export async function GET(request: NextRequest) {
                     request,
                     cache: 'discovery',
                     siteId: publicSite.id,
+                    cacheRevision,
                     headers,
                 });
             }
@@ -260,6 +273,7 @@ export async function GET(request: NextRequest) {
                 offset,
             });
             const sites = result.items.filter((site) => site.isPublished).map(publicSiteFromRepositorySite);
+            const cacheRevision = await latestDiscoveryCacheRevision(repositories);
 
             return publicContractJson({
                 success: true,
@@ -276,6 +290,7 @@ export async function GET(request: NextRequest) {
                 requestId,
                 request,
                 cache: 'discovery',
+                cacheRevision,
                 headers,
             });
         }

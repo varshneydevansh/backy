@@ -16,6 +16,9 @@ const assert = (condition, message) => {
 
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
+const publicSiteDiscoveryRoute = read('../src/app/api/sites/route.ts');
+const adminSitesRoute = read('../src/app/api/admin/sites/route.ts');
+const adminSiteDetailRoute = read('../src/app/api/admin/sites/[siteId]/route.ts');
 const sdkSource = read('../../../packages/sdk-js/src/index.ts');
 const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../../../packages/sdk-js/scripts/generated-contract-types.ts');
@@ -28,6 +31,17 @@ const audit = read('../../../specs/page-completion-audit/backy-page-surface-audi
 assert(
   manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
   'Frontend manifest must advertise public site discovery for custom frontends.',
+);
+
+assert(
+  publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
+    publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
+    publicSiteDiscoveryRoute.includes('cacheRevision') &&
+    adminSitesRoute.includes('recordSiteCacheInvalidation') &&
+    adminSitesRoute.includes('reason: "site-created"') &&
+    adminSiteDetailRoute.includes('recordSiteCacheInvalidation') &&
+    adminSiteDetailRoute.includes('reason: "site-updated"'),
+  'Public site discovery must use database discovery invalidation revisions from site create/update mutations.',
 );
 
 assert(

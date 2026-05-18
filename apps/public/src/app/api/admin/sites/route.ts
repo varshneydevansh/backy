@@ -13,6 +13,7 @@ import {
   requireAdminTeamScopeAccess,
 } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import {
   createAdminSite,
   getAdminSettings,
@@ -369,6 +370,17 @@ export async function POST(request: NextRequest) {
         },
         requestId,
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(
+        repositories,
+        {
+          siteId: created.item.id,
+          scope: "discovery",
+          entity: "site",
+          entityId: created.item.id,
+          reason: "site-created",
+          requestId,
+        },
+      );
       await deliverSiteWebhooks({
         repositories,
         site: adminSiteFromRepositorySite(created.item) || created.item,
@@ -392,6 +404,7 @@ export async function POST(request: NextRequest) {
           requestId,
           data: {
             site: adminSiteFromRepositorySite(created.item),
+            cacheInvalidation,
           },
         },
         { status: 201 },

@@ -19,6 +19,7 @@ import {
   requireAdminTeamScopeAccess,
 } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
+import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import {
   deleteAdminSite,
   getAdminSettings,
@@ -937,6 +938,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           typeof body.isPublished === "boolean" ? body.isPublished : undefined,
         settings: nextSettings,
       });
+      let cacheInvalidation: Awaited<
+        ReturnType<typeof recordSiteCacheInvalidation>
+      > | null = null;
       if (commentPolicyOnlyPatch) {
         await recordAdminAudit({
           repositories,
@@ -950,6 +954,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           metadata: {
             permission: "comments.configure",
           },
+          requestId,
+        });
+        cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+          siteId: site.id,
+          scope: "discovery",
+          entity: "site",
+          entityId: site.id,
+          reason: "site-updated",
           requestId,
         });
       } else {
@@ -1010,6 +1022,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           },
           requestId,
         });
+        cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+          siteId: site.id,
+          scope: "discovery",
+          entity: "site",
+          entityId: site.id,
+          reason: "site-updated",
+          requestId,
+        });
         await deliverSiteWebhooks({
           repositories,
           site: adminSiteFromRepositorySite(updated.item) || updated.item,
@@ -1035,6 +1055,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         requestId,
         data: {
           site: adminSiteFromRepositorySite(updated.item),
+          cacheInvalidation,
         },
       });
     }
