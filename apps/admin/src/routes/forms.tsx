@@ -1105,6 +1105,7 @@ function FormsRoute() {
     selectedFormSubmitUrl,
   ]);
   const formsTemplatePackText = useMemo(() => JSON.stringify(formsTemplatePack, null, 2), [formsTemplatePack]);
+  const formPersistenceCertificationText = useMemo(() => JSON.stringify(formPersistenceCertification, null, 2), [formPersistenceCertification]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
   const formsRouteSearch = useMemo<FormsSearch>(() => ({
     siteId: activeSiteId,
@@ -2187,6 +2188,28 @@ function FormsRoute() {
     setError(null);
     setNotice('Forms handoff manifest downloaded.');
   };
+
+  const downloadFormPersistenceCertification = () => {
+    if (isFormsBusy) return;
+    if (!canExportForms) {
+      setError(exportPermissionTitle || 'Your account cannot export forms certification data.');
+      setNotice(null);
+      return;
+    }
+
+    const blob = new Blob([formPersistenceCertificationText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-forms-persistence-certification.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Forms persistence certification handoff downloaded.');
+  };
+
   const downloadFormTemplatePack = () => {
     if (isFormsBusy) return;
     if (!canExportForms) {
@@ -2497,9 +2520,33 @@ function FormsRoute() {
                 Forms are covered by local UI/API and repository checks. The remaining launch gate is the Supabase/Postgres service smoke with a configured database URL.
               </p>
             </div>
-            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-              Database gate
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void copyFormApiText(formPersistenceCertificationText, 'Forms persistence certification handoff')}
+                disabled={isFormsBusy || !canExportForms}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Copy className="size-4" />}
+                data-testid="forms-persistence-certification-copy-button"
+              >
+                Copy DB handoff
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={downloadFormPersistenceCertification}
+                disabled={isFormsBusy || !canExportForms}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Download className="size-4" />}
+                data-testid="forms-persistence-certification-download-button"
+              >
+                Download DB JSON
+              </Button>
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                Database gate
+              </span>
+            </div>
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-3">
             {formPersistenceCertification.checks.map((check) => (

@@ -32,6 +32,14 @@ const assertFormsPersistenceCertificationSource = () => {
   const source = fs.readFileSync(new URL('../src/routes/forms.tsx', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
+  assert(
+    source.includes('data-testid="forms-persistence-certification-download-button"') &&
+      source.includes('data-testid="forms-persistence-certification-copy-button"') &&
+      source.includes('formPersistenceCertificationText') &&
+      source.includes('-backy-forms-persistence-certification.json') &&
+      source.includes('Forms persistence certification handoff downloaded.'),
+    'Forms page must expose a focused persistence certification JSON export',
+  );
   assert(source.includes('data-testid="forms-template-pack-download-button"'), 'Forms templates panel must expose template-pack download action');
   assert(source.includes("schemaVersion: 'backy.form-template-pack.v1'"), 'Forms template export must advertise backy.form-template-pack.v1');
   assert(source.includes('templateExport'), 'Forms handoff manifest must summarize template export metadata');
@@ -2003,7 +2011,10 @@ const assertLayout = async (client) => {
       document.body?.innerText?.includes('Create registration form'),
     hasPersistenceCertification: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')) &&
       document.body?.innerText?.includes('Persistence certification') &&
-      document.body?.innerText?.includes('test:forms-postgres'),
+      document.body?.innerText?.includes('test:forms-postgres') &&
+      Boolean(document.querySelector('[data-testid="forms-persistence-certification-download-button"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-persistence-certification-copy-button"]')) &&
+      document.body?.innerText?.includes('Download DB JSON'),
     hasDeliveryPanel: Boolean(document.querySelector('[data-testid="forms-webhook-delivery-panel"]')) &&
       document.body?.innerText?.includes('Webhook delivery'),
     hasTemplates: document.body?.innerText?.includes('Form templates') || false,
