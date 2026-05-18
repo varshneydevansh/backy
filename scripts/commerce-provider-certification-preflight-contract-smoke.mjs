@@ -156,6 +156,7 @@ includesAll(
     'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER must be auto, stripe, paypal, paddle, square, adyen, mollie, razorpay, or generic.',
     'runtimeCommerce',
     'validate-infrastructure',
     'prepareLocalCertificationSettings',
@@ -301,7 +302,7 @@ assertChoiceOptions(workflow, 'tax_provider', ['auto', 'stripe', 'taxjar', 'aval
 assertChoiceOptions(workflow, 'shipping_provider', ['auto', 'easypost', 'shippo', 'http']);
 assertChoiceOptions(workflow, 'catalog_provider', ['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http']);
 assertChoiceOptions(workflow, 'subscription_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http']);
-assertChoiceOptions(workflow, 'webhook_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'generic']);
+assertChoiceOptions(workflow, 'webhook_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'generic']);
 
 assert(
   workflow.indexOf('- name: Run Commerce provider certification preflight') < workflow.indexOf('- name: Write non-secret Commerce certification summary') &&

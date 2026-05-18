@@ -72,8 +72,8 @@ if (!['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorp
   throw new Error('BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER must be auto, stripe, paypal, paddle, square, adyen, mollie, razorpay, or http.');
 }
 
-if (!['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'generic'].includes(requestedWebhookProvider)) {
-  throw new Error('BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER must be auto, stripe, paypal, paddle, square, adyen, mollie, or generic.');
+if (!['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'generic'].includes(requestedWebhookProvider)) {
+  throw new Error('BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER must be auto, stripe, paypal, paddle, square, adyen, mollie, razorpay, or generic.');
 }
 
 const listen = (server, port = 0) => new Promise((resolve) => {

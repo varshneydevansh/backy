@@ -218,7 +218,14 @@ const commerceChecks = [
   checkCompleteAny('Magento catalog credentials', providerCredentials.magento, requestCatalog && catalogProvider === 'magento'),
   checkAny('HTTP catalog provider URL', ['BACKY_COMMERCE_PRODUCT_SYNC_URL', 'COMMERCE_PRODUCT_SYNC_URL'], requestCatalog && catalogProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
   checkAny('HTTP subscription provider URL', ['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'], requestSubscriptions && subscriptionProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
-  checkAny('Commerce webhook secret', ['BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'], requestWebhooks && webhookProvider !== 'auto'),
+  checkAny('Commerce webhook secret', ['BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'], requestWebhooks),
+  checkCompleteAny('Stripe webhook credentials', providerCredentials.stripe, requestWebhooks && webhookProvider === 'stripe'),
+  checkCompleteAny('PayPal webhook credentials', providerCredentials.paypal, requestWebhooks && webhookProvider === 'paypal'),
+  checkCompleteAny('Paddle webhook credentials', providerCredentials.paddle, requestWebhooks && webhookProvider === 'paddle'),
+  checkCompleteAny('Square webhook credentials', providerCredentials.square, requestWebhooks && webhookProvider === 'square'),
+  checkCompleteAny('Adyen webhook credentials', providerCredentials.adyen, requestWebhooks && webhookProvider === 'adyen'),
+  checkCompleteAny('Mollie webhook credentials', providerCredentials.mollie, requestWebhooks && webhookProvider === 'mollie'),
+  checkCompleteAny('Razorpay webhook credentials', providerCredentials.razorpay, requestWebhooks && webhookProvider === 'razorpay'),
 ];
 
 const commerce = {

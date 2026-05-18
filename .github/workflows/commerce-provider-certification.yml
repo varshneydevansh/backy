@@ -109,6 +109,7 @@ on:
           - square
           - adyen
           - mollie
+          - razorpay
           - generic
 
 jobs:

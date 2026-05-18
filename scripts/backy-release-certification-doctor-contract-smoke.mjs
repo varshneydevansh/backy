@@ -729,6 +729,28 @@ await assertProviderAliasReady({
   },
 });
 
+await assertMissingProvider({
+  label: 'selected Razorpay commerce webhook',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_WEBHOOKS: '1',
+    BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER: 'razorpay',
+    COMMERCE_WEBHOOK_SECRET: 'commerce_webhook_alias_secret',
+  },
+  failure: 'Razorpay webhook credentials',
+});
+
+await assertProviderAliasReady({
+  label: 'selected Razorpay commerce webhook',
+  env: {
+    BACKY_COMMERCE_CERTIFY_WEBHOOKS: '1',
+    BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER: 'razorpay',
+    COMMERCE_WEBHOOK_SECRET: 'commerce_webhook_alias_secret',
+    RAZORPAY_KEY_ID: 'razorpay_alias_key',
+    RAZORPAY_KEY_SECRET: 'razorpay_alias_secret',
+  },
+});
+
 console.log(JSON.stringify({
   ok: true,
   contract: 'backy.release-certification-doctor-contract.v1',
