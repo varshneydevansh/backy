@@ -13,6 +13,13 @@ const PORT = Number(process.env.BACKY_USERS_CDP_PORT || 9382);
 const SCREENSHOT_PATH = process.env.BACKY_USERS_SCREENSHOT || path.join(os.tmpdir(), 'backy-users-smoke.png');
 let apiAdminSessionToken = '';
 
+const getSmokeMfaCode = () => (
+  process.env.BACKY_USERS_SMOKE_MFA_CODE ||
+  process.env.BACKY_ADMIN_MFA_CODE ||
+  process.env.BACKY_ADMIN_2FA_CODE ||
+  ''
+);
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const assert = (condition, message) => {
@@ -59,7 +66,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode = '') => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -67,9 +74,17 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = getSmokeMfaCode();
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -279,6 +294,9 @@ const createUser = async ({ fullName, email, role = 'admin', status = 'invited' 
     assert(invite?.inviteUrl?.includes('/accept-invite?token='), `Invited user create did not return an invite URL: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(invite.deliveryConfigured === true, `Invited user create did not queue invite delivery: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(inviteDelivery?.provider && inviteDelivery.status === 'queued', `Invited user create did not expose delivery metadata: ${JSON.stringify(inviteDelivery).slice(0, 500)}`);
+    const inviteToken = new URL(invite.inviteUrl, 'https://backy.local').searchParams.get('token');
+    assert(inviteToken, `Invited user create did not expose a token in invite URL: ${JSON.stringify(invite).slice(0, 500)}`);
+    user.inviteToken = inviteToken;
   }
   return user;
 };
@@ -584,6 +602,33 @@ const clickButton = async (client, label) => {
   assert(result.ok, `Unable to click ${label}: ${JSON.stringify(result)}`);
 };
 
+const pressKey = async (client, key) => {
+  const codeByKey = {
+    Escape: 'Escape',
+    Enter: 'Enter',
+  };
+  const virtualKeyByKey = {
+    Escape: 27,
+    Enter: 13,
+  };
+
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key,
+    code: codeByKey[key] || key,
+    windowsVirtualKeyCode: virtualKeyByKey[key] || 0,
+    nativeVirtualKeyCode: virtualKeyByKey[key] || 0,
+  });
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key,
+    code: codeByKey[key] || key,
+    windowsVirtualKeyCode: virtualKeyByKey[key] || 0,
+    nativeVirtualKeyCode: virtualKeyByKey[key] || 0,
+  });
+  await sleep(150);
+};
+
 const signInAdmin = async (client) => {
   await navigate(
     client,
@@ -598,16 +643,23 @@ const signInAdmin = async (client) => {
   );
 
   const loginResult = await evaluate(client, `(async () => {
-    const response = await fetch(${JSON.stringify(`${API_BASE_URL}/api/admin/auth/login`)}, {
+    const login = (twoFactorCode) => fetch(${JSON.stringify(`${API_BASE_URL}/api/admin/auth/login`)}, {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         email: 'admin@backy.io',
         password: ${JSON.stringify(process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123')},
+        ...(twoFactorCode ? { twoFactorCode } : {}),
       }),
     });
-    const payload = await response.json().catch(() => ({}));
+    let response = await login('');
+    let payload = await response.json().catch(() => ({}));
+    const smokeMfaCode = ${JSON.stringify(getSmokeMfaCode())};
+    if (!response.ok && payload?.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+      response = await login(smokeMfaCode);
+      payload = await response.json().catch(() => ({}));
+    }
     if (!response.ok || payload.success === false || !payload.data?.user || !payload.data?.session) {
       return { ok: false, status: response.status, payload };
     }
@@ -1244,7 +1296,11 @@ const resetUserPasswordToken = async (token, userId, email, password) => {
     body: JSON.stringify({ email, password }),
   });
   const loginPayload = await loginResponse.json().catch(() => ({}));
-  assert(loginResponse.ok && loginPayload.data?.session?.token, `New password did not sign in: ${JSON.stringify(loginPayload).slice(0, 500)}`);
+  assert(
+    (loginResponse.ok && loginPayload.data?.session?.token) ||
+      (loginResponse.status === 401 && loginPayload.error?.code === 'MFA_REQUIRED'),
+    `New password did not sign in or reach the MFA challenge: ${JSON.stringify(loginPayload).slice(0, 500)}`,
+  );
 };
 
 const configureUserDetailMfa = async (client, { userId, email, password }) => {
@@ -1446,7 +1502,7 @@ const transferOwnershipFromDetail = async (client, fullName) => {
 
 const removeUserFromDirectory = async (client, fullName) => {
   await waitForUsersPageUser(client, fullName);
-  const openResult = await evaluate(client, `(() => {
+  const openDeleteDialog = async () => evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
       (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Remove ${fullName}`)}
     ));
@@ -1460,12 +1516,44 @@ const removeUserFromDirectory = async (client, fullName) => {
     button.click();
     return { ok: true };
   })()`);
+  const openResult = await openDeleteDialog();
   assert(openResult.ok, `Unable to open delete confirmation: ${JSON.stringify(openResult)}`);
 
+  const dialogState = await evaluate(client, `(() => {
+    const dialog = document.querySelector('[data-testid="users-delete-confirm-dialog"]');
+    return {
+      hasDialog: dialog instanceof HTMLElement,
+      role: dialog?.getAttribute('role') || '',
+      ariaModal: dialog?.getAttribute('aria-modal') || '',
+      labelledBy: dialog?.getAttribute('aria-labelledby') || '',
+      title: dialog?.querySelector('h2')?.textContent || '',
+      text: dialog?.textContent?.slice(0, 500) || '',
+    };
+  })()`);
+  assert(
+    dialogState.hasDialog &&
+      dialogState.role === 'dialog' &&
+      dialogState.ariaModal === 'true' &&
+      dialogState.labelledBy === 'users-delete-confirm-title' &&
+      dialogState.title === `Remove ${fullName}?`,
+    `User delete confirmation is missing dialog semantics: ${JSON.stringify(dialogState)}`,
+  );
+
+  await pressKey(client, 'Escape');
+  const escapeClosed = await evaluate(client, `(() => ({
+    closed: !document.querySelector('[data-testid="users-delete-confirm-dialog"]'),
+    stillHasUser: document.body?.innerText?.includes(${JSON.stringify(fullName)}) || false,
+  }))()`);
+  assert(
+    escapeClosed.closed && escapeClosed.stillHasUser,
+    `Escape did not dismiss user delete confirmation safely: ${JSON.stringify(escapeClosed)}`,
+  );
+
+  const reopenResult = await openDeleteDialog();
+  assert(reopenResult.ok, `Unable to reopen delete confirmation after Escape: ${JSON.stringify(reopenResult)}`);
+
   const confirmResult = await evaluate(client, `(() => {
-    const dialog = Array.from(document.querySelectorAll('[class*="fixed"]')).find((candidate) => (
-      (candidate.textContent || '').includes(${JSON.stringify(`Remove ${fullName}?`)})
-    ));
+    const dialog = document.querySelector('[data-testid="users-delete-confirm-dialog"]');
     const button = dialog && Array.from(dialog.querySelectorAll('button')).find((candidate) => (
       (candidate.textContent || '').trim() === 'Remove user'
     ));
@@ -1477,6 +1565,57 @@ const removeUserFromDirectory = async (client, fullName) => {
     return { ok: true };
   })()`);
   assert(confirmResult.ok, `Unable to confirm user deletion: ${JSON.stringify(confirmResult)}`);
+};
+
+const assertUserDetailDeleteDialogEscape = async (client, fullName) => {
+  const openResult = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').trim() === 'Remove user'
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'button-missing',
+        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.textContent || '').slice(0, 80),
+      };
+    }
+    if (button.disabled) return { ok: false, reason: 'button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(openResult.ok, `Unable to open user detail delete confirmation: ${JSON.stringify(openResult)}`);
+
+  const dialogState = await evaluate(client, `(() => {
+    const dialog = document.querySelector('[data-testid="user-detail-delete-confirm-dialog"]');
+    return {
+      hasDialog: dialog instanceof HTMLElement,
+      role: dialog?.getAttribute('role') || '',
+      ariaModal: dialog?.getAttribute('aria-modal') || '',
+      labelledBy: dialog?.getAttribute('aria-labelledby') || '',
+      title: dialog?.querySelector('h2')?.textContent || '',
+      text: dialog?.textContent?.slice(0, 500) || '',
+    };
+  })()`);
+  assert(
+    dialogState.hasDialog &&
+      dialogState.role === 'dialog' &&
+      dialogState.ariaModal === 'true' &&
+      dialogState.labelledBy === 'user-detail-delete-confirm-title' &&
+      dialogState.title === `Remove ${fullName}?`,
+    `User detail delete confirmation is missing dialog semantics: ${JSON.stringify(dialogState)}`,
+  );
+
+  await pressKey(client, 'Escape');
+  const closed = await evaluate(client, `(() => ({
+    closed: !document.querySelector('[data-testid="user-detail-delete-confirm-dialog"]'),
+    stillOnDetail: document.body?.innerText?.includes(${JSON.stringify(fullName)}) || false,
+  }))()`);
+  assert(
+    closed.closed && closed.stillOnDetail,
+    `Escape did not dismiss user detail delete confirmation safely: ${JSON.stringify(closed)}`,
+  );
+
+  return { dialogState, closed };
 };
 
 const setUsersBulkStatus = async (client, fullNames, status) => {
@@ -1868,8 +2007,9 @@ const main = async () => {
     const created = await createUser({ fullName, email });
     createdUserId = created.id;
     assert(created.role === 'admin' && created.status === 'invited', `Unexpected created user state: ${JSON.stringify(created)}`);
-    const bulkCreated = await createUser({ fullName: bulkFullName, email: bulkEmail, role: 'viewer', status: 'active' });
+    const bulkCreated = await createUser({ fullName: bulkFullName, email: bulkEmail, role: 'viewer', status: 'invited' });
     bulkUserId = bulkCreated.id;
+    await acceptUserInviteToken(bulkCreated.inviteToken, bulkUserId);
     const pagination = await assertUsersApiPagination({
       search: suffix,
       expectedIds: [createdUserId, bulkUserId],
@@ -1936,7 +2076,7 @@ const main = async () => {
       upsertCsvPath,
       [
         'full_name,email,role,status',
-        `${importedUpdatedFullName},${importedEmail},viewer,active`,
+        `${importedUpdatedFullName},${importedEmail},viewer,invited`,
       ].join('\n'),
       'utf8',
     );
@@ -1946,7 +2086,7 @@ const main = async () => {
       updated: 1,
       skipped: 0,
     });
-    await waitForUser(importedEmail, (user) => user.fullName === importedUpdatedFullName && user.role === 'viewer' && user.status === 'active');
+    await waitForUser(importedEmail, (user) => user.fullName === importedUpdatedFullName && user.role === 'viewer' && user.status === 'invited');
     const upsertAuditLogs = await listUserAuditLogs('import');
     assert(
       upsertAuditLogs.some((log) => log.action === 'user.import.upsert' && log.metadata?.updated === 1 && log.metadata?.mode === 'upsert'),
@@ -2034,6 +2174,7 @@ const main = async () => {
     const suspended = await waitForUser(email, (user) => user.fullName === fullName && user.role === 'viewer' && user.status === 'suspended');
     assert((await getUser(suspended.id)).status === 'suspended', 'User detail lifecycle action did not persist suspended status.');
     await waitForUserDetailActivity(client, email);
+    const detailDeleteDialog = await assertUserDetailDeleteDialogEscape(client, fullName);
 
     await navigateToUsers(client, fullName);
     await waitForUsersPageUser(client, fullName);
@@ -2071,6 +2212,7 @@ const main = async () => {
         generatedRecoveryCodes: mfaState.generatedCount,
         remainingAfterUse: mfaState.remainingAfterUse,
       },
+      detailDeleteDialog,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

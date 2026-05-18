@@ -819,6 +819,23 @@ function EditUserPage() {
     }
   };
 
+  useEffect(() => {
+    if (!showDeleteConfirm) return;
+
+    const handleDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isUserDetailBusy) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setShowDeleteConfirm(false);
+    };
+
+    document.addEventListener('keydown', handleDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleDeleteDialogKeyDown, true);
+  }, [isUserDetailBusy, showDeleteConfirm]);
+
   const handleLifecycleAction = async (status: UserStatus) => {
     if (isUserDetailBusy || status === formData.status) return;
     if (!canManageUsers) {
@@ -2228,14 +2245,20 @@ function EditUserPage() {
       </form>
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="user-detail-delete-confirm-title"
+          data-testid="user-detail-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Remove {user.fullName}?</h2>
+                <h2 id="user-detail-delete-confirm-title" className="text-lg font-semibold text-foreground">Remove {user.fullName}?</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   This account will lose Backy admin access immediately. Content history stays intact.
                 </p>

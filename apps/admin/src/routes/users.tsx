@@ -704,6 +704,24 @@ function UsersListView() {
     }
   };
 
+  useEffect(() => {
+    if (!pendingDelete && !pendingBulkDelete) return;
+
+    const handleDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isUserMutationBusy) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingDelete(null);
+      setPendingBulkDelete(false);
+    };
+
+    document.addEventListener('keydown', handleDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleDeleteDialogKeyDown, true);
+  }, [isUserMutationBusy, pendingBulkDelete, pendingDelete]);
+
   const copyUserApiText = async (value: string, label: string) => {
     if (isUsersBusy) return;
 
@@ -2135,14 +2153,20 @@ function UsersListView() {
       </div>
 
       {pendingBulkDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="users-bulk-delete-confirm-title"
+          data-testid="users-bulk-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Remove selected users?</h2>
+                <h2 id="users-bulk-delete-confirm-title" className="text-lg font-semibold text-foreground">Remove selected users?</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   This revokes admin access for {selectedActionableUsers.length} selected account{selectedActionableUsers.length === 1 ? '' : 's'}. Current-session users stay locked.
                 </p>
@@ -2175,14 +2199,20 @@ function UsersListView() {
       )}
 
       {pendingDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="users-delete-confirm-title"
+          data-testid="users-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Remove {pendingDelete.fullName}?</h2>
+                <h2 id="users-delete-confirm-title" className="text-lg font-semibold text-foreground">Remove {pendingDelete.fullName}?</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   This revokes admin access immediately. Backy keeps content they created, but this account will no longer be able to sign in.
                 </p>
