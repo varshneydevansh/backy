@@ -49,6 +49,15 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('Form edits, submission review, consent retention, and embed-block changes will appear here.'), 'Forms audit empty state must explain which actions populate activity');
   assert(source.includes('title="No delivery events yet"'), 'Forms delivery panel must keep the empty delivery title visible');
   assert(source.includes('Webhook and email delivery attempts, retries, and provider responses for this form will appear here.'), 'Forms delivery empty state must explain which events populate delivery history');
+  assert(source.includes('title="No form analytics yet"'), 'Forms analytics panel must keep the no-analytics empty-state title visible');
+  assert(source.includes('Submission, moderation, and collection-routing metrics appear after forms receive traffic.'), 'Forms analytics empty state must explain what will populate metrics');
+  assert(source.includes('title="No lead segments yet"'), 'Forms lead analytics panel must keep the no-segments empty-state title visible');
+  assert(source.includes('title="No saved lead lists yet"'), 'Forms saved lead lists panel must keep the no-lists empty-state title visible');
+  assert(source.includes('title="No forms match this library view"'), 'Forms library filter empty state must keep the shared title visible');
+  assert(source.includes('Change the search, source, state, destination, or readiness filters to broaden the form library.'), 'Forms library filter empty state must explain filter recovery');
+  assert(source.includes('title="No consent fields detected"'), 'Forms consent export panel must keep the no-consent-fields empty-state title visible');
+  assert(source.includes('title="No submissions match this view"'), 'Forms submission inbox filter empty state must keep the shared title visible');
+  assert(source.includes('Change the submission search or status filter to review more entries for this form.'), 'Forms submission filter empty state must explain filter recovery');
   for (const label of [
     'backy.forms-persistence-certification.v1',
     'npm run test:forms --workspace @backy-cms/admin',

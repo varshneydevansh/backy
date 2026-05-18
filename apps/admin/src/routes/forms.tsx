@@ -2671,9 +2671,11 @@ function FormsRoute() {
                 </div>
               ))}
               {(!formsAnalytics || formsAnalytics.forms.length === 0) && (
-                <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                  No form analytics yet.
-                </div>
+                <EmptyState
+                  icon={BarChart3}
+                  title="No form analytics yet"
+                  description="Submission, moderation, and collection-routing metrics appear after forms receive traffic."
+                />
               )}
             </div>
           </div>
@@ -2702,8 +2704,12 @@ function FormsRoute() {
                 </div>
               ))}
               {leadSegmentHighlights.length === 0 && (
-                <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground sm:col-span-2">
-                  No lead segments yet.
+                <div className="sm:col-span-2">
+                  <EmptyState
+                    icon={Filter}
+                    title="No lead segments yet"
+                    description="Lead-quality segments appear after contact-sharing forms collect or route lead data."
+                  />
                 </div>
               )}
             </div>
@@ -2731,9 +2737,11 @@ function FormsRoute() {
                 </div>
               ))}
               {topSavedLeadLists.length === 0 && (
-                <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                  No saved lists yet.
-                </div>
+                <EmptyState
+                  icon={Save}
+                  title="No saved lead lists yet"
+                  description="Saved contact lists created from filtered lead views will appear here."
+                />
               )}
             </div>
           </div>
@@ -3161,16 +3169,17 @@ function FormsRoute() {
 
               <div className="mt-4 grid gap-2">
                 {filteredForms.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-                    <div className="text-sm font-medium text-foreground">No forms match this library view</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      Change the search, source, state, destination, or readiness filters to broaden the form library.
-                    </div>
-                    {hasActiveFormFilters && (
-                      <Button variant="outline" onClick={clearFormFilters} disabled={isFormsBusy} className="mt-4">
-                        Clear form filters
-                      </Button>
-                    )}
+                  <div>
+                    <EmptyState
+                      icon={ClipboardList}
+                      title="No forms match this library view"
+                      description="Change the search, source, state, destination, or readiness filters to broaden the form library."
+                      action={hasActiveFormFilters ? (
+                        <Button variant="outline" onClick={clearFormFilters} disabled={isFormsBusy}>
+                          Clear form filters
+                        </Button>
+                      ) : undefined}
+                    />
                   </div>
                 ) : filteredForms.map((form) => {
                   const inbox = inboxByForm[form.id];
@@ -4272,8 +4281,12 @@ function FormsRoute() {
                       {selectedConsentSettings.exportIncludesIp ? ' Exports include IP hash and user-agent.' : ' Exports omit IP hash and user-agent.'}
                     </div>
                     {selectedConsentFields.length === 0 ? (
-                      <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
-                        No consent-like checkbox fields detected on this form.
+                      <div className="mt-4">
+                        <EmptyState
+                          icon={ShieldCheck}
+                          title="No consent fields detected"
+                          description="Add consent-like checkbox fields to include this form in privacy exports and retention review."
+                        />
                       </div>
                     ) : (
                       <div className="mt-4 grid gap-2 md:grid-cols-2">
@@ -4349,9 +4362,11 @@ function FormsRoute() {
               />
               <PanelContent>
                 {filteredSubmissions.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-                    No submissions for this filter.
-                  </div>
+                  <EmptyState
+                    icon={Inbox}
+                    title="No submissions match this view"
+                    description="Change the submission search or status filter to review more entries for this form."
+                  />
                 ) : (
                   <div className="grid gap-3">
                     {filteredSubmissions.map((submission) => (
