@@ -14,7 +14,7 @@ Backy should become a complete backend-first website CMS:
 - a headless API platform where any custom frontend can consume Backy content without importing Backy admin internals;
 - an AI-readable contract so generated frontends can map every visible element, token, asset, form, and interaction back to Backy-managed data.
 
-The current repo is a strong prototype, not yet a complete CMS platform. The biggest risk is not missing UI quantity. The biggest risk is that core flows still have multiple sources of truth.
+Backy is not yet a complete Wix/Canva/WordPress-class CMS platform, but the current page-surface audit has moved most primary admin/editor/API surfaces out of prototype status. The biggest remaining risk is no longer generic UI scaffolding; it is proving the remaining database and live-provider gates without confusing demo/mock-provider coverage for production certification.
 
 ## 2. Current repo state, based on code
 
@@ -31,10 +31,10 @@ The current repo is a strong prototype, not yet a complete CMS platform. The big
 
 ### What is incomplete or unsafe for production
 
-- Admin persistence still comes from `apps/admin/src/stores/mockStore.ts`, a Zustand store persisted to localStorage.
-- Admin authentication still comes from `apps/admin/src/stores/authStore.ts`, with hardcoded mock users and development-only passwords.
-- The page editor route saves page content by calling `updatePage` in the mock store, not a DB-backed, authenticated page API.
-- Public data comes from `apps/public/src/lib/backyStore.ts`, which is an in-memory seeded store, not the same persistent data plane used by admin.
+- Some admin UI routes still import the demo `mockStore` types/state for local fallback and hydrated client context, but mutation-critical routes have moved behind authenticated admin/public APIs and repository adapters for the current Ready surfaces.
+- Admin authentication is backend-backed through `apps/public` auth routes with httpOnly sessions, invite/password reset flows, MFA, audit events, Supabase Auth integration, production local-auth policy guards, and site/team RBAC coverage.
+- The page editor save path now writes through the authenticated admin page API with conflict detection and reload-latest recovery instead of relying on a browser-only `updatePage` mock mutation.
+- Public data can still run in seeded/demo mode, but the remaining production risk is executing the configured Supabase/Postgres service-data gates for Forms and SDK manifests plus live provider certification.
 - There are at least three editor/content contracts:
   - `packages/core/src/types/index.ts` uses a node-map `PageContent` model.
   - `apps/admin/src/types/editor.ts` uses a canvas `elements[]` model.
@@ -42,7 +42,7 @@ The current repo is a strong prototype, not yet a complete CMS platform. The big
 - Public API responses are not consistently wrapped in the documented `{ success, data, error }` envelope.
 - Admin/public route boundaries are not hardened into separate read/write surfaces.
 - Media upload now has runtime admin/public APIs, environment-selected local/S3/Supabase-compatible storage, quotas, signed private delivery, generated responsive WebP transform files, DB-backed retained-version create/list/compare/restore/delete paths with checksum/path/name/timeline diff review plus media-aware previews, static upload safety checks, optional HTTP scanner and ClamAV `clamd` scanning, quarantine controls, manual provider/CDN metric intake with conversions/value/attribution windows, media.configure-gated provider metadata controls, media.edit-gated mutation routes, provider analytics batch ingestion by media id/storage path/URL, library-wide provider ROI rollups, and admin audit logging. Production still needs automated provider-account bucket creation/secret rotation, cross-channel attribution beyond provider feeds, and per-site ownership enforcement; the current media flow validates the active runtime bucket/path and gives operators a credential-rotation runbook without storing secrets.
-- Settings include a delivery-mode/API display surface, but API keys are local mock settings, not real scoped credentials.
+- Settings now include backend-backed delivery mode, API-key rotation history, hash-only named service-key issuance/revocation, runtime diagnostics, provider metadata, audit logs, and site-scoped settings; remaining risk is live external provider certification.
 - Blog authoring reuses general editor surfaces and lacks a complete post workflow around categories, tags, authors, featured images, scheduling, revisions, and feeds.
 
 ## 3. Gap against Wix-like CMS builders
@@ -69,14 +69,14 @@ Backy has the right direction but lacks the production maturity.
 
 | Capability | WordPress-like expectation | Backy state | Required Backy work |
 |---|---|---|---|
-| Posts/pages | Mature CRUD with status, author, parent, slug, revisions | Types/schema exist; admin uses mock store | Move CRUD to DB-backed admin APIs with auth and status workflows |
+| Posts/pages | Mature CRUD with status, author, parent, slug, revisions | Admin page/blog create/edit/list flows save through backend APIs with auth/session coverage, template seeding, status/SEO settings, conflict handling, and public render/manifest contracts; revision graph/rollback depth remains the main parity gap | Add richer revision graph, diff, rollback, publish snapshots, and audit metadata |
 | Block editor | Blocks, inserter, settings panel, list view, undo/redo | Canvas editor exists with many actions, and the inserter can now drop composed presets as nested editable element trees | Stabilize contract, layers/list view, nested block confidence, keyboard coverage, responsive overrides |
 | Patterns/reusable blocks | Saved patterns can be inserted, synced, managed, exported | Static composed presets now exist for hero, feature-grid, and lead-capture form blocks. Admin reusable-section CRUD APIs store saved canvas section patterns; the editor can save/insert/rename/delete active site sections, insert them as synced canvas instances, refresh selected instances from the saved source, detach them into independent editable copies, and expose active saved sections to custom frontends through public list/detail APIs, manifest/OpenAPI, and the SDK. | Add richer saved-section metadata editing, conflict/version history, block/template registry, JSON export/import |
 | Media library | Durable uploads, metadata, attachment usage | Runtime media endpoints and admin `/media` now cover upload/list/update/delete, media.configure-gated storage metadata controls, media.edit-gated existing-media mutations, stable-ID replacement with retained prior version metadata and DB-backed retained-version compare/restore/delete, folders, custom upload metadata, visibility, usage links, bulk actions, explicit page/post bind-unbind, per-asset and library audit activity, library usage analytics, generated responsive image manifests, Backy-served delivery analytics, manual provider/CDN metric intake with conversion/value attribution fields, batch provider analytics ingestion with replace/increment modes, provider summary rollups, and provider ROI rollups for attributed value, conversions, CVR, and value/request, retained-version checksum/path/name/timeline comparison with image/video/audio-aware preview fallbacks, static upload safety-scan state, optional HTTP scanner and ClamAV `clamd` verdict metadata, quarantine controls, and uploaded font registration metadata with fallback/display controls; admin upload/delete/replace/transform/version routes write through the active `@backy/storage` adapter while preserving stable media ids, storage paths, generated transform byte counts, SHA-256 binary fingerprints, and quota accounting; public media list/detail/file/transform feeds now emit cache/contract headers, ETags where applicable, conditional 304 responses for feeds, responsive image `srcSet`/variant metadata, delivery request counts for Backy-served file/transform endpoints, and media-scope cache revisions; `@backy/storage` defines local/S3/R2/Supabase upload/read/delete/sign/list/stat adapters with local smoke coverage; public render payloads expose public font assets and hosted pages inject `@font-face` rules | Add automated provider-account bucket creation/secret rotation and cross-channel attribution beyond provider feeds; active runtime bucket/path validation and credential rotation guidance now exist in Media |
 | Taxonomies | Categories/tags/custom taxonomies | Blog category/tag admin CRUD and public category/tag/author feeds exist, post list APIs support taxonomy/author filters, public taxonomy feeds emit contract/cache headers with ETags and conditional 304 responses, and database-mode category/tag mutations record scoped invalidation events. | Add custom taxonomies, richer taxonomy management screens, RBAC, and audit trails |
 | Revisions | Content and template revisions | PageVersion type/schema exists, no complete UI/API loop | Add revision graph, diff, rollback, publish snapshots, audit metadata |
-| Users/RBAC | Users, roles, permissions, authenticated API scopes | Mock auth; limited roles | Add session provider, team/site scoped roles, invite flow, access audits |
-| REST/headless | Stable JSON APIs with auth rules | Public endpoints exist, `/api/sites/:siteId/manifest` now provides a site-level frontend discovery document with schema refs, capabilities, route patterns, redirect/gone metadata, configured navigation, endpoint URLs, module summaries, collections, forms, and media/font counts, and `/api/sites/:siteId/openapi` exports a site-scoped OpenAPI 3.1 document for the public frontend surface including redirect/gone route schemas. Admin clients can now read/write stored site menus through `GET/PATCH /api/admin/sites/:siteId/navigation`, and `/sites/:siteId` exposes a connected navigation-management UI for primary/footer menus. Runtime data still uses the seeded/JSON adapter and some legacy endpoints have inconsistent envelopes. | Add generated SDK examples, CORS hardening, API keys, read/write route separation, and DB-backed services |
+| Users/RBAC | Users, roles, permissions, authenticated API scopes | Backend auth routes, invite/reset/session/MFA flows, service keys, role/status editing, permission previews, team/site scoping, audit activity, and browser/API smoke coverage exist; broader external auth-provider rollout remains a certification/runtime gate | Run production auth-provider certification and keep extending site/team scoping where new admin routes are added |
+| REST/headless | Stable JSON APIs with auth rules | Public manifest/OpenAPI/SDK contracts now cover frontend discovery, routing, navigation, SEO, media, forms, comments, collections, reusable sections, commerce, interactive registry/runtime, cache headers, ETags, and admin capability discovery. Runtime data can still run in demo JSON mode, while DB-backed service-data certification remains gated by Supabase/Postgres workflow execution. | Run the SDK Postgres smoke against a migrated database and keep route additions covered by manifest/OpenAPI/SDK contract tests |
 | Themes/global styles | Site-wide styles and per-block style supports | Theme types/settings exist; no compiler pipeline | Add theme token compiler, per-block token inheritance, CSS var output |
 
 ## 5. Highest-priority missing platform modules
@@ -86,9 +86,9 @@ Backy has the right direction but lacks the production maturity.
    - Must include elements, children, responsive overrides, style tokens, data bindings, actions, animations, accessibility, SEO hooks, and version metadata.
 
 2. DB-backed persistence and service layer
-   - Replace direct `mockStore` usage in admin routes.
-   - Replace seeded public `backyStore` with query/service adapters.
-   - Keep a seed/demo adapter only for local demos and tests.
+   - Keep replacing remaining fallback `mockStore` dependencies where they are still source-of-truth for non-Ready surfaces.
+   - Run the configured Forms and SDK Supabase/Postgres gates before marking database-backed service data complete.
+   - Keep seed/demo adapters only for local demos and tests, with release certification making provider/database mode explicit.
 
 3. Auth and RBAC
    - Replace hardcoded mock users with real sessions.
@@ -128,14 +128,14 @@ Backy has the right direction but lacks the production maturity.
 - Editor: useful action wiring exists; responsive overrides, layer controls, multi-select operations, composed presets, editor-level synced reusable-section instances, reusable-section instance propagation, and conflict-safe page saves are now implemented. Page editor saves send `expectedUpdatedAt`, stale saves return `PAGE_VERSION_CONFLICT`, and the editor renders a reload-latest recovery action. It still needs a canonical schema, shared renderer parity hardening, nested block confidence, and richer keyboard/undo QA.
 - Blog: list/new/edit exists; needs categories/tags, author, featured image, scheduling, editorial statuses, post templates, RSS/feed API.
 - Media: backend and UI now cover runtime storage, media.configure-gated provider metadata, media.edit-gated existing-media mutations, metadata, folders, replacement, retained-version listing/compare/restore/deletion with SHA-256/path/name/timeline deltas plus media-aware previews, bindings, safety-scan state, optional HTTP and ClamAV scanning, quarantine controls, generated responsive manifests, quotas, signed/private delivery, audit activity, usage analytics, Backy-served delivery counts, manual provider/CDN metric recording with conversions/value/attribution windows, batch provider/CDN analytics ingestion, and provider ROI dashboards; still needs automated provider-account bucket creation/secret rotation and cross-channel attribution beyond provider feeds; active runtime bucket/path validation and credential rotation guidance now exist in Media.
-- Users: UI exists; needs invitations, team/site scopes, session/device state, audit trail.
-- Settings: UI exists; needs real secrets, API key issuance, webhooks, SMTP, analytics, security settings, environment validation.
+- Users: backend-backed invite/reset/session/MFA, role/status, team-scoped access, billing-limit enforcement, audit activity, and smoke coverage are Ready; remaining work is broader external auth-provider rollout and certification.
+- Settings: backend-backed delivery, API/service keys, security policy, notifications, storage/Supabase/Vercel/commerce metadata, provider diagnostics, audit history, and site-scoped settings are Ready; remaining work is live provider certification for Supabase, Vercel, storage, notification, and commerce providers.
 
 ### Public app
 
 - Site/page resolution works against seeded and DB-backed site settings for slug, path, redirects, gone routes, dynamic lists/items, and unpublished guards; domain and locale routing are still incomplete.
 - Public renderer exists; needs to consume the canonical content contract rather than local types.
-- Forms/comments are relatively advanced for a prototype; they need durable persistence, abuse controls that survive process restarts, admin ownership checks, and export/integration workflows.
+- Forms/comments are backend-backed with moderation, delivery, analytics, RBAC, repository coverage, and public/admin API contracts; remaining Forms risk is executing the configured Supabase/Postgres smoke against a migrated disposable database.
 - Public API has manifest/OpenAPI/SDK coverage and configurable navigation backed by a dedicated admin endpoint; it still needs CORS policy, domain/locale variants, stronger cache invalidation, and preview token auditing.
 
 ### Shared packages
@@ -200,19 +200,17 @@ The custom frontend must not import from `apps/admin`. It should consume only pu
 - Create validators and migration helpers.
 - Add JSON Schemas in `specs/ai-frontend-contract/`.
 
-### Phase 2: Replace mock persistence
+### Phase 2: Finish persistence certification
 
-- Add admin APIs for sites, pages, blog, media, users, settings.
-- Route admin UI through API clients.
-- Replace public seeded store with read/interact service adapters.
-- Keep a demo seed mode behind explicit config.
+- Keep admin UI on authenticated API clients for mutation-critical flows.
+- Replace any remaining fallback mock-store source-of-truth paths as each page exits Partial status.
+- Run the configured Supabase/Postgres service-data gates before treating database mode as production-certified.
+- Keep demo seed mode behind explicit config for local development and mock-provider CI.
 
 ### Phase 3: Secure Backy
 
-- Real auth sessions.
-- Team/site scoped RBAC.
-- API key issuance and rotation.
-- Audit logs and request IDs.
+- Keep backend auth sessions, MFA, service keys, site/team scoped RBAC, audit logs, and request IDs covered as new admin routes are added.
+- Certify external auth/provider deployments through the release gates before launch.
 
 ### Phase 4: Complete editor/CMS parity
 
@@ -230,9 +228,11 @@ The custom frontend must not import from `apps/admin`. It should consume only pu
 
 Local repo evidence:
 
-- `apps/admin/src/stores/mockStore.ts`: localStorage-backed mock persistence.
-- `apps/admin/src/stores/authStore.ts`: hardcoded development users.
-- `apps/admin/src/routes/pages.$pageId.edit.tsx`: page editor save path updates mock store.
+- `specs/page-completion-audit/backy-page-surface-audit.md`: current 39 Ready / 6 Partial / 0 Prototype / 0 Missing audit state.
+- `apps/public/src/app/api/admin/auth/login/route.ts`: backend auth, Supabase Auth exchange, MFA challenge, and httpOnly session issuance.
+- `apps/admin/src/stores/authStore.ts`: API-backed admin sign-in/session client with tokenless persisted metadata.
+- `apps/admin/src/routes/pages.$pageId.edit.tsx`: authenticated page editor save path with conflict handling and reload-latest recovery.
+- `apps/admin/src/stores/mockStore.ts`: remaining demo/fallback state and legacy type source that should not be treated as proof of production persistence.
 - `apps/admin/src/components/editor/CanvasEditor.tsx`: editor action surface and autosave exist.
 - `apps/public/src/lib/backyStore.ts`: seeded public data and in-memory form/comment/contact state.
 - `apps/public/src/components/PageRenderer.tsx`: local renderer contract and public interaction implementation.

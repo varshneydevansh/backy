@@ -42,6 +42,7 @@ const rootPackage = read('../package.json');
 const setup = read('../SETUP.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
+const platformGapAnalysis = read('../specs/backy-platform-gap-analysis-and-ai-frontend-contract.md');
 
 includesAll(
   workflow,
@@ -416,6 +417,32 @@ excludesAll(
     'admin auth is currently mock-based in routes and is not production-secure yet',
   ],
   'Backy Wix/Canva roadmap current-state documentation',
+);
+
+includesAll(
+  platformGapAnalysis,
+  [
+    'current page-surface audit has moved most primary admin/editor/API surfaces out of prototype status',
+    'Admin authentication is backend-backed through `apps/public` auth routes',
+    'The page editor save path now writes through the authenticated admin page API',
+    'Settings now include backend-backed delivery mode',
+    'Run the SDK Postgres smoke against a migrated database',
+    'current 39 Ready / 6 Partial / 0 Prototype / 0 Missing audit state',
+  ],
+  'Backy platform gap analysis current-state documentation',
+);
+
+excludesAll(
+  platformGapAnalysis,
+  [
+    'The current repo is a strong prototype',
+    'Admin persistence still comes from `apps/admin/src/stores/mockStore.ts`',
+    'Admin authentication still comes from `apps/admin/src/stores/authStore.ts`, with hardcoded mock users',
+    'The page editor route saves page content by calling `updatePage` in the mock store',
+    'Settings include a delivery-mode/API display surface, but API keys are local mock settings',
+    'Mock auth; limited roles',
+  ],
+  'Backy platform gap analysis current-state documentation',
 );
 
 includesAll(
