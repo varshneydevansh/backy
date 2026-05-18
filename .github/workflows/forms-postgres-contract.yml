@@ -26,6 +26,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BACKY_RELEASE_CERTIFY_DATABASE: '1'
       BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1'
+      BACKY_DATABASE_DISPOSABLE_CONFIRMED: ${{ inputs.disposable_database_confirmed }}
       BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST: ${{ inputs.database_expected_host }}
       BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE: ${{ inputs.database_expected_name }}
 

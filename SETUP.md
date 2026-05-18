@@ -66,11 +66,11 @@ npm run db:studio
 The Forms/Contacts database-mode gate runs against a real Postgres-compatible database, including Supabase Postgres:
 
 ```bash
-BACKY_DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms-postgres
-# or DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms-postgres
+BACKY_DATABASE_DISPOSABLE_CONFIRMED=true BACKY_DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms-postgres
+# or BACKY_DATABASE_DISPOSABLE_CONFIRMED=true DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms-postgres
 ```
 
-The smoke first checks the required Backy Forms/Contacts tables, columns, final RLS policies, indexes, and constraints, then creates a temporary site, page, form, submission, and contact, verifies read/update/filter/merge behavior through the database repositories, and deletes the temporary site afterward. GitHub Actions also exposes a manual **Forms Postgres Contract** workflow; configure the repository secret `BACKY_DATABASE_URL` or `DATABASE_URL` with a disposable migrated Supabase/Postgres database and set `disposable_database_confirmed=true` before running it.
+The smoke first checks the required Backy Forms/Contacts tables, columns, final RLS policies, indexes, and constraints, then creates a temporary site, page, form, submission, and contact, verifies read/update/filter/merge behavior through the database repositories, and deletes the temporary site afterward. Local runs must set `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true` after confirming the URL points at a disposable migrated database. GitHub Actions also exposes a manual **Forms Postgres Contract** workflow; configure the repository secret `BACKY_DATABASE_URL` or `DATABASE_URL` with a disposable migrated Supabase/Postgres database and set `disposable_database_confirmed=true` before running it.
 
 The SDK database-mode gate starts the public app in database mode and runs the generated/custom frontend contract smoke against the same configured database:
 
@@ -121,7 +121,7 @@ For Commerce certification, required mode also fails when `BACKY_COMMERCE_PROVID
 
 The release, standalone Settings provider, and standalone Commerce provider workflows run the same doctor after source preflights so every manual certification run leaves a safe readiness report in the GitHub logs before database or provider certification begins.
 
-Run the GitHub workflow with `certify_database=true` and `disposable_database_confirmed=true` only after `BACKY_DATABASE_URL` or `DATABASE_URL` points at a disposable migrated Supabase/Postgres database using a `postgres://` or `postgresql://` URL. The workflow forwards `BACKY_RELEASE_CERTIFY_DATABASE=1` to the readiness doctor for that mode. Set `database_expected_host` and/or `database_expected_name` when you want the Forms and SDK database gates to fail before schema checks if the secret points at the wrong Postgres/Supabase host or database. The database smoke scripts emit JSON evidence showing whether those target guards were active. That database gate runs both:
+Run the GitHub workflow with `certify_database=true` and `disposable_database_confirmed=true` only after `BACKY_DATABASE_URL` or `DATABASE_URL` points at a disposable migrated Supabase/Postgres database using a `postgres://` or `postgresql://` URL. The workflow forwards `BACKY_RELEASE_CERTIFY_DATABASE=1` to the readiness doctor and `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true` to the Forms database smoke for that mode. Set `database_expected_host` and/or `database_expected_name` when you want the Forms and SDK database gates to fail before schema checks if the secret points at the wrong Postgres/Supabase host or database. The database smoke scripts emit JSON evidence showing whether those target guards were active. That database gate runs both:
 
 ```bash
 npm run ci:forms-postgres

@@ -53,6 +53,7 @@ const assertFormsPersistenceCertificationSource = () => {
     '.github/workflows/forms-postgres-contract.yml',
     'BACKY_DATABASE_URL',
     'DATABASE_URL',
+    'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
     'disposable migrated Supabase/Postgres database',
@@ -75,8 +76,9 @@ const assertFormsPersistenceCertificationResponse = (payload) => {
   assert(certification.ciGate === 'npm run ci:forms-postgres', `Forms persistence certification missing CI gate: ${JSON.stringify(certification)}`);
   assert(certification.workflow === '.github/workflows/forms-postgres-contract.yml', `Forms persistence certification missing workflow: ${JSON.stringify(certification)}`);
   assert(Array.isArray(certification.requiredDatabaseEnv) && certification.requiredDatabaseEnv.includes('BACKY_DATABASE_URL') && certification.requiredDatabaseEnv.includes('DATABASE_URL'), `Forms persistence certification missing database env aliases: ${JSON.stringify(certification)}`);
+  assert(certification.requiredConfirmationEnv === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', `Forms persistence certification missing disposable confirmation env: ${JSON.stringify(certification)}`);
   assert(Array.isArray(certification.targetGuards) && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), `Forms persistence certification missing target guards: ${JSON.stringify(certification)}`);
-  assert(Array.isArray(certification.requires) && certification.requires.includes('disposable migrated Supabase/Postgres database') && certification.requires.includes('disposable_database_confirmed=true'), `Forms persistence certification missing disposable database requirements: ${JSON.stringify(certification)}`);
+  assert(Array.isArray(certification.requires) && certification.requires.includes('disposable migrated Supabase/Postgres database') && certification.requires.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') && certification.requires.includes('disposable_database_confirmed=true'), `Forms persistence certification missing disposable database requirements: ${JSON.stringify(certification)}`);
   assert(typeof certification.secretHandling === 'string' && certification.secretHandling.includes('Database URLs stay in server/CI environment variables'), `Forms persistence certification must describe non-secret handling: ${JSON.stringify(certification)}`);
   assert(JSON.stringify(legacyCertification) === JSON.stringify(certification), `Legacy Forms persistence certification must mirror data.persistenceCertification: ${JSON.stringify({ certification, legacyCertification })}`);
 };

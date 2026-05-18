@@ -404,7 +404,7 @@ Acceptance: stable deploy on Vercel with seeded demo and API contract docs.
 ---
 
 ## 7) Critical known blockers (do now)
-- Run `npm run test:forms-postgres --workspace @backy/db` or `npm run ci:forms-postgres` against a migrated disposable Supabase/Postgres database.
+- Run `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run test:forms-postgres --workspace @backy/db` or `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres` against a migrated disposable Supabase/Postgres database.
 - Run `npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres database.
 - Run live Settings provider certification for Supabase, Vercel, storage, notification, commerce metadata, provider diagnostics, and secret rotation handoffs.
 - Run live Commerce provider certification for payment, catalog, tax, shipping, discount, subscription lifecycle, and provider-managed webhook paths.

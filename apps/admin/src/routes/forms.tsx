@@ -899,6 +899,7 @@ function FormsRoute() {
     status: 'external-database-gate',
     selectedSiteId: activeSiteId,
     requiredDatabaseEnv: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+    requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
     localEvidence: ['npm run test:forms --workspace @backy-cms/admin', 'npm run test:repositories --workspace @backy/db'],
     databaseGate: 'npm run test:forms-postgres --workspace @backy/db',
     ciGate: 'npm run ci:forms-postgres',
@@ -909,6 +910,7 @@ function FormsRoute() {
     ],
     requires: [
       'disposable migrated Supabase/Postgres database',
+      'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
       'disposable_database_confirmed=true',
       'form_definitions, form_submissions, and form_contacts migrations with RLS policies',
     ],

@@ -8,6 +8,7 @@ const files = {
   hardeningMigration: new URL('../../../supabase/migrations/003_schema_parity_and_rls_hardening.sql', import.meta.url),
   workflow: new URL('../../../.github/workflows/forms-postgres-contract.yml', import.meta.url),
   rootPackage: new URL('../../../package.json', import.meta.url),
+  packageJson: new URL('../package.json', import.meta.url),
   adminFormsRoute: new URL('../../../apps/public/src/app/api/admin/sites/[siteId]/forms/route.ts', import.meta.url),
   adminFormsPage: new URL('../../../apps/admin/src/routes/forms.tsx', import.meta.url),
   adminFormsSmoke: new URL('../../../apps/admin/scripts/forms-smoke.mjs', import.meta.url),
@@ -31,6 +32,7 @@ const migration = await readFile(files.migration, 'utf8');
 const hardeningMigration = await readFile(files.hardeningMigration, 'utf8');
 const workflow = await readFile(files.workflow, 'utf8').catch(() => '');
 const rootPackage = await readFile(files.rootPackage, 'utf8');
+const packageJson = await readFile(files.packageJson, 'utf8');
 const adminFormsRoute = await readFile(files.adminFormsRoute, 'utf8');
 const adminFormsPage = await readFile(files.adminFormsPage, 'utf8');
 const adminFormsSmoke = await readFile(files.adminFormsSmoke, 'utf8');
@@ -211,11 +213,13 @@ includesEvery(adminFormsRoute, [
   "schemaVersion: 'backy.forms-persistence-certification.v1'",
   "status: 'external-database-gate'",
   "'BACKY_DATABASE_URL', 'DATABASE_URL'",
+  "requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'",
   "databaseGate: 'npm run test:forms-postgres --workspace @backy/db'",
   "ciGate: 'npm run ci:forms-postgres'",
   "workflow: '.github/workflows/forms-postgres-contract.yml'",
   "'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'",
   "'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'",
+  'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
   'disposable_database_confirmed=true',
   'persistenceCertification: formPersistenceCertification(site.id)',
   'Database URLs stay in server/CI environment variables',
@@ -225,11 +229,13 @@ includesEvery(adminFormsPage, [
   "schemaVersion: 'backy.forms-persistence-certification.v1'",
   "status: 'external-database-gate'",
   "'BACKY_DATABASE_URL', 'DATABASE_URL'",
+  "requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'",
   "databaseGate: 'npm run test:forms-postgres --workspace @backy/db'",
   "ciGate: 'npm run ci:forms-postgres'",
   "workflow: '.github/workflows/forms-postgres-contract.yml'",
   "'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'",
   "'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'",
+  'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
   'disposable migrated Supabase/Postgres database',
   'disposable_database_confirmed=true',
   'persistenceCertification: formPersistenceCertification',
@@ -247,6 +253,7 @@ includesEvery(adminFormsSmoke, [
   '.github/workflows/forms-postgres-contract.yml',
   'BACKY_DATABASE_URL',
   'DATABASE_URL',
+  'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
   'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
   'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   'disposable migrated Supabase/Postgres database',
@@ -261,6 +268,7 @@ if (workflow) {
     'DATABASE_URL',
     'BACKY_RELEASE_CERTIFY_DATABASE',
     'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED',
+    'BACKY_DATABASE_DISPOSABLE_CONFIRMED',
     'database_expected_host:',
     'database_expected_name:',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
@@ -305,14 +313,22 @@ if (workflow) {
 
 assert(
   smoke.indexOf('assertPostgresDatabaseUrl();') < smoke.indexOf('assertExpectedDatabaseTarget();') &&
+  smoke.indexOf('assertPostgresDatabaseUrl();') < smoke.indexOf('assertDisposableDatabaseConfirmed();') &&
+  smoke.indexOf('assertDisposableDatabaseConfirmed();') < smoke.indexOf('assertExpectedDatabaseTarget();') &&
   smoke.indexOf('assertExpectedDatabaseTarget();') < smoke.indexOf('await assertPostgresSchemaReady();'),
-  'Forms Postgres smoke must verify database URL format and expected database host/name before schema checks or repository writes.',
+  'Forms Postgres smoke must verify database URL format, disposable confirmation, and expected database host/name before schema checks or repository writes.',
 );
 
 includesEvery(rootPackage, [
   '"test:forms-postgres-preflight-contract": "npm run test:forms-postgres-preflight-contract --workspace @backy/db"',
-  '"ci:forms-postgres": "npm run test:forms-postgres-preflight-contract && npm run test:forms-postgres --workspace @backy/db"',
+  '"test:forms-postgres-disposable-guard": "npm run test:forms-postgres-disposable-guard --workspace @backy/db"',
+  '"test:partial-gate-preflights": "npm run test:forms-postgres-preflight-contract && npm run test:forms-postgres-disposable-guard && npm run test:sdk-postgres-preflight-contract',
+  '"ci:forms-postgres": "npm run test:forms-postgres-preflight-contract && npm run test:forms-postgres-disposable-guard && npm run test:forms-postgres --workspace @backy/db"',
 ], 'Root package Forms Postgres script contract');
+
+includesEvery(packageJson, [
+  '"test:forms-postgres-disposable-guard": "node scripts/forms-postgres-disposable-guard-smoke.mjs"',
+], 'DB package Forms Postgres disposable guard script contract');
 
 includesEvery(apiContracts, [
   'data.persistenceCertification',

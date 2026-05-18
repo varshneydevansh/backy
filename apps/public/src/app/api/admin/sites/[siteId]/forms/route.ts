@@ -21,6 +21,7 @@ const formPersistenceCertification = (siteId: string) => ({
   status: 'external-database-gate',
   selectedSiteId: siteId,
   requiredDatabaseEnv: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+  requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
   localEvidence: [
     'npm run test:forms --workspace @backy-cms/admin',
     'npm run test:repositories --workspace @backy/db',
@@ -34,6 +35,7 @@ const formPersistenceCertification = (siteId: string) => ({
   ],
   requires: [
     'disposable migrated Supabase/Postgres database',
+    'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
     'disposable_database_confirmed=true',
     'form_definitions, form_submissions, and form_contacts migrations with RLS policies',
   ],

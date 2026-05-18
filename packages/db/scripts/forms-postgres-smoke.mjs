@@ -18,6 +18,7 @@ It creates a temporary site, page, form, submission, and contact, then deletes t
 
 Required:
   BACKY_DATABASE_URL or DATABASE_URL
+  BACKY_DATABASE_DISPOSABLE_CONFIRMED=true
 
 Optional:
   BACKY_DATABASE_LOGGING=true
@@ -25,7 +26,7 @@ Optional:
   BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE=...
 
 Example:
-  BACKY_DATABASE_URL="postgres://..." npm run test:forms-postgres --workspace @backy/db
+  BACKY_DATABASE_DISPOSABLE_CONFIRMED=true BACKY_DATABASE_URL="postgres://..." npm run test:forms-postgres --workspace @backy/db
 `);
 };
 
@@ -39,6 +40,16 @@ if (!databaseUrl) {
   usage();
   throw new Error('BACKY_DATABASE_URL or DATABASE_URL is required for the forms Postgres smoke.');
 }
+
+const assertDisposableDatabaseConfirmed = () => {
+  const confirmed = (process.env.BACKY_DATABASE_DISPOSABLE_CONFIRMED || '').trim().toLowerCase();
+  if (!['1', 'true', 'yes'].includes(confirmed)) {
+    usage();
+    throw new Error('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true is required after confirming the Forms Postgres smoke target is a disposable migrated Supabase/Postgres database.');
+  }
+};
+
+const isSelfTest = process.env.BACKY_FORMS_POSTGRES_SMOKE_SELF_TEST === '1';
 
 const assertPostgresDatabaseUrl = () => {
   let parsed;
@@ -75,6 +86,18 @@ const assertExpectedDatabaseTarget = () => {
 };
 
 assertPostgresDatabaseUrl();
+assertDisposableDatabaseConfirmed();
+
+if (isSelfTest) {
+  console.log(JSON.stringify({
+    ok: true,
+    mode: 'forms-postgres-smoke-self-test',
+    database: 'postgres',
+    disposableConfirmed: true,
+  }));
+  process.exit(0);
+}
+
 assertExpectedDatabaseTarget();
 
 const requiredSchema = {
