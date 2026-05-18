@@ -39,6 +39,9 @@ assert(
     manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'") &&
     manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'") &&
     manifestRoute.includes('disposable_database_confirmed=true') &&
+    manifestRoute.includes("'media'") &&
+    manifestRoute.includes("'forms'") &&
+    manifestRoute.includes("'interactive-components'") &&
     manifestRoute.includes('Database URLs and service credentials stay in CI/runtime environment'),
   'Frontend manifest must expose a non-secret SDK Postgres database certification handoff.',
 );
@@ -51,7 +54,11 @@ assert(
     openApiRoute.includes('npm run test:frontend-contract-types') &&
     openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
     openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
-    openApiRoute.includes('disposable_database_confirmed=true'),
+    openApiRoute.includes('disposable_database_confirmed=true') &&
+    openApiRoute.includes('"media"') &&
+    openApiRoute.includes('"forms"') &&
+    openApiRoute.includes('"interactive-components"') &&
+    openApiRoute.includes('OpenAPI exposes only non-secret gate names and requirements'),
   'Site-scoped OpenAPI must expose the same non-secret SDK Postgres database certification extension.',
 );
 
@@ -123,9 +130,17 @@ assert(
     sdkSmoke.includes('manifest() missing BACKY_DATABASE_URL certification alias') &&
     sdkSmoke.includes('manifest() missing database expected-host guard') &&
     sdkSmoke.includes('manifest() missing disposable database confirmation requirement') &&
+    sdkSmoke.includes('manifest() missing media database certification coverage') &&
+    sdkSmoke.includes('manifest() missing forms database certification coverage') &&
+    sdkSmoke.includes('manifest() missing interactive component database certification coverage') &&
+    sdkSmoke.includes('manifest() missing non-secret database certification boundary') &&
     sdkSmoke.includes('openapi() database certification command drifted from manifest') &&
     sdkSmoke.includes('openapi() missing DATABASE_URL certification alias') &&
-    sdkSmoke.includes('openapi() missing disposable database confirmation requirement'),
+    sdkSmoke.includes('openapi() missing disposable database confirmation requirement') &&
+    sdkSmoke.includes('openapi() missing media database certification coverage') &&
+    sdkSmoke.includes('openapi() missing forms database certification coverage') &&
+    sdkSmoke.includes('openapi() missing interactive component database certification coverage') &&
+    sdkSmoke.includes('openapi() missing non-secret database certification boundary'),
   'SDK smoke must response-test the manifest/OpenAPI database certification handoff.',
 );
 
@@ -252,7 +267,8 @@ assert(
 
 assert(
   sdkReadme.includes('BACKY_DATABASE_URL` or `DATABASE_URL` pointing at a disposable migrated Supabase/Postgres database') &&
-    sdkReadme.includes('with the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias'),
+    sdkReadme.includes('with the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias') &&
+    sdkReadme.includes('coverage families for media, forms, and interactive components'),
   'SDK README must document both database secret aliases for the disposable migrated Supabase/Postgres smoke.',
 );
 
@@ -269,7 +285,9 @@ assert(
 
 assert(
   audit.includes('Supabase RLS, named policies, indexes, and interactive-component constraints') &&
-    audit.includes('collection, reusable-section, form, contact, comment, media folder, media version, cache invalidation, and interactive component contract tables'),
+    audit.includes('collection, reusable-section, form, contact, comment, media folder, media version, cache invalidation, and interactive component contract tables') &&
+    audit.includes('media/forms/interactive-component coverage families') &&
+    audit.includes('non-secret database credential boundary'),
   'Page completion audit must document the SDK Postgres preflight coverage.',
 );
 

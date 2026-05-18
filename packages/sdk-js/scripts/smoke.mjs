@@ -583,6 +583,14 @@ assert(manifest.data.contract?.databaseCertification?.environment?.secretAliases
 assert(manifest.data.contract?.databaseCertification?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'), 'manifest() missing database expected-host guard');
 assert(manifest.data.contract?.databaseCertification?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), 'manifest() missing database expected-name guard');
 assert(manifest.data.contract?.databaseCertification?.requires?.includes('disposable_database_confirmed=true'), 'manifest() missing disposable database confirmation requirement');
+assert(manifest.data.contract?.databaseCertification?.coverage?.includes('media'), 'manifest() missing media database certification coverage');
+assert(manifest.data.contract?.databaseCertification?.coverage?.includes('forms'), 'manifest() missing forms database certification coverage');
+assert(manifest.data.contract?.databaseCertification?.coverage?.includes('interactive-components'), 'manifest() missing interactive component database certification coverage');
+assert(
+  typeof manifest.data.contract?.databaseCertification?.secretHandling === 'string' &&
+    manifest.data.contract.databaseCertification.secretHandling.includes('Database URLs and service credentials stay in CI/runtime environment'),
+  'manifest() missing non-secret database certification boundary',
+);
 assert(manifest.data.delivery?.defaultLocale === 'en', 'manifest() missing default locale discovery');
 assert(manifest.data.delivery?.localeStrategy === 'none', 'manifest() missing locale strategy discovery');
 assert(manifest.data.delivery?.domains?.some?.((domain) => domain.type === 'managed' && typeof domain.baseUrl === 'string'), 'manifest() missing managed domain discovery');
@@ -625,6 +633,14 @@ assert(openapi['x-backy-database-certification']?.gate?.command === manifest.dat
 assert(openapi['x-backy-database-certification']?.environment?.secretAliases?.includes('DATABASE_URL'), 'openapi() missing DATABASE_URL certification alias');
 assert(openapi['x-backy-database-certification']?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'), 'openapi() missing database expected-host guard');
 assert(openapi['x-backy-database-certification']?.requires?.includes('disposable_database_confirmed=true'), 'openapi() missing disposable database confirmation requirement');
+assert(openapi['x-backy-database-certification']?.coverage?.includes('media'), 'openapi() missing media database certification coverage');
+assert(openapi['x-backy-database-certification']?.coverage?.includes('forms'), 'openapi() missing forms database certification coverage');
+assert(openapi['x-backy-database-certification']?.coverage?.includes('interactive-components'), 'openapi() missing interactive component database certification coverage');
+assert(
+  typeof openapi['x-backy-database-certification']?.secretHandling === 'string' &&
+    openapi['x-backy-database-certification'].secretHandling.includes('OpenAPI exposes only non-secret gate names and requirements'),
+  'openapi() missing non-secret database certification boundary',
+);
 assert(openapi['x-backy']?.delivery?.defaultLocale === manifest.data.delivery.defaultLocale, 'openapi() missing delivery locale discovery extension');
 assert(openapi['x-backy']?.delivery?.canonicalBaseUrl === manifest.data.delivery.canonicalBaseUrl, 'openapi() missing delivery canonical base extension');
 assert(openapi.components?.schemas?.RedirectRoute, 'openapi() missing redirect route schema');
