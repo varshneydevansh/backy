@@ -168,6 +168,64 @@ const sandboxResponseHeaders = {
   },
 };
 
+const mediaFileResponseHeaders = {
+  "X-Backy-Contract-Version": {
+    description: "Backy public API contract version for binary media delivery.",
+    schema: { type: "string", const: "backy.ai-frontend.v1" },
+  },
+  "X-Backy-Schema-Version": {
+    description: "Media file delivery schema/version identifier.",
+    schema: { type: "string", const: "backy.media-file.v1" },
+  },
+  "X-Backy-Request-Id": {
+    description: "Request id echoed for support and audit correlation.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Media-Id": {
+    description: "Delivered media asset id.",
+    schema: { type: "string" },
+  },
+};
+
+const mediaFileErrorResponseHeaders = {
+  "X-Backy-Contract-Version": mediaFileResponseHeaders["X-Backy-Contract-Version"],
+  "X-Backy-Schema-Version": mediaFileResponseHeaders["X-Backy-Schema-Version"],
+  "X-Backy-Request-Id": mediaFileResponseHeaders["X-Backy-Request-Id"],
+};
+
+const mediaTransformResponseHeaders = {
+  "X-Backy-Contract-Version": {
+    description: "Backy public API contract version for media transform redirects.",
+    schema: { type: "string", const: "backy.ai-frontend.v1" },
+  },
+  "X-Backy-Schema-Version": {
+    description: "Media transform redirect schema/version identifier.",
+    schema: { type: "string", const: "backy.media-transform.v1" },
+  },
+  "X-Backy-Request-Id": {
+    description: "Request id echoed for support and audit correlation.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Media-Id": {
+    description: "Transformed media asset id.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Transform-Width": {
+    description: "Bounded optimizer width accepted by Backy.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Transform-Quality": {
+    description: "Bounded optimizer quality accepted by Backy.",
+    schema: { type: "string" },
+  },
+};
+
+const mediaTransformErrorResponseHeaders = {
+  "X-Backy-Contract-Version": mediaTransformResponseHeaders["X-Backy-Contract-Version"],
+  "X-Backy-Schema-Version": mediaTransformResponseHeaders["X-Backy-Schema-Version"],
+  "X-Backy-Request-Id": mediaTransformResponseHeaders["X-Backy-Request-Id"],
+};
+
 const blogFeedDiscovery = (site: { id: string; name: string }) => ({
   id: "blog-rss",
   title: `${site.name} Blog RSS`,
@@ -1080,6 +1138,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               responses: {
                 "200": {
                   description: "Media file bytes",
+                  headers: mediaFileResponseHeaders,
                   content: {
                     "*/*": {
                       schema: { type: "string", format: "binary" },
@@ -1088,9 +1147,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "403": {
                   description: "Private media requires a valid signed URL",
+                  headers: mediaFileErrorResponseHeaders,
                 },
                 "404": {
                   description: "Media file not found",
+                  headers: mediaFileErrorResponseHeaders,
                 },
               },
             },
@@ -1122,13 +1183,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               responses: {
                 "307": {
                   description: "Redirect to optimized image URL",
+                  headers: mediaTransformResponseHeaders,
                 },
                 "400": {
                   description:
                     "Invalid transform request or unsupported media type",
+                  headers: mediaTransformErrorResponseHeaders,
                 },
                 "404": {
                   description: "Media not found or private",
+                  headers: mediaTransformErrorResponseHeaders,
                 },
               },
             },

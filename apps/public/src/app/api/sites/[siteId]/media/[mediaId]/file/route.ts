@@ -4,9 +4,12 @@ import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
 import { isMediaQuarantined, requiresAttachmentDelivery } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
+import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
+
+const MEDIA_FILE_SCHEMA_VERSION = 'backy.media-file.v1';
 
 interface RouteParams {
   params: Promise<{
@@ -17,8 +20,8 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const jsonError = (status: number, code: string, message: string, requestId: string) => {
-  const response = NextResponse.json(
+const jsonError = (status: number, code: string, message: string, requestId: string) => (
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -27,13 +30,14 @@ const jsonError = (status: number, code: string, message: string, requestId: str
         message,
       },
     },
-    { status },
-  );
-  response.headers.set('cache-control', 'no-store');
-  response.headers.set('x-backy-cache-scope', 'private');
-  response.headers.set('x-backy-request-id', requestId);
-  return response;
-};
+    {
+      status,
+      requestId,
+      cache: 'error',
+      schemaVersion: MEDIA_FILE_SCHEMA_VERSION,
+    },
+  )
+);
 
 const contentDispositionHeader = (disposition: string, filename: string) => {
   const safeFilename = filename.replace(/["\r\n]/g, '_') || 'download';
@@ -109,8 +113,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         'content-length': String(buffer.byteLength),
         'content-disposition': contentDispositionHeader(disposition, media.originalName || media.filename),
         'cache-control': isPrivateMedia ? 'private, max-age=60' : 'public, max-age=31536000, immutable',
+        vary: 'Accept, Origin',
         'x-content-type-options': 'nosniff',
         'x-backy-cache-scope': isPrivateMedia ? 'private' : 'discovery',
+        'x-backy-contract-version': BACKY_PUBLIC_CONTRACT_VERSION,
+        'x-backy-schema-version': MEDIA_FILE_SCHEMA_VERSION,
         'x-backy-request-id': requestId,
         'x-backy-site-id': site.id,
         'x-backy-media-id': media.id,

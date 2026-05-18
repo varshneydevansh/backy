@@ -1819,6 +1819,8 @@ try {
 
     const unsignedPrivateFontFile = await request(`/api/sites/${createdSiteId}/media/${createdMediaId}/file`);
     assert(unsignedPrivateFontFile.response.status === 403, `${unsignedPrivateFontFile.url} expected unsigned private media file to be blocked`);
+    assert(unsignedPrivateFontFile.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${unsignedPrivateFontFile.url} missing media file error contract version`);
+    assert(unsignedPrivateFontFile.response.headers.get('x-backy-schema-version') === 'backy.media-file.v1', `${unsignedPrivateFontFile.url} missing media file error schema version`);
     assert(unsignedPrivateFontFile.json?.error?.code === 'MEDIA_SIGNATURE_INVALID', `${unsignedPrivateFontFile.url} expected signature error`);
 
     const signedPrivateFont = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/signed-url`, {
@@ -1838,6 +1840,8 @@ try {
     const signedPrivateFontFile = await request(signedPrivateFont.json.data.path);
     assert(signedPrivateFontFile.response.status === 200, `${signedPrivateFontFile.url} expected signed private media file to load`);
     assert(signedPrivateFontFile.response.headers.get('x-backy-cache-scope') === 'private', `${signedPrivateFontFile.url} expected private cache scope`);
+    assert(signedPrivateFontFile.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${signedPrivateFontFile.url} missing media file contract version`);
+    assert(signedPrivateFontFile.response.headers.get('x-backy-schema-version') === 'backy.media-file.v1', `${signedPrivateFontFile.url} missing media file schema version`);
     assert(signedPrivateFontFile.response.headers.get('x-backy-media-id') === createdMediaId, `${signedPrivateFontFile.url} missing media id header`);
     assert(signedPrivateFontFile.text === 'contract-font', `${signedPrivateFontFile.url} returned unexpected signed private content`);
 
@@ -2070,11 +2074,15 @@ try {
     assert(transform.response.status === 307, `${transform.url} expected transform redirect, got ${transform.response.status}`);
     assert(transform.response.headers.get('location')?.includes('/_next/image'), `${transform.url} missing optimizer redirect`);
     assert(transform.response.headers.get('location')?.includes('w=320'), `${transform.url} missing transform width`);
+    assert(transform.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${transform.url} missing media transform contract version`);
+    assert(transform.response.headers.get('x-backy-schema-version') === 'backy.media-transform.v1', `${transform.url} missing media transform schema version`);
     assert(transform.response.headers.get('x-backy-transform-width') === '320', `${transform.url} missing transform width header`);
     assert(transform.response.headers.get('x-backy-transform-quality') === '80', `${transform.url} missing transform quality header`);
 
     const deliveredFile = await request(`/api/sites/${createdSiteId}/media/${createdImageMediaId}/file`);
     assert(deliveredFile.response.status === 200, `${deliveredFile.url} expected public media file delivery`);
+    assert(deliveredFile.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${deliveredFile.url} missing public media file contract version`);
+    assert(deliveredFile.response.headers.get('x-backy-schema-version') === 'backy.media-file.v1', `${deliveredFile.url} missing public media file schema version`);
     assert(deliveredFile.response.headers.get('content-type')?.includes('image/svg+xml'), `${deliveredFile.url} expected image/svg+xml delivery`);
 
     const mediaAfterDelivery = await request(`/api/admin/sites/${createdSiteId}/media?type=image`);
@@ -6080,6 +6088,8 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}`]?.get, `${publicOpenApi.url} missing media detail operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/file`]?.get, `${publicOpenApi.url} missing media file operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/transform`]?.get, `${publicOpenApi.url} missing media transform operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/file`]?.get?.responses?.['200']?.headers?.['X-Backy-Schema-Version']?.schema?.const === 'backy.media-file.v1', `${publicOpenApi.url} missing media file response schema header`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/transform`]?.get?.responses?.['307']?.headers?.['X-Backy-Schema-Version']?.schema?.const === 'backy.media-transform.v1', `${publicOpenApi.url} missing media transform response schema header`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records`]?.post, `${publicOpenApi.url} missing public collection create operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records/{recordId}`]?.patch, `${publicOpenApi.url} missing public collection update operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records/{recordId}`]?.delete, `${publicOpenApi.url} missing public collection delete operation`);

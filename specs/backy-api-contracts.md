@@ -213,12 +213,14 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Unsigned, expired, or mismatched private file requests return `{ success: false, error: { code: "MEDIA_SIGNATURE_INVALID" } }`.
   - File bytes are read through the configured runtime storage adapter. New uploads store `metadata.storagePath` and `metadata.storageProvider`, so private delivery and deletion do not depend on reverse-parsing the public URL.
   - Successful file responses increment Backy-served delivery analytics under `media.metadata.mediaDelivery`, including request counts, bytes served, daily buckets, and last delivery metadata.
+  - Success and error responses expose public Backy contract headers, including `x-backy-contract-version: backy.ai-frontend.v1`, `x-backy-schema-version: backy.media-file.v1`, `x-backy-request-id`, and `x-backy-cache-scope`; successful file responses also include `x-backy-site-id` and `x-backy-media-id` while preserving immutable public-file caching or short private signed-file caching as appropriate.
 - `GET /api/sites/:siteId/media/:mediaId/transform`
   - Query: `width`/`w` from `16..3840`, optional `quality`/`q` from `1..100`.
   - Only public image media is accepted.
   - Successful requests return a `307` redirect to Backy's image optimizer with `x-backy-transform-width` and `x-backy-transform-quality` headers.
   - Successful transform redirects increment Backy-served transform delivery analytics under `media.metadata.mediaDelivery`.
   - Non-image or private assets return contract error envelopes.
+  - Redirect and error responses expose public Backy contract headers, including `x-backy-contract-version: backy.ai-frontend.v1`, `x-backy-schema-version: backy.media-transform.v1`, `x-backy-request-id`, and `x-backy-cache-scope`; successful transform redirects also include `x-backy-site-id`, `x-backy-media-id`, `x-backy-transform-width`, and `x-backy-transform-quality`.
 
 - `POST /api/admin/sites/:siteId/media/:mediaId/transforms`
   - Generates and persists responsive WebP image variants for a public image asset through the active storage adapter.

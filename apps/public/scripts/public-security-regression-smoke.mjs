@@ -3299,10 +3299,15 @@ const mediaFileRoute = read(
   "apps/public/src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts",
 );
 for (const needle of [
+  "BACKY_PUBLIC_CONTRACT_VERSION",
+  "MEDIA_FILE_SCHEMA_VERSION = 'backy.media-file.v1'",
+  "publicContractJson",
   "requiresAttachmentDelivery(media)",
   "const disposition = requiresAttachment ? 'attachment' : requestedDisposition",
   "disposition: requestedDisposition",
   "'x-content-type-options': 'nosniff'",
+  "'x-backy-contract-version': BACKY_PUBLIC_CONTRACT_VERSION",
+  "'x-backy-schema-version': MEDIA_FILE_SCHEMA_VERSION",
   "'x-backy-media-delivery-policy': 'attachment-only'",
 ]) {
   assertIncludes(mediaFileRoute, needle, "media file delivery route");
@@ -3323,8 +3328,12 @@ const mediaTransformRoute = read(
   "apps/public/src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts",
 );
 for (const needle of [
+  "BACKY_PUBLIC_CONTRACT_VERSION",
+  "MEDIA_TRANSFORM_SCHEMA_VERSION = 'backy.media-transform.v1'",
   "publicMediaFilePath",
   "transformUrl.searchParams.set('url', publicMediaFilePath(site.id, media.id))",
+  "response.headers.set('x-backy-contract-version', BACKY_PUBLIC_CONTRACT_VERSION)",
+  "response.headers.set('x-backy-schema-version', MEDIA_TRANSFORM_SCHEMA_VERSION)",
 ]) {
   assertIncludes(mediaTransformRoute, needle, "media transform route");
 }

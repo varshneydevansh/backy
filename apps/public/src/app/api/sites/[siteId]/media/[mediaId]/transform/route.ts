@@ -3,7 +3,7 @@ import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
-import { publicContractJson } from '@/lib/publicContractResponse';
+import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -16,6 +16,7 @@ interface RouteParams {
 const MIN_WIDTH = 16;
 const MAX_WIDTH = 3840;
 const DEFAULT_QUALITY = 75;
+const MEDIA_TRANSFORM_SCHEMA_VERSION = 'backy.media-transform.v1';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -29,7 +30,12 @@ const errorResponse = (status: number, code: string, message: string, requestId:
         message,
       },
     },
-    { status, requestId, cache: 'error' },
+    {
+      status,
+      requestId,
+      cache: 'error',
+      schemaVersion: MEDIA_TRANSFORM_SCHEMA_VERSION,
+    },
   )
 );
 
@@ -96,7 +102,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const response = NextResponse.redirect(transformUrl, 307);
     response.headers.set('cache-control', 'public, max-age=60, stale-while-revalidate=300');
+    response.headers.set('vary', 'Accept, Origin');
     response.headers.set('x-backy-cache-scope', 'discovery');
+    response.headers.set('x-backy-contract-version', BACKY_PUBLIC_CONTRACT_VERSION);
+    response.headers.set('x-backy-schema-version', MEDIA_TRANSFORM_SCHEMA_VERSION);
     response.headers.set('x-backy-request-id', requestId);
     response.headers.set('x-backy-site-id', site.id);
     response.headers.set('x-backy-media-id', media.id);
