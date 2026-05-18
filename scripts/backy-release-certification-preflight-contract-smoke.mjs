@@ -344,6 +344,7 @@ includesAll(
     'shipping_provider',
     'catalog_provider',
     'subscription_provider',
+    'HTTP endpoint aliases such as `COMMERCE_TAX_PROVIDER_URL`, `COMMERCE_SHIPPING_PROVIDER_URL`, `COMMERCE_PRODUCT_SYNC_URL`, and `COMMERCE_SUBSCRIPTION_ACTION_URL`',
     'BACKY_SUPABASE_SERVICE_ROLE_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
     'BACKY_S3_SECRET_ACCESS_KEY',
