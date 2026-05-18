@@ -555,6 +555,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 
 - `POST /api/admin/sites/:siteId/forms`
 - `GET /api/admin/sites/:siteId/forms`
+  - Returns `{ success, requestId, data: { forms, total, pagination, persistenceCertification } }` with legacy top-level `forms`, `total`, and `persistenceCertification` for compatibility. `data.persistenceCertification` uses `schemaVersion: "backy.forms-persistence-certification.v1"` and exposes only non-secret gate metadata for `npm run test:forms-postgres --workspace @backy/db`, `npm run ci:forms-postgres`, `.github/workflows/forms-postgres-contract.yml`, `BACKY_DATABASE_URL`/`DATABASE_URL`, target guard env vars, and the disposable migrated Supabase/Postgres requirement.
 - `GET /api/admin/sites/:siteId/forms/:formId`
 - `PATCH /api/admin/sites/:siteId/forms/:formId`
 - `POST /api/admin/sites/:siteId/forms/:formId/clone`

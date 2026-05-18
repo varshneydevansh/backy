@@ -7,6 +7,9 @@ const files = {
   migration: new URL('../../../supabase/migrations/002_forms_contacts_persistence.sql', import.meta.url),
   workflow: new URL('../../../.github/workflows/forms-postgres-contract.yml', import.meta.url),
   rootPackage: new URL('../../../package.json', import.meta.url),
+  adminFormsRoute: new URL('../../../apps/public/src/app/api/admin/sites/[siteId]/forms/route.ts', import.meta.url),
+  apiContracts: new URL('../../../specs/backy-api-contracts.md', import.meta.url),
+  audit: new URL('../../../specs/page-completion-audit/backy-page-surface-audit.md', import.meta.url),
 };
 
 const assert = (condition, message) => {
@@ -24,6 +27,9 @@ const smoke = await readFile(files.smoke, 'utf8');
 const migration = await readFile(files.migration, 'utf8');
 const workflow = await readFile(files.workflow, 'utf8').catch(() => '');
 const rootPackage = await readFile(files.rootPackage, 'utf8');
+const adminFormsRoute = await readFile(files.adminFormsRoute, 'utf8');
+const apiContracts = await readFile(files.apiContracts, 'utf8');
+const audit = await readFile(files.audit, 'utf8');
 
 const formTables = [
   'form_definitions',
@@ -178,6 +184,20 @@ includesEvery(smoke, constraints, 'Forms Postgres smoke constraint contract');
 includesEvery(migration, constraints, 'Forms migration constraints');
 includesEvery(smoke, destructiveSafeWorkflowEvidence, 'Forms Postgres destructive-safe cleanup contract');
 includesEvery(smoke, repositoryCoverageEvidence, 'Forms Postgres repository workflow coverage contract');
+includesEvery(adminFormsRoute, [
+  'formPersistenceCertification',
+  "schemaVersion: 'backy.forms-persistence-certification.v1'",
+  "status: 'external-database-gate'",
+  "'BACKY_DATABASE_URL', 'DATABASE_URL'",
+  "databaseGate: 'npm run test:forms-postgres --workspace @backy/db'",
+  "ciGate: 'npm run ci:forms-postgres'",
+  "workflow: '.github/workflows/forms-postgres-contract.yml'",
+  "'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'",
+  "'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'",
+  'disposable_database_confirmed=true',
+  'persistenceCertification: formPersistenceCertification(site.id)',
+  'Database URLs stay in server/CI environment variables',
+], 'Admin Forms API persistence certification handoff');
 
 if (workflow) {
   includesEvery(workflow, [
@@ -233,6 +253,20 @@ includesEvery(rootPackage, [
   '"test:forms-postgres-preflight-contract": "npm run test:forms-postgres-preflight-contract --workspace @backy/db"',
   '"ci:forms-postgres": "npm run test:forms-postgres-preflight-contract && npm run test:forms-postgres --workspace @backy/db"',
 ], 'Root package Forms Postgres script contract');
+
+includesEvery(apiContracts, [
+  'data.persistenceCertification',
+  'backy.forms-persistence-certification.v1',
+  'npm run ci:forms-postgres',
+  'BACKY_DATABASE_URL',
+  'DATABASE_URL',
+], 'Forms API contract persistence certification documentation');
+
+includesEvery(audit, [
+  'Forms API persistence certification handoff',
+  'backy.forms-persistence-certification.v1',
+  'GET /api/admin/sites/:siteId/forms',
+], 'Forms audit persistence certification evidence');
 
 console.log(JSON.stringify({
   ok: true,

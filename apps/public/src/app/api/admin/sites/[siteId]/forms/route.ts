@@ -16,6 +16,38 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const formPersistenceCertification = (siteId: string) => ({
+  schemaVersion: 'backy.forms-persistence-certification.v1',
+  status: 'external-database-gate',
+  selectedSiteId: siteId,
+  requiredDatabaseEnv: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+  localEvidence: [
+    'npm run test:forms --workspace @backy-cms/admin',
+    'npm run test:repositories --workspace @backy/db',
+  ],
+  databaseGate: 'npm run test:forms-postgres --workspace @backy/db',
+  ciGate: 'npm run ci:forms-postgres',
+  workflow: '.github/workflows/forms-postgres-contract.yml',
+  targetGuards: [
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
+  ],
+  requires: [
+    'disposable migrated Supabase/Postgres database',
+    'disposable_database_confirmed=true',
+    'form_definitions, form_submissions, and form_contacts migrations with RLS policies',
+  ],
+  coverage: [
+    'form definitions',
+    'form submissions',
+    'form contacts',
+    'collection-record routing',
+    'contact merge and promotion metadata',
+    'consent/spam settings persistence',
+  ],
+  secretHandling: 'Database URLs stay in server/CI environment variables; Forms API responses expose only non-secret gate names and readiness evidence.',
+});
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
 );
@@ -169,9 +201,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           forms: payload.items,
           total: payload.pagination.total,
           pagination: payload.pagination,
+          persistenceCertification: formPersistenceCertification(site.id),
         },
         forms: payload.items,
         total: payload.pagination.total,
+        persistenceCertification: formPersistenceCertification(site.id),
       });
     }
 
@@ -193,9 +227,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           offset: 0,
           hasMore: false,
         },
+        persistenceCertification: formPersistenceCertification(site.id),
       },
       forms,
       total: forms.length,
+      persistenceCertification: formPersistenceCertification(site.id),
     });
   } catch (error) {
     console.error('Admin forms API error:', error);
