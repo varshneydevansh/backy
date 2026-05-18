@@ -1236,6 +1236,18 @@ const configureFrontendDesignThroughUi = async (client, { frontendLabel, fronten
     '/api/admin/sites/',
     'Frontend design template registry clone target',
   );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Create page',
+    'Frontend design template registry page action',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-template-list"]',
+    'Create post',
+    'Frontend design template registry blog action',
+  );
 };
 
 const configureRedirectsThroughUi = async (client, { from, to }) => {

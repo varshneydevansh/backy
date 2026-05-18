@@ -848,6 +848,36 @@ const frontendTemplateCloneTarget = (
   return cloneTargets[templateType] || "";
 };
 
+const FRONTEND_TEMPLATE_WORKSPACE_ACTIONS: Record<
+  SiteFrontendDesignContract["templates"][number]["type"],
+  { label: string; title: string }
+> = {
+  page: {
+    label: "Create page",
+    title: "Open the page creator with this frontend template selected.",
+  },
+  blogPost: {
+    label: "Create post",
+    title: "Open the blog creator with this frontend template selected.",
+  },
+  form: {
+    label: "Open forms",
+    title: "Open the forms workspace to create from captured form templates.",
+  },
+  product: {
+    label: "Open products",
+    title: "Open the products workspace to create from captured product templates.",
+  },
+  collection: {
+    label: "Open collections",
+    title: "Open the collections workspace for captured collection templates.",
+  },
+  section: {
+    label: "Open sections",
+    title: "Open reusable sections to create from captured section templates.",
+  },
+};
+
 const formatJsonLd = (jsonLd: AdminSiteSeoSettings["jsonLd"]): string =>
   Array.isArray(jsonLd) && jsonLd.length > 0
     ? JSON.stringify(jsonLd, null, 2)
@@ -4659,6 +4689,50 @@ function EditSitePage() {
     navigate({ to: "/sites" });
   };
 
+  const openFrontendTemplateWorkspace = (
+    template: SiteFrontendDesignContract["templates"][number],
+  ) => {
+    const targetSiteId = siteApiId || siteId;
+
+    switch (template.type) {
+      case "page":
+        void navigate({
+          to: "/pages/new",
+          search: {
+            siteId: targetSiteId,
+            designTemplate: template.id,
+          },
+        });
+        return;
+      case "blogPost":
+        void navigate({
+          to: "/blog/new",
+          search: {
+            siteId: targetSiteId,
+            designTemplate: template.id,
+          },
+        });
+        return;
+      case "form":
+        void navigate({ to: "/forms", search: { siteId: targetSiteId } });
+        return;
+      case "product":
+        void navigate({ to: "/products", search: { siteId: targetSiteId } });
+        return;
+      case "collection":
+        void navigate({ to: "/collections", search: { siteId: targetSiteId } });
+        return;
+      case "section":
+        void navigate({
+          to: "/reusable-sections",
+          search: { siteId: targetSiteId },
+        });
+        return;
+      default:
+        return;
+    }
+  };
+
   if (!site) {
     if (isSiteDetailLoading) {
       return (
@@ -6240,27 +6314,44 @@ function EditSitePage() {
                         template.type,
                         frontendDesignState.templateRegistry?.cloneTargets,
                       );
+                      const workspaceAction =
+                        FRONTEND_TEMPLATE_WORKSPACE_ACTIONS[template.type];
                       return (
                         <div
                           key={`${template.type}:${template.id}`}
                           className="rounded-lg border bg-background px-3 py-2"
                         >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                              {FRONTEND_TEMPLATE_TYPE_LABELS[template.type]}
-                            </span>
-                            <span className="min-w-0 truncate text-sm font-semibold">
-                              {template.name}
-                            </span>
-                          </div>
-                          <div className="mt-1 break-all text-xs text-muted-foreground">
-                            {cloneTarget || "Clone target available after refresh"}
-                          </div>
-                          {template.routePattern && (
-                            <div className="mt-1 break-all text-xs text-muted-foreground">
-                              {template.routePattern}
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                                  {FRONTEND_TEMPLATE_TYPE_LABELS[template.type]}
+                                </span>
+                                <span className="min-w-0 truncate text-sm font-semibold">
+                                  {template.name}
+                                </span>
+                              </div>
+                              <div className="mt-1 break-all text-xs text-muted-foreground">
+                                {cloneTarget || "Clone target available after refresh"}
+                              </div>
+                              {template.routePattern && (
+                                <div className="mt-1 break-all text-xs text-muted-foreground">
+                                  {template.routePattern}
+                                </div>
+                              )}
                             </div>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => openFrontendTemplateWorkspace(template)}
+                              title={workspaceAction.title}
+                              aria-label={`${workspaceAction.label} from ${template.name}`}
+                              data-testid={`site-template-registry-action-${template.type}-${template.id}`}
+                              className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground transition hover:border-primary hover:text-primary"
+                            >
+                              <ExternalLink className="size-3.5" />
+                              {workspaceAction.label}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
