@@ -107,7 +107,7 @@ Current Partial-to-gate map:
 - `/settings` and Settings admin APIs: run `npm run ci:settings-provider-certification` or enable `certify_settings_providers` in the release workflow with the selected storage, Vercel, notification, and provider-family inputs.
 - `/products` and `/orders`: run `npm run ci:commerce-provider-certification` or enable `certify_commerce_providers` in the release workflow with the selected payment, tax, shipping, catalog, subscription, and webhook provider inputs.
 
-Before running the external gates, use the non-secret readiness doctor to see which database, Settings, and Commerce credential groups are configured or missing:
+Before running the external gates, use the non-secret readiness doctor to see which database, Settings, and Commerce credential groups are configured or missing. Its JSON also includes `partialGateMap`, the current Partial row to local gate/workflow/input-family map:
 
 ```bash
 npm run doctor:release-certification

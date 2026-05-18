@@ -68,6 +68,45 @@ assert(normal.code === 0, `Doctor default mode should exit 0, got ${normal.code}
 const normalJson = parseJson(normal, 'default doctor');
 assert(normalJson.contract === 'backy.release-certification-doctor.v1', 'Doctor default mode missing contract.');
 assert(normalJson.ok === true, 'Doctor default mode should be ok when no certification groups are requested.');
+assert(
+  Array.isArray(normalJson.partialGateMap) && normalJson.partialGateMap.length === 4,
+  'Doctor default mode should expose the current Partial-to-gate map.',
+);
+for (const { row, gate, workflow, requiredInputFamily } of [
+  {
+    row: '/forms',
+    gate: 'npm run ci:forms-postgres',
+    workflow: '.github/workflows/forms-postgres-contract.yml',
+    requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL',
+  },
+  {
+    row: 'Frontend manifest/OpenAPI/SDK APIs',
+    gate: 'npm run ci:sdk-postgres-smoke',
+    workflow: '.github/workflows/sdk-postgres-smoke.yml',
+    requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL',
+  },
+  {
+    row: '/settings and Settings admin APIs',
+    gate: 'npm run ci:settings-provider-certification',
+    workflow: '.github/workflows/settings-provider-certification.yml',
+    requiredInputFamily: 'storage, Vercel, notification',
+  },
+  {
+    row: '/products and /orders',
+    gate: 'npm run ci:commerce-provider-certification',
+    workflow: '.github/workflows/commerce-provider-certification.yml',
+    requiredInputFamily: 'payment, tax, shipping',
+  },
+]) {
+  const entry = normalJson.partialGateMap.find((item) => item.row === row);
+  assert(entry, `Doctor Partial-to-gate map missing ${row}.`);
+  assert(entry.gate === gate, `Doctor Partial-to-gate map for ${row} should use ${gate}.`);
+  assert(entry.workflow === workflow, `Doctor Partial-to-gate map for ${row} should use ${workflow}.`);
+  assert(
+    typeof entry.requiredInputFamily === 'string' && entry.requiredInputFamily.includes(requiredInputFamily),
+    `Doctor Partial-to-gate map for ${row} should document ${requiredInputFamily} input requirements.`,
+  );
+}
 
 const missingDatabase = await runDoctor({
   BACKY_RELEASE_CERTIFY_DATABASE: '1',

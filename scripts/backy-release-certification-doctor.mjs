@@ -271,9 +271,37 @@ const failures = [
   ...collectFailures(commerce),
 ];
 
+const partialGateMap = [
+  {
+    row: '/forms',
+    gate: 'npm run ci:forms-postgres',
+    workflow: '.github/workflows/forms-postgres-contract.yml',
+    requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL pointing at a disposable migrated Supabase/Postgres database',
+  },
+  {
+    row: 'Frontend manifest/OpenAPI/SDK APIs',
+    gate: 'npm run ci:sdk-postgres-smoke',
+    workflow: '.github/workflows/sdk-postgres-smoke.yml',
+    requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL pointing at a disposable migrated Supabase/Postgres database',
+  },
+  {
+    row: '/settings and Settings admin APIs',
+    gate: 'npm run ci:settings-provider-certification',
+    workflow: '.github/workflows/settings-provider-certification.yml',
+    requiredInputFamily: 'selected storage, Vercel, notification, and provider-family inputs',
+  },
+  {
+    row: '/products and /orders',
+    gate: 'npm run ci:commerce-provider-certification',
+    workflow: '.github/workflows/commerce-provider-certification.yml',
+    requiredInputFamily: 'selected payment, tax, shipping, catalog, subscription, and webhook provider inputs',
+  },
+];
+
 console.log(JSON.stringify({
   ok: failures.length === 0,
   contract: 'backy.release-certification-doctor.v1',
+  partialGateMap,
   database,
   settings,
   commerce,
