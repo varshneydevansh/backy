@@ -4975,8 +4975,12 @@ function CollectionsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground" data-testid="collections-relationship-outgoing-empty">
-                    Add a reference or multi-reference field to connect this schema to another collection.
+                  <div data-testid="collections-relationship-outgoing-empty">
+                    <EmptyState
+                      icon={Database}
+                      title="No outgoing relationships"
+                      description="Add a reference or multi-reference field to connect this schema to another collection."
+                    />
                   </div>
                 )}
               </div>
@@ -5030,8 +5034,12 @@ function CollectionsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground" data-testid="collections-relationship-incoming-empty">
-                    No saved collections currently point at this schema.
+                  <div data-testid="collections-relationship-incoming-empty">
+                    <EmptyState
+                      icon={Database}
+                      title="No incoming relationships"
+                      description="No saved collections currently point at this schema."
+                    />
                   </div>
                 )}
               </div>

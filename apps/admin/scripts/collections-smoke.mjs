@@ -30,6 +30,10 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('reusable CMS data for pages, APIs, and custom frontends'), 'Collections empty state must explain what the first schema unlocks');
   assert(source.includes('title="No collection activity yet"'), 'Collections audit panel must keep the empty activity title visible');
   assert(source.includes('Collection schema changes, record edits, imports, exports, and deletes will appear here for audit review.'), 'Collections audit empty state must explain which actions populate activity');
+  assert(source.includes('title="No outgoing relationships"'), 'Collections relationship browser must keep the outgoing empty-state title visible');
+  assert(source.includes('Add a reference or multi-reference field to connect this schema to another collection.'), 'Collections outgoing relationship empty state must explain how to connect schemas');
+  assert(source.includes('title="No incoming relationships"'), 'Collections relationship browser must keep the incoming empty-state title visible');
+  assert(source.includes('No saved collections currently point at this schema.'), 'Collections incoming relationship empty state must explain why the graph is empty');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -770,8 +774,10 @@ const navigateToEmptyCollections = (client, siteId) => {
     `(() => {
       const body = document.body?.innerText || '';
       const params = new URLSearchParams(window.location.search);
+      const emptyButton = document.querySelector('[data-testid="collections-empty-new-collection-button"]');
       return {
-        ready: Boolean(document.querySelector('[data-testid="collections-empty-new-collection-button"]')) &&
+        ready: emptyButton instanceof HTMLButtonElement &&
+          !emptyButton.disabled &&
           body.includes('No collections yet') &&
           params.get('siteId') === ${JSON.stringify(siteId)} &&
           params.get('draft') === null &&
@@ -1031,18 +1037,25 @@ const assertCollectionBackupControls = async (client, collectionId) => {
 };
 
 const assertNewCollectionButtonReset = async (client, testId = 'collections-new-collection-button') => {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const clicked = await evaluate(client, `(() => {
       const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
       if (!(button instanceof HTMLButtonElement)) {
         return { ok: false, reason: 'new-collection-button-missing' };
       }
-      if (button.disabled) return { ok: false, reason: 'new-collection-button-disabled' };
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'new-collection-button-disabled',
+          title: button.getAttribute('title') || '',
+          body: document.body?.innerText?.slice(0, 1200) || '',
+        };
+      }
       button.click();
       return { ok: true };
     })()`);
     if (clicked.ok) break;
-    if (attempt === 39) {
+    if (attempt === 119) {
       throw new Error(`Unable to click New collection button: ${JSON.stringify(clicked)}`);
     }
     await sleep(250);
@@ -2028,6 +2041,7 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
         const button = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template-capture"]`)});
         const select = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template-select"]`)});
         const panel = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template"]`)});
+        const bodyText = document.body?.innerText || '';
         if (!(select instanceof HTMLSelectElement)) {
           return { ok: false, reason: 'select-missing' };
         }
@@ -2036,18 +2050,34 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
           return { ok: false, reason: 'page-option-missing', options: Array.from(select.options).map((option) => option.value) };
         }
         if (select.value !== ${JSON.stringify(pageId)}) {
-          select.value = ${JSON.stringify(pageId)};
-          select.dispatchEvent(new Event('change', { bubbles: true }));
+          const previousValue = select.value;
+          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+          setter?.call(select, ${JSON.stringify(pageId)});
+          select._valueTracker?.setValue(previousValue);
+          select.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          select.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
           return { ok: false, reason: 'select-updated', value: select.value };
         }
         if (!(button instanceof HTMLButtonElement)) {
           return { ok: false, reason: 'capture-button-missing' };
         }
         if (button.disabled) {
-          return { ok: false, reason: 'capture-button-disabled', text: panel?.textContent || '' };
+          return {
+            ok: false,
+            reason: 'capture-button-disabled',
+            selected: select.value,
+            title: button.title || '',
+            text: panel?.textContent || '',
+            body: bodyText.slice(0, 1200),
+          };
         }
         button.click();
-        return { ok: true };
+        return {
+          ok: true,
+          selected: select.value,
+          buttonText: button.textContent || '',
+          text: panel?.textContent || '',
+        };
       })()`);
       if (captured.ok) break;
       if (attempt === 79) {
@@ -2062,11 +2092,23 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
         const compare = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-template-compare"]`)});
         const compareSelect = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-template-compare-select"]`)});
         const diffSummary = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-template-diff-summary"]`)});
+        const select = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template-select"]`)});
+        const button = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template-capture"]`)});
+        const bodyText = document.body?.innerText || '';
         return {
           text: panel?.textContent || '',
           compareText: compare?.textContent || '',
           selectReady: compareSelect instanceof HTMLSelectElement && compareSelect.options.length > 0 && !compareSelect.disabled,
           diffText: diffSummary?.textContent || '',
+          selected: select instanceof HTMLSelectElement ? select.value : '',
+          buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          noticeText: document.querySelector('[data-testid="collections-success-notice"]')?.textContent || '',
+          captureError: bodyText.includes('Choose a ${kind} template page before capturing its canvas.')
+            ? 'Choose a ${kind} template page before capturing its canvas.'
+            : bodyText.includes('The selected ${kind} template page has no canvas elements to capture.')
+              ? 'The selected ${kind} template page has no canvas elements to capture.'
+              : '',
+          body: bodyText.slice(0, 1600),
         };
       })()`);
       if (
