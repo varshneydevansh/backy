@@ -5812,6 +5812,16 @@ function InfrastructureSettings({
                       </span>
                     ))}
                   </div>
+                  <div className="mt-2 rounded-md border border-border bg-background px-2 py-1.5">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {group.requiredInputs.map((input) => (
+                        <span key={`${group.family}-${input}`} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                          {input}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                   <div className="mt-2 text-[11px] leading-4 text-muted-foreground">{group.evidence}</div>
                 </div>
               ))}
