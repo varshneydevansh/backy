@@ -43,6 +43,7 @@ const setup = read('../SETUP.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
 const platformGapAnalysis = read('../specs/backy-platform-gap-analysis-and-ai-frontend-contract.md');
+const fullParityRoadmap = read('../specs/backy-full-parity-roadmap-spec.md');
 
 includesAll(
   workflow,
@@ -443,6 +444,32 @@ excludesAll(
     'Mock auth; limited roles',
   ],
   'Backy platform gap analysis current-state documentation',
+);
+
+includesAll(
+  fullParityRoadmap,
+  [
+    '39 Ready / 6 Partial / 0 Prototype / 0 Missing',
+    'configured Forms and SDK Supabase/Postgres service-data gates',
+    'backend auth/session/RBAC baseline is now implemented',
+    'copy/cut/paste/duplicate/delete/grouping',
+    'rich-text table/list edge-case coverage',
+    'Mutation-critical paths in admin/public use backend-backed sources of truth',
+  ],
+  'Backy full parity roadmap current-state documentation',
+);
+
+excludesAll(
+  fullParityRoadmap,
+  [
+    'DB persistence is still partially mocked/in-memory in many admin and public read paths',
+    'Auth/session and RBAC enforcement still not consistently applied across admin routes',
+    'Undo/redo stack is not consistently wired for all operations',
+    'Copy/duplicate/delete actions are not yet completed as a cohesive, history-aware action set',
+    'Save/publish/reload flow still needs deterministic persistence/rollback semantics',
+    'No mutation-critical paths in admin/public depend on mock data as source-of-truth',
+  ],
+  'Backy full parity roadmap current-state documentation',
 );
 
 includesAll(

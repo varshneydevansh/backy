@@ -21,28 +21,32 @@
 
 ## 1) Phase completion status (current snapshot)
 
-### Phase 0/1 (Contracts + persistence + auth) — **Partially complete**
+The canonical page-surface audit now tracks the platform at **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. The remaining Partial gates are configured Forms and SDK Supabase/Postgres service-data gates, live Settings and Commerce provider certification, and deeper editor parity around rich-text table/list edge cases and responsive pixel QA.
+
+### Phase 0/1 (Contracts + persistence + auth) — **Ready baseline with external certification gates**
 **Done**
 - Shared contract upgrades for form/comment types in `packages/core/src/types/index.ts`.
 - Public auth bridge added (`apps/public/src/lib/backyAuthBridge.ts`, `apps/public/src/hooks/useBackyAuthBridge.ts`).
 - Public routes moved significantly toward contract compatibility and robust parsing.
 - Master roadmap for execution is now tracked in `specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md`, with current A–J completion status in `specs/phase-docs/backy-phase-a-j-completion-spec.md`.
+- The backend auth/session/RBAC baseline is now implemented through `apps/public` auth routes, the httpOnly `backy_admin_session` cookie, Supabase Auth support, MFA, route guards, and server-side site/team scoping coverage.
+- Admin page/content save paths now use authenticated admin APIs and repository-backed persistence paths instead of treating local mock state as the source of truth.
+- Release, database, Forms Postgres, SDK Postgres, Settings provider, Commerce provider, RBAC, site-scope, and auth preflight/smoke gates document the current backend-backed baseline.
 
-**Not complete**
-- DB persistence is still partially mocked/in-memory in many admin and public read paths.
-- Auth/session and RBAC enforcement still not consistently applied across admin routes.
-- Store boundaries (admin write vs public read) are not fully enforced.
-- Route guards and ownership checks are inconsistent.
+**Remaining certification**
+- Run the configured Forms and SDK Supabase/Postgres service-data gates against a migrated disposable database.
+- Certify live Settings provider connections, live Commerce provider flows, and external provider-managed webhooks.
+- Continue shrinking any demo fixtures to non-authoritative local development paths.
 
-### Phase 2 (Editor action wiring) — **Partially complete**
+### Phase 2 (Editor action wiring) — **Ready baseline with deeper parity work**
 **Done**
 - Multiple editor UX improvements landed (selection edge handling, rich text control alignment, rich list editing, interaction safety, property panel additions).
 - Comment and block settings carry anti-abuse policy context through public comment payload parsing.
+- Undo/redo, copy/cut/paste/duplicate/delete/grouping, multi-select, layer hierarchy preservation, save conflict handling, and reload/recover paths are covered by editor smoke and audit evidence.
 
-**Not complete**
-- Undo/redo stack is not consistently wired for all operations.
-- Copy/duplicate/delete actions are not yet completed as a cohesive, history-aware action set.
-- Save/publish/reload flow still needs deterministic persistence/rollback semantics.
+**Remaining parity**
+- Expand rich-text table/list edge-case coverage, responsive breakpoint pixel QA, and long-session editor stress coverage.
+- Keep publish/rollback provider-backed certification tied to the release certification workflow.
 
 ### Forms/comments module — **Partially complete**
 **Done**
@@ -91,14 +95,14 @@
 1. Contract schema normalization:
    - `packages/core/src/types/index.ts` for element, page, form, comment, media contracts.
 2. Boundary adapters:
-   - `apps/admin/src/stores` should stop mutating local mock store for core flows.
+   - Keep `apps/admin/src/stores` demo fixtures constrained to local development and non-authoritative preview flows.
    - `apps/public/src/lib/backyStore.ts` becomes adapter facade with DB-backed implementations.
 3. Auth baseline:
    - `packages/auth` route middleware wired in `apps/admin/src/routes/__root.tsx`.
    - Role matrix for owner/admin/editor/viewer and scoped entities.
 
 ### Exit criteria
-- No mutation-critical paths in admin/public depend on mock data as source-of-truth.
+- Mutation-critical paths in admin/public use backend-backed sources of truth, with mock/demo fixtures limited to explicit local fallback paths.
 - 401/403 behavior for protected routes.
 - Canonical site/page lookup works from DB in both apps.
 
