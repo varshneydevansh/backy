@@ -44,6 +44,7 @@ const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md')
 const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
 const platformGapAnalysis = read('../specs/backy-platform-gap-analysis-and-ai-frontend-contract.md');
 const fullParityRoadmap = read('../specs/backy-full-parity-roadmap-spec.md');
+const phaseCompletionSpec = read('../specs/phase-docs/backy-phase-a-j-completion-spec.md');
 
 includesAll(
   workflow,
@@ -470,6 +471,34 @@ excludesAll(
     'No mutation-critical paths in admin/public depend on mock data as source-of-truth',
   ],
   'Backy full parity roadmap current-state documentation',
+);
+
+includesAll(
+  phaseCompletionSpec,
+  [
+    '39 Ready / 6 Partial / 0 Prototype / 0 Missing',
+    'ready baseline with database/provider certification gates',
+    'grouping/ungrouping with Cmd/Ctrl+G',
+    'ready baseline with database-service certification gate',
+    'run configured Forms and SDK Supabase/Postgres service-data gates',
+    'rich-text table/list edge cases and broader responsive pixel QA',
+  ],
+  'Backy phase completion current-state documentation',
+);
+
+excludesAll(
+  phaseCompletionSpec,
+  [
+    'done: core type contracts, comment anti-abuse policy, auth bridge, `canEdit`-gated moderation actions, owner role in session selector',
+    'in-progress: DB-backed writes, server-side RBAC/session middleware',
+    'done: selection, undo/redo surface, copy/duplicate/delete plumbing, save/reload hooks',
+    'multi-select command stack and grouped-action semantics are deferred',
+    'in-progress: queue ergonomics at very large scope',
+    'Final in this phase: finalize remaining Phase C anti-abuse and bulk queue operator ergonomics',
+    'Continue Phase A blocker completion for secure multi-user admin operation',
+    'apps/admin/src/stores/authStore.ts` and `apps/admin/src/routes/__root.tsx` for session/role hardening',
+  ],
+  'Backy phase completion current-state documentation',
 );
 
 includesAll(

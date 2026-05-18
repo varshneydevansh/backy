@@ -9,37 +9,37 @@
 - Deliver a headless Wix/Canva/WordPress-class CMS platform where `backy-admin` is the authoring control plane and **any UI/UX can be used** as frontend consumer by relying only on stable `backy-public` contracts.
 - Note: this is alphabetic slicing; for numeric roadmap conversion see `backy-alpha-vs-numeric-phase-progress-2026-02-27.md`.
 
+Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md` tracks **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. Remaining Partial work is external certification: configured Forms/SDK Supabase/Postgres service-data smokes, live Settings/Commerce provider execution, and live provider-managed webhook/billing certification. Local editor follow-up is now depth hardening around remaining rich-text table/list edge cases and broader responsive pixel QA, not basic drag/drop/grouping/persistence.
 
 ### Phase A — Contracts, persistence boundary, auth
 
-- status: partial
-- done: core type contracts, comment anti-abuse policy, auth bridge, `canEdit`-gated moderation actions, owner role in session selector
-- in-progress: DB-backed writes, server-side RBAC/session middleware, route-level ownership checks, real adapter-backed admin writes
+- status: ready baseline with database/provider certification gates
+- done: core type contracts, backend-backed auth routes, httpOnly admin session cookies, Supabase Auth support, MFA, server-side RBAC/site/team scoping, repository-backed admin writes for primary content/settings flows, route-level ownership checks, and source/smoke coverage for auth/RBAC/site-scope contracts
+- remaining: run configured Forms and SDK Supabase/Postgres service-data gates against a migrated disposable database; continue restricting demo fixtures to explicit local fallback paths
 
 ### Phase B — Editor action wiring
 
-- status: done
-- done: selection, undo/redo surface, copy/duplicate/delete plumbing, save/reload hooks, read-only role gating, revision-aware save conflict guardrails in page edit flow
-- done this pass: persistence-safe interaction boundaries for move/resize history commits, deterministic sibling insertion for duplicate, and save/reload persistence alignment on size/content mutations.
-- in-progress: multi-select command stack and grouped-action semantics are deferred to Phase B+ follow-up.
+- status: ready baseline with deeper parity hardening
+- done: drag/resize, selection, multi-select, grouping/ungrouping with Cmd/Ctrl+G, nested-group safeguards, undo/redo, copy/cut/paste/duplicate/delete, layer ordering, responsive overrides, save/reload, revision-aware conflict guardrails, rich-text selected range marks, list indentation/reordering, table row/column operations, spans, captions, and selected multi-cell table styling
+- remaining: expand the last rich-text table/list edge-case coverage and broader responsive pixel-level QA across full page templates
 
 ### Phase C — Forms and comments production module
 
-- status: complete-for-ops
-- done: form/comment payload compatibility, moderation queue, bulk moderation, blocklist CRUD, reports, analytics, CSV/JSON export, anti-abuse policy controls and validation
-- in-progress: queue ergonomics at very large scope, suspicious identity workflows, anti-abuse retention/tuning dashboards
+- status: ready baseline with database-service certification gate
+- done: form/comment payload compatibility, moderation queue, bulk moderation, blocklist CRUD, reports, analytics, CSV/JSON export, anti-abuse policy controls and validation, contact-share flows, delivery retry, consent retention/export controls, RBAC/billing enforcement, and repository persistence smoke coverage
+- remaining: run the configured Forms Supabase/Postgres service-data smoke against a migrated disposable database; continue operator-depth improvements after certification
 
 ### Phase C — forms/comments operator hardening outcome
-- status: immediate-usable
-- done: production-compatible moderation actions, policy tuning, export/analytics/report endpoints, anti-abuse telemetry surfaces.
-- in-progress: scale-focused operator ergonomics and external SOC telemetry joins.
+- status: ready for current local scope
+- done: production-compatible moderation actions, policy tuning, export/analytics/report endpoints, anti-abuse telemetry surfaces, retention controls, and delivery retry evidence.
+- remaining: external SOC telemetry joins and high-volume operational tuning after live service certification.
 
 ### Phase A → B → C run-order for this sprint
 
-- Immediate: stabilize admin session guards + root redirect determinism (route-level auth/session loop prevention)
-- Then: complete remaining Phase A DB/session boundary work and route RBAC
-- Next: finish Phase B+ multi-select and grouped action command-stack expansion
-- Final in this phase: finalize remaining Phase C anti-abuse and bulk queue operator ergonomics
+- Immediate: run or unblock the configured Forms/SDK Supabase/Postgres service-data gates with a disposable migrated database.
+- Then: run live Settings and Commerce provider certification against configured external services.
+- Next: keep tightening editor depth where local work remains, especially rich-text table/list edge cases and full-template responsive pixel QA.
+- Final in this phase: update page-surface audit rows only when the corresponding live gate or focused smoke evidence exists.
 
 ### Phase D — Core CMS composition primitives
 
@@ -85,11 +85,11 @@
 
 ## 2) Execution order for “asap to usable” delivery
 
-1. Stabilize Phase C hardening items that affect moderation operators and anti-abuse controls.
-2. Continue Phase A blocker completion for secure multi-user admin operation.
-3. Close Phase B+ follow-up for multi-select command stack and grouped nested transforms.
-4. Then finish Phase E envelope normalization and custom frontend contract onboarding.
-5. Move through D, F, G, H, I, J only after the above are stable.
+1. Run the database certification gates for Forms and SDK manifests against a disposable migrated Supabase/Postgres service.
+2. Run live Settings and Commerce provider certification for Supabase, Vercel, storage, notifications, billing/payment, catalog, tax, shipping, subscription, and provider-managed webhook paths.
+3. Continue focused editor hardening on rich-text table/list edge cases and responsive pixel QA.
+4. Keep public contract and custom frontend onboarding evidence tied to manifest/OpenAPI/SDK smokes.
+5. Defer broad new feature expansion until the remaining Partial certification rows are closed.
 
 ## 3) Acceptance criteria by phase
 
@@ -148,12 +148,11 @@
 
 ## 4) File-level priority for this pass
 
-1. `apps/public/src/app/api/sites/[siteId]/comments/route.ts` and related moderation/report endpoints.
-2. `apps/public/src/lib/backyStore.ts` anti-abuse analytics and blocklist behavior.
-3. `apps/admin/src/routes/sites.$siteId.tsx` queue ergonomics, bulk actions, and action guard hardening.
-4. `apps/admin/src/stores/authStore.ts` and `apps/admin/src/routes/__root.tsx` for session/role hardening.
-5. `apps/admin/src/components/editor/CanvasEditor.tsx` and `apps/admin/src/routes/pages.$pageId.edit.tsx` for save/publish/reload determinism.
-6. `apps/public/src/components/PageRenderer.tsx` and `apps/admin/src/components/editor/editorCatalog.tsx` for template composition rollout.
+1. `.github/workflows/forms-postgres-contract.yml`, `.github/workflows/sdk-postgres-smoke.yml`, and release certification wiring for database service gates.
+2. Settings and Commerce provider certification runners/workflows for live external provider evidence.
+3. `apps/admin/src/components/editor/ActiveEditorContext.tsx`, `RichTextFormatting.tsx`, and `apps/admin/scripts/editor-drag-smoke.mjs` for focused rich-text table/list and responsive editor hardening.
+4. `apps/public/src/components/PageRenderer.tsx` and hosted responsive smoke coverage for public render parity.
+5. `specs/page-completion-audit/backy-page-surface-audit.md` for evidence-only status changes after gates pass.
 
 ## 5) Why this stays open-source friendly
 
