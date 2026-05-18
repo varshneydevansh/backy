@@ -257,6 +257,7 @@ if (workflow) {
     'BACKY_DATABASE_URL',
     'DATABASE_URL',
     'BACKY_RELEASE_CERTIFY_DATABASE',
+    'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED',
     'database_expected_host:',
     'database_expected_name:',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',

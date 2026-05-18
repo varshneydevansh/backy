@@ -114,6 +114,7 @@ includesAll(
     'subscription_provider:',
     'webhook_provider:',
     'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: \'1\'',
+    'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: \'1\'',
     "BACKY_SETTINGS_CERTIFY_STORAGE: ${{ inputs.certify_storage && '1' || '0' }}",
     'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
     "BACKY_SETTINGS_CERTIFY_ROTATION: ${{ inputs.certify_rotation && '1' || '0' }}",

@@ -256,6 +256,7 @@ includesAll(
     'name: Commerce Provider Certification',
     'workflow_dispatch:',
     'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: \'1\'',
+    'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: \'1\'',
     'BACKY_COMMERCE_CERTIFY_PAYMENT',
     'payment_provider:',
     'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',

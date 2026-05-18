@@ -118,6 +118,7 @@ jobs:
     timeout-minutes: 30
     env:
       BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1'
+      BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1'
       BACKY_COMMERCE_CERTIFY_PAYMENT: ${{ inputs.certify_payment && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: ${{ inputs.payment_provider }}
       BACKY_COMMERCE_CERTIFY_TAX: ${{ inputs.certify_tax && '1' || '0' }}
