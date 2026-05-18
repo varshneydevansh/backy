@@ -33,11 +33,18 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   for (const label of [
+    'backy.forms-persistence-certification.v1',
     'npm run test:forms --workspace @backy-cms/admin',
     'npm run test:repositories --workspace @backy/db',
     'npm run test:forms-postgres --workspace @backy/db',
+    'npm run ci:forms-postgres',
+    '.github/workflows/forms-postgres-contract.yml',
     'BACKY_DATABASE_URL',
     'DATABASE_URL',
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
+    'disposable migrated Supabase/Postgres database',
+    'disposable_database_confirmed=true',
     'external-database-gate',
   ]) {
     assert(source.includes(label), `Forms persistence certification must name ${label}`);

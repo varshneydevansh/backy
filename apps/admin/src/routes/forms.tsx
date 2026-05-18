@@ -892,11 +892,23 @@ function FormsRoute() {
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/contacts?limit=100`
     : '';
   const formPersistenceCertification = useMemo(() => ({
+    schemaVersion: 'backy.forms-persistence-certification.v1',
     status: 'external-database-gate',
     selectedSiteId: activeSiteId,
     requiredDatabaseEnv: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
     localEvidence: ['npm run test:forms --workspace @backy-cms/admin', 'npm run test:repositories --workspace @backy/db'],
     databaseGate: 'npm run test:forms-postgres --workspace @backy/db',
+    ciGate: 'npm run ci:forms-postgres',
+    workflow: '.github/workflows/forms-postgres-contract.yml',
+    targetGuards: [
+      'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
+      'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
+    ],
+    requires: [
+      'disposable migrated Supabase/Postgres database',
+      'disposable_database_confirmed=true',
+      'form_definitions, form_submissions, and form_contacts migrations with RLS policies',
+    ],
     secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
     checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
   }), [activeSiteId]);
@@ -2455,6 +2467,12 @@ function FormsRoute() {
           </div>
           <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             Required database env: {formPersistenceCertification.requiredDatabaseEnv.join(' or ')}. Secrets stay in server/CI environment variables and are not included in the forms handoff manifest.
+            <div className="mt-1">
+              CI gate: <span className="font-mono">{formPersistenceCertification.ciGate}</span> via <span className="font-mono">{formPersistenceCertification.workflow}</span>.
+            </div>
+            <div className="mt-1">
+              Target guards: {formPersistenceCertification.targetGuards.join(', ')}; requires {formPersistenceCertification.requires.slice(0, 2).join(' and ')}.
+            </div>
           </div>
         </div>
       </section>
