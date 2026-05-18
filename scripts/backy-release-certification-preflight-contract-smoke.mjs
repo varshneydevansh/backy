@@ -83,6 +83,9 @@ includesAll(
     "BACKY_DATA_MODE: ${{ inputs.certify_database && 'database' || 'demo' }}",
     "BACKY_RELEASE_CERTIFY_DATABASE: ${{ inputs.certify_database && '1' || '0' }}",
     'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED',
+    'BACKY_ADMIN_API_KEY: ${{ secrets.BACKY_ADMIN_API_KEY }}',
+    'BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY: ${{ secrets.BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY }}',
+    'BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY: ${{ secrets.BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY }}',
     'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED',
     'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
     'BACKY_MEDIA_STORAGE_PROVIDER',
@@ -182,6 +185,14 @@ assert(
     workflow.indexOf('- name: Run SDK Postgres certification') < workflow.indexOf('- name: Run Settings provider certification') &&
     workflow.indexOf('- name: Run Settings provider certification') < workflow.indexOf('- name: Run Commerce provider certification'),
   'Backy release certification workflow must run preflights, require the database URL before database gates, then run provider gates in order.',
+);
+
+excludesAll(
+  workflow,
+  [
+    'BACKY_ADMIN_API_KEY: release-cert-${{ github.run_id }}-${{ github.run_attempt }}',
+  ],
+  'Backy release certification workflow',
 );
 
 includesAll(
@@ -384,6 +395,7 @@ includesAll(
     'target.mode',
     'externalBaseUrlConfigured',
     'External Settings targets require an explicit `BACKY_ADMIN_API_KEY` or `BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY`',
+    'external Commerce targets require `BACKY_ADMIN_API_KEY` or `BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY`',
     'backy.settings-provider-certification-handoff.v1',
     'npm run ci:forms-postgres',
     'npm run ci:sdk-postgres-smoke',
@@ -597,6 +609,7 @@ includesAll(
     'provider-only demo-mode behavior when database certification is skipped',
     'local/external certification-target evidence',
     'external-target runs now require an explicit `BACKY_ADMIN_API_KEY` or `BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY`',
+    'workflows now forward secret-backed Settings/Commerce certification admin-key aliases instead of generated local keys',
     'Release certification readiness doctor',
     'backy.release-certification-doctor.v1',
     'partialGateMap',

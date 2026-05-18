@@ -127,7 +127,9 @@ includesAll(
     "BACKY_SETTINGS_CERTIFY_NOTIFICATION: ${{ inputs.certify_notification && '1' || '0' }}",
     'BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER',
     'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
-    'BACKY_ADMIN_API_KEY',
+    'BACKY_ADMIN_API_KEY: ${{ secrets.BACKY_ADMIN_API_KEY }}',
+    'BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY: ${{ secrets.BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY }}',
+    'BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY: ${{ secrets.BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY }}',
     'BACKY_DATABASE_URL',
     'DATABASE_URL',
     'BACKY_MEDIA_STORAGE_PROVIDER',
@@ -419,6 +421,7 @@ includesAll(
     'externalBaseUrlConfigured',
     'Settings certification summary update',
     'external-target runs now require an explicit `BACKY_ADMIN_API_KEY` or `BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY`',
+    'workflows now forward secret-backed Settings/Commerce certification admin-key aliases instead of generated local keys',
     'Settings nested Commerce certification parity update',
     'full nested Commerce provider env surface',
     'Settings storage alias certification update',
@@ -434,6 +437,14 @@ includesAll(
     'Real-provider certification for Supabase, Vercel, storage, notification, and commerce providers.',
   ],
   'Settings provider certification audit evidence',
+);
+
+excludesAll(
+  workflow,
+  [
+    'BACKY_ADMIN_API_KEY: settings-provider-cert-${{ github.run_id }}-${{ github.run_attempt }}',
+  ],
+  'Settings provider certification workflow',
 );
 
 excludesAll(
