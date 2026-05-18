@@ -952,7 +952,9 @@ const refreshPaddleRefund = async (adjustmentId: string) => {
   });
   const payload = await response.json().catch(() => ({}));
   const payloadRecord = toRecord(payload);
-  const dataRecord = toRecord(payloadRecord.data);
+  const dataRecord = Array.isArray(payloadRecord.data)
+    ? toRecord(payloadRecord.data[0])
+    : toRecord(payloadRecord.data);
   const sourceRecord = Object.keys(dataRecord).length ? dataRecord : payloadRecord;
 
   if (!response.ok) {

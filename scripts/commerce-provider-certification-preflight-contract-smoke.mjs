@@ -443,6 +443,7 @@ includesAll(
     'canExecutePaddleRefund',
     'executePaddleRefund',
     'refreshPaddleRefund',
+    'Array.isArray(payloadRecord.data)',
     'adjustments.create',
     'adjustments.get',
     'paddle-api',
