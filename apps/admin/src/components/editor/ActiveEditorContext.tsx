@@ -426,7 +426,81 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     const minCellIndex = Math.min(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
     const maxCellIndex = Math.max(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
     const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    type TableCellGridEntry = {
+      path: number[];
+      rowStart: number;
+      rowEnd: number;
+      columnStart: number;
+      columnEnd: number;
+    };
+    const grid: (number[] | undefined)[][] = [];
+    const entries: TableCellGridEntry[] = [];
+    const boundedSpan = (value: unknown) => (
+      Number.isInteger(value) && Number(value) > 1 ? Math.min(Number(value), 100) : 1
+    );
+    const pathKey = (path: number[]) => path.join('.');
+
+    rows.forEach((row: unknown, rowIndex: number) => {
+      const rowCells = Array.isArray((row as { children?: unknown[] } | undefined)?.children)
+        ? (row as { children: unknown[] }).children
+        : [];
+      const gridRow = grid[rowIndex] || [];
+      grid[rowIndex] = gridRow;
+      let visualColumnIndex = 0;
+
+      rowCells.forEach((cell, cellIndex) => {
+        if ((cell as { type?: unknown } | undefined)?.type !== 'td' && (cell as { type?: unknown } | undefined)?.type !== 'th') {
+          return;
+        }
+
+        while (gridRow[visualColumnIndex]) {
+          visualColumnIndex += 1;
+        }
+
+        const cellPath = [...context.tablePath, rowIndex, cellIndex];
+        const colSpan = boundedSpan((cell as { colSpan?: unknown }).colSpan);
+        const rowSpan = boundedSpan((cell as { rowSpan?: unknown }).rowSpan);
+        const entry = {
+          path: cellPath,
+          rowStart: rowIndex,
+          rowEnd: rowIndex + rowSpan - 1,
+          columnStart: visualColumnIndex,
+          columnEnd: visualColumnIndex + colSpan - 1,
+        };
+        entries.push(entry);
+
+        for (let occupiedRow = entry.rowStart; occupiedRow <= entry.rowEnd; occupiedRow += 1) {
+          const occupiedGridRow = grid[occupiedRow] || [];
+          grid[occupiedRow] = occupiedGridRow;
+          for (let occupiedColumn = entry.columnStart; occupiedColumn <= entry.columnEnd; occupiedColumn += 1) {
+            occupiedGridRow[occupiedColumn] = cellPath;
+          }
+        }
+
+        visualColumnIndex = entry.columnEnd + 1;
+      });
+    });
+
+    const anchorEntry = entries.find((entry) => isSamePath(entry.path, anchorCellPath));
+    const focusEntry = entries.find((entry) => isSamePath(entry.path, focusCellPath));
     const cellPaths: number[][] = [];
+
+    if (anchorEntry && focusEntry) {
+      const minVisualRowIndex = Math.min(anchorEntry.rowStart, focusEntry.rowStart);
+      const maxVisualRowIndex = Math.max(anchorEntry.rowEnd, focusEntry.rowEnd);
+      const minVisualColumnIndex = Math.min(anchorEntry.columnStart, focusEntry.columnStart);
+      const maxVisualColumnIndex = Math.max(anchorEntry.columnEnd, focusEntry.columnEnd);
+
+      return entries
+        .filter((entry) => (
+          entry.rowStart <= maxVisualRowIndex &&
+          entry.rowEnd >= minVisualRowIndex &&
+          entry.columnStart <= maxVisualColumnIndex &&
+          entry.columnEnd >= minVisualColumnIndex
+        ))
+        .map((entry) => entry.path)
+        .filter((path, index, paths) => paths.findIndex((candidate) => pathKey(candidate) === pathKey(path)) === index);
+    }
 
     for (let rowIndex = minRowIndex; rowIndex <= maxRowIndex; rowIndex += 1) {
       const row = rows[rowIndex] as { children?: unknown[] } | undefined;

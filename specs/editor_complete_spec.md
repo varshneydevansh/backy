@@ -126,7 +126,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Shows properties for selected element
 - Has Content, Layout, Style, Appearance sections
 - **Issues:**
-    - Advanced rich text table editing still needs Canva-level edge-case coverage beyond the current single-cell controls and selected multi-cell style ranges, especially complex merged-cell selections and nested selection behavior
+    - Advanced rich text table editing still needs Canva-level edge-case coverage beyond the current single-cell controls and selected multi-cell style ranges, especially complex nested selection behavior
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
@@ -138,6 +138,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Table cell fill and border color controls can clear previously applied selected-cell colors and persist the removed metadata.
     - Selected table cells can receive independent vertical alignment from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
     - Selected multi-cell table ranges can receive persisted fill color, border color, and vertical alignment metadata across the selected rectangle without leaking into unselected cells.
+    - Selected table ranges now resolve through a span-aware visual grid, so ranges that cross `rowSpan`/`colSpan` cells include visually covered sibling cells instead of relying only on raw Slate child indexes.
     - Editor smoke coverage now guards the rich-text table range-selection source path plus the merged/multi-cell browser smoke assertions so table fill, border, and vertical alignment remain applied across the selected rectangle only.
     - Added richer appearance controls (border style/width/color, box shadow, spacing).
     - Added applied-change feedback in both standalone and embedded inspector layouts.
@@ -265,6 +266,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text controls can set and clear selected table cell fill and border colors without leaking metadata to adjacent cells.
   - Right-panel rich-text controls can set selected table cell vertical alignment without leaking metadata to adjacent cells.
   - Right-panel rich-text controls can apply and persist fill, border, and vertical alignment to a selected multi-cell table range without leaking metadata into unselected cells.
+  - Selected table ranges use a span-aware visual grid so row/column-spanned cells and their visually intersecting siblings receive range styling together.
   - Right-panel rich-text controls can set table captions that render outside the editable cell flow and persist on the Slate table node.
   - Right-panel rich-text controls can remove the active table while preserving surrounding rich-text blocks.
   - Selected-range mark controls split multi-node selections at text boundaries, persist marks only on selected fragments, and leave neighboring text unmarked.
@@ -276,7 +278,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Indent and outdent list entries from the right-panel formatting toolbar.
     - Move the active list item up/down from the right-panel formatting toolbar.
 - **Remaining:**
-  - Full fidelity for deeper table operations involving merged-cell selections and remaining edge-case selections beyond selected-range mark splits.
+  - Full fidelity for remaining deeply nested rich-text table/list selection edge cases beyond selected-range mark splits.
 
 ### 16. Font Selection
 **File:** `PropertyPanel.tsx` (StyleProperties)

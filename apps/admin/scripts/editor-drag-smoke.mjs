@@ -4290,6 +4290,8 @@ const testRichTextInlineMarkdownControls = async (client, elementId = 'smoke-hea
 };
 
 const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) => {
+  await activateTextEditing(client, elementId);
+
   const state = await evaluate(client, `(() => {
     let helperResult = null;
     if (typeof window.__backySelectActiveEditorText === 'function') {
@@ -4967,6 +4969,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   await mouseDownControlByTestId(client, 'rich-text-list-indent');
   await sleep(500);
 
+  await activateTextEditing(client, elementId);
   const nestedChildIndentState = await evaluate(client, `(() => {
     const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
       ? window.__backyReadActiveEditorTableState()
@@ -5039,6 +5042,17 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   await sleep(250);
 
   await activateTextEditing(client, elementId);
+  const restoredListBeforeCollapseState = await evaluate(client, `(() => {
+    return typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : { ok: false, reason: 'missing-active-editor-state-helper' };
+  })()`);
+  const restoredNestedItemBeforeCollapse = restoredListBeforeCollapseState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  assert(
+    typeof restoredNestedItemBeforeCollapse?.indent === 'number' && restoredNestedItemBeforeCollapse.indent > 0,
+    `List item indent was not restored before collapsing selection: ${JSON.stringify(restoredListBeforeCollapseState)}`,
+  );
+
   const collapsed = await evaluate(client, `(() => {
     if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
       return { ok: false, reason: 'missing-collapse-helper' };
@@ -5053,7 +5067,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
       : { ok: false, reason: 'missing-active-editor-state-helper' };
   })()`);
   const collapsedNestedItem = collapsedListState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
-  assert(collapsedNestedItem?.indent === 8, `List item indent was lost after collapsing selection: ${JSON.stringify(collapsedListState)}`);
+  assert(
+    collapsedNestedItem?.indent === restoredNestedItemBeforeCollapse.indent,
+    `List item indent was lost after collapsing selection: before ${JSON.stringify(restoredListBeforeCollapseState)}, after ${JSON.stringify(collapsedListState)}`,
+  );
   await sleep(250);
 
   await mouseDownControlByTestId(client, 'rich-text-insert-table');
@@ -5091,7 +5108,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
       : { ok: false, reason: 'missing-active-editor-state-helper' };
   })()`);
   const insertedTableNestedItem = insertedTableListState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
-  assert(insertedTableNestedItem?.indent === 8, `List item indent was lost after table insertion: ${JSON.stringify(insertedTableListState)}`);
+  assert(
+    insertedTableNestedItem?.indent === restoredNestedItemBeforeCollapse.indent,
+    `List item indent was lost after table insertion: before ${JSON.stringify(restoredListBeforeCollapseState)}, after ${JSON.stringify(insertedTableListState)}`,
+  );
   await sleep(500);
 
   const tableState = await evaluate(client, `(() => {
@@ -5425,6 +5445,16 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
       duplicatedColumnState.rows[1]?.join('|') === 'Value 1|Value 1|Value 2',
     `Table duplicate column control did not copy the selected column right: ${JSON.stringify(duplicatedColumnState)}`,
   );
+
+  await activateTextEditing(client, elementId);
+  const selectedDuplicatedColumnBeforeRemove = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedDuplicatedColumnBeforeRemove?.ok, `Unable to select duplicated table column before remove column control: ${JSON.stringify(selectedDuplicatedColumnBeforeRemove)}`);
 
   await mouseDownControlByTestId(client, 'rich-text-table-remove-column');
   await sleep(300);
@@ -5812,6 +5842,74 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
       tableCaptionState.tableCaption === 'Smoke pricing table',
     `Rich-text table caption control did not render and sync caption metadata: ${JSON.stringify(tableCaptionState)}`,
   );
+
+  await activateTextEditing(client, elementId);
+  const selectedRowSpanRangeCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 1') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(
+    selectedRowSpanRangeCell?.ok,
+    `Unable to select restored table cell before row-spanned range check: ${JSON.stringify(selectedRowSpanRangeCell)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-table-merge-cell-down');
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
+  const selectedRowSpanVisualRange = await evaluate(client, `window.__backySelectActiveEditorTableCellRange?.(0, 0, 1, 0) || { ok: false, reason: 'missing-active-editor-table-cell-range-helper' }`);
+  assert(
+    selectedRowSpanVisualRange?.ok,
+    `Unable to select row-spanned visual table range before style controls: ${JSON.stringify(selectedRowSpanVisualRange)}`,
+  );
+  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#eadcf8');
+  await sleep(500);
+
+  const rowSpanVisualRangeState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const readCell = (matcher) => {
+      const domCell = cells.find((cell) => matcher(cell.textContent || ''));
+      const slateCell = slateState?.types?.find((node) => (
+        (node.type === 'td' || node.type === 'th') &&
+        matcher(node.text || '')
+      ));
+      return {
+        text: domCell?.textContent || '',
+        rowSpan: domCell?.getAttribute('rowspan') || '',
+        backgroundColor: domCell ? window.getComputedStyle(domCell).backgroundColor : '',
+        slateRowSpan: slateCell?.rowSpan,
+        slateBackgroundColor: slateCell?.backgroundColor || '',
+      };
+    };
+
+    return {
+      rowSpanned: readCell((text) => text.includes('Column 1') && text.includes('Value 1')),
+      column2: readCell((text) => text.includes('Column 2')),
+      value2: readCell((text) => text.includes('Value 2')),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    rowSpanVisualRangeState.rowSpanned.rowSpan === '2' &&
+      rowSpanVisualRangeState.rowSpanned.slateRowSpan === 2 &&
+      rowSpanVisualRangeState.rowSpanned.backgroundColor === 'rgb(234, 220, 248)' &&
+      rowSpanVisualRangeState.column2.backgroundColor === 'rgb(234, 220, 248)' &&
+      rowSpanVisualRangeState.value2.backgroundColor === 'rgb(234, 220, 248)' &&
+      rowSpanVisualRangeState.rowSpanned.slateBackgroundColor === '#eadcf8' &&
+      rowSpanVisualRangeState.column2.slateBackgroundColor === '#eadcf8' &&
+      rowSpanVisualRangeState.value2.slateBackgroundColor === '#eadcf8',
+    `Row-spanned visual table range did not style every visually covered cell: ${JSON.stringify(rowSpanVisualRangeState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const selectedRowSpannedCellBeforeSplit = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 1') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(
+    selectedRowSpannedCellBeforeSplit?.ok,
+    `Unable to select row-spanned table cell before restoring table shape: ${JSON.stringify(selectedRowSpannedCellBeforeSplit)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-table-split-cell');
+  await sleep(500);
 
   await activateTextEditing(client, elementId);
   const selectedRestoredTableCellBeforeMergedRange = await evaluate(client, `(() => {
@@ -6402,6 +6500,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     restoredHeaderCell,
     selectedCaptionTableCell,
     tableCaptionState,
+    selectedRowSpanRangeCell,
+    selectedRowSpanVisualRange,
+    rowSpanVisualRangeState,
+    selectedRowSpannedCellBeforeSplit,
     selectedMultiCellFillRange,
     selectedMultiCellBorderRange,
     selectedMultiCellVerticalRange,

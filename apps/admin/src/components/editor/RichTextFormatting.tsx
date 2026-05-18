@@ -2723,7 +2723,11 @@ export function RichTextFormatting({
         <label className="flex items-center gap-2 text-xs">
           <Palette className="w-3 h-3" />
           <span className="text-muted-foreground whitespace-nowrap">Text Color</span>
-          <span className="ml-auto inline-flex" ref={textColorTriggerRef}>
+          <span
+            className="ml-auto inline-flex"
+            ref={textColorTriggerRef}
+            onMouseDownCapture={() => storeSelection()}
+          >
             <ColorPicker
               value={selectedFontColorValue}
               testId="rich-text-text-color"
@@ -2740,7 +2744,11 @@ export function RichTextFormatting({
         <label className="flex items-center gap-2 text-xs">
           <Highlighter className="w-3 h-3" />
           <span className="text-muted-foreground whitespace-nowrap">Highlight</span>
-          <span className="ml-auto inline-flex" ref={highlightColorTriggerRef}>
+          <span
+            className="ml-auto inline-flex"
+            ref={highlightColorTriggerRef}
+            onMouseDownCapture={() => storeSelection()}
+          >
             <ColorPicker
               value={selectedHighlightColorValue}
               testId="rich-text-highlight-color"
@@ -3052,7 +3060,11 @@ export function RichTextFormatting({
       <label className="flex min-w-0 items-center gap-2 text-xs">
         <Palette className="w-3 h-3 text-muted-foreground" />
         <span className="text-muted-foreground whitespace-nowrap">Cell Fill</span>
-        <span className="ml-auto inline-flex" ref={tableCellFillTriggerRef}>
+        <span
+          className="ml-auto inline-flex"
+          ref={tableCellFillTriggerRef}
+          onMouseDownCapture={() => storeSelection()}
+        >
           <ColorPicker
             value={selectedTableCellFillValue}
             testId="rich-text-table-cell-fill"
@@ -3069,7 +3081,11 @@ export function RichTextFormatting({
       <label className="flex min-w-0 items-center gap-2 text-xs">
         <Square className="w-3 h-3 text-muted-foreground" />
         <span className="text-muted-foreground whitespace-nowrap">Cell Border</span>
-        <span className="ml-auto inline-flex" ref={tableCellBorderTriggerRef}>
+        <span
+          className="ml-auto inline-flex"
+          ref={tableCellBorderTriggerRef}
+          onMouseDownCapture={() => storeSelection()}
+        >
           <ColorPicker
             value={selectedTableCellBorderValue}
             testId="rich-text-table-cell-border"
