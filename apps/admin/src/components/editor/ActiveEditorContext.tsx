@@ -658,20 +658,56 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
-    const insertIndex = context.cellIndex + 1;
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const selectedEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    const duplicateVisualColumnIndex = selectedEntry ? selectedEntry.columnStart : context.cellIndex;
+    const insertVisualColumnIndex = selectedEntry ? selectedEntry.columnEnd + 1 : context.cellIndex + 1;
+    const handledOrigins = new Set<string>();
+    let selectedRowInsertIndex = context.cellIndex + 1;
     let didDuplicateColumn = false;
     for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
       const rowPath = [...context.tablePath, rowIndex];
       const rowNode = Node.get(editor as any, rowPath) as any;
       const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
-      if (context.cellIndex >= rowChildren.length) {
+      const rowEntries = tableGrid.entries.filter((entry) => entry.rowStart === rowIndex);
+      const sourceEntry = tableGrid.entries.find((entry) => (
+        entry.rowStart <= rowIndex &&
+        entry.rowEnd >= rowIndex &&
+        entry.columnStart <= duplicateVisualColumnIndex &&
+        entry.columnEnd >= duplicateVisualColumnIndex
+      ));
+      if (!sourceEntry) {
         continue;
       }
 
-      const duplicatedCell = JSON.parse(JSON.stringify(rowChildren[context.cellIndex]));
+      const key = sourceEntry.path.join('.');
+      if (handledOrigins.has(key) || sourceEntry.rowStart !== rowIndex) {
+        continue;
+      }
+      handledOrigins.add(key);
+
+      const sourceCell = Node.get(editor as any, sourceEntry.path) as any;
+      if (sourceEntry.colSpan > 1) {
+        const currentColSpan = Number.isInteger(sourceCell?.colSpan) && sourceCell.colSpan > 1 ? sourceCell.colSpan : sourceEntry.colSpan;
+        Transforms.setNodes(editor as any, { colSpan: currentColSpan + 1 } as any, {
+          at: sourceEntry.path,
+        });
+        didDuplicateColumn = true;
+        continue;
+      }
+
+      const nextEntry = rowEntries.find((entry) => entry.columnStart >= insertVisualColumnIndex);
+      const boundedInsertIndex = Math.max(0, Math.min(
+        nextEntry ? nextEntry.path[nextEntry.path.length - 1] : rowChildren.length,
+        rowChildren.length,
+      ));
+      const duplicatedCell = JSON.parse(JSON.stringify(sourceCell));
       Transforms.insertNodes(editor as any, duplicatedCell, {
-        at: [...rowPath, Math.max(0, Math.min(insertIndex, rowChildren.length))],
+        at: [...rowPath, boundedInsertIndex],
       });
+      if (rowIndex === context.rowIndex) {
+        selectedRowInsertIndex = boundedInsertIndex;
+      }
       didDuplicateColumn = true;
     }
 
@@ -680,12 +716,15 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, insertIndex]));
+      const nextRowNode = Node.get(editor as any, context.rowPath) as any;
+      const nextRowChildren = Array.isArray(nextRowNode?.children) ? nextRowNode.children : [];
+      const nextCellIndex = Math.max(0, Math.min(selectedRowInsertIndex, nextRowChildren.length - 1));
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, nextCellIndex]));
     } catch {
       // Selection is best-effort after column duplication.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext, isSamePath]);
 
   const removeSelectedTableRow = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -920,26 +959,49 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
 
-    const targetCellIndex = context.cellIndex + direction;
-    if (targetCellIndex < 0 || targetCellIndex >= context.columnCount) {
+    const tableGrid = buildTableCellGrid(context.tableNode, context.tablePath);
+    const selectedEntry = tableGrid.entries.find((entry) => isSamePath(entry.path, context.cellPath));
+    const sourceVisualColumnIndex = selectedEntry ? selectedEntry.columnStart : context.cellIndex;
+    const targetVisualColumnIndex = sourceVisualColumnIndex + direction;
+    const tableHasSpanningCells = tableGrid.entries.some((entry) => entry.colSpan > 1 || entry.rowSpan > 1);
+    if (tableHasSpanningCells || targetVisualColumnIndex < 0 || targetVisualColumnIndex >= tableGrid.maxColumnCount) {
       return false;
     }
 
     const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    let selectedRowTargetIndex = context.cellIndex;
     let didMoveColumn = false;
     for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
       const rowPath = [...context.tablePath, rowIndex];
       const rowNode = Node.get(editor as any, rowPath) as any;
       const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
-      if (context.cellIndex >= rowChildren.length || targetCellIndex >= rowChildren.length) {
+      const rowEntries = tableGrid.entries.filter((entry) => entry.rowStart === rowIndex);
+      const sourceEntry = rowEntries.find((entry) => (
+        entry.columnStart === sourceVisualColumnIndex &&
+        entry.columnEnd === sourceVisualColumnIndex
+      ));
+      const targetEntry = rowEntries.find((entry) => (
+        entry.columnStart === targetVisualColumnIndex &&
+        entry.columnEnd === targetVisualColumnIndex
+      ));
+      if (!sourceEntry || !targetEntry) {
         continue;
       }
 
-      const movedCell = JSON.parse(JSON.stringify(rowChildren[context.cellIndex]));
-      Transforms.removeNodes(editor as any, { at: [...rowPath, context.cellIndex] });
+      const sourceCellIndex = sourceEntry.path[sourceEntry.path.length - 1];
+      const targetCellIndex = targetEntry.path[targetEntry.path.length - 1];
+      if (sourceCellIndex >= rowChildren.length || targetCellIndex >= rowChildren.length) {
+        continue;
+      }
+
+      const movedCell = JSON.parse(JSON.stringify(rowChildren[sourceCellIndex]));
+      Transforms.removeNodes(editor as any, { at: [...rowPath, sourceCellIndex] });
       Transforms.insertNodes(editor as any, movedCell, {
         at: [...rowPath, targetCellIndex],
       });
+      if (rowIndex === context.rowIndex) {
+        selectedRowTargetIndex = targetCellIndex;
+      }
       didMoveColumn = true;
     }
 
@@ -948,12 +1010,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, targetCellIndex]));
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, selectedRowTargetIndex]));
     } catch {
       // Selection is best-effort after column movement.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [buildTableCellGrid, getSelectedTableContext, isSamePath]);
 
   const toggleSelectedTableHeaderRow = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
