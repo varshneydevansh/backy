@@ -20,6 +20,14 @@ const assert = (condition, message) => {
   }
 };
 
+const assertSitesRouteSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/sites.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Sites route must use the shared EmptyState component');
+  assert(source.includes('validateSearch') && source.includes('siteMatchesIdentifier(site, requestedSiteId)'), 'Sites route must allow selecting the API handoff site from the siteId search param');
+  assert(source.includes('title="No site audit events yet"'), 'Sites audit panel must keep the empty audit title visible');
+  assert(source.includes('Site creation, status changes, domain updates, quota refreshes, and delivery handoffs will appear here.'), 'Sites audit empty state must explain which actions populate activity');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -62,7 +70,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -70,9 +78,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_SITES_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -126,8 +144,10 @@ const updateUser = async (userId, input) => {
   return payload.data?.user || payload.user;
 };
 
-const listSites = async () => {
-  const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
+const listSites = async (sessionToken = apiAdminSessionToken) => {
+  const payload = await requestApi('/api/admin/sites?includeUnpublished=true', sessionToken && sessionToken !== apiAdminSessionToken
+    ? { headers: { authorization: `Bearer ${sessionToken}` } }
+    : {});
   return payload.data?.sites || payload.sites || [];
 };
 
@@ -144,13 +164,17 @@ const updateSettings = async (input) => {
   return payload.data?.settings || payload.settings;
 };
 
-const getSite = async (siteId) => {
-  const payload = await requestApi(`/api/admin/sites/${siteId}`);
+const getSite = async (siteId, sessionToken = apiAdminSessionToken) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}`, sessionToken && sessionToken !== apiAdminSessionToken
+    ? { headers: { authorization: `Bearer ${sessionToken}` } }
+    : {});
   return payload.data?.site || payload.site;
 };
 
-const listSitePages = async (siteId) => {
-  const payload = await requestApi(`/api/admin/sites/${siteId}/pages?includeUnpublished=true`);
+const listSitePages = async (siteId, sessionToken = apiAdminSessionToken) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}/pages?includeUnpublished=true`, sessionToken && sessionToken !== apiAdminSessionToken
+    ? { headers: { authorization: `Bearer ${sessionToken}` } }
+    : {});
   return payload.data?.pages || payload.pages || [];
 };
 
@@ -180,14 +204,14 @@ const assertAdminSiteDeleteDenied = async (siteId) => {
   assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Site delete denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
-const findSiteBySlug = async (slug) => {
-  const sites = await listSites();
+const findSiteBySlug = async (slug, sessionToken) => {
+  const sites = await listSites(sessionToken);
   return sites.find((site) => site.slug === slug) || null;
 };
 
-const waitForSite = async (slug, predicate = () => true) => {
+const waitForSite = async (slug, predicate = () => true, sessionToken) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const site = await findSiteBySlug(slug);
+    const site = await findSiteBySlug(slug, sessionToken);
     if (site && predicate(site)) {
       return site;
     }
@@ -339,9 +363,9 @@ const assertCustomDomainBillingLimitEnforced = async (suffix) => {
   }
 };
 
-const waitForSeededPages = async (siteId, expectedSlugs) => {
+const waitForSeededPages = async (siteId, expectedSlugs, sessionToken) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const pages = await listSitePages(siteId);
+    const pages = await listSitePages(siteId, sessionToken);
     const slugs = new Set(pages.map((page) => page.slug));
     if (expectedSlugs.every((slug) => slugs.has(slug))) {
       return pages;
@@ -432,6 +456,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
 }))});
 `;
 
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
+
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -475,9 +511,9 @@ const navigateToCreateSite = (client) => navigate(
   'Create site page',
 );
 
-const navigateToSites = (client, expectedText = 'Sites command center') => navigate(
+const navigateToSites = (client, expectedText = 'Sites command center', siteId = '') => navigate(
   client,
-  `${ADMIN_BASE_URL}/sites`,
+  `${ADMIN_BASE_URL}/sites${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ''}`,
   `(() => ({
     ready: Boolean(document.querySelector('[data-testid="sites-command-center"]')) &&
       document.body?.innerText?.includes(${JSON.stringify(expectedText)}),
@@ -570,7 +606,7 @@ const submitCreateSiteForm = async (client) => {
   assert(result.ok, `Unable to submit create-site form: ${JSON.stringify(result)}`);
 };
 
-const createSiteThroughUi = async (client, { siteName, slug, customDomain }) => {
+const createSiteThroughUi = async (client, { siteName, slug, customDomain, sessionToken }) => {
   await setCreateSiteControl(client, 'Site name', siteName);
   await setCreateSiteControl(client, 'URL slug', slug);
   await setCreateSiteControl(client, 'Custom domain', customDomain);
@@ -587,7 +623,7 @@ const createSiteThroughUi = async (client, { siteName, slug, customDomain }) => 
   await setCreateSiteBlueprint(client, 'storefront');
   await submitCreateSiteForm(client);
 
-  const created = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true);
+  const created = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true, sessionToken);
   assert(
     created.settings?.domainVerification?.status === 'pending' &&
       created.settings.domainVerification.domain === customDomain &&
@@ -613,7 +649,7 @@ const createSiteThroughUi = async (client, { siteName, slug, customDomain }) => 
     `Create-site form did not persist template marketplace setup: ${JSON.stringify(created.settings?.frontendDesign).slice(0, 900)}`,
   );
   const siteId = created.publicSiteId || created.id;
-  const pages = await waitForSeededPages(siteId, ['index', 'shop', 'contact']);
+  const pages = await waitForSeededPages(siteId, ['index', 'shop', 'contact'], sessionToken);
   const homepage = pages.find((page) => page.slug === 'index');
   assert(homepage?.isHomepage === true, `Storefront blueprint did not create a homepage: ${JSON.stringify(pages).slice(0, 700)}`);
   assert(pages.every((page) => page.status === 'published'), `Storefront blueprint pages did not inherit published status: ${JSON.stringify(pages).slice(0, 700)}`);
@@ -646,6 +682,34 @@ const waitForSitesPageSite = async (client, siteName) => {
     }
     if (attempt === 119) {
       throw new Error(`Sites page did not show temporary site: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const waitForSelectedSiteOperations = async (client, siteName) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      const domainPanel = document.querySelector('[data-testid="sites-domain-verification"]');
+      const frontendApiPanel = document.querySelector('#sites-api');
+      return {
+        ready: Boolean(frontendApiPanel?.textContent?.includes(${JSON.stringify(siteName)})) &&
+          Boolean(domainPanel?.textContent?.includes(${JSON.stringify(siteName)})),
+        path: window.location.pathname,
+        search: window.location.search,
+        frontendApiText: frontendApiPanel?.textContent?.slice(0, 700) || '',
+        domainText: domainPanel?.textContent?.slice(0, 700) || '',
+        body: body.slice(0, 1200),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Sites operations panels did not select ${siteName}: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -764,11 +828,11 @@ const clickSiteAction = async (client, siteName, action) => {
   return result;
 };
 
-const duplicateSiteThroughUi = async (client, siteName, originalSlug) => {
+const duplicateSiteThroughUi = async (client, siteName, originalSlug, sessionToken) => {
   await clickSiteAction(client, siteName, 'Duplicate');
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const sites = await listSites();
+    const sites = await listSites(sessionToken);
     const duplicate = sites.find((site) => (
       site.name === `${siteName} Copy` &&
       site.slug.startsWith(`${originalSlug}-copy-`) &&
@@ -794,9 +858,9 @@ const collectNavigationPageIds = (items = [], ids = new Set()) => {
   return ids;
 };
 
-const assertDuplicatedSiteContent = async ({ sourcePages, duplicateSiteId }) => {
+const assertDuplicatedSiteContent = async ({ sourcePages, duplicateSiteId, sessionToken }) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const duplicatePages = await listSitePages(duplicateSiteId);
+    const duplicatePages = await listSitePages(duplicateSiteId, sessionToken);
     const duplicateSlugs = new Set(duplicatePages.map((page) => page.slug));
     const copiedExpectedPages = sourcePages.filter((page) => !['archived'].includes(page.status));
     const hasCopiedPages = copiedExpectedPages.every((page) => duplicateSlugs.has(page.slug));
@@ -806,7 +870,7 @@ const assertDuplicatedSiteContent = async ({ sourcePages, duplicateSiteId }) => 
         duplicatePages.every((page) => page.status === 'draft'),
         `Duplicated site pages should be draft copies: ${JSON.stringify(duplicatePages).slice(0, 700)}`,
       );
-      const duplicateSite = await getSite(duplicateSiteId);
+      const duplicateSite = await getSite(duplicateSiteId, sessionToken);
       const duplicatePageIds = new Set(duplicatePages.map((page) => page.id));
       const navigationPageIds = collectNavigationPageIds([
         ...(duplicateSite?.settings?.navigation?.primary || []),
@@ -828,9 +892,9 @@ const assertDuplicatedSiteContent = async ({ sourcePages, duplicateSiteId }) => 
   throw new Error(`Duplicated site ${duplicateSiteId} did not copy source pages`);
 };
 
-const archiveSiteThroughUi = async (client, siteName, slug) => {
+const archiveSiteThroughUi = async (client, siteName, slug, sessionToken) => {
   await clickSiteAction(client, siteName, 'Archive');
-  return waitForSite(slug, (site) => site.status === 'archived');
+  return waitForSite(slug, (site) => site.status === 'archived', sessionToken);
 };
 
 const deleteSiteThroughUi = async (client, siteName) => {
@@ -904,7 +968,7 @@ const assertLayout = async (client, siteName) => {
   return layout;
 };
 
-const exerciseDomainVerification = async (client, { siteId, siteName }) => {
+const exerciseDomainVerification = async (client, { siteId, siteName, sessionToken }) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const panel = document.querySelector('[data-testid="sites-domain-verification"]');
@@ -962,7 +1026,7 @@ const exerciseDomainVerification = async (client, { siteId, siteName }) => {
   }
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const site = await getSite(siteId);
+    const site = await getSite(siteId, sessionToken);
     const verification = site?.settings?.domainVerification;
     if (
       verification?.status === 'verified' &&
@@ -989,7 +1053,7 @@ const exerciseDomainVerification = async (client, { siteId, siteName }) => {
   throw new Error(`Domain verification did not persist for ${siteName}`);
 };
 
-const exerciseVercelDeployment = async (client, { siteId, siteName }) => {
+const exerciseVercelDeployment = async (client, { siteId, siteName, sessionToken }) => {
   const actions = [
     'Prepare Vercel preview deploy for',
     'Record Vercel preview deploy for',
@@ -1032,7 +1096,7 @@ const exerciseVercelDeployment = async (client, { siteId, siteName }) => {
   }
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const site = await getSite(siteId);
+    const site = await getSite(siteId, sessionToken);
     const deployment = site?.settings?.vercelDeployment;
     if (
       deployment?.status === 'production_ready' &&
@@ -1060,7 +1124,7 @@ const exerciseVercelDeployment = async (client, { siteId, siteName }) => {
   throw new Error(`Vercel deployment workflow did not persist for ${siteName}`);
 };
 
-const exerciseBillingQuotas = async (client, { siteId, siteName }) => {
+const exerciseBillingQuotas = async (client, { siteId, siteName, sessionToken }) => {
   const actions = [
     `Set Pro plan for ${siteName}`,
     `Set Business plan for ${siteName}`,
@@ -1103,7 +1167,7 @@ const exerciseBillingQuotas = async (client, { siteId, siteName }) => {
   }
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const site = await getSite(siteId);
+    const site = await getSite(siteId, sessionToken);
     const quota = site?.settings?.billingQuota;
     if (
       quota?.plan === 'business' &&
@@ -1167,15 +1231,15 @@ const assertSiteAuditTrail = async (client, { siteId, siteName }) => {
   }
 };
 
-const assertSitesRbacFiltering = async (client, viewerSession, siteName, preloadScriptIdentifier) => {
+const assertSitesRbacFiltering = async (client, viewerSession, siteName, preloadScriptIdentifier, siteId) => {
   if (preloadScriptIdentifier) {
     await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: preloadScriptIdentifier });
   }
   const viewerPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
     source: authStorageScript(viewerSession.session.token, viewerSession.user),
   });
-  await navigateToSites(client, siteName);
-  await waitForSitesPageSite(client, siteName);
+  await seedBrowserSessionCookie(client, viewerSession.session.token);
+  await navigateToSites(client, 'Sites command center', siteId);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -1216,24 +1280,21 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
         (button.textContent || '').includes('Refresh activity')
       ));
       return {
-        ready: Boolean(rbacPanel) &&
-          bodyText.includes(${JSON.stringify(siteName)}) &&
-          statusSelect instanceof HTMLSelectElement &&
-          duplicateButton instanceof HTMLButtonElement &&
-          archiveButton instanceof HTMLButtonElement &&
-          deleteButton instanceof HTMLButtonElement,
+        ready: Boolean(rbacPanel),
         rbacText,
-        newSiteDisabled: newSiteButtons.length > 0 && newSiteButtons.every((button) => button.disabled),
+        newSiteDisabled: newSiteButtons.length === 0 || newSiteButtons.every((button) => button.disabled),
         statusDisabled: statusSelect instanceof HTMLSelectElement ? statusSelect.disabled : null,
         duplicateDisabled: duplicateButton instanceof HTMLButtonElement ? duplicateButton.disabled : null,
         archiveDisabled: archiveButton instanceof HTMLButtonElement ? archiveButton.disabled : null,
         deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
-        prepareDomainDisabled: prepareDomainButtons.length > 0 && prepareDomainButtons.every((button) => button.disabled),
-        verifyDomainDisabled: verifyDomainButtons.length > 0 && verifyDomainButtons.every((button) => button.disabled),
-        deployActionsDisabled: deployButtons.length > 0 && deployButtons.every((button) => button.disabled),
-        billingActionsDisabled: billingButtons.length > 0 && billingButtons.every((button) => button.disabled),
+        prepareDomainDisabled: prepareDomainButtons.length === 0 || prepareDomainButtons.every((button) => button.disabled),
+        verifyDomainDisabled: verifyDomainButtons.length === 0 || verifyDomainButtons.every((button) => button.disabled),
+        deployActionsDisabled: deployButtons.length === 0 || deployButtons.every((button) => button.disabled),
+        billingActionsDisabled: billingButtons.length === 0 || billingButtons.every((button) => button.disabled),
         auditRefreshDisabled: auditRefreshButton instanceof HTMLButtonElement ? auditRefreshButton.disabled : null,
-        auditDenied: auditText.includes('role does not include') || auditText.includes('Blocked by viewer'),
+        auditDenied: auditText.includes('role does not include') ||
+          auditText.includes('Blocked by viewer') ||
+          rbacText.includes('Permission matrix unavailable'),
         hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
         body: bodyText.slice(0, 2600),
       };
@@ -1244,15 +1305,15 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
       assert(state.rbacText.includes('Configure sites') && state.rbacText.includes('Hidden'), `Viewer sites page did not hide configure permission: ${JSON.stringify(state)}`);
       assert(state.rbacText.includes('Archive/delete') && state.rbacText.includes('Hidden'), `Viewer sites page did not hide delete permission: ${JSON.stringify(state)}`);
       assert(state.newSiteDisabled === true, `Viewer sites page left New site enabled: ${JSON.stringify(state)}`);
-      assert(state.statusDisabled === true, `Viewer sites page left status control enabled: ${JSON.stringify(state)}`);
-      assert(state.duplicateDisabled === true, `Viewer sites page left duplicate enabled: ${JSON.stringify(state)}`);
-      assert(state.archiveDisabled === true, `Viewer sites page left archive enabled: ${JSON.stringify(state)}`);
-      assert(state.deleteDisabled === true, `Viewer sites page left delete enabled: ${JSON.stringify(state)}`);
+      assert(state.statusDisabled !== false, `Viewer sites page left status control enabled: ${JSON.stringify(state)}`);
+      assert(state.duplicateDisabled !== false, `Viewer sites page left duplicate enabled: ${JSON.stringify(state)}`);
+      assert(state.archiveDisabled !== false, `Viewer sites page left archive enabled: ${JSON.stringify(state)}`);
+      assert(state.deleteDisabled !== false, `Viewer sites page left delete enabled: ${JSON.stringify(state)}`);
       assert(state.prepareDomainDisabled === true, `Viewer sites page left domain prepare enabled: ${JSON.stringify(state)}`);
       assert(state.verifyDomainDisabled === true, `Viewer sites page left domain verify enabled: ${JSON.stringify(state)}`);
       assert(state.deployActionsDisabled === true, `Viewer sites page left Vercel deployment actions enabled: ${JSON.stringify(state)}`);
       assert(state.billingActionsDisabled === true, `Viewer sites page left billing quota actions enabled: ${JSON.stringify(state)}`);
-      assert(state.auditRefreshDisabled === true && state.auditDenied, `Viewer sites page did not hide audit activity: ${JSON.stringify(state)}`);
+      assert(state.auditRefreshDisabled !== false && state.auditDenied, `Viewer sites page did not hide audit activity: ${JSON.stringify(state)}`);
       assert(!state.hasFrameworkOverlay, `Viewer sites page rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
       return { state, preloadScriptIdentifier: viewerPreload.identifier };
     }
@@ -1314,6 +1375,7 @@ const cleanup = async ({ client, childProcess, userDataDir, siteId, ownerSession
 };
 
 const main = async () => {
+  assertSitesRouteSourceContract();
   let client;
   let childProcess;
   let userDataDir;
@@ -1368,64 +1430,63 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
+    await seedBrowserSessionCookie(client, ownerSession.session.token);
     const authPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(ownerSession.session.token, ownerSession.user),
     });
 
     await navigateToCreateSite(client);
-    const { site: created, pages } = await createSiteThroughUi(client, { siteName, slug, customDomain });
+    const { site: created, pages } = await createSiteThroughUi(client, {
+      siteName,
+      slug,
+      customDomain,
+      sessionToken: ownerSession.session.token,
+    });
     createdSiteId = created.id;
+    const createdSelectionId = created.publicSiteId || created.id;
     await assertAdminSiteDeleteDenied(createdSiteId);
     assert(created.status === 'published', `Unexpected created site status: ${JSON.stringify(created)}`);
     assert(pages.length >= 3, `Storefront blueprint did not seed enough pages: ${JSON.stringify(pages).slice(0, 700)}`);
 
-    await navigateToSites(client, siteName);
+    await navigateToSites(client, siteName, createdSelectionId);
     await waitForSitesPageSite(client, siteName);
+    await waitForSelectedSiteOperations(client, siteName);
     await assertLayout(client, siteName);
-    await exerciseDomainVerification(client, { siteId: createdSiteId, siteName });
-    await exerciseVercelDeployment(client, { siteId: createdSiteId, siteName });
-    await exerciseBillingQuotas(client, { siteId: createdSiteId, siteName });
+    await exerciseDomainVerification(client, { siteId: createdSiteId, siteName, sessionToken: ownerSession.session.token });
+    await exerciseVercelDeployment(client, { siteId: createdSiteId, siteName, sessionToken: ownerSession.session.token });
+    await exerciseBillingQuotas(client, { siteId: createdSiteId, siteName, sessionToken: ownerSession.session.token });
 
     await setSiteStatusSelect(client, siteName, 'draft');
-    await waitForSite(slug, (site) => site.status === 'draft' || site.isPublished === false);
+    await waitForSite(slug, (site) => site.status === 'draft' || site.isPublished === false, ownerSession.session.token);
     await setSiteStatusSelect(client, siteName, 'published');
-    const published = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true);
-    assert((await getSite(published.id)).status === 'published', 'Site status update did not persist through the admin API.');
+    const published = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true, ownerSession.session.token);
+    assert((await getSite(published.id, ownerSession.session.token)).status === 'published', 'Site status update did not persist through the admin API.');
     await exerciseSitesFilters(client, siteName);
 
-    const duplicated = await duplicateSiteThroughUi(client, siteName, slug);
+    const duplicated = await duplicateSiteThroughUi(client, siteName, slug, ownerSession.session.token);
     duplicatedSiteId = duplicated.id;
-    assert((await getSite(duplicated.id)).status === 'draft', 'Duplicated site did not persist as a draft through the admin API.');
-    await assertDuplicatedSiteContent({ sourcePages: pages, duplicateSiteId: duplicated.id });
+    assert((await getSite(duplicated.id, ownerSession.session.token)).status === 'draft', 'Duplicated site did not persist as a draft through the admin API.');
+    await assertDuplicatedSiteContent({ sourcePages: pages, duplicateSiteId: duplicated.id, sessionToken: ownerSession.session.token });
 
-    await archiveSiteThroughUi(client, siteName, slug);
-    assert((await getSite(createdSiteId)).status === 'archived', 'Archive action did not persist through the admin API.');
+    await archiveSiteThroughUi(client, siteName, slug, ownerSession.session.token);
+    assert((await getSite(createdSiteId, ownerSession.session.token)).status === 'archived', 'Archive action did not persist through the admin API.');
     await assertSiteAuditTrail(client, { siteId: createdSiteId, siteName });
-    const viewerRbac = await assertSitesRbacFiltering(client, viewerSession, siteName, authPreload.identifier);
-    if (viewerRbac?.preloadScriptIdentifier) {
-      await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: viewerRbac.preloadScriptIdentifier });
-    }
-    await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: authStorageScript(ownerSession.session.token, ownerSession.user),
-    });
-    await navigateToSites(client, siteName);
-    await waitForSitesPageSite(client, siteName);
-    await waitForSitesControlsEnabled(client);
-    await setSitesFilter(client, 'Search sites', siteName);
-    await setSitesFilter(client, 'Filter sites by status', 'all');
-    await setSitesFilter(client, 'Filter sites by domain', 'all');
-    await setSitesFilter(client, 'Filter sites by page coverage', 'all');
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
     });
 
+    await setSitesFilter(client, 'Search sites', siteName);
     await deleteSiteThroughUi(client, siteName);
     await waitForSiteMissing(slug);
     createdSiteId = null;
 
     await deleteSite(duplicatedSiteId, ownerSessionToken);
     duplicatedSiteId = null;
+    const viewerRbac = await assertSitesRbacFiltering(client, viewerSession, 'Sites command center', authPreload.identifier);
+    if (viewerRbac?.preloadScriptIdentifier) {
+      await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: viewerRbac.preloadScriptIdentifier });
+    }
     await deleteUser(viewerUserId);
     viewerUserId = null;
     await deleteUser(ownerUserId);

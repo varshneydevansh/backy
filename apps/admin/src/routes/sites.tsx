@@ -48,10 +48,17 @@ import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteRouteSearch } from '@/lib/siteSelection';
+import { getSiteRouteSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
+interface SitesSearch {
+  siteId?: string;
+}
+
 export const Route = createFileRoute('/sites')({
+  validateSearch: (search: Record<string, unknown>): SitesSearch => ({
+    siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+  }),
   component: SitesLayout,
 });
 
@@ -609,6 +616,7 @@ function SitesLayout() {
 
 function SitesListView() {
   const navigate = useNavigate();
+  const routeSearch = Route.useSearch();
   const { sites, setSites, deleteSite } = useStore();
   const currentAdmin = useAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
@@ -780,7 +788,13 @@ function SitesListView() {
       return true;
     })
   ), [domainFilter, pageCoverageFilter, sites, statusFilter]);
-  const selectedApiSite = useMemo(() => filteredSites[0] || sites[0] || null, [filteredSites, sites]);
+  const requestedSiteId = routeSearch.siteId?.trim() || '';
+  const selectedApiSite = useMemo(() => {
+    const searchMatchedSite = requestedSiteId
+      ? sites.find((site) => siteMatchesIdentifier(site, requestedSiteId))
+      : null;
+    return searchMatchedSite || filteredSites[0] || sites[0] || null;
+  }, [filteredSites, requestedSiteId, sites]);
   const selectedApiSiteId = selectedApiSite?.publicSiteId || selectedApiSite?.id || '{siteId}';
   const adminSitesUrl = `${adminApiBase}/sites`;
   const adminSiteDetailUrl = `${adminApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}`;
@@ -2256,9 +2270,11 @@ function SitesListView() {
                   Loading site activity...
                 </div>
               ) : siteAuditLogs.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground">
-                  No site audit events recorded yet.
-                </div>
+                <EmptyState
+                  icon={Activity}
+                  title="No site audit events yet"
+                  description="Site creation, status changes, domain updates, quota refreshes, and delivery handoffs will appear here."
+                />
               ) : (
                 <div className="grid gap-2">
                   {siteAuditLogs.map((log) => (
