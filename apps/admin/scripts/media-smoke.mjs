@@ -64,6 +64,10 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('Upload images, fonts, documents, or videos to see the largest files that may affect frontend delivery.'), 'Media largest-assets empty state must explain what populates analytics');
   assert(source.includes('title="No provider analytics yet"'), 'Media provider analytics panel must keep the shared empty-state title visible');
   assert(source.includes('Upload or ingest media provider metrics to compare Backy-served requests, storage bytes, and direct CDN activity.'), 'Media provider analytics empty state must explain what populates provider rows');
+  assert(source.includes('title="No media quota data yet"'), 'Media runtime quota panel must keep the shared empty-state title visible');
+  assert(source.includes('Quota data will appear after the media API responds with workspace storage usage and limits.'), 'Media runtime quota empty state must explain API-backed usage data');
+  assert(source.includes('title="No runtime storage data yet"'), 'Media runtime storage panel must keep the shared empty-state title visible');
+  assert(source.includes('Runtime storage data appears when admin settings report the current upload provider, bucket, path, and public URL.'), 'Media runtime storage empty state must explain provider metadata');
   assert(source.includes('title="No Backy delivery requests"'), 'Media asset delivery empty state must keep the shared title visible');
   assert(source.includes('title="No replacements recorded"'), 'Media asset replacement empty state must keep the shared title visible');
   assert(source.includes('title="No page or post references"'), 'Media asset reference empty state must keep the shared title visible');

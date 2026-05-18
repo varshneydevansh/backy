@@ -3939,9 +3939,11 @@ function MediaPage() {
                   </dl>
                 </>
               ) : (
-                <p className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
-                  Quota data will appear after the media API responds.
-                </p>
+                <EmptyState
+                  icon={Upload}
+                  title="No media quota data yet"
+                  description="Quota data will appear after the media API responds with workspace storage usage and limits."
+                />
               )}
             </div>
 
@@ -3996,9 +3998,11 @@ function MediaPage() {
                   </div>
                 </dl>
               ) : (
-                <p className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
-                  Runtime storage data is unavailable.
-                </p>
+                <EmptyState
+                  icon={Cloud}
+                  title="No runtime storage data yet"
+                  description="Runtime storage data appears when admin settings report the current upload provider, bucket, path, and public URL."
+                />
               )}
               {runtimeStorage?.missing && runtimeStorage.missing.length > 0 && (
                 <p className="mt-3 text-sm text-warning">
