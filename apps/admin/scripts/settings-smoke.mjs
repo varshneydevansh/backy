@@ -71,6 +71,7 @@ const assertSettingsSourceContracts = () => {
     'ci:commerce-provider-certification',
     'data-testid="settings-provider-certification"',
     'providerCertification',
+    'backy.settings-provider-certification-handoff.v1',
     'npm run test:settings-provider-certification-preflight-contract',
     'external-live-provider-gate',
     'Supabase/Postgres',

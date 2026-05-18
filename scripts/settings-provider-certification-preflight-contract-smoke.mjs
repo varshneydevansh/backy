@@ -288,6 +288,7 @@ includesAll(
     'Plan env sync',
     'Promote env',
     'Revoke next env',
+    'backy.settings-provider-certification-handoff.v1',
     'BACKY_DATABASE_URL or DATABASE_URL',
     'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
     'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
@@ -339,6 +340,7 @@ includesAll(
     'hasReleaseCertificationNotificationAliases',
     'hasReleaseCertificationCommerceAliases',
     'hasReleaseCertificationCommerceHttpAliases',
+    'backy.settings-provider-certification-handoff.v1',
   ],
   'Settings UI smoke provider operation coverage',
 );
