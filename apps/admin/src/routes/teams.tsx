@@ -486,9 +486,13 @@ function TeamsPage() {
               ))}
             </div>
           ) : teamAuditLogs.length === 0 ? (
-            <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-              No team activity has been recorded for the selected workspace yet.
-            </p>
+            <div className="mt-4">
+              <EmptyState
+                icon={Activity}
+                title="No team activity yet"
+                description="Team creation, member invites, role changes, and workspace ownership updates will appear here."
+              />
+            </div>
           ) : (
             <div className="mt-4 space-y-3" data-testid="teams-audit-list">
               {teamAuditLogs.map((log) => (

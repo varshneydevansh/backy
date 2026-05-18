@@ -23,6 +23,8 @@ const assertTeamsRouteSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Teams route must use the shared EmptyState component for the primary no-teams state');
   assert(source.includes('title="No teams yet"'), 'Teams empty state must keep the no-teams title visible');
   assert(source.includes('assigning members, roles, sites, and workspace ownership'), 'Teams empty state must explain what the first team unlocks');
+  assert(source.includes('title="No team activity yet"'), 'Teams audit panel must keep the empty activity title visible');
+  assert(source.includes('Team creation, member invites, role changes, and workspace ownership updates will appear here.'), 'Teams audit empty state must explain which actions populate activity');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
