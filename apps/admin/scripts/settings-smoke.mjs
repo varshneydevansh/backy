@@ -74,9 +74,14 @@ const assertSettingsSourceContracts = () => {
     'npm run test:settings-provider-certification-preflight-contract',
     'external-live-provider-gate',
     'Supabase/Postgres',
+    'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+    'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
     'Vercel env secret manager',
+    'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID',
     'Resend',
-    'COMMERCE_WEBHOOK_SECRET',
+    'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
+    'BACKY_RESEND_API_KEY or RESEND_API_KEY',
+    'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
     'releaseCertification',
   ];
 
