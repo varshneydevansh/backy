@@ -5961,9 +5961,11 @@ function InfrastructureSettings({
             </Notice>
           )}
           {!infrastructureDiagnostics && !infrastructureCheckError && (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Run a check after editing provider metadata to see which runtime pieces are ready, optional, or blocked.
-            </div>
+            <EmptyState
+              icon={CheckCircle2}
+              title="No infrastructure check has run yet"
+              description="Run a check after editing provider metadata to see which runtime pieces are ready, optional, or blocked."
+            />
           )}
           {infrastructureDiagnostics && (
             <div>
@@ -6034,9 +6036,11 @@ function InfrastructureSettings({
             </Notice>
           )}
           {!storageProvisioningResult && !storageProbeError && (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              This probe writes a temporary file to the configured media provider, reads it back, then deletes it. Use it after changing storage environment variables or bucket policy.
-            </div>
+            <EmptyState
+              icon={Cloud}
+              title="No storage probe has run yet"
+              description="Run the storage probe to write a temporary file to the configured media provider, read it back, then delete it after changing storage environment variables or bucket policy."
+            />
           )}
           {storageProvisioningResult && (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
