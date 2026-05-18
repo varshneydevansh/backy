@@ -19,6 +19,8 @@ const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const publicSiteDiscoveryRoute = read('../src/app/api/sites/route.ts');
 const adminSitesRoute = read('../src/app/api/admin/sites/route.ts');
 const adminSiteDetailRoute = read('../src/app/api/admin/sites/[siteId]/route.ts');
+const adminTemplateRegistryRoute = read('../src/app/api/admin/sites/[siteId]/templates/route.ts');
+const templateRegistryLib = read('../src/lib/templateRegistry.ts');
 const sdkSource = read('../../../packages/sdk-js/src/index.ts');
 const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../../../packages/sdk-js/scripts/generated-contract-types.ts');
@@ -42,6 +44,19 @@ assert(
     adminSiteDetailRoute.includes('recordSiteCacheInvalidation') &&
     adminSiteDetailRoute.includes('reason: "site-updated"'),
   'Public site discovery must use database discovery invalidation revisions from site create/update mutations.',
+);
+
+assert(
+  adminTemplateRegistryRoute.includes('GET /api/admin/sites/[siteId]/templates') &&
+    adminTemplateRegistryRoute.includes('buildTemplateRegistry') &&
+    adminTemplateRegistryRoute.includes('permission: "pages.view"') &&
+    templateRegistryLib.includes('schemaVersion: "backy.template-registry.v1"') &&
+    templateRegistryLib.includes('cloneField: "frontendDesignTemplateId"') &&
+    templateRegistryLib.includes('cloneTargets') &&
+    templateRegistryLib.includes('blogPost: `/api/admin/sites/${siteId}/blog`') &&
+    templateRegistryLib.includes('form: `/api/admin/sites/${siteId}/forms`') &&
+    templateRegistryLib.includes('product: `/api/admin/sites/${siteId}/collections/products/records`'),
+  'Admin template registry must expose persisted frontend-design templates and clone targets for page/blog/form/section/collection/product creation.',
 );
 
 assert(
