@@ -15,6 +15,8 @@ const assert = (condition, message) => {
 };
 
 const sdkSmokeCi = read('../../../scripts/sdk-smoke-ci.mjs');
+const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
+const nextConfig = read('../next.config.js');
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
@@ -90,6 +92,41 @@ assert(
     sdkSmokeCi.includes('expectedHostConfigured') &&
     sdkSmokeCi.includes('expectedDatabaseConfigured'),
   'SDK Postgres smoke must preflight target host/name, schema, enum, RLS, policy, index, and constraint readiness, then emit machine-readable certification evidence.',
+);
+
+assert(
+  sdkSmokeCi.includes("import net from 'node:net'") &&
+    sdkSmokeCi.includes('const freePort = async ()') &&
+    sdkSmokeCi.includes('node_modules/next/dist/bin/next') &&
+    sdkSmokeCi.includes("`http://127.0.0.1:${await freePort()}`") &&
+    sdkSmokeCi.includes("process.execPath, [nextBin, 'dev', '-p', localServerPort]") &&
+    sdkSmokeCi.includes('BACKY_NEXT_DIST_DIR') &&
+    sdkSmokeCi.includes("localNextDistDir = '.next-sdk-smoke'") &&
+    sdkSmokeCi.includes('localNextDistDir') &&
+    nextConfig.includes('process.env.BACKY_NEXT_DIST_DIR') &&
+    nextConfig.includes('distDir: process.env.BACKY_NEXT_DIST_DIR') &&
+    sdkSmokeCi.includes('shouldStartLocalServer'),
+  'SDK smoke CI must allocate a fresh local Next port and isolated distDir instead of reusing a stale fixed-port server.',
+);
+
+assert(
+  sdkSmokeCi.includes("contract: 'backy.sdk-postgres-smoke-ci.v1'") &&
+    sdkSmokeCi.includes('targetGuard') &&
+    sdkSmokeCi.includes('expectedHostConfigured') &&
+    sdkSmokeCi.includes('expectedDatabaseConfigured'),
+  'SDK Postgres smoke must emit machine-readable target-guard evidence after the configured database run.',
+);
+
+assert(
+  sdkSmoke.includes('manifest() missing database certification schema') &&
+    sdkSmoke.includes('manifest() missing SDK Postgres certification command') &&
+    sdkSmoke.includes('manifest() missing BACKY_DATABASE_URL certification alias') &&
+    sdkSmoke.includes('manifest() missing database expected-host guard') &&
+    sdkSmoke.includes('manifest() missing disposable database confirmation requirement') &&
+    sdkSmoke.includes('openapi() database certification command drifted from manifest') &&
+    sdkSmoke.includes('openapi() missing DATABASE_URL certification alias') &&
+    sdkSmoke.includes('openapi() missing disposable database confirmation requirement'),
+  'SDK smoke must response-test the manifest/OpenAPI database certification handoff.',
 );
 
 assert(

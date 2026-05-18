@@ -8,6 +8,7 @@ dist/
 build/
 .out/
 .next/
+.next-sdk-smoke*/
 dist-ssr/
 
 # Environment variables

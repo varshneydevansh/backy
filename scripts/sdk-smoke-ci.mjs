@@ -2,12 +2,17 @@
 
 import { spawn } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
+import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
 const root = new URL('..', import.meta.url);
+const publicRoot = new URL('apps/public/', root);
 const nextEnvUrl = new URL('apps/public/next-env.d.ts', root);
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const baseUrl = (process.env.BACKY_SDK_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
+const nextBin = fileURLToPath(new URL('node_modules/next/dist/bin/next', root));
+const publicRootPath = fileURLToPath(publicRoot);
+const externalBaseUrl = process.env.BACKY_SDK_BASE_URL?.trim();
 const requireDatabaseMode = process.env.BACKY_SDK_REQUIRE_DATABASE === '1';
 const configuredDatabaseUrl = process.env.BACKY_DATABASE_URL || process.env.DATABASE_URL || '';
 const expectedDatabaseHost = (process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST || '').trim();
@@ -21,6 +26,26 @@ const sdkSmokeMfaCode = process.env.BACKY_SDK_MFA_CODE
 if (requireDatabaseMode && !configuredDatabaseUrl) {
   throw new Error('BACKY_SDK_REQUIRE_DATABASE=1 requires BACKY_DATABASE_URL or DATABASE_URL for the SDK database smoke.');
 }
+
+const listen = (server, port = 0) => new Promise((resolve) => {
+  server.listen(port, '127.0.0.1', () => resolve(server.address()));
+});
+
+const closeServer = (server) => new Promise((resolve) => {
+  server.close(() => resolve());
+});
+
+const freePort = async () => {
+  const server = net.createServer();
+  const address = await listen(server);
+  await closeServer(server);
+  return address.port;
+};
+
+const baseUrl = (externalBaseUrl || `http://127.0.0.1:${await freePort()}`).replace(/\/$/, '');
+const localServerPort = new URL(baseUrl).port;
+const shouldStartLocalServer = !externalBaseUrl;
+const localNextDistDir = '.next-sdk-smoke';
 
 const assertExpectedDatabaseTarget = () => {
   if (!requireDatabaseMode) return;
@@ -478,16 +503,21 @@ try {
   await runStep('SDK build', ['--workspace', '@backy/sdk-js', 'run', 'build']);
 
   const serverState = { exited: false };
-  server = spawn(npmBin, ['--workspace', '@backy/public', 'run', 'dev'], {
-    cwd: root,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: baseEnv,
-  });
-  server.stdout.on('data', (chunk) => process.stdout.write(chunk));
-  server.stderr.on('data', (chunk) => process.stderr.write(chunk));
-  server.once('exit', () => {
-    serverState.exited = true;
-  });
+  if (shouldStartLocalServer) {
+    server = spawn(process.execPath, [nextBin, 'dev', '-p', localServerPort], {
+      cwd: publicRootPath,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...baseEnv,
+        BACKY_NEXT_DIST_DIR: localNextDistDir,
+      },
+    });
+    server.stdout.on('data', (chunk) => process.stdout.write(chunk));
+    server.stderr.on('data', (chunk) => process.stderr.write(chunk));
+    server.once('exit', () => {
+      serverState.exited = true;
+    });
+  }
 
   await waitForDiscovery(serverState);
   await runStep('SDK smoke', ['run', 'test:smoke:sdk'], {

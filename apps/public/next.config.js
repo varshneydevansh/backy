@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    ...(process.env.BACKY_NEXT_DIST_DIR ? { distDir: process.env.BACKY_NEXT_DIST_DIR } : {}),
+
     // Enable React strict mode for better development experience
     reactStrictMode: true,
 
