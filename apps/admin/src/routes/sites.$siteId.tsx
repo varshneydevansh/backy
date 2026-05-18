@@ -348,6 +348,8 @@ interface SiteWebhookEditorState {
 
 interface SiteFrontendDesignEditorState {
   frontendDesign: SiteFrontendDesignContract;
+  endpoints: AdminFrontendDesignResponse["endpoints"];
+  templateRegistry: AdminFrontendDesignResponse["templateRegistry"] | null;
   tokensJson: string;
   chromeJson: string;
   templatesJson: string;
@@ -806,8 +808,15 @@ const parseArrayJson = (
 
 const createFrontendDesignState = (
   frontendDesign: SiteFrontendDesignContract = EMPTY_FRONTEND_DESIGN,
+  response?: Pick<AdminFrontendDesignResponse, "endpoints" | "templateRegistry">,
 ): SiteFrontendDesignEditorState => ({
   frontendDesign,
+  endpoints: response?.endpoints || {
+    admin: "",
+    templates: "",
+    publicManifest: "",
+  },
+  templateRegistry: response?.templateRegistry || null,
   tokensJson: formatContractJson(frontendDesign.tokens || {}),
   chromeJson: formatContractJson(frontendDesign.chrome || {}),
   templatesJson: JSON.stringify(frontendDesign.templates || [], null, 2),
@@ -2357,7 +2366,7 @@ function EditSitePage() {
     notice: string | null = null,
   ) => {
     setFrontendDesignState({
-      ...createFrontendDesignState(response.frontendDesign),
+      ...createFrontendDesignState(response.frontendDesign, response),
       notice,
     });
   };
@@ -6127,6 +6136,74 @@ function EditSitePage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div
+            className="mt-5 rounded-lg border bg-muted/20 p-4"
+            data-testid="site-template-registry-summary"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Template registry</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Clone-ready page, blog, form, product, collection, and
+                  section templates from this design contract.
+                </p>
+              </div>
+              <code className="break-all rounded-md bg-background px-2 py-1 text-xs text-muted-foreground">
+                {frontendDesignState.endpoints.templates ||
+                  `/api/admin/sites/${siteApiId || ":siteId"}/templates`}
+              </code>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Schema
+                </div>
+                <div className="mt-1 text-sm font-semibold">
+                  {frontendDesignState.templateRegistry?.schemaVersion ||
+                    "backy.template-registry.v1"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Clone field
+                </div>
+                <div className="mt-1 text-sm font-semibold">
+                  {frontendDesignState.templateRegistry?.cloneField ||
+                    "frontendDesignTemplateId"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Clone targets
+                </div>
+                <div className="mt-1 text-sm font-semibold">
+                  {Object.keys(
+                    frontendDesignState.templateRegistry?.cloneTargets || {},
+                  ).length || 6}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(
+                frontendDesignState.templateRegistry?.supportedTypes || [
+                  "page",
+                  "blogPost",
+                  "form",
+                  "product",
+                  "collection",
+                  "section",
+                ]
+              ).map((type) => (
+                <span
+                  key={type}
+                  className="rounded-full border bg-background px-2 py-1 text-xs font-medium"
+                >
+                  {type}
+                </span>
+              ))}
+            </div>
           </div>
 
           <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

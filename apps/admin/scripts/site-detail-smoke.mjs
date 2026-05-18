@@ -520,7 +520,14 @@ const assertSiteDetailLayout = async (client, siteName) => {
         body.includes('Add endpoint') &&
         body.includes('Save webhooks'),
       hasNavigation: Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) && body.includes('Site navigation') && body.includes('Primary menu') && body.includes('Footer menu'),
-      hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) && body.includes('Frontend design contract') && body.includes('Capture current design') && body.includes('Save contract'),
+      hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) &&
+        Boolean(document.querySelector('[data-testid="site-template-registry-summary"]')) &&
+        body.includes('Frontend design contract') &&
+        body.includes('Capture current design') &&
+        body.includes('Save contract') &&
+        body.includes('Template registry') &&
+        body.includes('frontendDesignTemplateId') &&
+        body.includes('backy.template-registry.v1'),
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
       hasSeo: Boolean(document.querySelector('[data-testid="site-seo-panel"]')) && body.includes('SEO defaults') && body.includes('JSON-LD defaults'),
       hasSettings: body.includes('Site Name') && body.includes('Custom Domain'),

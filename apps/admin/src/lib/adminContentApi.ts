@@ -200,7 +200,16 @@ export interface AdminFrontendDesignResponse {
   frontendDesign: NonNullable<SiteSettings['frontendDesign']>;
   endpoints: {
     admin: string;
+    templates?: string;
     publicManifest: string;
+  };
+  templateRegistry?: {
+    schemaVersion: string;
+    status: NonNullable<SiteSettings['frontendDesign']>['status'];
+    templateCount: number;
+    supportedTypes: Array<NonNullable<SiteSettings['frontendDesign']>['templates'][number]['type']>;
+    cloneField: string;
+    cloneTargets: Record<string, string>;
   };
   nextSteps: string[];
 }
