@@ -4804,9 +4804,11 @@ function MediaPage() {
                 </span>
               </div>
               {mediaAnalytics.providerRows.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                  Provider analytics will appear after assets are loaded.
-                </p>
+                <EmptyState
+                  icon={Cloud}
+                  title="No provider analytics yet"
+                  description="Upload or ingest media provider metrics to compare Backy-served requests, storage bytes, and direct CDN activity."
+                />
               ) : (
                 <div className="grid gap-2">
                   {mediaAnalytics.providerRows.map((row) => (
