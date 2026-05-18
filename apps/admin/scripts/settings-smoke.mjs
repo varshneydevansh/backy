@@ -60,6 +60,8 @@ const assertSettingsSourceContracts = () => {
     'Run a check after editing provider metadata to see which runtime pieces are ready, optional, or blocked.',
     'title="No storage probe has run yet"',
     'Run the storage probe to write a temporary file to the configured media provider, read it back, then delete it after changing storage environment variables or bucket policy.',
+    'title="No deployment history yet"',
+    'Run an infrastructure check to record the first deployment and domain readiness snapshot.',
     'title="No site settings updates yet"',
     'Save scoped SEO, analytics, localization, or comment policy changes to start this request-id audit trail.',
     'title="No matching settings audit events"',

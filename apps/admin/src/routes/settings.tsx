@@ -6597,8 +6597,12 @@ function InfrastructureSettings({
                   </span>
                 </div>
                 {deploymentHistory.length === 0 ? (
-                  <div className="mt-3 rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-                    Run an infrastructure check to record the first deployment/domain snapshot.
+                  <div className="mt-3">
+                    <EmptyState
+                      icon={Rocket}
+                      title="No deployment history yet"
+                      description="Run an infrastructure check to record the first deployment and domain readiness snapshot."
+                    />
                   </div>
                 ) : (
                   <div className="mt-3 grid gap-2">
