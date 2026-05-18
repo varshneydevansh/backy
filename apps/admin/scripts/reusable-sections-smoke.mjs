@@ -36,6 +36,13 @@ const assert = (condition, message) => {
   }
 };
 
+const assertReusableSectionsRouteSourceContract = () => {
+  const source = fs.readFileSync(new URL('../src/routes/reusable-sections.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Reusable sections route must use the shared EmptyState component for library empty states');
+  assert(source.includes("'No reusable sections yet'"), 'Reusable sections empty state must distinguish a new library from filtered results');
+  assert(source.includes('frontend handoff APIs'), 'Reusable sections empty state must explain the frontend handoff value');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -404,6 +411,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const seedBrowserSessionCookie = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -1056,6 +1075,7 @@ const main = async () => {
   let originalFrontendDesign;
 
   try {
+    assertReusableSectionsRouteSourceContract();
     await loginAdminApi();
     originalFrontendDesign = await getFrontendDesign();
     await patchFrontendDesign(smokeFrontendDesignContract());
@@ -1072,6 +1092,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToReusableSections(client);

@@ -46,6 +46,7 @@ import {
 import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
@@ -1700,9 +1701,15 @@ function ReusableSectionsRoute() {
           />
           <PanelContent>
             {filteredSections.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                No reusable sections match this view.
-              </div>
+              <EmptyState
+                icon={Layers3}
+                title={sections.length === 0 ? 'No reusable sections yet' : 'No reusable sections match this view'}
+                description={
+                  sections.length === 0
+                    ? 'Create reusable page sections to share complex blocks across the editor, published pages, and frontend handoff APIs.'
+                    : 'Try another search term or status filter to find a reusable page section.'
+                }
+              />
             ) : (
               <div className="grid gap-3">
                 {filteredSections.map((section) => {
