@@ -33,6 +33,7 @@ const listRouteFiles = (directory) =>
   });
 
 const routeSource = read("../src/app/api/admin/settings/route.ts");
+const adminContractSmokeSource = read("./admin-contract-smoke.mjs");
 const siteRouteSource = read(
   "../src/app/api/admin/sites/[siteId]/settings/route.ts",
 );
@@ -1148,6 +1149,17 @@ includesAll(
     "settings.notification_webhook.test",
   ],
   "Admin settings executable provider operation contract",
+);
+
+includesAll(
+  adminContractSmokeSource,
+  [
+    "providerCertificationRequiredInputs",
+    "missing provider certification required input",
+    "BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY",
+    "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
+  ],
+  "Admin settings runtime provider certification handoff contract",
 );
 
 includesAll(

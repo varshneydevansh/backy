@@ -7161,6 +7161,21 @@ try {
         json.data.settings.providerCertification.groups.some((group) => group.family === 'Commerce providers'),
       `${url} missing provider certification family coverage`,
     );
+    const providerCertificationRequiredInputs = json.data.settings.providerCertification.groups
+      .flatMap((group) => Array.isArray(group.requiredInputs) ? group.requiredInputs : []);
+    for (const requiredInput of [
+      'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+      'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
+      'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID',
+      'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
+      'BACKY_RESEND_API_KEY or RESEND_API_KEY',
+      'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    ]) {
+      assert(
+        providerCertificationRequiredInputs.includes(requiredInput),
+        `${url} missing provider certification required input ${requiredInput}`,
+      );
+    }
     originalDeliveryMode = json.data.settings.deliveryMode;
     originalSettingsIntegrations = json.data.settings.integrations || null;
   });

@@ -352,6 +352,8 @@ includesAll(
     'settings.media_storage.secret_manager',
     'settings.notification_webhook.test',
     'executable provider-operation actions for storage provisioning',
+    'providerCertificationRequiredInputs',
+    'missing provider certification required input',
   ],
   'Settings admin contract provider operation coverage',
 );
