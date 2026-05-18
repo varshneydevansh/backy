@@ -6,10 +6,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packagePath = path.resolve(__dirname, '../package.json');
 const smokePath = path.resolve(__dirname, 'editor-drag-smoke.mjs');
 const activeEditorContextPath = path.resolve(__dirname, '../src/components/editor/ActiveEditorContext.tsx');
+const propertyPanelPath = path.resolve(__dirname, '../src/components/editor/PropertyPanel.tsx');
 
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const smokeSource = fs.readFileSync(smokePath, 'utf8');
 const activeEditorContextSource = fs.readFileSync(activeEditorContextPath, 'utf8');
+const propertyPanelSource = fs.readFileSync(propertyPanelPath, 'utf8');
 const editorScripts = Object.entries(packageJson.scripts ?? {})
   .filter(([name]) => name.startsWith('test:editor'))
   .map(([name, command]) => ({ name, command }));
@@ -126,6 +128,10 @@ const missingTableStyleSetterGuards = [
   tableCellPathReaderCount < 3 ? `expected at least 3 table style cell-path reader calls, found ${tableCellPathReaderCount}` : '',
   tableCellPathLoopCount < 3 ? `expected at least 3 table style cell-path loops, found ${tableCellPathLoopCount}` : '',
 ].filter(Boolean);
+const propertyPanelTypecheckGuards = [
+  propertyPanelSource.includes('@ts-nocheck') ? 'PropertyPanel.tsx must stay under TypeScript checking' : '',
+  propertyPanelSource.includes('TODO: Fix prop type access') ? 'PropertyPanel.tsx must not carry the old prop typing TODO' : '',
+].filter(Boolean);
 
 if (
   missingEnvScripts.length ||
@@ -135,7 +141,8 @@ if (
   missingTableRangeSmokeSnippets.length ||
   missingResponsiveSmokeSnippets.length ||
   missingEditorMfaLoginSnippets.length ||
-  missingTableStyleSetterGuards.length
+  missingTableStyleSetterGuards.length ||
+  propertyPanelTypecheckGuards.length
 ) {
   console.error(JSON.stringify({
     ok: false,
@@ -147,6 +154,7 @@ if (
     missingResponsiveSmokeSnippets,
     missingEditorMfaLoginSnippets,
     missingTableStyleSetterGuards,
+    propertyPanelTypecheckGuards,
   }, null, 2));
   process.exit(1);
 }
@@ -160,4 +168,5 @@ console.log(JSON.stringify({
   tableRangeSmokeSnippets: 10,
   responsiveSmokeSnippets: 14,
   editorMfaLoginSnippets: 9,
+  propertyPanelTypecheckGuards: 2,
 }, null, 2));
