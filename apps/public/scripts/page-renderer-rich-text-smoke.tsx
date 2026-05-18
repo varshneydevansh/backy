@@ -205,7 +205,7 @@ const content: PageContent = {
         listType: 'number',
         listMarker: 'upper-alpha',
         listIndent: -12,
-        items: ['Discovery', '', 'Launch'],
+        items: ['Discovery', '', { text: 'Launch', indent: '99' }],
         fontSize: 16,
         color: '#334155',
       },
@@ -801,8 +801,9 @@ const styledList = html.match(/<div[^>]*data-element-id="styled-list"[\s\S]*?<\/
 assert(styledList.length > 0, `List output was not rendered: ${html}`);
 assert(styledList.includes('list-style-type:upper-alpha'), `List marker was not rendered: ${styledList}`);
 assert(styledList.includes('margin-left:0px'), `List negative indent was not clamped: ${styledList}`);
-assert((styledList.match(/<li>/g) || []).length === 3, `List empty item structure was not preserved: ${styledList}`);
+assert((styledList.match(/<li(?:\s|>)/g) || []).length === 3, `List empty item structure was not preserved: ${styledList}`);
 assert(styledList.includes('<li></li>'), `List blank item was not preserved: ${styledList}`);
+assert(styledList.includes('<li style="margin-left:192px">Launch</li>'), `List item indent was not clamped to depth 8: ${styledList}`);
 assert(html.includes('src="https://cdn.backy.test/hero.png"'), `Image src was not rendered: ${html}`);
 assert(html.includes('alt="Styled image alt"'), `Image alt was not rendered: ${html}`);
 assert(html.includes('object-fit:contain'), `Image object fit was not rendered: ${html}`);
