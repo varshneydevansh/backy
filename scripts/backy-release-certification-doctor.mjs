@@ -149,6 +149,7 @@ const settings = {
     vercelTeamExpected: has('BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID'),
   },
   checks: [
+    checkAny('Settings external admin key', ['BACKY_ADMIN_API_KEY', 'BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY'], requested('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED', false) && has('BACKY_SETTINGS_CERTIFICATION_BASE_URL')),
     ...storageChecks.map((item) => {
       const enabled = item.enabled && requested('BACKY_SETTINGS_CERTIFY_STORAGE', false);
       return { ...item, enabled, ready: enabled ? item.ready : true };
@@ -250,7 +251,10 @@ const commerce = {
     subscriptionProvider,
     webhookProvider,
   },
-  checks: commerceChecks,
+  checks: [
+    checkAny('Commerce external admin key', ['BACKY_ADMIN_API_KEY', 'BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY'], requested('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', false) && has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
+    ...commerceChecks,
+  ],
 };
 
 const collectFailures = (group) => group.checks

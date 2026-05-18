@@ -116,7 +116,7 @@ Before running the external gates, use the non-secret readiness doctor to see wh
 npm run doctor:release-certification
 ```
 
-Set `BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1` when you want that doctor to fail the command if a requested certification group is missing required variables.
+Set `BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1` when you want that doctor to fail the command if a requested certification group is missing required variables. For external Settings or Commerce targets, required mode also fails early when the matching deployed-target admin key alias is missing.
 For Commerce certification, required mode also fails when `BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1` is set but no `BACKY_COMMERCE_CERTIFY_*` provider group is selected.
 
 The release, standalone Settings provider, and standalone Commerce provider workflows run the same doctor after source preflights so every manual certification run leaves a safe readiness report in the GitHub logs before database or provider certification begins.

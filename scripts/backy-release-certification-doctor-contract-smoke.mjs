@@ -141,6 +141,66 @@ assert(
   'Doctor required Commerce mode should report commerce provider group selection failure.',
 );
 
+const missingSettingsExternalAdminKey = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFICATION_BASE_URL: 'https://backy-settings.example.test',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  missingSettingsExternalAdminKey.code === 1,
+  `Doctor external Settings mode should exit 1 without admin key, got ${missingSettingsExternalAdminKey.code}.`,
+);
+const missingSettingsExternalAdminKeyJson = parseJson(missingSettingsExternalAdminKey, 'missing Settings external admin key doctor');
+assert(missingSettingsExternalAdminKeyJson.ok === false, 'Doctor external Settings mode should report ok=false.');
+assert(
+  missingSettingsExternalAdminKeyJson.failures.includes('Settings external admin key'),
+  'Doctor external Settings mode should report Settings external admin key failure.',
+);
+
+const settingsExternalAdminAliasReady = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_NOTIFICATION: '1',
+  BACKY_SETTINGS_CERTIFICATION_BASE_URL: 'https://backy-settings.example.test',
+  BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY: 'settings-external-admin-key',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  settingsExternalAdminAliasReady.code === 0,
+  `Doctor external Settings mode should accept BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY, got ${settingsExternalAdminAliasReady.code}.`,
+);
+
+const missingCommerceExternalAdminKey = await runDoctor({
+  BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFY_TAX: '1',
+  BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'http',
+  BACKY_COMMERCE_CERTIFICATION_BASE_URL: 'https://backy-commerce.example.test',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  missingCommerceExternalAdminKey.code === 1,
+  `Doctor external Commerce mode should exit 1 without admin key, got ${missingCommerceExternalAdminKey.code}.`,
+);
+const missingCommerceExternalAdminKeyJson = parseJson(missingCommerceExternalAdminKey, 'missing Commerce external admin key doctor');
+assert(missingCommerceExternalAdminKeyJson.ok === false, 'Doctor external Commerce mode should report ok=false.');
+assert(
+  missingCommerceExternalAdminKeyJson.failures.includes('Commerce external admin key'),
+  'Doctor external Commerce mode should report Commerce external admin key failure.',
+);
+
+const commerceExternalAdminAliasReady = await runDoctor({
+  BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFY_TAX: '1',
+  BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: 'http',
+  BACKY_COMMERCE_CERTIFICATION_BASE_URL: 'https://backy-commerce.example.test',
+  BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY: 'commerce-external-admin-key',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  commerceExternalAdminAliasReady.code === 0,
+  `Doctor external Commerce mode should accept BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY, got ${commerceExternalAdminAliasReady.code}.`,
+);
+
 await assertMissingProvider({
   label: 'auto Razorpay payment partial credentials',
   env: {
