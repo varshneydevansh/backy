@@ -867,6 +867,30 @@ const assertProductsApiContractsSource = () => {
     source.includes('data-testid="products-api-contracts"'),
     "Products page must render API response contracts for custom frontends",
   );
+  assert(
+    source.includes('data-testid="products-provider-certification"'),
+    "Products page must render the live provider certification handoff",
+  );
+  assert(
+    source.includes("providerCertification") &&
+      source.includes("ci:commerce-provider-smoke") &&
+      source.includes("ci:commerce-provider-certification"),
+    "Products handoff manifest must expose mock and live provider certification gates",
+  );
+  for (const providerLabel of [
+    "TaxJar",
+    "Avalara",
+    "EasyPost",
+    "Shippo",
+    "Stripe promotion codes",
+    "Razorpay",
+    "Magento",
+  ]) {
+    assert(
+      source.includes(providerLabel),
+      `Products certification handoff must name ${providerLabel}`,
+    );
+  }
   for (const schemaVersion of [
     "backy.commerce-catalog.v1",
     "backy.commerce-order.v1",

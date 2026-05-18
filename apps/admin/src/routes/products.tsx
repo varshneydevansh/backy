@@ -164,6 +164,45 @@ const PRODUCT_API_CONTRACTS = [
   },
 ] as const;
 
+const PRODUCT_PROVIDER_CERTIFICATION_GROUPS = [
+  {
+    family: 'Payment and subscription checkout',
+    providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay'],
+    gate: 'ci:commerce-provider-certification',
+    evidence: 'Live payment, checkout, webhook, and subscription action credentials.',
+  },
+  {
+    family: 'Tax quote providers',
+    providers: ['Stripe Tax', 'TaxJar', 'Avalara', 'HTTP'],
+    gate: 'ci:commerce-provider-certification',
+    evidence: 'Live tax account credentials or a selected HTTP tax quote endpoint.',
+  },
+  {
+    family: 'Shipping rate and label providers',
+    providers: ['EasyPost', 'Shippo', 'HTTP'],
+    gate: 'ci:commerce-provider-certification',
+    evidence: 'Live carrier rate, label, and tracking credentials.',
+  },
+  {
+    family: 'Discount quote providers',
+    providers: ['Stripe promotion codes', 'HTTP'],
+    gate: 'ci:commerce-provider-certification',
+    evidence: 'Live promotion-code lookup credentials or selected HTTP discount endpoint.',
+  },
+  {
+    family: 'Catalog sync providers',
+    providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento', 'HTTP'],
+    gate: 'ci:commerce-provider-certification',
+    evidence: 'Live catalog credentials or a selected HTTP product sync endpoint.',
+  },
+  {
+    family: 'Mock provider regression',
+    providers: ['Local provider mocks'],
+    gate: 'ci:commerce-provider-smoke',
+    evidence: 'Repeatable local provider matrix without live credentials.',
+  },
+] as const;
+
 const PRODUCT_RECORD_PAGE_SIZE = 100;
 const COMMERCE_SIGNAL_RECORD_LIMIT = 100;
 
@@ -1318,6 +1357,20 @@ function ProductsRoute() {
     productCollection,
     products,
   ]);
+  const providerCertificationSummary = useMemo(() => ({
+    status: 'external-live-provider-gate',
+    selectedSiteId: activeSiteId,
+    localMockGate: 'ci:commerce-provider-smoke',
+    liveCertificationGate: 'ci:commerce-provider-certification',
+    secretHandling: 'Provider credentials stay in server environment/configuration; product records and handoff manifests only expose non-secret readiness evidence.',
+    groups: PRODUCT_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
+      family: group.family,
+      providers: [...group.providers],
+      gate: group.gate,
+      evidence: group.evidence,
+    })),
+  }), [activeSiteId]);
+
   const productHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1393,6 +1446,7 @@ function ProductsRoute() {
     providerExecution: {
       quoteProviders: 'Configured HTTP tax, shipping, and discount quote providers can adjust checkout totals before order persistence.',
       catalogSync: 'Product records can be synchronized to Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, or a configured HTTP catalog-sync provider from the Products workspace.',
+      providerCertification: providerCertificationSummary,
       reconciliation: {
         readiness: reconciliationReadiness,
         lastPreview: reconciliationResult
@@ -1607,6 +1661,7 @@ function ProductsRoute() {
     productCollection,
     productNotificationEvents,
     products,
+    providerCertificationSummary,
     publicBaseUrl,
     reconciliationReadiness,
     reconciliationResult,
@@ -3284,6 +3339,48 @@ function ProductsRoute() {
                     >
                       Open orders
                     </Link>
+                  </div>
+                </div>
+                <div data-testid="products-provider-certification" className="mt-3 rounded-lg border border-border bg-card p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Live provider certification</div>
+                      <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                        Mock-provider automation is repeatable through {providerCertificationSummary.localMockGate}. Live checkout, quote, catalog, webhook, and subscription certification remains gated on configured provider accounts through {providerCertificationSummary.liveCertificationGate}.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      External credentials
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="font-medium text-foreground">Mock gate</div>
+                      <div className="mt-1 font-mono text-[11px] text-muted-foreground">{providerCertificationSummary.localMockGate}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="font-medium text-foreground">Live gate</div>
+                      <div className="mt-1 font-mono text-[11px] text-muted-foreground">{providerCertificationSummary.liveCertificationGate}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="font-medium text-foreground">Secrets</div>
+                      <div className="mt-1 text-muted-foreground">Server env only</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {providerCertificationSummary.groups.map((group) => (
+                      <div key={group.family} className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                        <div className="font-medium text-foreground">{group.family}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {group.providers.map((provider) => (
+                            <span key={`${group.family}-${provider}`} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                              {provider}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-[11px] leading-4 text-muted-foreground">{group.evidence}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
