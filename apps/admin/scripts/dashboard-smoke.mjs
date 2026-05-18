@@ -21,6 +21,22 @@ const assert = (condition, message) => {
   }
 };
 
+const assertDashboardSourceContracts = () => {
+  const source = fs.readFileSync(new URL('../src/routes/index.tsx', import.meta.url), 'utf8');
+  for (const snippet of [
+    "schemaVersion: 'backy.dashboard-handoff.v1'",
+    'generatedAt: new Date().toISOString()',
+    'source: dashboard.source',
+    'attention: {',
+    'issueCount: issues.length',
+    'issues: issues.map',
+    'frontendHandoffText',
+    'Download JSON',
+  ]) {
+    assert(source.includes(snippet), `Dashboard handoff contract is missing ${snippet}`);
+  }
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -818,6 +834,7 @@ const main = async () => {
   const viewerEmail = `dashboard-viewer-${suffix}@example.com`;
 
   try {
+    assertDashboardSourceContracts();
     await loginAdminApi();
     const created = await createSite({ name: siteName, slug });
     siteId = created.publicSiteId || created.id;

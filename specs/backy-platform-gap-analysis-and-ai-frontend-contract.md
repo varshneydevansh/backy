@@ -124,7 +124,7 @@ Backy has the right direction but lacks the production maturity.
 
 ### Admin app
 
-- Dashboard: UI exists; needs backend metrics, onboarding, recent edits, publish status, alerts.
+- Dashboard: backend metrics, onboarding, recent activity, publish/readiness status, workflow alerts, API consumer readiness, persistence/deployment health, RBAC scoping, and a named downloadable `backy.dashboard-handoff.v1` contract are implemented; remaining dashboard risk belongs to the global production auth/RBAC, provider, and database rollout gates.
 - Sites: list/create/edit exists; needs real ownership, domain verification, status workflow, slug uniqueness.
 - Pages: list/new/edit exists; needs API-backed persistence, templates, slug tree, publish/revision flow.
 - Editor: useful action wiring exists; responsive overrides, layer controls, multi-select operations, composed presets, editor-level synced reusable-section instances, reusable-section instance propagation, and conflict-safe page saves are now implemented. Page editor saves send `expectedUpdatedAt`, stale saves return `PAGE_VERSION_CONFLICT`, and the editor renders a reload-latest recovery action. It still needs a canonical schema, shared renderer parity hardening, nested block confidence, and richer keyboard/undo QA.

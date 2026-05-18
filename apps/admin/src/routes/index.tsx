@@ -1409,6 +1409,8 @@ function Index() {
     vercel,
   ]);
   const frontendHandoff = useMemo(() => ({
+    schemaVersion: 'backy.dashboard-handoff.v1',
+    generatedAt: new Date().toISOString(),
     site: {
       id: activeSiteId,
       name: activeSite?.name || activeSiteId,
@@ -1418,12 +1420,23 @@ function Index() {
     },
     deliveryMode: dashboard.settings?.deliveryMode || 'unknown',
     health: {
+      source: dashboard.source,
       backend: backendHealthy ? 'reachable' : 'fallback',
       storage: storage ? { provider: storage.provider, configured: storage.configured, missing: storage.missing || [] } : null,
       database: database ? { provider: database.provider, configured: database.configured, missing: database.missing || [] } : null,
       supabase: supabase ? { configured: supabase.configured, missing: supabase.missing || [] } : null,
       vercel: vercel ? { configured: vercel.configured, missing: vercel.missing || [] } : null,
       readiness: { errors: readinessErrors, warnings: readinessWarnings },
+    },
+    attention: {
+      issueCount: issues.length,
+      issues: issues.map((issue) => ({
+        id: issue.id,
+        severity: issue.severity,
+        label: issue.label,
+        detail: issue.detail,
+        route: issue.to,
+      })),
     },
     publicEndpoints: frontendContractUrls,
     adminEndpoints: Object.fromEntries(adminContractUrlEntries),
@@ -1565,8 +1578,10 @@ function Index() {
     dashboard.posts.length,
     dashboard.settings?.deliveryMode,
     dashboard.sites.length,
+    dashboard.source,
     database,
     frontendContractUrls,
+    issues,
     ordersCollection,
     productsCollection,
     persistenceReadiness,
