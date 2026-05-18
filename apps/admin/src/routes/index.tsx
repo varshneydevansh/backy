@@ -1343,6 +1343,71 @@ function Index() {
     setSelectedSiteId(nextSiteId);
     navigate({ to: '/', search: { siteId: nextSiteId }, replace: true });
   };
+  const deploymentHealth = useMemo(() => {
+    const vercelSettings = dashboard.settings?.integrations?.vercel;
+    const persistedRuns = [...(vercelSettings?.deploymentHistory || [])].sort((first, second) => (
+      new Date(second.checkedAt).getTime() - new Date(first.checkedAt).getTime()
+    ));
+    const lastPersistedRun = persistedRuns[0];
+    const lastSessionRun = deploymentRuns[0];
+    const lastRun = lastSessionRun
+      ? {
+        status: lastSessionRun.status,
+        checkedAt: lastSessionRun.createdAt,
+        requestId: lastSessionRun.requestId,
+        targetUrl: lastSessionRun.targetUrl,
+        blocked: lastSessionRun.blocked,
+        warnings: lastSessionRun.warnings,
+        ready: lastSessionRun.ready,
+        source: 'session preflight',
+      }
+      : lastPersistedRun
+        ? {
+          status: lastPersistedRun.status,
+          checkedAt: lastPersistedRun.checkedAt,
+          requestId: lastPersistedRun.requestId,
+          targetUrl: lastPersistedRun.productionDomain || vercel?.url || '',
+          blocked: lastPersistedRun.blockedCount,
+          warnings: lastPersistedRun.warningCount,
+          ready: lastPersistedRun.readyCount,
+          source: 'settings history',
+        }
+        : null;
+    const targetDomain = vercel?.url || vercelSettings?.productionDomain || activeSite?.customDomain || (activeSite?.slug ? `${activeSite.slug}.backy.app` : '');
+    const projectConfigured = Boolean(vercel?.configured || vercelSettings?.projectId);
+    const deployTokenReady = !vercelSettings?.autoDeploy || Boolean(vercel?.tokenConfigured);
+    const domainConfigured = Boolean(targetDomain);
+    const deploymentEvents = dashboard.auditLogs.filter((log) => {
+      const action = log.action.toLowerCase();
+      const entity = log.entity.toLowerCase();
+      return action.includes('deploy') || action.includes('rebuild') || action.includes('cache') || action.includes('invalidation') || entity.includes('deploy');
+    }).length;
+    const readyCount = [projectConfigured, deployTokenReady, domainConfigured, Boolean(lastRun)].filter(Boolean).length;
+
+    return {
+      score: Math.round((readyCount / 4) * 100),
+      projectStatus: projectConfigured ? 'Configured' : 'Needs project metadata',
+      projectId: vercelSettings?.projectId || vercel?.projectId || '',
+      environment: vercel?.environment || 'unknown',
+      autoDeploy: Boolean(vercelSettings?.autoDeploy),
+      previewDeployments: vercelSettings?.previewDeployments !== false,
+      deployTokenReady,
+      targetDomain,
+      domainStatus: domainConfigured ? 'Domain present' : 'Missing domain',
+      lastRun,
+      lastDeployLabel: lastRun ? `${lastRun.status} on ${formatDate(lastRun.checkedAt)}` : 'No deploy check recorded',
+      cacheRebuildStatus: deploymentEvents > 0 || lastRun ? 'Audit/preflight recorded' : 'Not recorded',
+      deploymentEvents,
+      historyCount: persistedRuns.length + deploymentRuns.length,
+    };
+  }, [
+    activeSite?.customDomain,
+    activeSite?.slug,
+    dashboard.auditLogs,
+    dashboard.settings?.integrations?.vercel,
+    deploymentRuns,
+    vercel,
+  ]);
   const frontendHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1384,6 +1449,21 @@ function Index() {
       serviceRoleConfigured: persistenceReadiness.serviceRole,
       storageBucket: persistenceReadiness.storageBucket,
       missing: persistenceReadiness.missing,
+    },
+    deployment: {
+      score: deploymentHealth.score,
+      projectStatus: deploymentHealth.projectStatus,
+      projectId: deploymentHealth.projectId,
+      environment: deploymentHealth.environment,
+      autoDeploy: deploymentHealth.autoDeploy,
+      previewDeployments: deploymentHealth.previewDeployments,
+      deployTokenReady: deploymentHealth.deployTokenReady,
+      targetDomain: deploymentHealth.targetDomain,
+      domainStatus: deploymentHealth.domainStatus,
+      lastDeployLabel: deploymentHealth.lastDeployLabel,
+      cacheRebuildStatus: deploymentHealth.cacheRebuildStatus,
+      deploymentEvents: deploymentHealth.deploymentEvents,
+      historyCount: deploymentHealth.historyCount,
     },
     controlRoutes: {
       sites: '/sites',
@@ -1476,6 +1556,7 @@ function Index() {
     dashboard.comments,
     dashboard.contacts,
     dashboard.commerce,
+    deploymentHealth,
     dashboard.forms.length,
     dashboard.media.length,
     dashboard.moderation,
@@ -2424,6 +2505,106 @@ function Index() {
                   No deployment preflight has run in this dashboard session.
                 </div>
               )}
+            </div>
+          </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-border bg-card p-5 shadow-sm"
+          data-testid="dashboard-deployment-health"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Globe className="size-4 text-primary" />
+                <h2 className="font-semibold">Deployment health</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Vercel project status, last deploy check, domain verification, and cache or rebuild evidence for the active frontend target.
+              </p>
+            </div>
+            <Link
+              to="/settings"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              Deployment settings
+              <ArrowUpRight className="size-4" />
+            </Link>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Vercel project status</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Runtime project metadata, deploy token readiness, and deployment modes.
+                  </p>
+                </div>
+                <Globe className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Project" value={deploymentHealth.projectStatus} />
+                <SignalMetric label="Deploy token" value={deploymentHealth.deployTokenReady ? 'Ready' : 'Missing'} />
+                <SignalMetric label="Environment" value={deploymentHealth.environment} />
+                <SignalMetric label="Health score" value={`${deploymentHealth.score}%`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                deploymentHealth.score >= 75 ? 'border-success/25 bg-success/10 text-success' : 'border-warning/25 bg-warning/10 text-warning',
+              )}>
+                {deploymentHealth.projectId
+                  ? `Project ${deploymentHealth.projectId} is visible to Backy without exposing secrets.`
+                  : 'Add Vercel project metadata before enabling deploy orchestration.'}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Last deploy</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Latest persisted Settings deployment check or dashboard preflight run.
+                  </p>
+                </div>
+                <History className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Last status" value={deploymentHealth.lastRun?.status || 'None'} />
+                <SignalMetric label="Source" value={deploymentHealth.lastRun?.source || 'Not checked'} />
+                <SignalMetric label="Warnings" value={`${deploymentHealth.lastRun?.warnings ?? 0}`} />
+                <SignalMetric label="Blocked" value={`${deploymentHealth.lastRun?.blocked ?? 0}`} />
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {deploymentHealth.lastDeployLabel}
+                {deploymentHealth.lastRun?.requestId ? ` · ${deploymentHealth.lastRun.requestId}` : ''}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Domain and rebuild status</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Production domain presence plus cache invalidation or rebuild audit evidence.
+                  </p>
+                </div>
+                <RefreshCw className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Domain" value={deploymentHealth.domainStatus} />
+                <SignalMetric label="Auto deploy" value={deploymentHealth.autoDeploy ? 'Enabled' : 'Manual'} />
+                <SignalMetric label="Preview" value={deploymentHealth.previewDeployments ? 'Enabled' : 'Off'} />
+                <SignalMetric label="Cache/rebuild" value={deploymentHealth.cacheRebuildStatus} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                deploymentHealth.targetDomain ? 'border-success/25 bg-success/10 text-success' : 'border-warning/25 bg-warning/10 text-warning',
+              )}>
+                {deploymentHealth.targetDomain
+                  ? `Target domain: ${deploymentHealth.targetDomain}`
+                  : 'Set a production domain before custom frontend launch handoff.'}
+              </div>
             </div>
           </div>
         </section>

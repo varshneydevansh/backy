@@ -480,6 +480,11 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Deployment execution and history') &&
       document.body?.innerText?.includes('Run deployment preflight') &&
       document.body?.innerText?.includes('Preflight history'),
+    hasDeploymentHealth: Boolean(document.querySelector('[data-testid="dashboard-deployment-health"]')) &&
+      document.body?.innerText?.includes('Deployment health') &&
+      document.body?.innerText?.includes('Vercel project status') &&
+      document.body?.innerText?.includes('Last deploy') &&
+      document.body?.innerText?.includes('Domain and rebuild status'),
     hasOperationsSignals: Boolean(document.querySelector('[data-testid="dashboard-operations-signal-board"]')) &&
       document.body?.innerText?.includes('Operations signal board') &&
       document.body?.innerText?.includes('Commerce catalog') &&
@@ -530,6 +535,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasOnboarding &&
       layout.hasRbacScope &&
       layout.hasDeploymentHistory &&
+      layout.hasDeploymentHealth &&
       layout.hasOperationsSignals &&
       layout.hasCommerceHealth &&
       layout.hasModerationQueue &&
@@ -564,6 +570,7 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
       ['rbacScope', '[data-testid="dashboard-rbac-scope"]'],
       ['onboarding', '[data-testid="dashboard-onboarding-state"]'],
       ['deploymentHistory', '[data-testid="dashboard-deployment-history"]'],
+      ['deploymentHealth', '[data-testid="dashboard-deployment-health"]'],
       ['operationsSignals', '[data-testid="dashboard-operations-signal-board"]'],
       ['commerceHealth', '[data-testid="dashboard-commerce-health"]'],
       ['moderationQueue', '[data-testid="dashboard-moderation-queue"]'],
