@@ -1878,6 +1878,17 @@ const datasetResponsiveRenderCase = (collection, mode) => {
   };
 };
 
+const frontendDesignResponsiveRenderCase = () => ({
+  template: 'frontend-design',
+  label: 'frontend design template page',
+  minTotalElementCount: 3,
+  requiredElementIds: [
+    `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}`,
+    `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-heading`,
+    `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-editable-region`,
+  ],
+});
+
 const createStarterTemplateBackends = async (client, createdPageIds) => {
   const summaries = [];
 
@@ -1913,11 +1924,17 @@ const createFrontendDesignTemplateBackend = async (client, createdPageIds) => {
   const pageId = editState.path.split('/').filter(Boolean).at(-2);
   createdPageIds.push(pageId);
   const content = await assertFrontendDesignTemplatePageContent(pageId, slug, title);
+  const publicResponsiveRender = await assertPublicResponsivePageRender(
+    client,
+    pageId,
+    frontendDesignResponsiveRenderCase(),
+  );
 
   return {
     routeState: routeState.state,
     editState,
     pageId,
+    publicResponsiveRender,
     content,
   };
 };
