@@ -874,7 +874,8 @@ const assertProductsApiContractsSource = () => {
   assert(
     source.includes("providerCertification") &&
       source.includes("ci:commerce-provider-smoke") &&
-      source.includes("ci:commerce-provider-certification"),
+      source.includes("ci:commerce-provider-certification") &&
+      source.includes("requiredInputs"),
     "Products handoff manifest must expose mock and live provider certification gates",
   );
   for (const providerLabel of [
@@ -885,6 +886,12 @@ const assertProductsApiContractsSource = () => {
     "Stripe promotion codes",
     "Razorpay",
     "Magento",
+    "BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY",
+    "BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL",
+    "BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL",
+    "BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL",
+    "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
+    "Required inputs",
   ]) {
     assert(
       source.includes(providerLabel),
@@ -987,6 +994,9 @@ const assertCommerceProviderCertificationResponse = (commerce, label) => {
   const providers = groups.flatMap((group) =>
     Array.isArray(group.providers) ? group.providers : [],
   );
+  const requiredInputs = groups.flatMap((group) =>
+    Array.isArray(group.requiredInputs) ? group.requiredInputs : [],
+  );
   for (const family of [
     "Checkout and payment settlement",
     "Tax quote providers",
@@ -1015,6 +1025,21 @@ const assertCommerceProviderCertificationResponse = (commerce, label) => {
     assert(
       providers.includes(provider),
       `${label} provider certification missing provider ${provider}: ${JSON.stringify(certification)}`,
+    );
+  }
+  for (const requiredInput of [
+    "BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY",
+    "BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY",
+    "BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code",
+    "BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY",
+    "BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY",
+    "BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL",
+    "BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL",
+    "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
+  ]) {
+    assert(
+      requiredInputs.includes(requiredInput),
+      `${label} provider certification missing required input ${requiredInput}: ${JSON.stringify(certification)}`,
     );
   }
 };

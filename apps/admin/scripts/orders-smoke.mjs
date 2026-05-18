@@ -140,7 +140,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(
     source.includes('providerCertification') &&
       source.includes('ci:commerce-provider-smoke') &&
-      source.includes('ci:commerce-provider-certification'),
+      source.includes('ci:commerce-provider-certification') &&
+      source.includes('requiredInputs'),
     'Orders handoff manifest must expose mock and live provider certification gates',
   );
   for (const providerLabel of [
@@ -155,6 +156,13 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
     'Adyen refunds',
     'Mollie refunds',
     'Razorpay refunds',
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+    'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    'BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL',
+    'BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL',
+    'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+    'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+    'Required inputs',
   ]) {
     assert(source.includes(providerLabel), `Orders certification handoff must name ${providerLabel}`);
   }

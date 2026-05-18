@@ -174,6 +174,7 @@ export interface CommerceStorefrontContract {
       family: string;
       providers: string[];
       gate: 'ci:commerce-provider-certification' | 'ci:commerce-provider-smoke';
+      requiredInputs: string[];
       evidence: string;
     }>;
   };
@@ -308,42 +309,87 @@ const commerceProviderCertification = (): CommerceStorefrontContract['providerCe
       family: 'Checkout and payment settlement',
       providers: ['Stripe checkout', 'Stripe webhooks', 'PayPal', 'Square', 'Adyen', 'Mollie', 'Razorpay'],
       gate: 'ci:commerce-provider-certification',
+      requiredInputs: [
+        'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+        'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+        'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN',
+        'BACKY_ADYEN_API_KEY or ADYEN_API_KEY',
+        'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY',
+        'BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET',
+        'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+      ],
       evidence: 'Live payment credentials, signed webhook secrets, and provider settlement events.',
     },
     {
       family: 'Tax quote providers',
       providers: ['Stripe Tax', 'TaxJar', 'Avalara', 'HTTP'],
       gate: 'ci:commerce-provider-certification',
+      requiredInputs: [
+        'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+        'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+        'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+        'BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL',
+      ],
       evidence: 'Live tax account credentials or a selected HTTP tax quote endpoint.',
     },
     {
       family: 'Shipping rate, label, and tracking providers',
       providers: ['EasyPost', 'Shippo', 'HTTP'],
       gate: 'ci:commerce-provider-certification',
+      requiredInputs: [
+        'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+        'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+        'BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL',
+      ],
       evidence: 'Live carrier rate, label, void/refund, and tracking credentials.',
     },
     {
       family: 'Discount quote providers',
       providers: ['Stripe promotion codes', 'HTTP'],
       gate: 'ci:commerce-provider-certification',
+      requiredInputs: [
+        'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+        'configured Settings commerce discount provider endpoint',
+      ],
       evidence: 'Live promotion-code lookup credentials or selected HTTP discount endpoint.',
     },
     {
       family: 'Catalog sync providers',
       providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento', 'HTTP'],
       gate: 'ci:commerce-provider-certification',
+      requiredInputs: [
+        'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+        'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+        'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+        'BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN or SHOPIFY_ADMIN_ACCESS_TOKEN',
+        'BACKY_BIGCOMMERCE_ACCESS_TOKEN or BIGCOMMERCE_ACCESS_TOKEN',
+        'BACKY_WOOCOMMERCE_CONSUMER_KEY/SECRET or WOOCOMMERCE_CONSUMER_KEY/SECRET',
+        'BACKY_ETSY_ACCESS_TOKEN or ETSY_ACCESS_TOKEN',
+        'BACKY_MAGENTO_ACCESS_TOKEN or MAGENTO_ACCESS_TOKEN',
+        'BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL',
+      ],
       evidence: 'Live catalog credentials or a selected HTTP product sync endpoint.',
     },
     {
       family: 'Subscription lifecycle providers',
       providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'HTTP', 'Manual handoff'],
       gate: 'ci:commerce-provider-certification',
+      requiredInputs: [
+        'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+        'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+        'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+        'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN',
+        'BACKY_ADYEN_API_KEY or ADYEN_API_KEY',
+        'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY',
+        'BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL',
+      ],
       evidence: 'Live subscription pause, resume, cancel, webhook, renewal, dunning, and cancellation evidence.',
     },
     {
       family: 'Mock provider regression',
       providers: ['Local provider mocks'],
       gate: 'ci:commerce-provider-smoke',
+      requiredInputs: ['No live provider credentials required'],
       evidence: 'Repeatable checkout, quote, catalog, label, tracking, fulfillment, refund, webhook, and reconciliation coverage without live credentials.',
     },
   ],

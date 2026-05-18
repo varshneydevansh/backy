@@ -603,12 +603,17 @@ const commerceProviderCertification = {
       family: "Tax quote providers",
       providers: ["TaxJar", "Avalara"],
       gate: "ci:commerce-provider-certification",
+      requiredInputs: [
+        "BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY",
+        "BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code",
+      ],
       evidence: "Live tax account credentials.",
     },
     {
       family: "Mock provider regression",
       providers: ["Local provider mocks"],
       gate: "ci:commerce-provider-smoke",
+      requiredInputs: ["No live provider credentials required"],
       evidence: "Repeatable local provider coverage.",
     },
   ],

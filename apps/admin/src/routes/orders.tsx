@@ -643,36 +643,73 @@ const ORDER_PROVIDER_CERTIFICATION_GROUPS = [
     family: 'Checkout and payment settlement',
     providers: ['Stripe checkout', 'Stripe webhooks', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+      'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+      'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN',
+      'BACKY_ADYEN_API_KEY or ADYEN_API_KEY',
+      'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY',
+      'BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET',
+      'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    ],
     evidence: 'Live payment credentials, signed webhook secrets, and provider settlement events.',
   },
   {
     family: 'Quote recalculation',
     providers: ['HTTP tax', 'Stripe Tax', 'TaxJar', 'Avalara', 'HTTP shipping', 'EasyPost rates', 'Shippo rates', 'Stripe promotion codes'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+      'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+      'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+      'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+      'BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL',
+      'BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL',
+    ],
     evidence: 'Live tax, shipping-rate, and discount provider credentials or selected HTTP endpoints.',
   },
   {
     family: 'Carrier labels and tracking',
     providers: ['EasyPost labels', 'EasyPost tracking', 'Shippo labels', 'Shippo tracking'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+      'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+    ],
     evidence: 'Live carrier label purchase, void/refund, and tracking credentials.',
   },
   {
     family: 'Fulfillment dispatch',
     providers: ['HTTP warehouse', 'HTTP 3PL', 'Manual handoff'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'configured Settings commerce fulfillment provider endpoint',
+      'warehouse/3PL provider credential references',
+    ],
     evidence: 'Live warehouse/3PL endpoint credentials or an explicit manual operations path.',
   },
   {
     family: 'Provider refunds',
     providers: ['Stripe refunds', 'PayPal refunds', 'Paddle refunds', 'Square refunds', 'Adyen refunds', 'Mollie refunds', 'Razorpay refunds'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+      'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+      'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN',
+      'BACKY_ADYEN_API_KEY or ADYEN_API_KEY',
+      'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY',
+      'BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET',
+    ],
     evidence: 'Live refund credentials plus provider-specific reference formats and refresh/webhook behavior.',
   },
   {
     family: 'Mock provider regression',
     providers: ['Local provider mocks'],
     gate: 'ci:commerce-provider-smoke',
+    requiredInputs: ['No live provider credentials required'],
     evidence: 'Repeatable checkout, quote, label, tracking, fulfillment, refund, webhook, and reconciliation coverage without live credentials.',
   },
 ] as const;
@@ -1202,6 +1239,7 @@ function OrdersRoute() {
       family: group.family,
       providers: [...group.providers],
       gate: group.gate,
+      requiredInputs: [...group.requiredInputs],
       evidence: group.evidence,
     })),
   }), [activeSiteId]);
@@ -3184,6 +3222,16 @@ function OrdersRoute() {
                               {provider}
                             </span>
                           ))}
+                        </div>
+                        <div className="mt-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs</div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {group.requiredInputs.map((input) => (
+                              <span key={`${group.family}-${input}`} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                {input}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                         <div className="mt-2 text-[11px] leading-4 text-muted-foreground">{group.evidence}</div>
                       </div>

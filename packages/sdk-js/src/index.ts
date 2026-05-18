@@ -908,6 +908,7 @@ export interface BackyCommerceStorefrontContract {
       family: string;
       providers: string[];
       gate: "ci:commerce-provider-certification" | "ci:commerce-provider-smoke";
+      requiredInputs: string[];
       evidence: string;
       [key: string]: unknown;
     }>;

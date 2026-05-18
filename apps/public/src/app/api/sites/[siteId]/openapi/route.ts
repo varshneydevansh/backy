@@ -5438,7 +5438,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "array",
                   items: {
                     type: "object",
-                    required: ["family", "providers", "gate", "evidence"],
+                    required: ["family", "providers", "gate", "requiredInputs", "evidence"],
                     properties: {
                       family: { type: "string" },
                       providers: {
@@ -5451,6 +5451,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                           "ci:commerce-provider-certification",
                           "ci:commerce-provider-smoke",
                         ],
+                      },
+                      requiredInputs: {
+                        type: "array",
+                        items: { type: "string" },
                       },
                       evidence: { type: "string" },
                     },

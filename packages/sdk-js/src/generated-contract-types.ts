@@ -1636,6 +1636,7 @@ export type GeneratedBackyOpenApiCommerceProviderCertification = {
     family: string;
     providers: Array<string>;
     gate: "ci:commerce-provider-certification" | "ci:commerce-provider-smoke";
+    requiredInputs: Array<string>;
     evidence: string;
     [key: string]: unknown;
   }>;

@@ -169,36 +169,73 @@ const PRODUCT_PROVIDER_CERTIFICATION_GROUPS = [
     family: 'Payment and subscription checkout',
     providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+      'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+      'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN',
+      'BACKY_ADYEN_API_KEY or ADYEN_API_KEY',
+      'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY',
+      'BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET',
+      'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    ],
     evidence: 'Live payment, checkout, webhook, and subscription action credentials.',
   },
   {
     family: 'Tax quote providers',
     providers: ['Stripe Tax', 'TaxJar', 'Avalara', 'HTTP'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+      'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+      'BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL',
+    ],
     evidence: 'Live tax account credentials or a selected HTTP tax quote endpoint.',
   },
   {
     family: 'Shipping rate and label providers',
     providers: ['EasyPost', 'Shippo', 'HTTP'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+      'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+      'BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL',
+    ],
     evidence: 'Live carrier rate, label, and tracking credentials.',
   },
   {
     family: 'Discount quote providers',
     providers: ['Stripe promotion codes', 'HTTP'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'configured Settings commerce discount provider endpoint',
+    ],
     evidence: 'Live promotion-code lookup credentials or selected HTTP discount endpoint.',
   },
   {
     family: 'Catalog sync providers',
     providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento', 'HTTP'],
     gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+      'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+      'BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN or SHOPIFY_ADMIN_ACCESS_TOKEN',
+      'BACKY_BIGCOMMERCE_ACCESS_TOKEN or BIGCOMMERCE_ACCESS_TOKEN',
+      'BACKY_WOOCOMMERCE_CONSUMER_KEY/SECRET or WOOCOMMERCE_CONSUMER_KEY/SECRET',
+      'BACKY_ETSY_ACCESS_TOKEN or ETSY_ACCESS_TOKEN',
+      'BACKY_MAGENTO_ACCESS_TOKEN or MAGENTO_ACCESS_TOKEN',
+      'BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL',
+    ],
     evidence: 'Live catalog credentials or a selected HTTP product sync endpoint.',
   },
   {
     family: 'Mock provider regression',
     providers: ['Local provider mocks'],
     gate: 'ci:commerce-provider-smoke',
+    requiredInputs: ['No live provider credentials required'],
     evidence: 'Repeatable local provider matrix without live credentials.',
   },
 ] as const;
@@ -1367,6 +1404,7 @@ function ProductsRoute() {
       family: group.family,
       providers: [...group.providers],
       gate: group.gate,
+      requiredInputs: [...group.requiredInputs],
       evidence: group.evidence,
     })),
   }), [activeSiteId]);
@@ -3377,6 +3415,16 @@ function ProductsRoute() {
                               {provider}
                             </span>
                           ))}
+                        </div>
+                        <div className="mt-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs</div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {group.requiredInputs.map((input) => (
+                              <span key={`${group.family}-${input}`} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                {input}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                         <div className="mt-2 text-[11px] leading-4 text-muted-foreground">{group.evidence}</div>
                       </div>

@@ -57,6 +57,7 @@ function assertCommerceProviderCertification(commerce, label) {
   const groups = Array.isArray(certification.groups) ? certification.groups : [];
   const families = groups.map((group) => group.family);
   const providers = groups.flatMap((group) => (Array.isArray(group.providers) ? group.providers : []));
+  const requiredInputs = groups.flatMap((group) => (Array.isArray(group.requiredInputs) ? group.requiredInputs : []));
   for (const family of [
     'Checkout and payment settlement',
     'Tax quote providers',
@@ -80,6 +81,18 @@ function assertCommerceProviderCertification(commerce, label) {
     'Local provider mocks',
   ]) {
     assert(providers.includes(provider), `${label} missing certification provider ${provider}`);
+  }
+  for (const requiredInput of [
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+    'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+    'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+    'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+    'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+    'BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL',
+    'BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL',
+    'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+  ]) {
+    assert(requiredInputs.includes(requiredInput), `${label} missing certification required input ${requiredInput}`);
   }
 }
 
