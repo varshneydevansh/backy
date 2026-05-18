@@ -59,6 +59,13 @@ const getFrontendDesign = async () => {
   return frontendDesign;
 };
 
+const getFrontendDesignResponse = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
+  const frontendDesign = payload.data?.frontendDesign;
+  assert(frontendDesign?.schemaVersion === 'backy.frontend-design.v1', `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data;
+};
+
 const patchFrontendDesign = async (frontendDesign) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
     method: 'PATCH',
@@ -97,6 +104,40 @@ const getManifest = async () => {
   const payload = await requestApi(`/api/sites/${SITE_ID}/manifest`);
   assert(payload.data?.schemaVersion === 'backy.frontend-manifest.v1', `Manifest returned unexpected schema: ${JSON.stringify(payload).slice(0, 500)}`);
   return payload.data;
+};
+
+const assertTemplateRegistry = async () => {
+  const allPayload = await requestApi(`/api/admin/sites/${SITE_ID}/templates`);
+  const registry = allPayload.data?.registry;
+  assert(registry?.schemaVersion === 'backy.template-registry.v1', `Template registry returned unexpected schema: ${JSON.stringify(allPayload).slice(0, 500)}`);
+  assert(registry.templateCount === 6, `Template registry count was unexpected: ${registry.templateCount}`);
+  assert(registry.totalTemplateCount === 6, `Template registry total count was unexpected: ${registry.totalTemplateCount}`);
+  assert(registry.cloneField === 'frontendDesignTemplateId', `Template registry clone field was unexpected: ${registry.cloneField}`);
+  assert(registry.cloneTargets?.page === `/api/admin/sites/${SITE_ID}/pages`, 'Template registry missing page clone target');
+  assert(registry.cloneTargets?.blogPost === `/api/admin/sites/${SITE_ID}/blog`, 'Template registry missing blog clone target');
+  assert(registry.cloneTargets?.form === `/api/admin/sites/${SITE_ID}/forms`, 'Template registry missing form clone target');
+  assert(registry.cloneTargets?.section === `/api/admin/sites/${SITE_ID}/reusable-sections`, 'Template registry missing section clone target');
+  assert(registry.cloneTargets?.collection === `/api/admin/sites/${SITE_ID}/collections`, 'Template registry missing collection clone target');
+  assert(registry.cloneTargets?.product === `/api/admin/sites/${SITE_ID}/collections/products/records`, 'Template registry missing product clone target');
+
+  const pageTemplate = registry.templates?.find((template) => template.id === 'smoke-page-template');
+  assert(pageTemplate?.clone?.endpoint === registry.cloneTargets.page, `Template registry missing page clone payload: ${JSON.stringify(pageTemplate).slice(0, 500)}`);
+  assert(pageTemplate.clone.body?.frontendDesignTemplateId === 'smoke-page-template', 'Template registry page clone body missing frontendDesignTemplateId');
+  assert(pageTemplate.clone.body?.title === 'Smoke Page Template', 'Template registry page clone body missing title');
+  assert(pageTemplate.contentSummary?.elementCount > 0, 'Template registry page summary missing element count');
+
+  const formTemplate = registry.byType?.form?.[0];
+  assert(formTemplate?.clone?.body?.name === 'Smoke Form Template', `Template registry missing form clone name: ${JSON.stringify(formTemplate).slice(0, 500)}`);
+  assert(formTemplate.contentSummary?.fieldCount === 2, 'Template registry form summary missing field count');
+
+  const productTemplate = registry.byType?.product?.[0];
+  assert(productTemplate?.clone?.endpoint === registry.cloneTargets.product, `Template registry missing product clone target: ${JSON.stringify(productTemplate).slice(0, 500)}`);
+  assert(productTemplate.clone.body?.values?.title === 'Smoke Product Template', 'Template registry product clone body missing title value');
+
+  const filteredPayload = await requestApi(`/api/admin/sites/${SITE_ID}/templates?type=product&search=product`);
+  const filtered = filteredPayload.data?.registry;
+  assert(filtered?.templateCount === 1, `Filtered product template count was unexpected: ${JSON.stringify(filteredPayload).slice(0, 500)}`);
+  assert(filtered.templates?.[0]?.id === 'smoke-product-template', 'Filtered product template did not return smoke-product-template');
 };
 
 const getProductCollection = async () => {
@@ -296,6 +337,11 @@ const main = async () => {
   assert(unauthResponse.status === 401, `Frontend design API should reject missing auth, got ${unauthResponse.status}`);
   assert(unauthPayload?.success === false && unauthPayload?.error?.code === 'UNAUTHORIZED', `Frontend design API missing auth envelope: ${JSON.stringify(unauthPayload).slice(0, 500)}`);
 
+  const unauthTemplateResponse = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}/templates`);
+  const unauthTemplatePayload = await unauthTemplateResponse.json().catch(() => ({}));
+  assert(unauthTemplateResponse.status === 401, `Template registry API should reject missing auth, got ${unauthTemplateResponse.status}`);
+  assert(unauthTemplatePayload?.success === false && unauthTemplatePayload?.error?.code === 'UNAUTHORIZED', `Template registry API missing auth envelope: ${JSON.stringify(unauthTemplatePayload).slice(0, 500)}`);
+
   await loginAdminApi();
   const original = await getFrontendDesign();
   const unique = Date.now().toString(36);
@@ -329,8 +375,14 @@ const main = async () => {
       'Frontend design update audit log was not recorded',
     );
 
-    const afterPatch = await getFrontendDesign();
+    const frontendDesignResponse = await getFrontendDesignResponse();
+    assert(frontendDesignResponse.endpoints?.templates === `/api/admin/sites/${SITE_ID}/templates`, 'Frontend design response did not advertise template registry endpoint');
+    assert(frontendDesignResponse.templateRegistry?.schemaVersion === 'backy.template-registry.v1', 'Frontend design response missing template registry summary');
+    assert(frontendDesignResponse.templateRegistry?.templateCount === 6, 'Frontend design response template registry summary had unexpected template count');
+    assert(frontendDesignResponse.templateRegistry?.cloneField === 'frontendDesignTemplateId', 'Frontend design response missing template registry clone field');
+    const afterPatch = frontendDesignResponse.frontendDesign;
     assert(afterPatch.tokens?.colors?.primary === '#0f766e', 'GET did not persist patched color token');
+    await assertTemplateRegistry();
 
     const manifestAfterPatch = await getManifest();
     validateAiFrontendManifest({ success: true, requestId: 'frontend-design-smoke', data: manifestAfterPatch }, 'frontend design manifest after patch');
