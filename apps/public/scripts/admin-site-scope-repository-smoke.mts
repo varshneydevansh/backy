@@ -40,6 +40,7 @@ const coveredSiteRoutePrefixes = [
   'reusable-sections/import',
   'seo',
   'settings',
+  'templates',
 ];
 
 const listRouteKeys = (directory: string, prefix = ''): string[] => (
@@ -301,6 +302,11 @@ const main = async () => {
       permission: 'sites.view',
     },
     {
+      label: 'repository non-member nested template registry denied',
+      path: `/api/admin/sites/${site.id}/templates`,
+      permission: 'pages.view',
+    },
+    {
       label: 'repository non-member nested interactive components denied',
       path: `/api/admin/sites/${site.id}/interactive-components`,
       permission: 'pages.view',
@@ -348,6 +354,12 @@ const main = async () => {
     permission: 'media.view',
   });
 
+  await expectAllowed({
+    userId: 'repo-viewer',
+    path: `/api/admin/sites/${site.id}/templates`,
+    permission: 'pages.view',
+  });
+
   await expectForbiddenSiteScope({
     userId: 'repo-viewer',
     path: `/api/admin/sites/${site.id}/pages`,
@@ -368,6 +380,7 @@ const main = async () => {
       'repository non-member nested site settings read denied',
       'repository non-member nested site settings write denied',
       'repository viewer nested site read allowed by slug',
+      'repository viewer nested template registry read allowed',
       'repository viewer nested content write denied',
       'repository editor nested content write allowed',
     ],

@@ -35,6 +35,7 @@ const coveredSiteRoutePrefixes = [
   'reusable-sections/import',
   'seo',
   'settings',
+  'templates',
 ];
 
 function assert(condition, message) {
@@ -320,6 +321,11 @@ try {
     {
       label: 'non-member admin nested frontend-design read denied',
       path: `/api/admin/sites/${encodeURIComponent(site.id)}/frontend-design`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested template registry denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/templates`,
       init: { headers: scopedHeaders },
     },
     {
