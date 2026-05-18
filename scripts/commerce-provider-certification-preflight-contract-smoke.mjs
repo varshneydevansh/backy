@@ -384,6 +384,20 @@ includesAll(
 );
 
 includesAll(
+  apiContracts,
+  [
+    'provider: "etsy"',
+    'provider: "magento"',
+    'Magento/Adobe Commerce REST API products',
+    'backy.product-subscription-execution-readiness.v1` provider readiness for Stripe, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, generic HTTP, and manual handoff actions',
+    'executes Razorpay subscription pause/resume/cancel with Basic auth',
+    'BACKY_RAZORPAY_KEY_ID',
+    'BACKY_RAZORPAY_KEY_SECRET',
+  ],
+  'API contracts product provider sync and subscription provider matrix',
+);
+
+includesAll(
   setup,
   [
     'Commerce provider mock smoke',
