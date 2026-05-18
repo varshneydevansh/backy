@@ -26,6 +26,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST: ${{ inputs.database_expected_host }}
       BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE: ${{ inputs.database_expected_name }}
+      BACKY_RELEASE_CERTIFY_DATABASE: '1'
       BACKY_DATA_MODE: database
       BACKY_SDK_REQUIRE_DATABASE: '1'
       BACKY_ADMIN_API_KEY: sdk-postgres-smoke-${{ github.run_id }}-${{ github.run_attempt }}

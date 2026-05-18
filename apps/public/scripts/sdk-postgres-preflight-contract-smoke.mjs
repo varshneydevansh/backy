@@ -110,6 +110,7 @@ assert(
     sdkPostgresWorkflow.includes('database_expected_name:') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
+    sdkPostgresWorkflow.includes("BACKY_RELEASE_CERTIFY_DATABASE: '1'") &&
     sdkPostgresWorkflow.includes('Run non-secret database certification doctor') &&
     sdkPostgresWorkflow.includes('npm run doctor:release-certification') &&
     sdkPostgresWorkflow.includes('Write non-secret SDK database summary') &&
