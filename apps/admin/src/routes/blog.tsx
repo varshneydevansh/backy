@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X, MessageSquare } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X, MessageSquare, History } from 'lucide-react';
 import {
   AdminContentApiError,
   archiveBlogPost,
@@ -2549,7 +2549,15 @@ function BlogRevisionCell({
           <span>{formatDate(latest.createdAt)} · {latest.snapshotStatus}</span>
         </div>
       ) : (
-        <div className="text-xs text-muted-foreground">No saved snapshots yet.</div>
+        <div className="flex max-w-64 items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
+          <History className="mt-0.5 size-3.5 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <div className="font-medium text-foreground">No saved snapshots yet</div>
+            <div className="mt-0.5 leading-4">
+              Save this post in the editor to capture a rollback-ready revision.
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

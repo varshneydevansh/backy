@@ -30,6 +30,8 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   assert(source.includes('Create category terms to power blog archive navigation'), 'Blog categories empty state must explain frontend archive/filter value');
   assert(source.includes('title="No tags yet"'), 'Blog taxonomy manager must keep the tags empty-state title visible');
   assert(source.includes('Create tags to expose lightweight topic filters'), 'Blog tags empty state must explain frontend topic/filter value');
+  assert(source.includes('No saved snapshots yet'), 'Blog revision column must keep an explicit empty revision title visible');
+  assert(source.includes('Save this post in the editor to capture a rollback-ready revision.'), 'Blog revision empty state must explain how snapshots are captured');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
