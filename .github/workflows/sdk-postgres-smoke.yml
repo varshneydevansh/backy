@@ -30,6 +30,7 @@ jobs:
       BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1'
       BACKY_DATA_MODE: database
       BACKY_SDK_REQUIRE_DATABASE: '1'
+      BACKY_DATABASE_DISPOSABLE_CONFIRMED: ${{ inputs.disposable_database_confirmed }}
       BACKY_ADMIN_API_KEY: sdk-postgres-smoke-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:

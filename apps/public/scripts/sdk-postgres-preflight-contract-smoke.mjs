@@ -36,9 +36,11 @@ assert(
     manifestRoute.includes("localPreflight: 'npm run test:sdk-postgres-preflight-contract'") &&
     manifestRoute.includes("typeContract: 'npm run test:frontend-contract-types'") &&
     manifestRoute.includes("'BACKY_DATABASE_URL', 'DATABASE_URL'") &&
+    manifestRoute.includes("requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'") &&
     manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'") &&
     manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'") &&
     manifestRoute.includes('disposable_database_confirmed=true') &&
+    manifestRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
     manifestRoute.includes("'media'") &&
     manifestRoute.includes("'forms'") &&
     manifestRoute.includes("'interactive-components'") &&
@@ -52,9 +54,11 @@ assert(
     openApiRoute.includes('backy.frontend-database-certification.v1') &&
     openApiRoute.includes('npm run ci:sdk-postgres-smoke') &&
     openApiRoute.includes('npm run test:frontend-contract-types') &&
+    openApiRoute.includes('requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"') &&
     openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
     openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
     openApiRoute.includes('disposable_database_confirmed=true') &&
+    openApiRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
     openApiRoute.includes('"media"') &&
     openApiRoute.includes('"forms"') &&
     openApiRoute.includes('"interactive-components"') &&
@@ -69,6 +73,7 @@ assert(
     frontendManifestSchema.includes('"npm run test:frontend-contract-types"') &&
     frontendManifestSchema.includes('"BACKY_DATABASE_URL"') &&
     frontendManifestSchema.includes('"DATABASE_URL"') &&
+    frontendManifestSchema.includes('"requiredConfirmationEnv": { "const": "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true" }') &&
     frontendManifestSchema.includes('"version", "schemas", "databaseCertification"'),
   'Frontend manifest schema must require and type the database certification handoff.',
 );
@@ -78,6 +83,7 @@ assert(
     generatedSdkTypes.includes('"x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('"npm run ci:sdk-postgres-smoke"') &&
+    generatedSdkTypes.includes('requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"') &&
     generatedSdkTypes.includes('"npm run test:frontend-contract-types"'),
   'Generated SDK types must export the manifest/OpenAPI database certification contract.',
 );
@@ -90,6 +96,8 @@ assert(
     sdkSmokeCi.includes('requiredDatabaseIndexes') &&
     sdkSmokeCi.includes('requiredDatabaseConstraints') &&
     sdkSmokeCi.includes('assertExpectedDatabaseTarget') &&
+    sdkSmokeCi.includes('assertDisposableDatabaseConfirmed') &&
+    sdkSmokeCi.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true is required') &&
     sdkSmokeCi.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
     sdkSmokeCi.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
     sdkSmokeCi.includes('SDK Postgres certification expected database host') &&
@@ -130,6 +138,7 @@ assert(
   sdkSmoke.includes('manifest() missing database certification schema') &&
     sdkSmoke.includes('manifest() missing SDK Postgres certification command') &&
     sdkSmoke.includes('manifest() missing BACKY_DATABASE_URL certification alias') &&
+    sdkSmoke.includes('manifest() missing SDK Postgres disposable confirmation env requirement') &&
     sdkSmoke.includes('manifest() missing database expected-host guard') &&
     sdkSmoke.includes('manifest() missing disposable database confirmation requirement') &&
     sdkSmoke.includes('manifest() missing media database certification coverage') &&
@@ -138,6 +147,7 @@ assert(
     sdkSmoke.includes('manifest() missing non-secret database certification boundary') &&
     sdkSmoke.includes('openapi() database certification command drifted from manifest') &&
     sdkSmoke.includes('openapi() missing DATABASE_URL certification alias') &&
+    sdkSmoke.includes('openapi() missing SDK Postgres disposable confirmation env requirement') &&
     sdkSmoke.includes('openapi() missing disposable database confirmation requirement') &&
     sdkSmoke.includes('openapi() missing media database certification coverage') &&
     sdkSmoke.includes('openapi() missing forms database certification coverage') &&
@@ -229,7 +239,9 @@ assert(
 );
 
 assert(
-  rootPackage.includes('"ci:sdk-postgres-smoke": "npm run test:sdk-postgres-preflight-contract && BACKY_SDK_REQUIRE_DATABASE=1 node scripts/sdk-smoke-ci.mjs"') &&
+  rootPackage.includes('"test:sdk-postgres-disposable-guard": "node scripts/sdk-postgres-disposable-guard-smoke.mjs"') &&
+    rootPackage.includes('"ci:sdk-postgres-smoke": "npm run test:sdk-postgres-preflight-contract && npm run test:sdk-postgres-disposable-guard && BACKY_SDK_REQUIRE_DATABASE=1 node scripts/sdk-smoke-ci.mjs"') &&
+    rootPackage.includes('npm run test:sdk-postgres-disposable-guard && npm run test:settings-provider-certification-preflight-contract') &&
     sdkPostgresWorkflow.includes('Run SDK Postgres preflight contract') &&
     sdkPostgresWorkflow.includes('npm run test:sdk-postgres-preflight-contract') &&
     sdkPostgresWorkflow.includes('DATABASE_URL') &&
@@ -240,6 +252,7 @@ assert(
     sdkPostgresWorkflow.includes('database_expected_name:') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
     sdkPostgresWorkflow.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
+    sdkPostgresWorkflow.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED') &&
     sdkSmokeCi.includes('assertPostgresDatabaseUrl') &&
     sdkSmokeCi.includes('valid postgres:// or postgresql:// URL for the SDK database smoke') &&
     sdkPostgresWorkflow.includes("BACKY_RELEASE_CERTIFY_DATABASE: '1'") &&
@@ -268,8 +281,10 @@ assert(
 
 assert(
   sdkSmokeCi.indexOf('assertPostgresDatabaseUrl();') < sdkSmokeCi.indexOf('assertExpectedDatabaseTarget();') &&
+    sdkSmokeCi.indexOf('assertPostgresDatabaseUrl();') < sdkSmokeCi.indexOf('assertDisposableDatabaseConfirmed();') &&
+    sdkSmokeCi.indexOf('assertDisposableDatabaseConfirmed();') < sdkSmokeCi.indexOf('assertExpectedDatabaseTarget();') &&
     sdkSmokeCi.indexOf('assertExpectedDatabaseTarget();') < sdkSmokeCi.indexOf('await assertSdkDatabaseSchemaReady();'),
-  'SDK Postgres smoke must verify database URL format and expected database host/name before schema checks or runtime startup.',
+  'SDK Postgres smoke must verify database URL format, disposable confirmation, and expected database host/name before schema checks or runtime startup.',
 );
 
 assert(
@@ -280,15 +295,18 @@ assert(
 
 assert(
   sdkReadme.includes('BACKY_DATABASE_URL` or `DATABASE_URL` pointing at a disposable migrated Supabase/Postgres database') &&
+    sdkReadme.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
+    sdkReadme.includes('forwards `disposable_database_confirmed=true` to `BACKY_DATABASE_DISPOSABLE_CONFIRMED`') &&
     sdkReadme.includes('with the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias') &&
     sdkReadme.includes('coverage families for media, forms, and interactive components'),
-  'SDK README must document both database secret aliases for the disposable migrated Supabase/Postgres smoke.',
+  'SDK README must document both database secret aliases and the disposable confirmation env for the Supabase/Postgres smoke.',
 );
 
 assert(
   apiContracts.includes('forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database') &&
+    apiContracts.includes('against `BACKY_DATABASE_URL`/`DATABASE_URL` only after `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true`') &&
     apiContracts.includes('sdk-postgres-smoke.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database'),
-  'API contracts must document both database secret aliases for Forms and SDK Postgres manual gates.',
+  'API contracts must document both database secret aliases and the SDK disposable confirmation env for Postgres manual gates.',
 );
 
 assert(

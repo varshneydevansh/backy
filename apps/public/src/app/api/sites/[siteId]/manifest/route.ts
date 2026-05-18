@@ -98,6 +98,7 @@ const frontendDatabaseCertification = {
   environment: {
     dataMode: 'database',
     secretAliases: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+    requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
     targetGuards: [
       'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
       'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
@@ -105,6 +106,7 @@ const frontendDatabaseCertification = {
   },
   requires: [
     'disposable migrated Supabase/Postgres database',
+    'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
     'disposable_database_confirmed=true',
     'public schema, RLS policies, indexes, and constraints migrated',
   ],

@@ -313,6 +313,7 @@ const frontendDatabaseCertification = {
   environment: {
     dataMode: "database",
     secretAliases: ["BACKY_DATABASE_URL", "DATABASE_URL"],
+    requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true",
     targetGuards: [
       "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
       "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",

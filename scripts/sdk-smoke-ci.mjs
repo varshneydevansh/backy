@@ -17,6 +17,7 @@ const requireDatabaseMode = process.env.BACKY_SDK_REQUIRE_DATABASE === '1';
 const configuredDatabaseUrl = process.env.BACKY_DATABASE_URL || process.env.DATABASE_URL || '';
 const expectedDatabaseHost = (process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST || '').trim();
 const expectedDatabaseName = (process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE || '').trim();
+const sdkPostgresSelfTest = process.env.BACKY_SDK_POSTGRES_SMOKE_SELF_TEST === '1';
 const sdkSmokeMfaCode = process.env.BACKY_SDK_MFA_CODE
   || process.env.BACKY_ADMIN_CONTRACT_MFA_CODE
   || process.env.BACKY_ADMIN_MFA_CODE
@@ -37,6 +38,14 @@ const assertPostgresDatabaseUrl = () => {
   }
   if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
     throw new Error('BACKY_DATABASE_URL or DATABASE_URL must be a valid postgres:// or postgresql:// URL for the SDK database smoke.');
+  }
+};
+
+const assertDisposableDatabaseConfirmed = () => {
+  if (!requireDatabaseMode) return;
+  const confirmed = (process.env.BACKY_DATABASE_DISPOSABLE_CONFIRMED || '').trim().toLowerCase();
+  if (!['1', 'true', 'yes'].includes(confirmed)) {
+    throw new Error('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true is required after confirming the SDK Postgres smoke target is a disposable migrated Supabase/Postgres database.');
   }
 };
 
@@ -61,6 +70,17 @@ const shouldStartLocalServer = !externalBaseUrl;
 const localNextDistDir = '.next-sdk-smoke';
 
 assertPostgresDatabaseUrl();
+assertDisposableDatabaseConfirmed();
+
+if (sdkPostgresSelfTest) {
+  console.log(JSON.stringify({
+    ok: true,
+    mode: 'sdk-postgres-smoke-self-test',
+    databaseRequired: requireDatabaseMode,
+    disposableConfirmed: requireDatabaseMode,
+  }));
+  process.exit(0);
+}
 
 const assertExpectedDatabaseTarget = () => {
   if (!requireDatabaseMode) return;

@@ -33,6 +33,7 @@
               "items": { "enum": ["BACKY_DATABASE_URL", "DATABASE_URL"] },
               "contains": { "const": "BACKY_DATABASE_URL" }
             },
+            "requiredConfirmationEnv": { "const": "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true" },
             "targetGuards": {
               "type": "array",
               "items": {
@@ -43,7 +44,7 @@
               }
             }
           },
-          "required": ["dataMode", "secretAliases", "targetGuards"]
+          "required": ["dataMode", "secretAliases", "requiredConfirmationEnv", "targetGuards"]
         },
         "requires": {
           "type": "array",

@@ -2327,6 +2327,7 @@ export type GeneratedBackyFrontendManifestDatabaseCertification = {
   environment: {
     dataMode: "database";
     secretAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL">;
+    requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true";
     targetGuards: Array<"BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST" | "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE">;
     [key: string]: unknown;
   };

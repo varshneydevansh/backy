@@ -580,6 +580,7 @@ assert(manifest.data.contract?.databaseCertification?.gate?.localPreflight === '
 assert(manifest.data.contract?.databaseCertification?.environment?.dataMode === 'database', 'manifest() missing SDK Postgres database mode requirement');
 assert(manifest.data.contract?.databaseCertification?.environment?.secretAliases?.includes('BACKY_DATABASE_URL'), 'manifest() missing BACKY_DATABASE_URL certification alias');
 assert(manifest.data.contract?.databaseCertification?.environment?.secretAliases?.includes('DATABASE_URL'), 'manifest() missing DATABASE_URL certification alias');
+assert(manifest.data.contract?.databaseCertification?.environment?.requiredConfirmationEnv === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', 'manifest() missing SDK Postgres disposable confirmation env requirement');
 assert(manifest.data.contract?.databaseCertification?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'), 'manifest() missing database expected-host guard');
 assert(manifest.data.contract?.databaseCertification?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), 'manifest() missing database expected-name guard');
 assert(manifest.data.contract?.databaseCertification?.requires?.includes('disposable_database_confirmed=true'), 'manifest() missing disposable database confirmation requirement');
@@ -631,6 +632,7 @@ assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'open
 assert(openapi['x-backy-database-certification']?.schemaVersion === manifest.data.contract.databaseCertification.schemaVersion, 'openapi() missing database certification schema extension');
 assert(openapi['x-backy-database-certification']?.gate?.command === manifest.data.contract.databaseCertification.gate.command, 'openapi() database certification command drifted from manifest');
 assert(openapi['x-backy-database-certification']?.environment?.secretAliases?.includes('DATABASE_URL'), 'openapi() missing DATABASE_URL certification alias');
+assert(openapi['x-backy-database-certification']?.environment?.requiredConfirmationEnv === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', 'openapi() missing SDK Postgres disposable confirmation env requirement');
 assert(openapi['x-backy-database-certification']?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'), 'openapi() missing database expected-host guard');
 assert(openapi['x-backy-database-certification']?.requires?.includes('disposable_database_confirmed=true'), 'openapi() missing disposable database confirmation requirement');
 assert(openapi['x-backy-database-certification']?.coverage?.includes('media'), 'openapi() missing media database certification coverage');
