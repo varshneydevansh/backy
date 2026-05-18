@@ -146,9 +146,9 @@ assert(
   sdkSmokeCi.includes('Public can view published content collections') &&
     sdkSmokeCi.includes('Public can view published content collection records') &&
     sdkSmokeCi.includes('Public can view active published form definitions') &&
-    sdkSmokeCi.includes('Public can create active published form submissions') &&
+    sdkSmokeCi.includes('Service role can create form submissions') &&
     sdkSmokeCi.includes('Public can view approved active interactive components'),
-  'SDK Postgres smoke must preflight public read/create policies required by generated/custom frontends.',
+  'SDK Postgres smoke must preflight public read policies plus the service-role form submission write policy required by generated/custom frontends.',
 );
 
 assert(

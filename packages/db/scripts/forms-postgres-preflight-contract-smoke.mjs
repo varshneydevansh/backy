@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const files = {
   smoke: new URL('./forms-postgres-smoke.mjs', import.meta.url),
   migration: new URL('../../../supabase/migrations/002_forms_contacts_persistence.sql', import.meta.url),
+  hardeningMigration: new URL('../../../supabase/migrations/003_schema_parity_and_rls_hardening.sql', import.meta.url),
   workflow: new URL('../../../.github/workflows/forms-postgres-contract.yml', import.meta.url),
   rootPackage: new URL('../../../package.json', import.meta.url),
   adminFormsRoute: new URL('../../../apps/public/src/app/api/admin/sites/[siteId]/forms/route.ts', import.meta.url),
@@ -25,6 +26,7 @@ const includesEvery = (source, values, label) => {
 
 const smoke = await readFile(files.smoke, 'utf8');
 const migration = await readFile(files.migration, 'utf8');
+const hardeningMigration = await readFile(files.hardeningMigration, 'utf8');
 const workflow = await readFile(files.workflow, 'utf8').catch(() => '');
 const rootPackage = await readFile(files.rootPackage, 'utf8');
 const adminFormsRoute = await readFile(files.adminFormsRoute, 'utf8');
@@ -100,7 +102,7 @@ const formColumns = {
   ],
 };
 
-const policies = [
+const initialMigrationPolicies = [
   'Team members can view form definitions',
   'Public can view active published form definitions',
   'Editors can manage form definitions',
@@ -110,6 +112,12 @@ const policies = [
   'Team members can view form contacts',
   'Editors can manage form contacts',
 ];
+
+const policies = initialMigrationPolicies.map((policy) => (
+  policy === 'Public can create active published form submissions'
+    ? 'Service role can create form submissions'
+    : policy
+));
 
 const indexes = [
   'form_definitions_site_active_updated_idx',
@@ -177,7 +185,14 @@ for (const [table, columns] of Object.entries(formColumns)) {
 }
 
 includesEvery(smoke, policies, 'Forms Postgres smoke RLS policy contract');
-includesEvery(migration, policies, 'Forms migration RLS policies');
+includesEvery(migration, initialMigrationPolicies, 'Forms initial migration RLS policies');
+includesEvery(hardeningMigration, [
+  'DROP POLICY IF EXISTS "Public can create active published form submissions" ON public.form_submissions',
+  'CREATE POLICY "Service role can create form submissions"',
+  'ON public.form_submissions FOR INSERT',
+  'TO service_role',
+  'WITH CHECK (TRUE)',
+], 'Forms hardening migration service-role submission policy');
 includesEvery(smoke, indexes, 'Forms Postgres smoke index contract');
 includesEvery(migration, indexes, 'Forms migration indexes');
 includesEvery(smoke, constraints, 'Forms Postgres smoke constraint contract');
@@ -274,6 +289,7 @@ console.log(JSON.stringify({
   checked: {
     tables: formTables,
     policies: policies.length,
+    hardeningMigration: true,
     indexes: indexes.length,
     constraints: constraints.length,
     workflow: Boolean(workflow),

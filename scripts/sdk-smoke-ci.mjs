@@ -109,7 +109,7 @@ const requiredDatabasePolicies = {
   ],
   form_submissions: [
     'Team members can view form submissions',
-    'Public can create active published form submissions',
+    'Service role can create form submissions',
     'Editors can manage form submissions',
   ],
   form_contacts: [

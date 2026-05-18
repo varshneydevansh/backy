@@ -70,7 +70,7 @@ BACKY_DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms
 # or DATABASE_URL="postgresql://user:password@host:5432/backy" npm run ci:forms-postgres
 ```
 
-The smoke first checks the required Backy Forms/Contacts tables and columns, then creates a temporary site, page, form, submission, and contact, verifies read/update/filter/merge behavior through the database repositories, and deletes the temporary site afterward. GitHub Actions also exposes a manual **Forms Postgres Contract** workflow; configure the repository secret `BACKY_DATABASE_URL` or `DATABASE_URL` with a disposable migrated Supabase/Postgres database and set `disposable_database_confirmed=true` before running it.
+The smoke first checks the required Backy Forms/Contacts tables, columns, final RLS policies, indexes, and constraints, then creates a temporary site, page, form, submission, and contact, verifies read/update/filter/merge behavior through the database repositories, and deletes the temporary site afterward. GitHub Actions also exposes a manual **Forms Postgres Contract** workflow; configure the repository secret `BACKY_DATABASE_URL` or `DATABASE_URL` with a disposable migrated Supabase/Postgres database and set `disposable_database_confirmed=true` before running it.
 
 The SDK database-mode gate starts the public app in database mode and runs the generated/custom frontend contract smoke against the same configured database:
 
