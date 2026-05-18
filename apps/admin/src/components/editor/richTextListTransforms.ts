@@ -30,6 +30,33 @@ const readIndent = (value: unknown): number | undefined => {
   return Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, Math.floor(indent)));
 };
 
+const cloneNodeWithNormalizedListIndent = (value: unknown): unknown => {
+  const patchNode = (node: unknown): unknown => {
+    if (!isRecord(node)) {
+      return node;
+    }
+
+    const nextNode: Record<string, unknown> = { ...node };
+    const children = Array.isArray(nextNode.children) ? nextNode.children : null;
+    if (children) {
+      nextNode.children = children.map((child) => patchNode(child));
+    }
+
+    if (nextNode.type === 'li') {
+      const indent = readIndent(nextNode);
+      if (typeof indent === 'number') {
+        nextNode.indent = indent;
+      } else {
+        delete nextNode.indent;
+      }
+    }
+
+    return nextNode;
+  };
+
+  return patchNode(cloneNode(value));
+};
+
 const emptyListItem = () => ({
   type: 'li',
   children: [{ text: '' }],
@@ -92,7 +119,7 @@ export const toListItemNodes = (nodes: unknown[]): unknown[] => {
     }
 
     if (node.type === 'li') {
-      return [node];
+      return [cloneNodeWithNormalizedListIndent(node)];
     }
 
     const children = Array.isArray(node.children) ? node.children : null;
@@ -104,7 +131,7 @@ export const toListItemNodes = (nodes: unknown[]): unknown[] => {
 
       const nestedItems = children.flatMap((child) => {
         if (isRecord(child) && child.type === 'li') {
-          return [child];
+          return [cloneNodeWithNormalizedListIndent(child)];
         }
 
         return toListItemNodes([child]);
@@ -146,8 +173,9 @@ export const applyListTypeToNodes = (
           return node;
         }
 
+        const nextNode = cloneNodeWithNormalizedListIndent(node) as Record<string, unknown>;
         return {
-          ...node,
+          ...nextNode,
           type: format,
         };
       }),
@@ -190,16 +218,16 @@ export const applyListTypeToSelectedListItemNodes = (
         ));
 
         if (selectedIndex >= 0) {
-          const beforeItems = children.slice(0, selectedIndex).map((child) => cloneNode(child));
-          const selectedItem = cloneNode(children[selectedIndex]);
-          const afterItems = children.slice(selectedIndex + 1).map((child) => cloneNode(child));
+          const beforeItems = children.slice(0, selectedIndex).map((child) => cloneNodeWithNormalizedListIndent(child));
+          const selectedItem = cloneNodeWithNormalizedListIndent(children[selectedIndex]);
+          const afterItems = children.slice(selectedIndex + 1).map((child) => cloneNodeWithNormalizedListIndent(child));
 
           if (beforeItems.length > 0) {
-            nextNodes.push({ ...cloneNode(node), children: beforeItems });
+            nextNodes.push({ ...(cloneNodeWithNormalizedListIndent(node) as Record<string, unknown>), children: beforeItems });
           }
-          nextNodes.push({ ...cloneNode(node), type: format, children: [selectedItem] });
+          nextNodes.push({ ...(cloneNodeWithNormalizedListIndent(node) as Record<string, unknown>), type: format, children: [selectedItem] });
           if (afterItems.length > 0) {
-            nextNodes.push({ ...cloneNode(node), children: afterItems });
+            nextNodes.push({ ...(cloneNodeWithNormalizedListIndent(node) as Record<string, unknown>), children: afterItems });
           }
           didChange = true;
           continue;
@@ -244,7 +272,9 @@ export const moveSelectedListItemNodes = (
 
     if (listIndex >= 0) {
       const listNode = values[listIndex] as Record<string, unknown>;
-      const children = Array.isArray(listNode.children) ? listNode.children.map((child) => cloneNode(child)) : [];
+      const children = Array.isArray(listNode.children)
+        ? listNode.children.map((child) => cloneNodeWithNormalizedListIndent(child))
+        : [];
       const itemIndex = children.findIndex((child) => (
         listItemMatchesText(child, needle)
       ));
@@ -270,7 +300,7 @@ export const moveSelectedListItemNodes = (
         isRecord(values[adjacentIndex]) &&
         isListType((values[adjacentIndex] as Record<string, unknown>).type)
       ) {
-        const nextNodes = values.map((node) => cloneNode(node));
+        const nextNodes = values.map((node) => cloneNodeWithNormalizedListIndent(node));
         const selectedList = nextNodes[listIndex];
         nextNodes[listIndex] = nextNodes[adjacentIndex];
         nextNodes[adjacentIndex] = selectedList;

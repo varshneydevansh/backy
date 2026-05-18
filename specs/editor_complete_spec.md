@@ -453,6 +453,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### ✅ Rich-text list property parity
 - Extracted list content transforms into shared pure helpers so property-panel fallbacks preserve empty list rows and nested list item structure during list type changes.
+- List type-change and move helpers now normalize imported/raw list item indentation before re-persisting cloned nodes, so toolbar actions cannot restore out-of-contract depths after the render clamp.
 - Active editor list indent/outdent and package-level keyboard list shortcuts now remove `indent` at zero instead of persisting `indent: 0`, keeping indentation clamped and structurally stable.
 - Canvas preview and public rendering now preserve nested/indented Slate list items instead of flattening them to plain strings, including nested child items and object-backed item metadata.
 - Covered by `npm run test:rich-text-lists --workspace @backy-cms/admin`, `npm run typecheck --workspace @backy-cms/admin`, and `npm run test:inline-markdown --workspace @backy-cms/editor`.
