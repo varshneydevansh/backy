@@ -870,6 +870,7 @@ const assertProductsApiContractsSource = () => {
     "title={products.length === 0 ? 'No products yet' : 'No products match this view'}",
     'title="No subscription orders yet"',
     'title="No provider catalog run recorded"',
+    'title="No customer profiles yet"',
   ]) {
     assert(
       source.includes(emptyStateTitle),
@@ -879,6 +880,10 @@ const assertProductsApiContractsSource = () => {
   assert(
     source.includes('Save a product and run a provider sync to store checkout catalog metadata, handoff status, and provider product or price IDs.'),
     "Products provider-sync empty state must explain how catalog handoff metadata is created",
+  );
+  assert(
+    source.includes("Customer profiles are created automatically from checkout intake and stay in the private customers collection."),
+    "Products customer profiles empty state must explain checkout intake and private storage",
   );
   assert(
     source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),

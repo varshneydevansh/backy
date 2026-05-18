@@ -22,6 +22,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  Users,
 } from 'lucide-react';
 import {
   createCollection,
@@ -3862,9 +3863,11 @@ function ProductsRoute() {
                           </div>
                         </div>
                       )) : (
-                        <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                          Customer profiles are created automatically from checkout intake and stay in the private customers collection.
-                        </div>
+                        <EmptyState
+                          icon={Users}
+                          title="No customer profiles yet"
+                          description="Customer profiles are created automatically from checkout intake and stay in the private customers collection."
+                        />
                       )}
                     </div>
                     {selectedCustomerProfile && (
