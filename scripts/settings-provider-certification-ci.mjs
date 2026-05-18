@@ -37,6 +37,15 @@ if (requireCertification && !adminKey) {
   throw new Error('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 requires BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY.');
 }
 
+if (requireCertification && ![
+  certifyStorage,
+  certifyRotation,
+  certifyVercelSecrets,
+  certifyNotification,
+].some(Boolean)) {
+  throw new Error('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 requires at least one Settings certification group: BACKY_SETTINGS_CERTIFY_STORAGE, BACKY_SETTINGS_CERTIFY_ROTATION, BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS, or BACKY_SETTINGS_CERTIFY_NOTIFICATION.');
+}
+
 if (requireCertification && !externalBaseUrl) {
   const missing = [];
   if (

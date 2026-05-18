@@ -60,6 +60,7 @@ includesAll(
     'BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID',
     'BACKY_SETTINGS_CERTIFY_NOTIFICATION',
     'BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER',
+    'requires at least one Settings certification group',
     'validate-infrastructure',
     'media-storage-provisioning-probe',
     'media-storage-credential-rotation-probe',
