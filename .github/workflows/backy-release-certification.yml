@@ -364,12 +364,7 @@ jobs:
         run: npm ci
 
       - name: Run local release preflight contracts
-        run: |
-          npm run test:release-certification-preflight-contract
-          npm run test:forms-postgres-preflight-contract
-          npm run test:sdk-postgres-preflight-contract
-          npm run test:settings-provider-certification-preflight-contract
-          npm run test:commerce-provider-certification-preflight-contract
+        run: npm run test:partial-gate-preflights
 
       - name: Run non-secret release certification doctor
         run: npm run doctor:release-certification
