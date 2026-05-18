@@ -27,6 +27,18 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('Save a frontend design contract with page, blog, form, product, collection, or section templates to populate this registry.'), 'Site detail template registry empty state must explain how templates are captured');
   assert(source.includes('title="No site audit events yet"'), 'Site detail audit panel must keep the empty audit title visible');
   assert(source.includes('Save navigation, redirects, SEO, frontend design, or site settings to create request-id activity for this site.'), 'Site detail audit empty state must explain which actions populate activity');
+  assert(source.includes('title="No webhook endpoints configured"'), 'Site detail webhooks panel must keep the empty webhook title visible');
+  assert(source.includes('Add an endpoint to deliver site lifecycle, navigation, SEO, and form events to downstream systems.'), 'Site detail webhooks empty state must explain how to configure delivery');
+  assert(source.includes('title="No redirect or 410 rules configured"'), 'Site detail redirects panel must keep the empty redirects title visible');
+  assert(source.includes('Add a redirect rule to preserve old URLs, point traffic to new content, or mark retired paths as gone.'), 'Site detail redirects empty state must explain redirect setup');
+  assert(source.includes('title="No form selected"'), 'Site detail forms workspace must keep the empty form selection title visible');
+  assert(source.includes('Create a standalone form or choose an existing form from the Active Form selector to edit its fields and delivery settings.'), 'Site detail form selection empty state must explain how to start editing');
+  assert(source.includes('title="No submissions in the selected state"'), 'Site detail submissions panel must keep the filtered empty submissions title visible');
+  assert(source.includes('Submissions that match the active form and status filter will appear here after visitors complete the form.'), 'Site detail submissions empty state must explain filtered results');
+  assert(source.includes('title="No contacts in the selected state"'), 'Site detail contacts panel must keep the filtered empty contacts title visible');
+  assert(source.includes('Lead-share contacts that match the active form and status filter will appear here.'), 'Site detail contacts empty state must explain filtered contacts');
+  assert(source.includes('title="No comments in the selected state"'), 'Site detail comments panel must keep the filtered empty comments title visible');
+  assert(source.includes('Comments that match the active moderation status will appear here for review and bulk actions.'), 'Site detail comments empty state must explain filtered moderation results');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

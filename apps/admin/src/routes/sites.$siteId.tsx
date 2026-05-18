@@ -5629,9 +5629,11 @@ function EditSitePage() {
                 Loading webhooks...
               </div>
             ) : webhookState.endpoints.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-background px-4 py-6 text-sm text-muted-foreground">
-                No webhook endpoints configured.
-              </div>
+              <EmptyState
+                icon={Send}
+                title="No webhook endpoints configured"
+                description="Add an endpoint to deliver site lifecycle, navigation, SEO, and form events to downstream systems."
+              />
             ) : (
               webhookState.endpoints.map((endpoint, index) => (
                 <div
@@ -6762,8 +6764,12 @@ function EditSitePage() {
                   Loading redirect rules...
                 </div>
               ) : redirectState.rules.length === 0 ? (
-                <div className="min-w-[860px] px-3 py-8 text-center text-sm text-muted-foreground">
-                  No redirect or 410 rules configured.
+                <div className="min-w-[860px] p-4">
+                  <EmptyState
+                    icon={CornerDownRight}
+                    title="No redirect or 410 rules configured"
+                    description="Add a redirect rule to preserve old URLs, point traffic to new content, or mark retired paths as gone."
+                  />
                 </div>
               ) : (
                 <div className="min-w-[860px] divide-y divide-border">
@@ -8116,9 +8122,12 @@ function EditSitePage() {
                 ) : null}
 
                 {!formBuilderDraft ? (
-                  <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-6 text-sm text-muted-foreground">
-                    No form selected. Create a standalone form or choose an
-                    existing form from the Active Form selector.
+                  <div className="mt-4">
+                    <EmptyState
+                      icon={Users}
+                      title="No form selected"
+                      description="Create a standalone form or choose an existing form from the Active Form selector to edit its fields and delivery settings."
+                    />
                   </div>
                 ) : (
                   <fieldset
@@ -8806,9 +8815,11 @@ function EditSitePage() {
                       Loading submissions...
                     </div>
                   ) : state.submissions.length === 0 ? (
-                    <div className="text-sm text-muted-foreground py-4">
-                      No submissions in the selected state.
-                    </div>
+                    <EmptyState
+                      icon={Send}
+                      title="No submissions in the selected state"
+                      description="Submissions that match the active form and status filter will appear here after visitors complete the form."
+                    />
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
@@ -8971,9 +8982,11 @@ function EditSitePage() {
                       Loading contacts...
                     </div>
                   ) : state.contacts.length === 0 ? (
-                    <div className="text-sm text-muted-foreground py-4">
-                      No contacts in the selected state.
-                    </div>
+                    <EmptyState
+                      icon={Users}
+                      title="No contacts in the selected state"
+                      description="Lead-share contacts that match the active form and status filter will appear here."
+                    />
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
@@ -9367,9 +9380,11 @@ function EditSitePage() {
                       Loading comments...
                     </div>
                   ) : state.comments.length === 0 ? (
-                    <div className="text-sm text-muted-foreground py-4">
-                      No comments in the selected state.
-                    </div>
+                    <EmptyState
+                      icon={CircleSlash}
+                      title="No comments in the selected state"
+                      description="Comments that match the active moderation status will appear here for review and bulk actions."
+                    />
                   ) : (
                     <div className="space-y-3">
                       {state.comments.map((comment) => (
