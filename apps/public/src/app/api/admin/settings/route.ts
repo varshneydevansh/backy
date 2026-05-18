@@ -39,6 +39,60 @@ export const runtime = 'nodejs';
 const ADMIN_SETTINGS_SCHEMA = 'backy.admin-settings.v1';
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
+  {
+    family: 'Database and Supabase',
+    providers: ['Supabase/Postgres', 'Supabase Auth', 'Supabase Storage'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['BACKY_DATABASE_URL or DATABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'BACKY_SUPABASE_URL'],
+    evidence: 'Configured runtime diagnostics plus disposable database/storage/auth provider checks.',
+  },
+  {
+    family: 'Storage and media delivery',
+    providers: ['Local storage', 'Supabase Storage', 'S3/R2-compatible storage', 'Media scanner'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['BACKY_STORAGE_PROVIDER', 'BACKY_MEDIA_STORAGE_PROVIDER', 'AWS_ACCESS_KEY_ID', 'BACKY_MEDIA_SCAN_PROVIDER'],
+    evidence: 'Storage provisioning, read/write/list/stat probes, scanner readiness, and replacement credential rotation checks.',
+  },
+  {
+    family: 'Vercel deployment and secrets',
+    providers: ['Vercel project', 'Vercel team', 'Vercel domains', 'Vercel env secret manager'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['VERCEL_TOKEN or BACKY_VERCEL_TOKEN', 'BACKY_VERCEL_PROJECT_ID', 'BACKY_VERCEL_TEAM_ID'],
+    evidence: 'Project metadata, deployment diagnostics, and non-secret env secret-manager planning evidence.',
+  },
+  {
+    family: 'Notifications',
+    providers: ['Webhook', 'Resend', 'SMTP', 'Local outbox'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: ['BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL', 'RESEND_API_KEY', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD'],
+    evidence: 'Configured provider readiness plus test-notification delivery proof for the selected channel.',
+  },
+  {
+    family: 'Commerce providers',
+    providers: ['Stripe', 'TaxJar', 'Avalara', 'EasyPost', 'Shippo', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento'],
+    gate: 'npm run ci:commerce-provider-certification',
+    requiredInputs: ['STRIPE_SECRET_KEY', 'TAXJAR_API_KEY', 'COMMERCE_WEBHOOK_SECRET', 'provider-specific catalog/payment credentials'],
+    evidence: 'Payment, tax, shipping, catalog, subscription, refund, and webhook provider readiness for selected live families.',
+  },
+] as const;
+
+const providerCertificationContract = () => ({
+  status: 'external-live-provider-gate',
+  settingsGate: 'npm run ci:settings-provider-certification',
+  commerceGate: 'npm run ci:commerce-provider-certification',
+  localPreflight: 'npm run test:settings-provider-certification-preflight-contract',
+  releasePreflight: 'npm run test:release-certification-preflight-contract',
+  secretHandling: 'Provider credentials stay in deployment or CI environment variables; admin settings responses only expose non-secret provider families, gate names, and readiness evidence.',
+  groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
+    family: group.family,
+    providers: [...group.providers],
+    gate: group.gate,
+    requiredInputs: [...group.requiredInputs],
+    evidence: group.evidence,
+  })),
+});
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
     {
@@ -768,6 +822,7 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
     runtimeNotifications: getNotificationRuntimeSummary(),
     runtimeCommerce: getCommerceRuntimeSummary(settings),
     runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary(),
+    providerCertification: providerCertificationContract(),
     updatedAt: settings.updatedAt,
   };
 };

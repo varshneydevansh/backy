@@ -181,6 +181,13 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('runtimeVercel: getVercelRuntimeSummary()'), 'Admin settings response must include Vercel runtime diagnostics');
   assert(source.includes('runtimeCommerce: getCommerceRuntimeSummary(settings)'), 'Admin settings response must include commerce runtime diagnostics');
   assert(source.includes('runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary()'), 'Admin settings response must include interactive runtime diagnostics');
+  assert(source.includes('providerCertification: providerCertificationContract()'), 'Admin settings response must include provider certification metadata');
+  assert(source.includes('external-live-provider-gate'), 'Admin settings provider certification must expose external live-provider status');
+  assert(source.includes('npm run ci:settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider gate');
+  assert(source.includes('npm run ci:commerce-provider-certification'), 'Admin settings provider certification must expose the Commerce provider gate');
+  for (const providerLabel of ['Supabase/Postgres', 'Vercel env secret manager', 'Resend', 'COMMERCE_WEBHOOK_SECRET', 'Magento']) {
+    assert(source.includes(providerLabel), `Admin settings provider certification must name ${providerLabel}`);
+  }
   assert(source.includes('validateSecretReferencePolicy(integrations)'), 'Admin settings route must enforce secret-reference validation');
   assert(source.includes('SECRET_REFERENCE_REQUIRED'), 'Admin settings route must reject raw secret-like values with a stable error code');
   assert(source.includes('validateCommerceProviderEndpoints(integrations)'), 'Admin settings route must validate provider endpoint URLs');
@@ -7132,6 +7139,15 @@ try {
     assert(Array.isArray(json?.data?.settings?.runtimeVercel?.missing), `${url} missing runtime Vercel missing list`);
     assert(!JSON.stringify(json.data.settings.runtimeStorage).includes('SECRET'), `${url} exposed storage secret names or values`);
     assert(!JSON.stringify(json.data.settings.runtimeSupabase).includes('SERVICE_ROLE'), `${url} exposed Supabase secret env names or values`);
+    assert(json?.data?.settings?.providerCertification?.status === 'external-live-provider-gate', `${url} missing provider certification status`);
+    assert(json?.data?.settings?.providerCertification?.settingsGate === 'npm run ci:settings-provider-certification', `${url} missing Settings provider certification gate`);
+    assert(json?.data?.settings?.providerCertification?.commerceGate === 'npm run ci:commerce-provider-certification', `${url} missing Commerce provider certification gate`);
+    assert(Array.isArray(json?.data?.settings?.providerCertification?.groups), `${url} missing provider certification groups`);
+    assert(
+      json.data.settings.providerCertification.groups.some((group) => group.family === 'Database and Supabase') &&
+        json.data.settings.providerCertification.groups.some((group) => group.family === 'Commerce providers'),
+      `${url} missing provider certification family coverage`,
+    );
     originalDeliveryMode = json.data.settings.deliveryMode;
     originalSettingsIntegrations = json.data.settings.integrations || null;
   });
