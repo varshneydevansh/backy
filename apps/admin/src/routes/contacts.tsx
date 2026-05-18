@@ -2552,21 +2552,19 @@ function ContactsRoute() {
               </div>
             </div>
           ) : (
-            <div id="contacts-api" className="mb-5 rounded-lg border border-dashed border-border bg-muted/30 p-4 scroll-mt-24">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <Code2 className="size-4" />
-                    Contact pipeline API
+            <div id="contacts-api" className="mb-5 scroll-mt-24">
+              <EmptyState
+                icon={Code2}
+                title="No contact API form selected"
+                description="Select one source form to expose its contact list and update endpoints. The all-forms view is an admin aggregate."
+                action={(
+                  <div className="mt-2">
+                    <Button variant="outline" onClick={openFormsWorkspace} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<Mail className="size-4" />}>
+                      Configure forms
+                    </Button>
                   </div>
-                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                    Select one source form to expose its contact list and update endpoints. The all-forms view is an admin aggregate.
-                  </p>
-                </div>
-                <Button variant="outline" onClick={openFormsWorkspace} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<Mail className="size-4" />}>
-                  Configure forms
-                </Button>
-              </div>
+                )}
+              />
             </div>
           )}
 

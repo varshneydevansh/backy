@@ -30,6 +30,8 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
   assert(source.includes('Save a filtered contact view to reuse lead segments'), 'Contacts saved-lists empty state must explain what saved views unlock');
   assert(source.includes('title="No contact audit activity yet"'), 'Contacts audit panel must keep the audit empty-state title visible');
   assert(source.includes('Contact imports, lifecycle changes, merges, promotions, syncs, and retention actions will appear here'), 'Contacts audit empty state must explain what will populate the audit log');
+  assert(source.includes('title="No contact API form selected"'), 'Contacts API panel must keep the no-form-selected empty-state title visible');
+  assert(source.includes('Select one source form to expose its contact list and update endpoints. The all-forms view is an admin aggregate.'), 'Contacts API empty state must explain why one source form is required');
   assert(source.includes('title="No contacts match this view"'), 'Contacts inbox filter empty state must keep the shared title visible');
   assert(source.includes('Change the search, form, lifecycle, or lead quality filters to broaden the inbox.'), 'Contacts inbox filter empty state must explain how to recover from filters');
 };
