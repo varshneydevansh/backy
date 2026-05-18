@@ -683,6 +683,39 @@ const createSmokePage = async () => {
                   underline: true,
                 },
               },
+              {
+                id: 'smoke-nested-box',
+                type: 'box',
+                x: 208,
+                y: 116,
+                width: 100,
+                height: 82,
+                zIndex: 3,
+                props: {
+                  backgroundColor: '#e0f2fe',
+                  borderRadius: 6,
+                  borderColor: '#38bdf8',
+                  borderWidth: 1,
+                },
+                children: [
+                  {
+                    id: 'smoke-grandchild-button',
+                    type: 'button',
+                    x: 12,
+                    y: 18,
+                    width: 76,
+                    height: 34,
+                    zIndex: 1,
+                    props: {
+                      label: 'Deep CTA',
+                      backgroundColor: '#0f172a',
+                      color: '#ffffff',
+                      borderRadius: 5,
+                      fontSize: 12,
+                    },
+                  },
+                ],
+              },
             ],
           },
           {
@@ -13199,6 +13232,14 @@ const assertPersistedBoxBehavior = async (pageId) => {
   assert(props.margin === 4, `Persisted box margin mismatch: ${JSON.stringify(props)}`);
   assert(props.boxShadow === '0 10px 20px rgba(8, 145, 178, 0.25)', `Persisted box shadow mismatch: ${JSON.stringify(props)}`);
   assert(Array.isArray(box.children) && box.children.some((child) => child.id === 'smoke-child-button'), `Persisted box nested child missing: ${JSON.stringify(box)}`);
+  const nestedBox = findCanvasElement(box.children, 'smoke-nested-box');
+  const grandchildButton = findCanvasElement(box.children, 'smoke-grandchild-button');
+  assert(nestedBox?.type === 'box', `Persisted multi-level nested box missing: ${JSON.stringify(box)}`);
+  assert(
+    Array.isArray(nestedBox.children) && nestedBox.children.some((child) => child.id === 'smoke-grandchild-button'),
+    `Persisted grandchild button missing from nested box: ${JSON.stringify(nestedBox)}`,
+  );
+  assert(grandchildButton?.type === 'button', `Persisted grandchild button type mismatch: ${JSON.stringify(grandchildButton)}`);
 
   return props;
 };
@@ -13967,7 +14008,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-nested-box', 'smoke-grandchild-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
     if (LIBRARY_SMOKE) {
       assert(!EDITOR_PATH, 'Component library smoke currently requires an internally created smoke page');
@@ -14416,6 +14457,30 @@ const main = async () => {
           expectedWidth: 220,
           testLayerOverride: false,
         }),
+        nestedBoxMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-nested-box', {
+          breakpoint: 'mobile',
+          expectedX: 210,
+          expectedWidth: 118,
+          testLayerOverride: false,
+        }),
+        nestedBoxTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-nested-box', {
+          breakpoint: 'tablet',
+          expectedX: 230,
+          expectedWidth: 138,
+          testLayerOverride: false,
+        }),
+        grandchildButtonMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-grandchild-button', {
+          breakpoint: 'mobile',
+          expectedX: 18,
+          expectedWidth: 88,
+          testLayerOverride: false,
+        }),
+        grandchildButtonTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-grandchild-button', {
+          breakpoint: 'tablet',
+          expectedX: 24,
+          expectedWidth: 98,
+          testLayerOverride: false,
+        }),
         checkboxMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-checkbox', {
           breakpoint: 'mobile',
           expectedX: 30,
@@ -14474,6 +14539,8 @@ const main = async () => {
           'smoke-interactive',
           'smoke-code-component',
           'smoke-child-button',
+          'smoke-nested-box',
+          'smoke-grandchild-button',
           'smoke-select',
           'smoke-checkbox',
           'smoke-radio',
@@ -14809,6 +14876,50 @@ const main = async () => {
               testLayerOverride: false,
             },
           ),
+          nestedBoxMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-nested-box',
+            {
+              breakpoint: 'mobile',
+              expectedX: 210,
+              expectedWidth: 118,
+              testLayerOverride: false,
+            },
+          ),
+          nestedBoxTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-nested-box',
+            {
+              breakpoint: 'tablet',
+              expectedX: 230,
+              expectedWidth: 138,
+              testLayerOverride: false,
+            },
+          ),
+          grandchildButtonMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-grandchild-button',
+            {
+              breakpoint: 'mobile',
+              expectedX: 18,
+              expectedWidth: 88,
+              testLayerOverride: false,
+            },
+          ),
+          grandchildButtonTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-grandchild-button',
+            {
+              breakpoint: 'tablet',
+              expectedX: 24,
+              expectedWidth: 98,
+              testLayerOverride: false,
+            },
+          ),
           checkboxMobile: await assertResponsiveBreakpointEditing(
             reloadClient,
             tempPageId,
@@ -14948,6 +15059,14 @@ const main = async () => {
           reloadedResponsiveEditing.childButtonMobile.breakpointAfter.width === responsiveEditing.childButtonMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.childButtonTablet.breakpointAfter.x === responsiveEditing.childButtonTablet.breakpointAfter.x &&
           reloadedResponsiveEditing.childButtonTablet.breakpointAfter.width === responsiveEditing.childButtonTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.nestedBoxMobile.breakpointAfter.x === responsiveEditing.nestedBoxMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.nestedBoxMobile.breakpointAfter.width === responsiveEditing.nestedBoxMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.nestedBoxTablet.breakpointAfter.x === responsiveEditing.nestedBoxTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.nestedBoxTablet.breakpointAfter.width === responsiveEditing.nestedBoxTablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.grandchildButtonMobile.breakpointAfter.x === responsiveEditing.grandchildButtonMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.grandchildButtonMobile.breakpointAfter.width === responsiveEditing.grandchildButtonMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.grandchildButtonTablet.breakpointAfter.x === responsiveEditing.grandchildButtonTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.grandchildButtonTablet.breakpointAfter.width === responsiveEditing.grandchildButtonTablet.breakpointAfter.width &&
           reloadedResponsiveEditing.checkboxMobile.breakpointAfter.x === responsiveEditing.checkboxMobile.breakpointAfter.x &&
           reloadedResponsiveEditing.checkboxMobile.breakpointAfter.width === responsiveEditing.checkboxMobile.breakpointAfter.width &&
           reloadedResponsiveEditing.checkboxTablet.breakpointAfter.x === responsiveEditing.checkboxTablet.breakpointAfter.x &&
@@ -15170,6 +15289,38 @@ const main = async () => {
           elementId: 'smoke-child-button',
           expectedX: 76,
           expectedWidth: 220,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'nestedBoxMobile',
+          label: 'Public mobile nested box responsive geometry',
+          elementId: 'smoke-nested-box',
+          expectedX: 210,
+          expectedWidth: 118,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'nestedBoxTablet',
+          label: 'Public tablet nested box responsive geometry',
+          elementId: 'smoke-nested-box',
+          expectedX: 230,
+          expectedWidth: 138,
+          viewport: { width: 820, height: 1024 },
+        },
+        {
+          key: 'grandchildButtonMobile',
+          label: 'Public mobile grandchild button responsive geometry',
+          elementId: 'smoke-grandchild-button',
+          expectedX: 18,
+          expectedWidth: 88,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'grandchildButtonTablet',
+          label: 'Public tablet grandchild button responsive geometry',
+          elementId: 'smoke-grandchild-button',
+          expectedX: 24,
+          expectedWidth: 98,
           viewport: { width: 820, height: 1024 },
         },
         {
@@ -15526,7 +15677,7 @@ const main = async () => {
 
       const dataBindingQueryControls = await testCollectionDataBindingControls(client, tempCollection.id);
       const repeaterControls = await testRepeaterControls(client, tempCollection.id);
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-nested-box', 'smoke-grandchild-button', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       const expectedState = await readEditorElementState(client, elementIds);
       const preSaveStatus = await readEditorSaveStatus(client);
       const savedStatus = await waitForEditorSaveStatus(
@@ -15699,7 +15850,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-nested-box', 'smoke-grandchild-button', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -15845,7 +15996,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-child-button', 'smoke-nested-box', 'smoke-grandchild-button', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
