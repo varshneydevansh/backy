@@ -176,9 +176,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Public rendering applies responsive overrides from the rendered container width
 - `test:editor-drag` verifies mobile and tablet layout plus layer visibility/lock override persistence, group-level reset/inheritance controls, desktop layout preservation, breakpoint switching, and reload hydration across text, image, and box/nested-container elements
 - Responsive smoke verifies mobile/tablet CSS and canvas-relative visual geometry with thresholds, hit-testing, clipped snapshots, editor reload hydration, and public preview rendering for text, media, box/nested-container, and columns components
+- `test:page-create` now verifies each built-in starter page template in mobile and tablet hosted previews with breakpoint/scale assertions, required element presence, overflow checks, and pixel-threshold screenshots.
 - Public rendering applies tablet/mobile overrides inside the matching breakpoint canvas dimensions instead of scaling a desktop-width canvas around mobile-authored coordinates.
 - **Remaining Improvements Needed:**
-    - Broaden pixel-level screenshot comparison across more complete page templates and component types
+    - Broaden pixel-level screenshot comparison beyond starter templates into saved reusable sections, dynamic templates, and additional component combinations
 - **Implemented Contract:**
     ```typescript
     interface CanvasElement {
@@ -498,7 +499,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
-  - Mobile and tablet persistence plus thresholded editor/public visual geometry are covered for heading, image, and box/nested-container elements by responsive smoke; still needs broader pixel-level comparison across complete page templates/components.
+  - Mobile and tablet persistence plus thresholded editor/public visual geometry are covered for heading, image, box/nested-container, columns, and built-in starter page templates; still needs broader pixel-level comparison across saved reusable sections, dynamic templates, and additional component combinations.
 - Responsive smoke now also covers mobile/tablet columns layout overrides, reload hydration, and public preview CSS/visual geometry with clipped screenshots and hit-testing.
 - Long-session stress smoke now covers repeated keyboard edits across multiple elements, undo/redo recovery, a midpoint mobile responsive override edit, save/reload persistence, and runtime health sampling via `npm run test:editor-stress --workspace @backy-cms/admin`.
 - Public `PageRenderer` now uses the active breakpoint canvas size for tablet/mobile scaling so responsive overrides are positioned in the same coordinate system authored in the editor.
@@ -513,7 +514,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Reusable-section export/import now supports JSON portability across sites, duplicate-slug protection, and upsert imports that increment version history.
   - Reusable-section restore now lets admins restore an older saved-section version with slug conflict checks and restore provenance.
   - Reusable-section instance registry/propagation now discovers synced page/blog instances, reports stale source timestamps, and bulk-refreshes synced instances while preserving root placement.
-  - Page-create smoke now creates and reopens every built-in starter page template, including the about template, and verifies seeded editable elements, chrome, canvas sizing, form/data-binding metadata, and editor rendering.
+  - Page-create smoke now creates and reopens every built-in starter page template, including the about template, and verifies seeded editable elements, chrome, canvas sizing, form/data-binding metadata, editor rendering, and mobile/tablet hosted-preview rendering with pixel-threshold screenshots.
   - Page-create smoke now also covers collection dataset list and detail page seeds, including repeater/list metadata, single-record bindings, canvas sizing, and content-document hydration.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.

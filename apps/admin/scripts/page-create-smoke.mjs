@@ -37,6 +37,26 @@ const BLANK_EDITOR_SCREENSHOT_THRESHOLDS = {
   minCanvasDarkRatio: 0.0003,
 };
 
+const PUBLIC_TEMPLATE_SCREENSHOT_THRESHOLDS = {
+  minClipWidth: 320,
+  minClipHeight: 640,
+  minSampledPixels: 45000,
+  minLumaRange: 90,
+  minCanvasNonWhiteRatio: 0.003,
+  minCanvasDarkRatio: 0.00045,
+};
+
+const BLANK_PUBLIC_TEMPLATE_SCREENSHOT_THRESHOLDS = {
+  ...PUBLIC_TEMPLATE_SCREENSHOT_THRESHOLDS,
+  minCanvasNonWhiteRatio: 0.0012,
+  minCanvasDarkRatio: 0.0002,
+};
+
+const PUBLIC_TEMPLATE_RESPONSIVE_VIEWPORTS = [
+  { key: 'mobile', width: 390, height: 900, expectedBreakpoint: 'mobile' },
+  { key: 'tablet', width: 820, height: 1024, expectedBreakpoint: 'tablet' },
+];
+
 const STARTER_TEMPLATE_BACKEND_CASES = [
   {
     template: 'landing',
@@ -561,6 +581,20 @@ const getEditorScreenshotThresholds = (template) => (
   template === 'blank' ? BLANK_EDITOR_SCREENSHOT_THRESHOLDS : EDITOR_SCREENSHOT_THRESHOLDS
 );
 
+const getPublicTemplateScreenshotThresholds = (template) => (
+  template === 'blank' ? BLANK_PUBLIC_TEMPLATE_SCREENSHOT_THRESHOLDS : PUBLIC_TEMPLATE_SCREENSHOT_THRESHOLDS
+);
+
+const requestPagePreview = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ ttlSeconds: 600 }),
+  });
+  const preview = payload.data || {};
+  assert(preview.hostedUrl && preview.previewToken, `Unable to create page preview: ${JSON.stringify(payload).slice(0, 500)}`);
+  return preview;
+};
+
 const assertScreenshotPixelThresholds = async (client, label, screenshotData, thresholds, cropRect) => {
   const metrics = await evaluate(client, `(async () => {
     const image = new Image();
@@ -644,6 +678,27 @@ const setViewport = async (client, { width, height, mobile = false, deviceScaleF
     mobile,
     deviceScaleFactor,
   });
+};
+
+const openPublicPreviewTab = async (parentClient, url, viewport) => {
+  const target = await parentClient.send('Target.createTarget', { url: 'about:blank' });
+  const page = (await fetchJson('/json/list')).find((candidate) => candidate.id === target.targetId);
+  assert(page?.webSocketDebuggerUrl, `No Chrome target found for public preview check ${target.targetId}`);
+
+  const client = connectCdp(page.webSocketDebuggerUrl);
+  await client.opened;
+  await client.send('Runtime.enable');
+  await client.send('Page.enable');
+  await client.send('DOM.enable');
+  await client.send('Log.enable');
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: viewport.width,
+    height: viewport.height,
+    deviceScaleFactor: 1,
+    mobile: viewport.expectedBreakpoint === 'mobile',
+  });
+  await client.send('Page.navigate', { url });
+  return client;
 };
 
 const assertTemplatePreviewVisualState = async (client, label, screenshotPath) => {
@@ -1680,6 +1735,121 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
   };
 };
 
+const assertStarterTemplatePublicResponsiveRender = async (parentClient, pageId, testCase) => {
+  const preview = await requestPagePreview(pageId);
+  const results = {};
+
+  for (const viewport of PUBLIC_TEMPLATE_RESPONSIVE_VIEWPORTS) {
+    let publicClient = null;
+    try {
+      publicClient = await openPublicPreviewTab(parentClient, preview.hostedUrl, viewport);
+      let renderState = null;
+
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        renderState = await evaluate(publicClient, `(() => {
+          const root = document.querySelector('[data-backy-render-breakpoint]');
+          const canvas = document.querySelector('.backy-canvas');
+          const elements = Array.from(document.querySelectorAll('[data-element-id]'));
+          const requiredElementIds = ${JSON.stringify(testCase.requiredElementIds)};
+          const byId = new Map(elements.map((element) => [element.getAttribute('data-element-id'), element]));
+          const requiredRects = requiredElementIds.map((id) => {
+            const element = byId.get(id);
+            const rect = element?.getBoundingClientRect();
+            return {
+              id,
+              present: Boolean(element),
+              width: Math.round(rect?.width || 0),
+              height: Math.round(rect?.height || 0),
+              left: Math.round(rect?.left || 0),
+              top: Math.round(rect?.top || 0),
+            };
+          });
+          const rootRect = root?.getBoundingClientRect();
+          const canvasRect = canvas?.getBoundingClientRect();
+          return {
+            url: window.location.href,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            breakpoint: root?.getAttribute('data-backy-render-breakpoint') || '',
+            renderScale: Number(root?.getAttribute('data-backy-render-scale') || 0),
+            canvasScale: Number(document.querySelector('[data-backy-canvas-scale]')?.getAttribute('data-backy-canvas-scale') || 0),
+            canvasWidth: Math.round(canvasRect?.width || 0),
+            canvasHeight: Math.round(canvasRect?.height || 0),
+            rootWidth: Math.round(rootRect?.width || 0),
+            renderedElementCount: elements.length,
+            missingElementIds: requiredRects.filter((rect) => !rect.present).map((rect) => rect.id),
+            collapsedElementIds: requiredRects.filter((rect) => rect.present && (rect.width <= 0 || rect.height <= 0)).map((rect) => rect.id),
+            requiredRects,
+            horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+            emptyStateVisible: document.body?.innerText?.includes('Drop components onto the canvas') || false,
+            notFoundVisible: /not found|could not find|404/i.test(document.body?.innerText || ''),
+            body: document.body?.innerText?.slice(0, 280) || '',
+          };
+        })()`);
+
+        if (
+          renderState.breakpoint === viewport.expectedBreakpoint
+          && renderState.renderedElementCount >= testCase.minTotalElementCount
+          && renderState.missingElementIds.length === 0
+          && renderState.collapsedElementIds.length === 0
+          && renderState.canvasWidth > 0
+          && renderState.canvasHeight > 0
+          && renderState.renderScale > 0
+          && renderState.canvasScale > 0
+          && renderState.horizontalOverflow <= 4
+          && !renderState.emptyStateVisible
+          && !renderState.notFoundVisible
+        ) {
+          break;
+        }
+
+        if (attempt === 99) {
+          throw new Error(`Created ${testCase.template} public ${viewport.key} render did not reach a complete responsive state: ${JSON.stringify(renderState)}`);
+        }
+
+        await sleep(200);
+      }
+
+      assert(renderState.breakpoint === viewport.expectedBreakpoint, `Created ${testCase.template} public ${viewport.key} breakpoint mismatch: ${JSON.stringify(renderState)}`);
+      assert(renderState.renderScale > 0 && renderState.renderScale <= 1, `Created ${testCase.template} public ${viewport.key} scale mismatch: ${JSON.stringify(renderState)}`);
+      assert(renderState.horizontalOverflow <= 4, `Created ${testCase.template} public ${viewport.key} route has horizontal overflow: ${JSON.stringify(renderState)}`);
+
+      const screenshotPath = path.join(EDITOR_TEMPLATE_SCREENSHOT_DIR, `backy-page-create-public-${testCase.template}-${viewport.key}.png`);
+      const screenshot = await captureScreenshotData(publicClient, screenshotPath);
+      const screenshotMetrics = await assertScreenshotPixelThresholds(
+        publicClient,
+        `Created ${testCase.template} public ${viewport.key} render`,
+        screenshot.data,
+        getPublicTemplateScreenshotThresholds(testCase.template),
+        { x: 0, y: 0, width: viewport.width, height: viewport.height },
+      );
+
+      results[viewport.key] = {
+        ...renderState,
+        screenshotPath,
+        screenshotMetrics,
+      };
+    } finally {
+      if (publicClient) {
+        try {
+          await publicClient.send('Page.close');
+        } catch {
+          // The target may already be closed by Chrome during cleanup.
+        }
+        publicClient.close();
+      }
+    }
+  }
+
+  return {
+    preview: {
+      hostedUrl: preview.hostedUrl,
+      renderUrl: preview.renderUrl,
+      expiresAt: preview.expiresAt,
+    },
+    results,
+  };
+};
+
 const createStarterTemplateBackends = async (client, createdPageIds) => {
   const summaries = [];
 
@@ -1691,12 +1861,14 @@ const createStarterTemplateBackends = async (client, createdPageIds) => {
     createdPageIds.push(pageId);
     const editorRender = await assertStarterTemplateEditorRender(client, testCase);
     const content = await assertStarterTemplatePageContent(pageId, testCase, slug);
+    const publicResponsiveRender = await assertStarterTemplatePublicResponsiveRender(client, pageId, testCase);
 
     summaries.push({
       template: testCase.template,
       routeState: routeState.state,
       editState,
       editorRender,
+      publicResponsiveRender,
       pageId,
       content,
     });
