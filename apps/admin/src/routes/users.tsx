@@ -2097,9 +2097,11 @@ function UsersListView() {
                   ))}
                 </div>
               ) : userAuditLogs.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                  No user audit events recorded yet. Create, update, or remove a user to populate this timeline.
-                </div>
+                <EmptyState
+                  icon={History}
+                  title="No user audit events yet"
+                  description="Create, update, import, delete, or review users to populate this access timeline."
+                />
               ) : (
                 <div className="space-y-2">
                   {userAuditLogs.map((log) => (

@@ -28,6 +28,13 @@ const assert = (condition, message) => {
   }
 };
 
+const assertUsersEmptyStatesUseSharedComponent = () => {
+  const source = fs.readFileSync(new URL('../src/routes/users.tsx', import.meta.url), 'utf8');
+  assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Users route must use the shared EmptyState component');
+  assert(source.includes('title="No user audit events yet"'), 'Users audit panel must keep the empty audit title visible');
+  assert(source.includes('Create, update, import, delete, or review users to populate this access timeline.'), 'Users audit empty state must explain which actions populate the timeline');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -1976,6 +1983,7 @@ const cleanup = async ({ client, childProcess, userDataDir, userId }) => {
 };
 
 const main = async () => {
+  assertUsersEmptyStatesUseSharedComponent();
   let client;
   let childProcess;
   let userDataDir;
