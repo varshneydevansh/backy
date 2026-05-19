@@ -242,6 +242,14 @@ assert(
   'Public OpenAPI media list route must document invalid media filter error envelopes.',
 );
 assert(
+  openApiRoute.includes('name: "search"') &&
+    openApiRoute.includes('name: "folder"') &&
+    openApiRoute.includes('name: "folderId"') &&
+    openApiRoute.includes('name: "scope"') &&
+    openApiRoute.includes('"file"'),
+  'Public OpenAPI media list route must document search/folder/scope filters and the type=file alias for custom frontend media pickers.',
+);
+assert(
   openApiRoute.includes('Fetch public, non-quarantined uploaded font families'),
   'Public OpenAPI font manifest route must advertise that quarantined fonts are excluded.',
 );
@@ -271,9 +279,17 @@ assert(
   'Public OpenAPI media file route must document invalid disposition errors.',
 );
 assert(
-  sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
-    sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other'"),
+  sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') ||
+    sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'file' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
+);
+assert(
+  sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') &&
+    sdkSource.includes('search?: string') &&
+    sdkSource.includes('blogId?: string') &&
+    sdkSource.includes('global?: boolean') &&
+    sdkSource.includes('siteId?: string'),
+  'SDK media list options must expose public route aliases for custom frontend media pickers.',
 );
 assert(
   generatedSdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"'),

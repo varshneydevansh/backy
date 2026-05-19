@@ -1610,13 +1610,18 @@ export interface BackyInteractionEvent {
 }
 
 export interface BackyMediaListOptions extends BackyListOptions {
-  type?: "image" | "video" | "audio" | "document" | "font" | "other";
+  type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other";
   q?: string;
+  search?: string;
   tag?: string;
+  folder?: string;
   folderId?: string;
   scope?: string;
   pageId?: string;
   postId?: string;
+  blogId?: string;
+  global?: boolean;
+  siteId?: string;
 }
 
 export interface BackyPageListOptions extends BackyListOptions {
@@ -2380,9 +2385,21 @@ export interface BackyManifestMediaModule {
   };
   filters: {
     types: string[];
+    typeAliases: {
+      file: "document";
+      [key: string]: unknown;
+    };
     visibility: Array<"public" | "private">;
     scopes: Array<"global" | "page" | "post">;
     queryParams: string[];
+    maxLimit: 100;
+    aliases: {
+      q: "search";
+      folder: "folderId";
+      blogId: "postId";
+      fileType: "document";
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -3064,10 +3081,10 @@ export class BackyClient {
   ): Promise<
     BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>
   > {
-    const { requestId, ...queryOptions } = options;
+    const { requestId, siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
     return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/media`,
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/media`,
       {
         query,
         requestId,

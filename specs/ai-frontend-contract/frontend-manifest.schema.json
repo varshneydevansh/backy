@@ -1551,11 +1551,33 @@
                   "additionalProperties": true,
                   "properties": {
                     "types": { "type": "array", "items": { "type": "string" } },
+                    "typeAliases": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "file": { "const": "document" }
+                      }
+                    },
                     "visibility": { "type": "array", "items": { "enum": ["public", "private"] } },
                     "scopes": { "type": "array", "items": { "enum": ["global", "page", "post"] } },
-                    "queryParams": { "type": "array", "items": { "type": "string" } }
+                    "queryParams": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "contains": { "const": "folderId" }
+                    },
+                    "maxLimit": { "const": 100 },
+                    "aliases": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "q": { "const": "search" },
+                        "folder": { "const": "folderId" },
+                        "blogId": { "const": "postId" },
+                        "fileType": { "const": "document" }
+                      }
+                    }
                   },
-                  "required": ["types", "visibility", "scopes", "queryParams"]
+                  "required": ["types", "typeAliases", "visibility", "scopes", "queryParams", "maxLimit", "aliases"]
                 }
               },
               "required": ["schemaVersion", "count", "publicCount", "fontCount", "types", "listUrl", "endpoints", "capabilities", "filters"]

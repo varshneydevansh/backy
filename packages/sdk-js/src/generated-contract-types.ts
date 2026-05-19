@@ -3379,9 +3379,21 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         };
         filters: {
           types: Array<string>;
+          typeAliases: {
+            file?: "document";
+            [key: string]: unknown;
+          };
           visibility: Array<"public" | "private">;
           scopes: Array<"global" | "page" | "post">;
           queryParams: Array<string>;
+          maxLimit: 100;
+          aliases: {
+            q?: "search";
+            folder?: "folderId";
+            blogId?: "postId";
+            fileType?: "document";
+            [key: string]: unknown;
+          };
           [key: string]: unknown;
         };
         [key: string]: unknown;

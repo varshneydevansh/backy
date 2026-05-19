@@ -108,13 +108,22 @@ assert(
     manifestRoute.includes("signedPrivateFiles: true") &&
     manifestRoute.includes("responsiveImages: true") &&
     manifestRoute.includes("editableMetadata: true") &&
+    manifestRoute.includes("'folderId'") &&
+    manifestRoute.includes("'scope'") &&
+    manifestRoute.includes("'tag'") &&
+    manifestRoute.includes("file: 'document'") &&
     manifestRoute.includes('media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length)') &&
     manifestRoute.includes('media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total)') &&
     frontendManifestSchema.includes('"backy.media-discovery.v1"') &&
     frontendManifestSchema.includes('"signedPrivateFiles"') &&
     frontendManifestSchema.includes('"queryParams"') &&
+    frontendManifestSchema.includes('"folderId"') &&
+    frontendManifestSchema.includes('"maxLimit"') &&
     sdkSource.includes('schemaVersion: "backy.media-discovery.v1";') &&
+    sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') &&
+    sdkSource.includes('siteId?: string') &&
     sdkSmoke.includes('manifest() missing media discovery module') &&
+    sdkSmoke.includes('manifest() media discovery missing folderId filter') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery'),
   'Frontend manifest and SDK must expose structured media discovery for custom frontend asset browsers.',
 );

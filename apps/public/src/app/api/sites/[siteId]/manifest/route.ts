@@ -693,9 +693,33 @@ const buildManifestMediaDiscovery = (
     },
     filters: {
       types,
+      typeAliases: {
+        file: 'document',
+      },
       visibility: ['public', 'private'],
       scopes: ['global', 'page', 'post'],
-      queryParams: ['type', 'q', 'folder', 'pageId', 'postId', 'global', 'limit', 'offset'],
+      queryParams: [
+        'type',
+        'q',
+        'search',
+        'tag',
+        'folder',
+        'folderId',
+        'scope',
+        'pageId',
+        'postId',
+        'blogId',
+        'global',
+        'limit',
+        'offset',
+      ],
+      maxLimit: 100,
+      aliases: {
+        q: 'search',
+        folder: 'folderId',
+        blogId: 'postId',
+        fileType: 'document',
+      },
     },
   };
 };

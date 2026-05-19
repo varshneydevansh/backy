@@ -610,6 +610,14 @@ assert(manifestMedia.capabilities?.signedPrivateFiles === true, 'manifest() medi
 assert(manifestMedia.capabilities?.responsiveImages === true, 'manifest() media discovery missing responsive image capability');
 assert(manifestMedia.capabilities?.editableMetadata === true, 'manifest() media discovery missing editable metadata capability');
 assert(manifestMedia.filters?.queryParams?.includes?.('folder'), 'manifest() media discovery missing folder filter');
+assert(manifestMedia.filters?.queryParams?.includes?.('folderId'), 'manifest() media discovery missing folderId filter');
+assert(manifestMedia.filters?.queryParams?.includes?.('search'), 'manifest() media discovery missing search filter');
+assert(manifestMedia.filters?.queryParams?.includes?.('tag'), 'manifest() media discovery missing tag filter');
+assert(manifestMedia.filters?.queryParams?.includes?.('scope'), 'manifest() media discovery missing scope filter');
+assert(manifestMedia.filters?.queryParams?.includes?.('blogId'), 'manifest() media discovery missing blogId filter alias');
+assert(manifestMedia.filters?.typeAliases?.file === 'document', 'manifest() media discovery missing file type alias');
+assert(manifestMedia.filters?.aliases?.folder === 'folderId', 'manifest() media discovery missing folder alias');
+assert(manifestMedia.filters?.maxLimit === 100, 'manifest() media discovery missing max limit');
 assert(manifestMedia.filters?.scopes?.includes?.('page') && manifestMedia.filters?.scopes?.includes?.('post'), 'manifest() media discovery missing page/post scope filters');
 const manifestTheme = manifest.data.modules?.theme;
 assert(manifestTheme?.schemaVersion === 'backy.theme-discovery.v1', 'manifest() missing theme discovery module');

@@ -1340,9 +1340,19 @@ const manifest = {
       },
       filters: {
         types: ["image", "font"],
+        typeAliases: {
+          file: "document",
+        },
         visibility: ["public", "private"],
         scopes: ["global", "page", "post"],
-        queryParams: ["type", "q", "folder", "pageId", "postId", "global", "limit", "offset"],
+        queryParams: ["type", "q", "search", "tag", "folder", "folderId", "scope", "pageId", "postId", "blogId", "global", "limit", "offset"],
+        maxLimit: 100,
+        aliases: {
+          q: "search",
+          folder: "folderId",
+          blogId: "postId",
+          fileType: "document",
+        },
       },
     },
     commerce: {
@@ -2102,9 +2112,19 @@ const sdkManifestMedia = {
   },
   filters: {
     types: ["font", "image"],
+    typeAliases: {
+      file: "document",
+    },
     visibility: ["public", "private"],
     scopes: ["global", "page", "post"],
-    queryParams: ["type", "q", "folder", "pageId", "postId", "global", "limit", "offset"],
+    queryParams: ["type", "q", "search", "tag", "folder", "folderId", "scope", "pageId", "postId", "blogId", "global", "limit", "offset"],
+    maxLimit: 100,
+    aliases: {
+      q: "search",
+      folder: "folderId",
+      blogId: "postId",
+      fileType: "document",
+    },
   },
 } satisfies BackyManifestMediaModule;
 
@@ -3139,7 +3159,13 @@ const sdkGenericFileMediaAsset = {
 } satisfies BackyMediaAsset;
 
 const sdkGenericFileMediaListOptions = {
-  type: "other",
+  type: "file",
+  search: "brand system",
+  tag: "brand",
+  folderId: "folder_brand",
+  scope: "global",
+  global: true,
+  siteId: "site_demo",
   limit: 20,
 } satisfies BackyMediaListOptions;
 
