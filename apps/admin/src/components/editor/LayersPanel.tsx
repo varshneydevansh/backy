@@ -194,6 +194,15 @@ function LayerItem({
         onSelect(element.id, e.metaKey || e.ctrlKey, e.shiftKey);
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key !== 'Enter' && e.key !== ' ') {
+            return;
+        }
+
+        e.preventDefault();
+        onSelect(element.id, e.metaKey || e.ctrlKey, e.shiftKey);
+    };
+
     const handleDragStart = (e: React.DragEvent) => {
         if (disabled || !canReorder) {
             e.preventDefault();
@@ -206,6 +215,11 @@ function LayerItem({
     return (
         <div
             className={`layer-item ${isSelected ? 'selected' : ''} ${isHidden ? 'hidden' : ''} ${isLocked ? 'locked' : ''}`}
+            role="treeitem"
+            tabIndex={disabled ? -1 : 0}
+            aria-selected={isSelected}
+            aria-level={depth + 1}
+            aria-expanded={element.children?.length ? true : undefined}
             data-layer-id={element.id}
             data-layer-depth={depth}
             data-layer-selected={isSelected ? 'true' : 'false'}
@@ -223,6 +237,7 @@ function LayerItem({
                 transition: 'background-color 0.15s, box-shadow 0.15s',
             }}
             onClick={handleClick}
+            onKeyDown={handleKeyDown}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
             draggable={!disabled && canReorder}
@@ -631,6 +646,8 @@ export function LayersPanel({
 
             {/* Layer list */}
             <div
+                role="tree"
+                aria-label="Canvas layers"
                 style={{
                     flex: 1,
                     overflowY: 'auto',

@@ -223,6 +223,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
   assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
+  assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10080,6 +10081,34 @@ const testLayersPanelControls = async (client, pageId) => {
       unselectedRowActions.tabIndex === -1,
     `Hidden unselected layer row actions remained interactive: ${JSON.stringify(unselectedRowActions)}`,
   );
+  const keyboardRowSelection = await evaluate(client, `(() => {
+    const tree = document.querySelector('[role="tree"][aria-label="Canvas layers"]');
+    const row = document.querySelector('[data-layer-id="smoke-link"]');
+    if (!(tree instanceof HTMLElement) || !(row instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-tree-or-row', hasTree: Boolean(tree), hasRow: Boolean(row) };
+    }
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    const selected = Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean);
+    return {
+      ok: true,
+      rowRole: row.getAttribute('role'),
+      treeRole: tree.getAttribute('role'),
+      tabIndex: row instanceof HTMLElement ? row.tabIndex : null,
+      ariaSelected: row.getAttribute('aria-selected'),
+      ariaLevel: row.getAttribute('aria-level'),
+      selected,
+    };
+  })()`);
+  assert(
+    keyboardRowSelection?.ok &&
+      keyboardRowSelection.rowRole === 'treeitem' &&
+      keyboardRowSelection.treeRole === 'tree' &&
+      keyboardRowSelection.tabIndex === 0 &&
+      keyboardRowSelection.ariaSelected === 'true' &&
+      keyboardRowSelection.selected.length === 1 &&
+      keyboardRowSelection.selected.includes('smoke-link'),
+    `Keyboard layer row selection did not select smoke-link with tree semantics: ${JSON.stringify(keyboardRowSelection)}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10193,6 +10222,7 @@ const testLayersPanelControls = async (client, pageId) => {
     rangeSelected,
     selectedRowActions,
     unselectedRowActions,
+    keyboardRowSelection,
     reorder,
     hiddenState,
     toolbarVisibleState,
