@@ -17,6 +17,7 @@ const assert = (condition, message) => {
 const mediaRoute = read('../src/app/api/admin/sites/[siteId]/media/route.ts');
 const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
 const publicFontManifestRoute = read('../src/app/api/sites/[siteId]/media/fonts/route.ts');
+const publicMediaTransformRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
 const coreTypes = read('../../../packages/core/src/types/index.ts');
@@ -78,6 +79,13 @@ assert(
   'Public font manifest route must exclude quarantined font assets before generating @font-face CSS.',
 );
 assert(
+  publicMediaTransformRoute.includes("'INVALID_TRANSFORM_WIDTH'") &&
+    publicMediaTransformRoute.includes("'INVALID_TRANSFORM_QUALITY'") &&
+    publicMediaTransformRoute.includes('Number.isInteger(parsed)') &&
+    !publicMediaTransformRoute.includes('Math.max(min, Math.min(max'),
+  'Public media transform route must reject invalid width/quality instead of clamping or defaulting invalid query values.',
+);
+assert(
   mediaRoute.includes('const mimeType = file.type || "application/octet-stream"') ||
     mediaRoute.includes("const mimeType = file.type || 'application/octet-stream'"),
   'Media upload route must preserve a safe default MIME type for generic file uploads.',
@@ -131,6 +139,10 @@ assert(
   'Public OpenAPI font manifest route must advertise that quarantined fonts are excluded.',
 );
 assert(
+  openApiRoute.includes('Invalid transform width/quality or unsupported media type'),
+  'Public OpenAPI media transform route must document invalid width/quality errors.',
+);
+assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
     sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
@@ -166,6 +178,11 @@ assert(
 assert(
   apiContracts.includes('Public font manifests exclude quarantined font assets'),
   'API contract docs must describe public font manifest quarantine filtering.',
+);
+assert(
+  apiContracts.includes('Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`') &&
+    apiContracts.includes('invalid quality values return `400 INVALID_TRANSFORM_QUALITY`'),
+  'API contract docs must describe invalid public media transform query errors.',
 );
 
 console.log(JSON.stringify({

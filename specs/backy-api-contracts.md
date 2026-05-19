@@ -221,6 +221,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Success and error responses expose public Backy contract headers, including `x-backy-contract-version: backy.ai-frontend.v1`, `x-backy-schema-version: backy.media-file.v1`, `x-backy-request-id`, and `x-backy-cache-scope`; successful file responses also include `x-backy-site-id` and `x-backy-media-id` while preserving immutable public-file caching or short private signed-file caching as appropriate.
 - `GET /api/sites/:siteId/media/:mediaId/transform`
   - Query: `width`/`w` from `16..3840`, optional `quality`/`q` from `1..100`.
+  - Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`; invalid quality values return `400 INVALID_TRANSFORM_QUALITY`.
   - Only public image media is accepted.
   - Successful requests return a `307` redirect to Backy's image optimizer with `x-backy-transform-width` and `x-backy-transform-quality` headers.
   - Successful transform redirects increment Backy-served transform delivery analytics under `media.metadata.mediaDelivery`.

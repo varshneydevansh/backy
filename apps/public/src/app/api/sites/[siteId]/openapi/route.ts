@@ -1195,7 +1195,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "400": {
                   description:
-                    "Invalid transform request or unsupported media type",
+                    "Invalid transform width/quality or unsupported media type",
                   headers: mediaTransformErrorResponseHeaders,
                 },
                 "404": {

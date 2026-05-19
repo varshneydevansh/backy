@@ -39,13 +39,22 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
-const boundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
+const boundedInteger = (
+  value: string | null,
+  fallback: number | null,
+  min: number,
+  max: number,
+): { value: number; invalid?: string } => {
+  if (value === null || value.trim().length === 0) {
+    return fallback === null ? { value: 0, invalid: value ?? '' } : { value: fallback };
   }
 
-  return Math.max(min, Math.min(max, Math.floor(parsed)));
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    return { value: 0, invalid: value };
+  }
+
+  return { value: parsed };
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -55,12 +64,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { siteId, mediaId } = await params;
     const { searchParams } = new URL(request.url);
     const widthParam = searchParams.get('width') || searchParams.get('w');
-    const width = boundedInteger(widthParam, 0, MIN_WIDTH, MAX_WIDTH);
-    const quality = boundedInteger(searchParams.get('quality') || searchParams.get('q'), DEFAULT_QUALITY, 1, 100);
+    const widthResult = boundedInteger(widthParam, null, MIN_WIDTH, MAX_WIDTH);
+    const qualityResult = boundedInteger(searchParams.get('quality') || searchParams.get('q'), DEFAULT_QUALITY, 1, 100);
 
-    if (!widthParam || width <= 0) {
+    if (widthResult.invalid !== undefined) {
       return errorResponse(400, 'INVALID_TRANSFORM_WIDTH', `width must be between ${MIN_WIDTH} and ${MAX_WIDTH}.`, requestId);
     }
+    if (qualityResult.invalid !== undefined) {
+      return errorResponse(400, 'INVALID_TRANSFORM_QUALITY', 'quality must be between 1 and 100.', requestId);
+    }
+    const width = widthResult.value;
+    const quality = qualityResult.value;
 
     const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
     const repositorySite = repositories ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId) : null;
