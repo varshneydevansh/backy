@@ -221,6 +221,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('isLayerOrderShortcut') && source.includes("handleZOrderChange(isBackward") && source.includes('Cmd/Ctrl+]'), 'Editor keyboard handler must support Cmd/Ctrl bracket layer ordering shortcuts');
   assert(source.includes('const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1') && source.includes('const duplicatedIds: string[] = [];'), 'Editor layer row duplicate/delete actions must support selected multi-layer actions');
   assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
+  assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10043,6 +10044,17 @@ const testLayersPanelControls = async (client, pageId) => {
       rangeSelected.selected.length === rangeSelected.expected.length,
     `Layers panel Shift range-select did not select exactly the rendered row range: ${JSON.stringify(rangeSelected)}`,
   );
+  const selectedRowActions = await evaluate(client, `(() => {
+    const selectedRows = Array.from(document.querySelectorAll('[data-layer-selected="true"]'));
+    return selectedRows.map((row) => ({
+      id: row.getAttribute('data-layer-id'),
+      actionsVisible: row.querySelector('[data-layer-actions-visible]')?.getAttribute('data-layer-actions-visible') || 'missing',
+    }));
+  })()`);
+  assert(
+    selectedRowActions.length >= 2 && selectedRowActions.every((row) => row.actionsVisible === 'true'),
+    `Selected layer rows did not keep row actions visible: ${JSON.stringify(selectedRowActions)}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10154,6 +10166,7 @@ const testLayersPanelControls = async (client, pageId) => {
     initialTree,
     multiSelected,
     rangeSelected,
+    selectedRowActions,
     reorder,
     hiddenState,
     toolbarVisibleState,

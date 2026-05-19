@@ -325,10 +325,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ✅ Working
 - Right inspector Layers tab renders a hierarchical tree with nested layer depth.
 - Layer rows support click selection, Ctrl/Cmd multi-select, and Shift range-select across the rendered layer-tree order.
+- Selected layer rows keep their action buttons visible without requiring hover, while unselected rows still reveal actions on hover.
 - Dragging layer rows reorders sibling layers and updates sibling z-index ordering.
 - Row actions support move up/down, outdent, nest selected layers into container-like parents, hide/show, lock/unlock, duplicate, and delete; duplicate/delete apply to the selected unlocked sibling set when invoked from a selected row in a multi-selection.
 - Hidden and locked layer state saves into the page canvas payload.
-- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, Ctrl/Cmd multi-select, Shift range-select, drag reorder, hide, lock, single and multi duplicate/delete, manual save, and persisted layer state.
+- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, Ctrl/Cmd multi-select, Shift range-select, selected-row action visibility, drag reorder, hide, lock, single and multi duplicate/delete, manual save, and persisted layer state.
 
 ### 20. Copy/Paste
 **Current State:** ✅ Working

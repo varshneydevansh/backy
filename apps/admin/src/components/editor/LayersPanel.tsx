@@ -179,6 +179,7 @@ function LayerItem({
     const layerName = (element.props.name as string) || `${element.type}-${element.id.slice(0, 4)}`;
     const hasExternalSelection = selectedIds.some((id) => id !== element.id);
     const canNestSelectedHere = !disabled && !isLocked && canAcceptChildren && hasExternalSelection;
+    const showRowActions = showActions || isSelected;
 
     const iconButtonStyle = (active = true, danger = false): React.CSSProperties => ({
         padding: '4px',
@@ -280,9 +281,10 @@ function LayerItem({
                 style={{
                     display: 'flex',
                     gap: '4px',
-                    opacity: showActions ? 1 : 0,
+                    opacity: showRowActions ? 1 : 0,
                     transition: 'opacity 0.15s',
                 }}
+                data-layer-actions-visible={showRowActions ? 'true' : 'false'}
             >
                 <button
                     type="button"
