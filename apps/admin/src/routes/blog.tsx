@@ -1135,6 +1135,11 @@ function BlogListView() {
     columns,
     pageSize: 10
   });
+  const hasBlogFilters = searchQuery.trim().length > 0
+    || statusFilter !== 'all'
+    || Boolean(selectedCategoryId)
+    || Boolean(selectedTagId)
+    || Boolean(selectedAuthorId);
   const getBlogSurfaceSearch = (surface: (typeof BLOG_WORKFLOW_SURFACES)[number]) => {
     if (surface.route === '/pages/new') {
       return { siteId: activeSiteId, template: surface.template };
@@ -1554,14 +1559,66 @@ function BlogListView() {
       }
     >
       {error && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {error}
+        <div
+          role="alert"
+          data-testid="blog-error-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Blog workspace needs attention</p>
+                <p className="mt-1 leading-6">{error}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {hasBlogFilters && (
+                <button
+                  type="button"
+                  onClick={clearBlogFilters}
+                  disabled={isBlogWorkflowBusy}
+                  className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Clear filters
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void refreshPosts(activeSiteId)}
+                disabled={isBlogWorkflowBusy || !canViewBlog}
+                title={!canViewBlog ? viewBlogPermissionTitle : undefined}
+                aria-label="Retry loading blog posts"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry load
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {permissionError && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError}
+        <div
+          role="alert"
+          data-testid="blog-permission-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Blog permissions could not be verified</p>
+                <p className="mt-1 leading-6">{permissionError}</p>
+              </div>
+            </div>
+            <Link
+              to="/users"
+              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+            >
+              Review users
+            </Link>
+          </div>
         </div>
       )}
 

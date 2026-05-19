@@ -32,6 +32,11 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   assert(source.includes('Create tags to expose lightweight topic filters'), 'Blog tags empty state must explain frontend topic/filter value');
   assert(source.includes('No saved snapshots yet'), 'Blog revision column must keep an explicit empty revision title visible');
   assert(source.includes('Save this post in the editor to capture a rollback-ready revision.'), 'Blog revision empty state must explain how snapshots are captured');
+  assert(source.includes('data-testid="blog-error-state"') && source.includes('Blog workspace needs attention'), 'Blog list must expose a labelled backend error state');
+  assert(source.includes('aria-label="Retry loading blog posts"') && source.includes('Retry load'), 'Blog list backend error state must expose a retry action');
+  assert(source.includes('hasBlogFilters') && source.includes('Clear filters'), 'Blog list backend error state must expose filter recovery when filters are active');
+  assert(source.includes('data-testid="blog-permission-state"') && source.includes('Blog permissions could not be verified'), 'Blog list must expose a labelled permission error state');
+  assert(source.includes('to="/users"') && source.includes('Review users'), 'Blog permission error state must link to user access management');
   assert(
     source.includes('getPostScheduleSummary') &&
       source.includes('scheduled_state') &&
@@ -1029,6 +1034,10 @@ const cleanup = async ({ client, childProcess, userDataDir, postId, categoryId, 
 
 const main = async () => {
   assertBlogTaxonomyEmptyStatesUseSharedComponent();
+  if (process.env.BACKY_BLOG_LIST_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'blog-list-source' }));
+    return;
+  }
   await loginAdminApi();
   let client;
   let childProcess;
