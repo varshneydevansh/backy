@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -190,6 +190,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Policy hero', 'Data-use sections', 'Rights contact'],
     },
     {
+        id: 'terms',
+        name: 'Terms page',
+        desc: 'Service terms, account rules, commerce conditions, acceptable use, and contact CTA.',
+        detail: 'Creates a public terms and conditions page ready to bind legal settings, service terms, commerce rules, and dispute/contact actions.',
+        sections: ['Terms hero', 'Policy sections', 'Contact action'],
+    },
+    {
         id: 'cart',
         name: 'Cart page',
         desc: 'Cart items, quantity controls, totals, and checkout handoff.',
@@ -310,6 +317,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'privacy',
         description: 'A public privacy policy page ready to explain data collection, retention, user rights, processors, and contact options.',
     },
+    terms: {
+        title: 'Terms and conditions',
+        slug: 'terms',
+        description: 'A public terms page ready to explain service rules, account responsibilities, commerce conditions, acceptable use, and dispute handling.',
+    },
     cart: {
         title: 'Cart',
         slug: 'cart',
@@ -377,6 +389,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     portfolio: 'primary',
     events: 'primary',
     privacy: 'footer',
+    terms: 'footer',
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
@@ -610,6 +623,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     portfolio: ['Home', 'Portfolio', 'Services', 'Contact'],
     events: ['Home', 'Events', 'Blog', 'Contact'],
     privacy: ['Home', 'Privacy', 'Terms', 'Contact'],
+    terms: ['Home', 'Terms', 'Privacy', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
@@ -699,6 +713,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Use', x: 38, y: 48, w: 26, h: 28, className: 'border-slate-200 bg-white' },
         { label: 'Contact', x: 68, y: 48, w: 24, h: 28, className: 'border-slate-200 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    terms: [
+        { label: 'Terms', x: 8, y: 14, w: 84, h: 24, className: 'border-zinc-300 bg-zinc-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-zinc-900' },
+        { label: 'Rules', x: 64, y: 24, w: 20, h: 6, className: 'border-zinc-200 bg-white' },
+        { label: 'Use', x: 8, y: 48, w: 26, h: 28, className: 'border-zinc-200 bg-white' },
+        { label: 'Sales', x: 38, y: 48, w: 26, h: 28, className: 'border-zinc-200 bg-white' },
+        { label: 'Support', x: 68, y: 48, w: 24, h: 28, className: 'border-zinc-200 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-zinc-200 bg-white' },
     ],
     cart: [
         { label: 'Cart', x: 8, y: 14, w: 52, h: 20, className: 'border-teal-200 bg-teal-50' },
@@ -1773,6 +1796,8 @@ function NewPageRoute() {
                     ? 'Backy event schedule placeholders'
                 : formData.template === 'privacy'
                     ? 'Backy legal policy placeholders'
+                : formData.template === 'terms'
+                    ? 'Backy legal terms placeholders'
                 : formData.template === 'cart'
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
@@ -1892,7 +1917,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1942,7 +1967,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal policies, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal content, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3982,6 +4007,8 @@ function buildTemplateElements(input: {
                 ? 'RSVP'
             : input.template === 'privacy'
                 ? 'Contact'
+            : input.template === 'terms'
+                ? 'Terms'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'help-center'
@@ -5125,6 +5152,171 @@ function buildTemplateElements(input: {
                                 width: 158,
                                 height: 40,
                                 props: { label: 'Contact privacy', backgroundColor: '#e2e8f0', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'privacy.request.open' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'terms') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'terms-hero-section',
+                width: 1200,
+                height: 320,
+                dataBindings: [{ source: 'settings', mode: 'legal-terms', fields: ['terms', 'effectiveDate', 'supportEmail', 'commerceTerms'] }],
+                props: { backgroundColor: '#fafafa', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'terms-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Terms', fontSize: 13, fontWeight: '800', color: '#52525b', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'terms-heading',
+                        width: 660,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 210, {
+                        id: 'terms-copy',
+                        width: 600,
+                        height: 64,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#3f3f46' },
+                    }),
+                    createCanvasElement('box', 790, 86, {
+                        id: 'terms-effective-card',
+                        width: 300,
+                        height: 150,
+                        dataBindings: [{ source: 'settings', mode: 'legal-terms', fields: ['effectiveDate', 'version', 'jurisdiction'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#d4d4d8', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'terms-effective-label',
+                                width: 170,
+                                height: 22,
+                                props: { content: 'Effective date', fontSize: 12, fontWeight: '800', color: '#52525b', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 60, {
+                                id: 'terms-effective-date',
+                                width: 210,
+                                height: 34,
+                                props: { content: 'Updated today', level: 'h3', fontSize: 24, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'settings', mode: 'legal-terms', field: 'effectiveDate', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 104, {
+                                id: 'terms-effective-copy',
+                                width: 220,
+                                height: 32,
+                                props: { content: 'Bind this card from Settings terms metadata.', fontSize: 13, lineHeight: 1.35, color: '#71717a' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 320, {
+                id: 'terms-policy-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'settings', mode: 'terms-sections', fields: ['acceptableUse', 'accounts', 'commerce', 'services', 'liability'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'terms-policy-heading',
+                        width: 420,
+                        height: 42,
+                        props: { content: 'Terms overview', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Using this site', body: 'Explain acceptable use, content ownership, account responsibilities, and restrictions for public visitors and members.' },
+                        { title: 'Purchases and services', body: 'Document payment, subscription, refund, cancellation, booking, and fulfillment terms for products and services.' },
+                        { title: 'Changes and disputes', body: 'Describe policy changes, limitation notices, governing terms, support routes, and dispute contact expectations.' },
+                    ].map((section, index) => createCanvasElement('box', 74 + index * 350, 132, {
+                        id: `terms-policy-card-${index}`,
+                        width: 310,
+                        height: 290,
+                        dataBindings: [{ source: 'settings', mode: 'terms-section', index }],
+                        props: { backgroundColor: '#fafafa', borderRadius: 8, borderColor: '#e4e4e7', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: `terms-policy-card-title-${index}`,
+                                width: 230,
+                                height: 34,
+                                props: { content: section.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'settings', mode: 'terms-section', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: `terms-policy-card-copy-${index}`,
+                                width: 236,
+                                height: 120,
+                                props: { content: section.body, fontSize: 14, lineHeight: 1.55, color: '#52525b' },
+                                dataBindings: [{ source: 'settings', mode: 'terms-section', index, field: 'body', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 232, {
+                                id: `terms-policy-card-note-${index}`,
+                                width: 210,
+                                height: 24,
+                                props: { content: 'Editable terms content', fontSize: 13, fontWeight: '800', color: '#52525b' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 880, {
+                id: 'terms-contact-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'settings', mode: 'terms-contact', fields: ['supportEmail', 'requestUrl', 'commerceTerms', 'serviceTerms'] }],
+                props: { backgroundColor: '#f4f4f5', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 62, {
+                        id: 'terms-acceptance-card',
+                        width: 600,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'commerce-terms', fields: ['refunds', 'subscriptions', 'shipping', 'tax'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e4e4e7', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 26, {
+                                id: 'terms-acceptance-heading',
+                                width: 320,
+                                height: 34,
+                                props: { content: 'Commerce and services', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Refunds', 'Subscriptions', 'Shipping', 'Service scope'].map((term, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
+                                id: `terms-acceptance-item-${index}`,
+                                width: 210,
+                                height: 24,
+                                props: { content: term, fontSize: 15, fontWeight: '800', color: '#3f3f46' },
+                            })),
+                        ],
+                    }),
+                    createCanvasElement('box', 748, 62, {
+                        id: 'terms-contact-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'legal-contact', fields: ['supportEmail', 'requestUrl'] }],
+                        props: { backgroundColor: '#111827', borderRadius: 8 },
+                        children: [
+                            createCanvasElement('heading', 26, 26, {
+                                id: 'terms-contact-heading',
+                                width: 220,
+                                height: 32,
+                                props: { content: 'Questions about terms?', level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 26, 76, {
+                                id: 'terms-contact-copy',
+                                width: 240,
+                                height: 46,
+                                props: { content: 'Bind support contact details to Settings or a custom frontend legal request route.', fontSize: 14, lineHeight: 1.45, color: '#d4d4d8' },
+                            }),
+                            createCanvasElement('button', 26, 138, {
+                                id: 'terms-contact-button',
+                                width: 146,
+                                height: 40,
+                                props: { label: 'Contact terms', backgroundColor: '#e4e4e7', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'terms.contact.open' },
                             }),
                         ],
                     }),

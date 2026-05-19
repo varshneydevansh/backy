@@ -347,6 +347,46 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'terms',
+    title: 'Smoke Terms Template',
+    slugBase: 'smoke-terms-template',
+    expectedNavigationPlacement: 'footer',
+    chromePrefix: 'terms',
+    navigationItem: 'Terms',
+    headingId: 'terms-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'terms-site-header',
+      'terms-site-navigation',
+      'terms-site-footer',
+      'terms-hero-section',
+      'terms-effective-card',
+      'terms-effective-date',
+      'terms-policy-section',
+      'terms-policy-card-0',
+      'terms-policy-card-title-0',
+      'terms-policy-card-copy-0',
+      'terms-contact-section',
+      'terms-acceptance-card',
+      'terms-contact-card',
+      'terms-contact-button',
+    ],
+    dataBindingElementIds: [
+      'terms-hero-section',
+      'terms-effective-card',
+      'terms-effective-date',
+      'terms-policy-section',
+      'terms-policy-card-0',
+      'terms-policy-card-title-0',
+      'terms-policy-card-copy-0',
+      'terms-contact-section',
+      'terms-acceptance-card',
+      'terms-contact-card',
+    ],
+  },
+  {
     template: 'cart',
     title: 'Smoke Cart Template',
     slugBase: 'smoke-cart-template',
@@ -763,6 +803,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('privacy-policy-card-${index}') &&
       source.includes('privacy-rights-card') &&
       source.includes('privacy.request.open') &&
+      source.includes("'terms'") &&
+      source.includes('terms-policy-card-${index}') &&
+      source.includes('terms-acceptance-card') &&
+      source.includes('terms.contact.open') &&
       source.includes("'cart'") &&
       source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
@@ -779,7 +823,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, help-center, and blog-post starters',
   );
 };
 
@@ -1384,6 +1428,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Privacy policy',
       forms: 'none',
       dynamicData: 'Backy legal policy placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'terms',
+      navPlacement: 'footer',
+      selectedTemplateName: 'Terms page',
+      forms: 'none',
+      dynamicData: 'Backy legal terms placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

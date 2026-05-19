@@ -55,6 +55,8 @@ const assertPagesListSourceContract = () => {
       source.includes('eventsPageTemplate') &&
       source.includes("key: 'privacy'") &&
       source.includes('privacyPageTemplate') &&
+      source.includes("key: 'terms'") &&
+      source.includes('termsPageTemplate') &&
       source.includes("key: 'cart'") &&
       source.includes('cartPageTemplate') &&
       source.includes("key: 'checkout'") &&
@@ -65,7 +67,7 @@ const assertPagesListSourceContract = () => {
       source.includes('helpCenterPageTemplate') &&
       source.includes("key: 'blog-post'") &&
       source.includes('blogPostPageTemplate'),
-    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, help-center, and blog starters and handoff routes',
+    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, terms, help-center, and blog starters and handoff routes',
   );
 };
 
@@ -1574,6 +1576,12 @@ const main = async () => {
       ['template=privacy'],
       { title: 'Privacy policy', slug: 'privacy', template: 'privacy', homepage: false },
     );
+    const termsShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-terms',
+      ['template=terms'],
+      { title: 'Terms and conditions', slug: 'terms', template: 'terms', homepage: false },
+    );
     const cartShortcut = await clickEmptyCreate(
       client,
       'pages-create-cart',
@@ -1696,6 +1704,7 @@ const main = async () => {
       portfolioShortcut,
       eventsShortcut,
       privacyShortcut,
+      termsShortcut,
       cartShortcut,
       checkoutShortcut,
       orderConfirmationShortcut,
