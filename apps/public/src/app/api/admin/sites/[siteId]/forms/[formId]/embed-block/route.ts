@@ -331,6 +331,8 @@ const buildFormEmbedContent = (
       formName: form.name,
       formTitle: formTitle(form),
       formDescription: form.description || "",
+      formActive: form.isActive !== false,
+      formAudience: form.audience,
       fields: cloneJson(form.fields) as unknown as BackyJsonValue,
       definitionUrl: input.definitionUrl,
       actionUrl: input.submitUrl,
@@ -338,6 +340,10 @@ const buildFormEmbedContent = (
       successMessage:
         form.successMessage || "Thanks. We received your submission.",
       successRedirectUrl: form.successRedirectUrl || "",
+      notificationEmail: form.notificationEmail || "",
+      notificationWebhook: form.notificationWebhook || "",
+      enableHoneypot: form.enableHoneypot !== false,
+      enableCaptcha: form.enableCaptcha === true,
       audience: form.audience,
       moderationMode: form.moderationMode || "manual",
       frontendDesignTemplateId:

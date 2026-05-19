@@ -167,7 +167,13 @@ const assertFormsPersistenceCertificationSource = () => {
       embedBlockRouteSource.includes('contactShareDedupeByEmail:') &&
       embedBlockRouteSource.includes('collectionWriteEnabled: Boolean(collectionTarget?.enabled)') &&
       embedBlockRouteSource.includes('collectionWriteCollectionId: collectionTarget?.collectionId || ""') &&
-      embedBlockRouteSource.includes('collectionWriteFieldMap: collectionTarget?.fieldMap'),
+      embedBlockRouteSource.includes('collectionWriteFieldMap: collectionTarget?.fieldMap') &&
+      embedBlockRouteSource.includes('formAudience: form.audience') &&
+      embedBlockRouteSource.includes('formActive: form.isActive !== false') &&
+      embedBlockRouteSource.includes('notificationEmail: form.notificationEmail || ""') &&
+      embedBlockRouteSource.includes('notificationWebhook: form.notificationWebhook || ""') &&
+      embedBlockRouteSource.includes('enableHoneypot: form.enableHoneypot !== false') &&
+      embedBlockRouteSource.includes('enableCaptcha: form.enableCaptcha === true'),
     'Forms template and embed-block handoffs must emit flattened canvas props for contact and collection routing',
   );
   assert(
@@ -2061,6 +2067,12 @@ const createEmbedBlockInUi = async (client, formId) => {
       assert(created.content.elements[0].props?.formId === formId, `Embed formId not preserved: ${JSON.stringify(created.content.elements[0].props)}`);
       const embedProps = created.content.elements[0].props || {};
       assert(Array.isArray(embedProps.fields) && embedProps.fields.length > 0, `Embed form schema props missing: ${JSON.stringify(embedProps)}`);
+      assert(embedProps.formAudience, `Embed formAudience prop missing: ${JSON.stringify(embedProps)}`);
+      assert(Object.prototype.hasOwnProperty.call(embedProps, 'formActive'), `Embed formActive prop missing: ${JSON.stringify(embedProps)}`);
+      assert(Object.prototype.hasOwnProperty.call(embedProps, 'enableHoneypot'), `Embed honeypot prop missing: ${JSON.stringify(embedProps)}`);
+      assert(Object.prototype.hasOwnProperty.call(embedProps, 'enableCaptcha'), `Embed captcha prop missing: ${JSON.stringify(embedProps)}`);
+      assert(Object.prototype.hasOwnProperty.call(embedProps, 'notificationEmail'), `Embed notification email prop missing: ${JSON.stringify(embedProps)}`);
+      assert(Object.prototype.hasOwnProperty.call(embedProps, 'notificationWebhook'), `Embed notification webhook prop missing: ${JSON.stringify(embedProps)}`);
       if (embedProps.contactShare?.enabled) {
         assert(embedProps.contactShareEnabled === true, `Embed contact-share flattened props missing: ${JSON.stringify(embedProps)}`);
         assert(embedProps.contactShareEmailField || embedProps.contactSharePhoneField, `Embed contact-share identity props missing: ${JSON.stringify(embedProps)}`);
