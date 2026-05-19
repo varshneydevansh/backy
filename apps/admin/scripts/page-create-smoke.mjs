@@ -1690,6 +1690,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 250, width: 660, height: 150 }"),
     'FAQ page starter must seed explicit tablet/mobile responsive overrides for search, category filters, question rows, and support sections.',
   );
+  assert(
+    source.includes("id: 'testimonials-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 610 }") &&
+      source.includes("id: 'testimonials-rating-card'") &&
+      source.includes("mobile: { x: 24, y: 390, width: 327, height: 150 }") &&
+      source.includes("id: 'testimonials-review-section'") &&
+      source.includes("tablet: { y: 500, width: 768, height: 1080 }") &&
+      source.includes("id: 'testimonials-source-filter'") &&
+      source.includes("mobile: { x: 24, y: 114, width: 327, height: 64 }") &&
+      source.includes("id: `testimonials-review-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 224 + index * 318, width: 327, height: 300 }") &&
+      source.includes("id: 'testimonials-cta-section'") &&
+      source.includes("mobile: { y: 1850, width: 375, height: 560 }") &&
+      source.includes("id: 'testimonials-logo-wall'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 204 }") &&
+      source.includes("id: 'testimonials-inquiry-card'") &&
+      source.includes("tablet: { x: 54, y: 250, width: 660, height: 150 }"),
+    'Testimonials page starter must seed explicit tablet/mobile responsive overrides for proof, review, and inquiry sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

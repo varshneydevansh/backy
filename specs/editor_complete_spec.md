@@ -557,6 +557,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Order-confirmation starter pages now seed explicit tablet/mobile responsive overrides for order status metadata, receipt totals, fulfillment cards, and post-purchase action cards so receipt flows remain readable and actionable across breakpoints.
   - Help-center starter pages now seed explicit tablet/mobile responsive overrides for support search, topic cards, FAQ rows/toggles, and escalation CTAs so support discovery flows remain readable and tappable across breakpoints.
   - FAQ starter pages now seed explicit tablet/mobile responsive overrides for FAQ search, category filters, question rows/toggles, answers, and support/contact cards so self-service answer flows remain readable and tappable across breakpoints.
+  - Testimonials starter pages now seed explicit tablet/mobile responsive overrides for rating metadata, review source filters, stacked review cards, logo-wall proof, and inquiry CTAs so social-proof sections remain readable and actionable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves

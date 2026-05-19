@@ -8967,24 +8967,40 @@ function buildTemplateElements(input: {
                 height: 360,
                 dataBindings: [{ source: 'testimonials', mode: 'overview', fields: ['reviews', 'averageRating', 'featuredLogo', 'inquiryUrl'] }],
                 props: { backgroundColor: '#fffbeb', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 500 },
+                    mobile: { width: 375, height: 610 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'testimonials-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Customer proof', fontSize: 13, fontWeight: '800', color: '#b45309', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 98, {
                         id: 'testimonials-heading',
                         width: 640,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 520, height: 92, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 212, {
                         id: 'testimonials-intro-copy',
                         width: 620,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                        responsive: {
+                            tablet: { x: 56, y: 204, width: 520, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 784, 92, {
                         id: 'testimonials-rating-card',
@@ -8992,6 +9008,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'testimonials', mode: 'rating-summary', fields: ['averageRating', 'reviewCount', 'sources'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 330, width: 330, height: 130 },
+                            mobile: { x: 24, y: 390, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('text', 26, 24, {
                                 id: 'testimonials-rating-label',
@@ -9016,12 +9036,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'testimonials', mode: 'reviews', fields: ['reviews', 'ratings', 'industries', 'sources'], limit: 9 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 500, width: 768, height: 1080 },
+                    mobile: { y: 610, width: 375, height: 1240 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 58, {
                         id: 'testimonials-review-heading',
                         width: 420,
                         height: 42,
                         props: { content: 'What customers say', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 420 },
+                            mobile: { x: 24, y: 46, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     createCanvasElement('box', 780, 54, {
                         id: 'testimonials-source-filter',
@@ -9029,12 +9057,19 @@ function buildTemplateElements(input: {
                         height: 56,
                         dataBindings: [{ source: 'testimonials', mode: 'filters', fields: ['sources', 'industries', 'ratings'] }],
                         props: { backgroundColor: '#fffbeb', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 124, width: 420, height: 56 },
+                            mobile: { x: 24, y: 114, width: 327, height: 64 },
+                        },
                         children: [
                             createCanvasElement('text', 20, 17, {
                                 id: 'testimonials-source-filter-label',
                                 width: 240,
                                 height: 24,
                                 props: { content: 'Filter by source, industry, or rating', fontSize: 13, fontWeight: '800', color: '#92400e' },
+                                responsive: {
+                                    mobile: { width: 260, height: 36 },
+                                },
                             }),
                         ],
                     }),
@@ -9044,6 +9079,10 @@ function buildTemplateElements(input: {
                         height: 300,
                         dataBindings: [{ source: 'testimonials', mode: 'review', index }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 220 + index * 270, width: 660, height: 240 },
+                            mobile: { x: 24, y: 224 + index * 318, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: `testimonials-review-rating-${index}`,
@@ -9058,6 +9097,10 @@ function buildTemplateElements(input: {
                                 height: 104,
                                 props: { content: review.quote, fontSize: 15, lineHeight: 1.5, color: '#374151' },
                                 dataBindings: [{ source: 'testimonials', mode: 'review', index, field: 'quote', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 520, height: 72 },
+                                    mobile: { width: 270, height: 126 },
+                                },
                             }),
                             createCanvasElement('heading', 24, 200, {
                                 id: `testimonials-review-name-${index}`,
@@ -9065,6 +9108,10 @@ function buildTemplateElements(input: {
                                 height: 28,
                                 props: { content: review.name, level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'testimonials', mode: 'review', index, field: 'name', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { y: 164, width: 300 },
+                                    mobile: { y: 210, width: 240 },
+                                },
                             }),
                             createCanvasElement('text', 24, 238, {
                                 id: `testimonials-review-role-${index}`,
@@ -9072,6 +9119,10 @@ function buildTemplateElements(input: {
                                 height: 24,
                                 props: { content: review.role, fontSize: 13, fontWeight: '700', color: '#92400e' },
                                 dataBindings: [{ source: 'testimonials', mode: 'review', index, field: 'role', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { y: 198, width: 300 },
+                                    mobile: { y: 248, width: 240 },
+                                },
                             }),
                         ],
                     })),
@@ -9083,6 +9134,10 @@ function buildTemplateElements(input: {
                 height: 300,
                 dataBindings: [{ source: 'testimonials', mode: 'trust-actions', fields: ['caseStudyUrl', 'inquiryUrl', 'logoWall', 'reviewSources'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 460 },
+                    mobile: { y: 1850, width: 375, height: 560 },
+                },
                 children: [
                     createCanvasElement('box', 74, 64, {
                         id: 'testimonials-logo-wall',
@@ -9090,18 +9145,29 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'testimonials', mode: 'logo-wall', fields: ['logos', 'industries'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 150 },
+                            mobile: { x: 24, y: 46, width: 327, height: 204 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 24, {
                                 id: 'testimonials-logo-heading',
                                 width: 270,
                                 height: 32,
                                 props: { content: 'Trusted by growing teams', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64, props: { fontSize: 24 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 26, 78, {
                                 id: 'testimonials-logo-copy',
                                 width: 360,
                                 height: 42,
                                 props: { content: 'Bind customer logos, industries, source badges, or review-platform snippets from Backy data.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 500 },
+                                    mobile: { y: 104, width: 270, height: 76 },
+                                },
                             }),
                         ],
                     }),
@@ -9111,12 +9177,19 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'testimonials', mode: 'inquiry', fields: ['inquiryUrl', 'caseStudyUrl', 'contactEmail'] }],
                         props: { backgroundColor: '#78350f', borderRadius: 8, borderColor: '#78350f', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 250, width: 660, height: 150 },
+                            mobile: { x: 24, y: 292, width: 327, height: 190 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 22, {
                                 id: 'testimonials-inquiry-heading',
                                 width: 250,
                                 height: 32,
                                 props: { content: 'Want results like these?', level: 'h2', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('button', 26, 82, {
                                 id: 'testimonials-inquiry-button',
@@ -9124,6 +9197,10 @@ function buildTemplateElements(input: {
                                 height: 42,
                                 props: { label: 'Start inquiry', backgroundColor: '#ffffff', color: '#78350f', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'testimonials.inquiry.open' },
                                 dataBindings: [{ source: 'testimonials', mode: 'inquiry', field: 'inquiryUrl', targetPath: 'props.href' }],
+                                responsive: {
+                                    tablet: { width: 160, height: 44 },
+                                    mobile: { y: 106, width: 170, height: 48 },
+                                },
                             }),
                         ],
                     }),
