@@ -376,6 +376,7 @@ Public page payload should include:
 - `POST /api/sites/:siteId/blog/:postId/comments`
 - `GET /api/sites/:siteId/blog/:postId/comments?status=approved&limit=&offset=`
   - Blog comment submit/list endpoints follow the same envelope and legacy compatibility behavior as page comments.
+  - Blog comment validation and spam rejections return structured `422` envelopes with `error.code: "VALIDATION_ERROR"`, `details`, and `validation` field errors instead of legacy string errors.
   - Invalid blog comment list filters return explicit `400` errors instead of silently falling back or clamping: `INVALID_BLOG_COMMENT_STATUS`, `INVALID_BLOG_COMMENT_SORT`, `INVALID_BLOG_COMMENT_LIMIT`, or `INVALID_BLOG_COMMENT_OFFSET`.
 
 - `GET /api/sites/:siteId/comments`

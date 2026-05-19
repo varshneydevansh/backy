@@ -353,6 +353,9 @@ function assertAdminPageContentValidationSource() {
   assert(publicBlogCommentsRoute.includes('integerQueryFromInput'), 'public blog comments route must parse pagination filters strictly');
   assert(publicBlogCommentsRoute.includes('statusFilter.invalid'), 'public blog comments route must branch on invalid status filters');
   assert(publicBlogCommentsRoute.includes('sortFilter.invalid'), 'public blog comments route must branch on invalid sort filters');
+  assert(publicBlogCommentsRoute.includes('blogCommentValidationResponse'), 'public blog comments route must use structured validation error envelopes');
+  assert(publicBlogCommentsRoute.includes("code: 'VALIDATION_ERROR'"), 'public blog comments route must return stable validation error codes');
+  assert(!publicBlogCommentsRoute.includes("error: 'Validation failed'"), 'public blog comments route must not return legacy string validation errors');
   assert(publicPagesRoute.includes("'INVALID_PAGE_LIMIT'"), 'public pages list route must reject invalid limit filters');
   assert(publicPagesRoute.includes("'INVALID_PAGE_OFFSET'"), 'public pages list route must reject invalid offset filters');
   assert(publicPagesRoute.includes('parseBoundedInteger'), 'public pages list route must parse pagination filters strictly');

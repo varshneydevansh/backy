@@ -148,6 +148,38 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
+const blogCommentValidationResponse = (
+  requestId: string,
+  details: Record<string, string>,
+  status = 422,
+  extra: { status?: Comment['status']; spamFlags?: string[] } = {},
+) => {
+  const message = 'Validation failed';
+
+  return contractResponse(
+    {
+      success: false,
+      requestId,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message,
+      },
+      errorMessage: message,
+      details,
+      validation: Object.entries(details).map(([field, fieldMessage]) => ({
+        field,
+        code: 'invalid',
+        message: fieldMessage,
+      })),
+      status: extra.status,
+      spamFlags: extra.spamFlags,
+      message,
+    },
+    requestId,
+    status,
+  );
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -318,16 +350,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const content = parseTextInput(body.content || (body as { body?: unknown }).body);
       if (content.length === 0) {
-        return contractResponse(
-          {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { content: 'Comment content is required' },
-          },
-          responseRequestId,
-          422,
-        );
+        return blogCommentValidationResponse(responseRequestId, { content: 'Comment content is required' });
       }
 
       const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
@@ -361,55 +384,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       if (!policy.allowGuests && !userId) {
-        return contractResponse(
-          {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { authorName: 'Guests are disabled for this comment block.' },
-          },
-          responseRequestId,
-          403,
-        );
+        return blogCommentValidationResponse(responseRequestId, {
+          authorName: 'Guests are disabled for this comment block.',
+        }, 403);
       }
 
       if (policy.requireName && authorName.length === 0) {
-        return contractResponse(
-          {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { authorName: 'Name is required' },
-          },
-          responseRequestId,
-          422,
-        );
+        return blogCommentValidationResponse(responseRequestId, { authorName: 'Name is required' });
       }
 
       if (policy.requireEmail && authorEmail.length === 0) {
-        return contractResponse(
-          {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { authorEmail: 'Email is required' },
-          },
-          responseRequestId,
-          422,
-        );
+        return blogCommentValidationResponse(responseRequestId, { authorEmail: 'Email is required' });
       }
 
       if (parentId && !policy.allowReplies) {
-        return contractResponse(
-          {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { parentId: 'Replies are not enabled for this comment block' },
-          },
-          responseRequestId,
-          422,
-        );
+        return blogCommentValidationResponse(responseRequestId, {
+          parentId: 'Replies are not enabled for this comment block',
+        });
       }
 
       const captchaFailure = await verifyCommentCaptcha({
@@ -429,29 +420,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (parentId) {
         parent = await repositories.comments.getById(site.id, parentId);
         if (!parent || parent.targetType !== 'post' || parent.targetId !== postId) {
-          return contractResponse(
-            {
-              success: false,
-              requestId: responseRequestId,
-              error: 'Validation failed',
-              details: { parentId: 'The selected parent comment does not belong to this target.' },
-            },
-            responseRequestId,
-            422,
-          );
+          return blogCommentValidationResponse(responseRequestId, {
+            parentId: 'The selected parent comment does not belong to this target.',
+          });
         }
 
         if (parent.commentThreadId && commentThreadId && parent.commentThreadId !== commentThreadId) {
-          return contractResponse(
-            {
-              success: false,
-              requestId: responseRequestId,
-              error: 'Validation failed',
-              details: { parentId: 'The selected parent comment belongs to a different thread.' },
-            },
-            responseRequestId,
-            422,
-          );
+          return blogCommentValidationResponse(responseRequestId, {
+            parentId: 'The selected parent comment belongs to a different thread.',
+          });
         }
       }
 
@@ -472,17 +449,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
 
       if (!classification.ok) {
-        return contractResponse(
+        return blogCommentValidationResponse(
+          responseRequestId,
+          { content: classification.spamMessage || 'Comment rejected.' },
+          422,
           {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { content: classification.spamMessage || 'Comment rejected.' },
             status: classification.status,
             spamFlags: classification.spamFlags,
           },
-          responseRequestId,
-          422,
         );
       }
 
@@ -567,16 +541,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const content = parseTextInput(body.content || (body as { body?: unknown }).body);
     if (content.length === 0) {
-      return contractResponse(
-        {
-          success: false,
-          requestId: responseRequestId,
-          error: 'Validation failed',
-          details: { content: 'Comment content is required' },
-        },
-        responseRequestId,
-        422,
-      );
+      return blogCommentValidationResponse(responseRequestId, { content: 'Comment content is required' });
     }
 
     const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
@@ -610,55 +575,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (!policy.allowGuests && !userId) {
-      return contractResponse(
-        {
-          success: false,
-          requestId: responseRequestId,
-          error: 'Validation failed',
-          details: { authorName: 'Guests are disabled for this comment block.' },
-        },
-        responseRequestId,
-        403,
-      );
+      return blogCommentValidationResponse(responseRequestId, {
+        authorName: 'Guests are disabled for this comment block.',
+      }, 403);
     }
 
     if (policy.requireName && authorName.length === 0) {
-      return contractResponse(
-        {
-          success: false,
-          requestId: responseRequestId,
-          error: 'Validation failed',
-          details: { authorName: 'Name is required' },
-        },
-        responseRequestId,
-        422,
-      );
+      return blogCommentValidationResponse(responseRequestId, { authorName: 'Name is required' });
     }
 
     if (policy.requireEmail && authorEmail.length === 0) {
-      return contractResponse(
-        {
-          success: false,
-          requestId: responseRequestId,
-          error: 'Validation failed',
-          details: { authorEmail: 'Email is required' },
-        },
-        responseRequestId,
-        422,
-      );
+      return blogCommentValidationResponse(responseRequestId, { authorEmail: 'Email is required' });
     }
 
     if (parentId && !policy.allowReplies) {
-      return contractResponse(
-        {
-          success: false,
-          requestId: responseRequestId,
-          error: 'Validation failed',
-          details: { parentId: 'Replies are not enabled for this comment block' },
-        },
-        responseRequestId,
-        422,
-      );
+      return blogCommentValidationResponse(responseRequestId, {
+        parentId: 'Replies are not enabled for this comment block',
+      });
     }
 
     const captchaFailure = await verifyCommentCaptcha({
@@ -678,29 +611,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (parentId) {
       parent = getCommentById(parentId);
       if (!parent || parent.siteId !== site.id || parent.targetType !== 'post' || parent.targetId !== postId) {
-        return contractResponse(
-          {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { parentId: 'The selected parent comment does not belong to this target.' },
-          },
-          responseRequestId,
-          422,
-        );
+        return blogCommentValidationResponse(responseRequestId, {
+          parentId: 'The selected parent comment does not belong to this target.',
+        });
       }
 
       if (parent.commentThreadId && commentThreadId && parent.commentThreadId !== commentThreadId) {
-        return contractResponse(
-          {
-            success: false,
-            requestId: responseRequestId,
-            error: 'Validation failed',
-            details: { parentId: 'The selected parent comment belongs to a different thread.' },
-          },
-          responseRequestId,
-          422,
-        );
+        return blogCommentValidationResponse(responseRequestId, {
+          parentId: 'The selected parent comment belongs to a different thread.',
+        });
       }
     }
 
@@ -721,17 +640,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!classification.ok) {
-      return contractResponse(
+      return blogCommentValidationResponse(
+        responseRequestId,
+        { content: classification.spamMessage || 'Comment rejected.' },
+        422,
         {
-          success: false,
-          requestId: responseRequestId,
-          error: 'Validation failed',
-          details: { content: classification.spamMessage || 'Comment rejected.' },
           status: classification.status,
           spamFlags: classification.spamFlags,
         },
-        responseRequestId,
-        422,
       );
     }
 
