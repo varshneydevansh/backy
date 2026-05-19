@@ -434,6 +434,7 @@ Public page payload should include:
 - `POST /api/admin/sites/:siteId/pages`
   - Body: `{ title, slug?, description?, status?, isHomepage?, content?, meta?, forms?, scheduledAt? }`
   - Validates required title, slug format, and per-site slug conflicts.
+  - Invalid explicit editor content payloads return `400` errors instead of being saved as an empty/default canvas: `INVALID_PAGE_CONTENT`, `INVALID_PAGE_CONTENT_ELEMENTS`, or `INVALID_PAGE_CANVAS_SIZE`.
 
 - `GET /api/admin/sites/:siteId/pages/:pageId`
   - Returns full editable page payload including canvas content.
@@ -449,6 +450,7 @@ Public page payload should include:
 
 - `PATCH /api/admin/sites/:siteId/pages/:pageId`
   - Body supports partial updates for title, slug, description, status, homepage flag, canvas content, SEO meta, forms, and schedule.
+  - Invalid explicit editor content payloads return `400` errors instead of being saved as an empty/default canvas: `INVALID_PAGE_CONTENT`, `INVALID_PAGE_CONTENT_ELEMENTS`, or `INVALID_PAGE_CANVAS_SIZE`.
 
 - `DELETE /api/admin/sites/:siteId/pages/:pageId`
   - Deletes the page from the runtime adapter.

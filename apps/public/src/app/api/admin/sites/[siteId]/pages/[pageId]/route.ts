@@ -204,6 +204,61 @@ const storePageContentFromInput = (
   };
 };
 
+const pageContentValidationError = (
+  rawContent: unknown,
+  requestId: string,
+) => {
+  if (rawContent === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(rawContent) || isBackyContentDocument(rawContent)) {
+    return null;
+  }
+
+  if (!isRecord(rawContent)) {
+    return errorResponse(
+      400,
+      "INVALID_PAGE_CONTENT",
+      "Page content must be a canvas content object, content document, or element array.",
+      requestId,
+    );
+  }
+
+  if (rawContent.elements !== undefined && !Array.isArray(rawContent.elements)) {
+    return errorResponse(
+      400,
+      "INVALID_PAGE_CONTENT_ELEMENTS",
+      "Page content elements must be an array.",
+      requestId,
+    );
+  }
+
+  if (rawContent.canvasSize !== undefined) {
+    if (!isRecord(rawContent.canvasSize)) {
+      return errorResponse(
+        400,
+        "INVALID_PAGE_CANVAS_SIZE",
+        "Page canvasSize must include positive numeric width and height.",
+        requestId,
+      );
+    }
+
+    const width = Number(rawContent.canvasSize.width);
+    const height = Number(rawContent.canvasSize.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return errorResponse(
+        400,
+        "INVALID_PAGE_CANVAS_SIZE",
+        "Page canvasSize must include positive numeric width and height.",
+        requestId,
+      );
+    }
+  }
+
+  return null;
+};
+
 const rejectIfReadinessBlocked = (
   status: "draft" | "published" | "scheduled" | "archived",
   readiness: ReturnType<typeof buildPageReadiness>,
@@ -419,6 +474,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const contentValidationError = pageContentValidationError(
+        body.content,
+        requestId,
+      );
+      if (contentValidationError) {
+        return contentValidationError;
+      }
       const expectedUpdatedAt =
         typeof body.expectedUpdatedAt === "string"
           ? body.expectedUpdatedAt.trim()
@@ -646,6 +708,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const contentValidationError = pageContentValidationError(
+      body.content,
+      requestId,
+    );
+    if (contentValidationError) {
+      return contentValidationError;
+    }
     const expectedUpdatedAt =
       typeof body.expectedUpdatedAt === "string"
         ? body.expectedUpdatedAt.trim()

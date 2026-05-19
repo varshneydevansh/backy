@@ -267,6 +267,36 @@ function assertAdminSettingsContractSource() {
   assert(apiContracts.includes('BACKY_COMMERCE_WEBHOOK_SECRET`/`COMMERCE_WEBHOOK_SECRET'), 'API contracts must document provider certification alias families');
 }
 
+function assertAdminPageContentValidationSource() {
+  const pageListRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/pages/route.ts', import.meta.url),
+    'utf8',
+  );
+  const pageDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/pages/[pageId]/route.ts', import.meta.url),
+    'utf8',
+  );
+  const apiContracts = fs.readFileSync(
+    new URL('../../../specs/backy-api-contracts.md', import.meta.url),
+    'utf8',
+  );
+
+  for (const [label, source] of [['page create', pageListRoute], ['page update', pageDetailRoute]]) {
+    assert(source.includes('pageContentValidationError'), `${label} route must validate explicit editor content payloads`);
+    assert(source.includes('"INVALID_PAGE_CONTENT"'), `${label} route must reject non-object/non-array content payloads`);
+    assert(source.includes('"INVALID_PAGE_CONTENT_ELEMENTS"'), `${label} route must reject non-array content.elements payloads`);
+    assert(source.includes('"INVALID_PAGE_CANVAS_SIZE"'), `${label} route must reject malformed canvasSize payloads`);
+    assert(source.includes('Number.isFinite(width)') && source.includes('Number.isFinite(height)'), `${label} route must require finite canvas dimensions`);
+  }
+
+  assert(
+    apiContracts.includes('INVALID_PAGE_CONTENT') &&
+      apiContracts.includes('INVALID_PAGE_CONTENT_ELEMENTS') &&
+      apiContracts.includes('INVALID_PAGE_CANVAS_SIZE'),
+    'API contracts must document invalid admin page editor content errors',
+  );
+}
+
 async function request(pathOrUrl, init) {
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${baseUrl}${pathOrUrl}`;
   const headers = new Headers(init?.headers || {});
@@ -627,6 +657,7 @@ if (process.env.BACKY_ADMIN_CONTRACT_SOURCE_GUARD === '1') {
   assertHostedFeedErrorContractSource();
   assertSiteSettingsLocalizationSource();
   assertAdminSettingsContractSource();
+  assertAdminPageContentValidationSource();
   console.log(JSON.stringify({ ok: true, guard: 'admin-contract-source' }));
   process.exit(0);
 }
@@ -635,6 +666,7 @@ try {
   assertInteractiveSandboxRouteSource();
   assertHostedFeedErrorContractSource();
   assertSiteSettingsLocalizationSource();
+  assertAdminPageContentValidationSource();
   await loginAdminApi();
   const initialSettings = await request('/api/admin/settings');
   const allowedAdminDomains = parseAllowedEmailDomains(initialSettings.json?.data?.settings?.auth?.allowedEmailDomains);
