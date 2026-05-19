@@ -223,6 +223,14 @@ const withFormFrontendDesign = <TForm extends { settings?: unknown }>(form: TFor
   frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings),
 });
 
+const normalizeFrontendSubmissionAliasKey = (value: string): string => (
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9_ -]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+);
+
 const normalizeFrontendSubmissionValueKeys = (
   form: Pick<FormDefinition, 'fields' | 'settings'>,
   values: Record<string, unknown>,
@@ -236,7 +244,9 @@ const normalizeFrontendSubmissionValueKeys = (
       return acc;
     }
 
-    const mappedKey = frontendFieldKeyMap[rawKey];
+    const mappedKey =
+      frontendFieldKeyMap[rawKey] ||
+      frontendFieldKeyMap[normalizeFrontendSubmissionAliasKey(rawKey)];
     if (mappedKey && fieldKeys.has(mappedKey) && !Object.prototype.hasOwnProperty.call(acc, mappedKey)) {
       acc[mappedKey] = value;
     }

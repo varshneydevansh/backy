@@ -5167,13 +5167,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               type: "object",
               additionalProperties: true,
               description:
-                "Submit form field values under values, fields, data, or submission. Keys may be canonical Backy field keys or aliases from form.frontendFieldKeyMap. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, and captcha token fields are reserved transport metadata keys.",
+                "Submit form field values under values, fields, data, or submission. Keys may be canonical Backy field keys or aliases from form.frontendFieldKeyMap; alias lookup also normalizes casing, spaces, hyphens, and punctuation. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, and captcha token fields are reserved transport metadata keys.",
               properties: {
                 values: {
                   type: "object",
                   additionalProperties: true,
                   description:
-                    "Preferred field value map. Accepts canonical field keys or frontendFieldKeyMap aliases.",
+                    "Preferred field value map. Accepts canonical field keys or normalized frontendFieldKeyMap aliases.",
                 },
                 fields: {
                   type: "object",

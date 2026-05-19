@@ -283,11 +283,14 @@ const assertFormsPersistenceCertificationSource = () => {
   );
   assert(
     publicFormSubmissionsRouteSource.includes('normalizeFrontendSubmissionValueKeys') &&
+      publicFormSubmissionsRouteSource.includes('normalizeFrontendSubmissionAliasKey') &&
       publicFormSubmissionsRouteSource.includes('frontendFormFieldKeyMapFromMetadata(form.settings)') &&
+      publicFormSubmissionsRouteSource.includes('frontendFieldKeyMap[normalizeFrontendSubmissionAliasKey(rawKey)]') &&
       publicFormSubmissionsRouteSource.includes('const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values)') &&
       publicFormSubmissionsRouteSource.includes('const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues)') &&
       publicOpenApiRouteSource.includes('canonical field keys or frontendFieldKeyMap aliases') &&
-      publicOpenApiRouteSource.includes('Accepts canonical field keys or frontendFieldKeyMap aliases.'),
+      publicOpenApiRouteSource.includes('alias lookup also normalizes casing, spaces, hyphens, and punctuation') &&
+      publicOpenApiRouteSource.includes('Accepts canonical field keys or normalized frontendFieldKeyMap aliases.'),
     'Public form submissions must accept frontend field key map aliases before validation and storage',
   );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
@@ -1229,10 +1232,10 @@ const assertFrontendTemplateForm = async (formId) => {
       startedAt: Date.now() - 3000,
       honeypot: '',
       values: {
-        'Full name': 'Frontend Alias User',
-        Email: 'forms-frontend-alias@example.com',
-        'Project budget': '$25k+',
-        Message: 'Submitted with frontend aliases.',
+        'full name': 'Frontend Alias User',
+        EMAIL: 'forms-frontend-alias@example.com',
+        'Project Budget!': '$25k+',
+        message: 'Submitted with frontend aliases.',
       },
     }),
   });
