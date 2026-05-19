@@ -81,6 +81,19 @@ const mediaScopeFromInput = (value: string | null): { scope?: PublicMediaScopeFi
     return { invalid: value };
 };
 
+const booleanFilterFromInput = (value: string | null): { value?: boolean; invalid?: string } => {
+    if (value === null) {
+        return {};
+    }
+
+    const parsed = booleanQueryFlag(value);
+    if (parsed === undefined && value.trim().length > 0) {
+        return { invalid: value };
+    }
+
+    return { value: parsed };
+};
+
 const mediaTagMatches = (tags: string[], tag: string | null) => {
     if (!tag) {
         return true;
@@ -134,7 +147,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const scope = mediaScope.scope;
         const pageId = searchParams.get('pageId');
         const postId = searchParams.get('postId') || searchParams.get('blogId');
-        const globalOnly = booleanQueryFlag(searchParams.get('global'));
+        const globalFilter = booleanFilterFromInput(searchParams.get('global'));
+        if (globalFilter.invalid) {
+            return errorResponse(
+                400,
+                'INVALID_MEDIA_GLOBAL_FILTER',
+                'Invalid global media filter. Use true or false.',
+                requestId,
+            );
+        }
+        const globalOnly = globalFilter.value;
         const search = searchParams.get('search') || searchParams.get('q');
         const tag = searchParams.get('tag');
         const folderId = searchParams.has('folderId') ? searchParams.get('folderId') : undefined;

@@ -65,6 +65,12 @@ assert(
   'Public media list route must reject invalid media scope filters instead of silently returning all assets.',
 );
 assert(
+  publicMediaRoute.includes("'INVALID_MEDIA_GLOBAL_FILTER'") &&
+    publicMediaRoute.includes('globalFilter.invalid') &&
+    publicMediaRoute.includes('Use true or false'),
+  'Public media list route must reject invalid global filters instead of silently returning all assets.',
+);
+assert(
   mediaRoute.includes('const mimeType = file.type || "application/octet-stream"') ||
     mediaRoute.includes("const mimeType = file.type || 'application/octet-stream'"),
   'Media upload route must preserve a safe default MIME type for generic file uploads.',
@@ -109,9 +115,9 @@ assert(
 );
 assert(
   openApiRoute.includes('"400"') &&
-    openApiRoute.includes('Invalid media type or scope filter') &&
+    openApiRoute.includes('Invalid media type, scope, or global filter') &&
     openApiRoute.includes('#/components/schemas/ErrorEnvelope'),
-  'Public OpenAPI media list route must document invalid type/scope filter error envelopes.',
+  'Public OpenAPI media list route must document invalid type/scope/global filter error envelopes.',
 );
 assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
@@ -141,6 +147,10 @@ assert(
 assert(
   apiContracts.includes('Invalid public media scope filters return `400 INVALID_MEDIA_SCOPE`'),
   'API contract docs must describe invalid public media scope filter errors.',
+);
+assert(
+  apiContracts.includes('Invalid public media global filters return `400 INVALID_MEDIA_GLOBAL_FILTER`'),
+  'API contract docs must describe invalid public media global filter errors.',
 );
 
 console.log(JSON.stringify({
