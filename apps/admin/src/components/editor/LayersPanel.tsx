@@ -653,6 +653,19 @@ export function LayersPanel({
     const [collapsedLayerIds, setCollapsedLayerIds] = useState<string[]>([]);
     const [layerSearch, setLayerSearch] = useState('');
     const collapsedLayerIdSet = useMemo(() => new Set(collapsedLayerIds), [collapsedLayerIds]);
+    const collapsibleLayerIds = useMemo(() => {
+        const ids: string[] = [];
+        const collect = (items: CanvasElement[]) => {
+            items.forEach((element) => {
+                if (element.children?.length) {
+                    ids.push(element.id);
+                    collect(element.children);
+                }
+            });
+        };
+        collect(elements);
+        return ids;
+    }, [elements]);
     const normalizedLayerSearch = layerSearch.trim().toLowerCase();
     const filteredLayerIdSet = useMemo(() => {
         if (!normalizedLayerSearch) {
@@ -750,6 +763,14 @@ export function LayersPanel({
         setFocusedLayerId(selectedFocusableId || renderedLayerIds[0]);
     }, [disabled, focusedLayerId, renderedLayerIds, selectedIds]);
 
+    useEffect(() => {
+        setCollapsedLayerIds((current) => {
+            const collapsibleIds = new Set(collapsibleLayerIds);
+            const next = current.filter((id) => collapsibleIds.has(id));
+            return next.length === current.length ? current : next;
+        });
+    }, [collapsibleLayerIds]);
+
     const focusLayerRow = useCallback((id: string) => {
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-layer-id]'))
             .find((candidate) => candidate.getAttribute('data-layer-id') === id);
@@ -763,6 +784,14 @@ export function LayersPanel({
                 : [...current, id]
         ));
     }, []);
+
+    const handleExpandAll = useCallback(() => {
+        setCollapsedLayerIds([]);
+    }, []);
+
+    const handleCollapseAll = useCallback(() => {
+        setCollapsedLayerIds(collapsibleLayerIds);
+    }, [collapsibleLayerIds]);
 
     const handleKeyboardNavigate = useCallback(
         (id: string, key: string, multiSelect: boolean, rangeSelect: boolean) => {
@@ -981,6 +1010,64 @@ export function LayersPanel({
                 >
                     Clear
                 </button>
+            </div>
+
+            <div
+                style={{
+                    padding: '8px 12px',
+                    borderBottom: '1px solid #e5e7eb',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    fontSize: '12px',
+                    color: '#6b7280',
+                }}
+                data-testid="editor-layer-tree-controls"
+                data-layer-collapsible-count={collapsibleLayerIds.length}
+                data-layer-collapsed-count={collapsedLayerIds.length}
+            >
+                <span>{renderedLayerIds.length} shown</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                        type="button"
+                        onClick={handleExpandAll}
+                        disabled={collapsedLayerIds.length === 0}
+                        data-testid="editor-layer-expand-all"
+                        aria-label="Expand all layers"
+                        style={{
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            background: '#ffffff',
+                            color: collapsedLayerIds.length > 0 ? '#374151' : '#9ca3af',
+                            cursor: collapsedLayerIds.length > 0 ? 'pointer' : 'not-allowed',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            padding: '5px 8px',
+                        }}
+                    >
+                        Expand all
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleCollapseAll}
+                        disabled={collapsibleLayerIds.length === 0 || collapsedLayerIds.length === collapsibleLayerIds.length}
+                        data-testid="editor-layer-collapse-all"
+                        aria-label="Collapse all layers"
+                        style={{
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            background: '#ffffff',
+                            color: collapsibleLayerIds.length > 0 && collapsedLayerIds.length !== collapsibleLayerIds.length ? '#374151' : '#9ca3af',
+                            cursor: collapsibleLayerIds.length > 0 && collapsedLayerIds.length !== collapsibleLayerIds.length ? 'pointer' : 'not-allowed',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            padding: '5px 8px',
+                        }}
+                    >
+                        Collapse all
+                    </button>
+                </div>
             </div>
 
             {/* Layer list */}

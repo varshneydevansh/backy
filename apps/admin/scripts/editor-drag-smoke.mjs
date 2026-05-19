@@ -232,6 +232,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('const handleLayerRename') && source.includes('nextElement.name = nextName') && source.includes('onRename={handleLayerRename}'), 'Editor layer rename must update the selected canvas element name through history');
   assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
   assert(layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') && layersPanelSource.includes('data-testid="editor-layer-search-empty"'), 'Editor layer search must reveal matching descendants and expose an empty state');
+  assert(layersPanelSource.includes('data-testid="editor-layer-expand-all"') && layersPanelSource.includes('data-testid="editor-layer-collapse-all"') && layersPanelSource.includes('collapsibleLayerIds'), 'Editor layers panel must support bulk expand and collapse controls');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10025,6 +10026,67 @@ const testLayersPanelControls = async (client, pageId) => {
     initialTree.byId['smoke-child-button'].depth > initialTree.byId['smoke-box'].depth,
     `Layers panel did not show nested child depth: ${JSON.stringify(initialTree)}`,
   );
+  const bulkCollapseExpand = await evaluate(client, `(async () => {
+    const collapseAll = document.querySelector('[data-testid="editor-layer-collapse-all"]');
+    const expandAll = document.querySelector('[data-testid="editor-layer-expand-all"]');
+    const controls = document.querySelector('[data-testid="editor-layer-tree-controls"]');
+    if (!(collapseAll instanceof HTMLButtonElement) || !(expandAll instanceof HTMLButtonElement) || !(controls instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-bulk-controls',
+        hasCollapseAll: Boolean(collapseAll),
+        hasExpandAll: Boolean(expandAll),
+        hasControls: Boolean(controls),
+      };
+    }
+
+    const initial = {
+      collapsibleCount: controls.getAttribute('data-layer-collapsible-count') || '',
+      collapsedCount: controls.getAttribute('data-layer-collapsed-count') || '',
+      collapseDisabled: collapseAll.disabled,
+      expandDisabled: expandAll.disabled,
+    };
+    collapseAll.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const controlsAfterCollapse = document.querySelector('[data-testid="editor-layer-tree-controls"]');
+    const afterCollapse = {
+      parentExpanded: document.querySelector('[data-layer-id="smoke-box"]')?.getAttribute('aria-expanded') || '',
+      childVisible: Boolean(document.querySelector('[data-layer-id="smoke-child-button"]')),
+      collapsibleCount: controlsAfterCollapse?.getAttribute('data-layer-collapsible-count') || '',
+      collapsedCount: controlsAfterCollapse?.getAttribute('data-layer-collapsed-count') || '',
+      collapseDisabled: collapseAll.disabled,
+      expandDisabled: expandAll.disabled,
+    };
+    expandAll.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const controlsAfterExpand = document.querySelector('[data-testid="editor-layer-tree-controls"]');
+    return {
+      ok: true,
+      initial,
+      afterCollapse,
+      afterExpand: {
+        parentExpanded: document.querySelector('[data-layer-id="smoke-box"]')?.getAttribute('aria-expanded') || '',
+        childVisible: Boolean(document.querySelector('[data-layer-id="smoke-child-button"]')),
+        collapsibleCount: controlsAfterExpand?.getAttribute('data-layer-collapsible-count') || '',
+        collapsedCount: controlsAfterExpand?.getAttribute('data-layer-collapsed-count') || '',
+        collapseDisabled: collapseAll.disabled,
+        expandDisabled: expandAll.disabled,
+      },
+    };
+  })()`);
+  assert(
+    bulkCollapseExpand?.ok &&
+      Number(bulkCollapseExpand.initial.collapsibleCount) >= 1 &&
+      bulkCollapseExpand.afterCollapse.parentExpanded === 'false' &&
+      bulkCollapseExpand.afterCollapse.childVisible === false &&
+      bulkCollapseExpand.afterCollapse.collapsedCount === bulkCollapseExpand.afterCollapse.collapsibleCount &&
+      bulkCollapseExpand.afterCollapse.expandDisabled === false &&
+      bulkCollapseExpand.afterExpand.parentExpanded === 'true' &&
+      bulkCollapseExpand.afterExpand.childVisible === true &&
+      bulkCollapseExpand.afterExpand.collapsedCount === '0' &&
+      bulkCollapseExpand.afterExpand.collapseDisabled === false,
+    `Layer bulk expand/collapse controls did not toggle nested tree rows: ${JSON.stringify(bulkCollapseExpand)}`,
+  );
   const collapsedTreeClick = await clickLayerAction(client, 'toggle-expand', 'smoke-box');
   const collapsedTree = await evaluate(client, `(() => {
     const parent = document.querySelector('[data-layer-id="smoke-box"]');
@@ -10425,6 +10487,7 @@ const testLayersPanelControls = async (client, pageId) => {
 
   return {
     initialTree,
+    bulkCollapseExpand,
     multiSelected,
     rangeSelected,
     selectedRowActions,
