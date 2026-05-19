@@ -205,6 +205,13 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('Save this canvas to create a rollback point before publishing or restoring designs.'), 'Page editor revision empty state must explain how rollback points are captured');
 };
 
+const assertCanvasEditorShortcutSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
+  assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
+  assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
+};
+
 const assertEditorInteractiveSandboxPreviewSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   assert(source.includes('AdminInteractiveSandboxPreview'), 'Editor canvas must include an admin sandbox preview component for code components');
@@ -4241,6 +4248,14 @@ const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
   const redone = await readEditorElementState(client, [elementId]);
   assertElementState(redone, nudged, `${elementId} keyboard Ctrl+Shift+Z`);
 
+  await pressKey(client, 'z', { ctrlKey: true });
+  const undoneAgain = await readEditorElementState(client, [elementId]);
+  assertElementState(undoneAgain, before, `${elementId} keyboard Ctrl+Z before Ctrl+Y`);
+
+  await pressKey(client, 'y', { ctrlKey: true });
+  const redoneWithY = await readEditorElementState(client, [elementId]);
+  assertElementState(redoneWithY, nudged, `${elementId} keyboard Ctrl+Y`);
+
   return {
     elementId,
     before: before[elementId],
@@ -4248,6 +4263,8 @@ const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
     gridState,
     undone: undone[elementId],
     redone: redone[elementId],
+    undoneAgain: undoneAgain[elementId],
+    redoneWithY: redoneWithY[elementId],
   };
 };
 
@@ -13985,6 +14002,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   assertPageEditorFallbackIsReadOnly();
+  assertCanvasEditorShortcutSource();
   assertEditorInteractiveSandboxPreviewSource();
   assertInteractiveRegistryVersionPinningSource();
   assertComponentLibraryEmptyStateSource();

@@ -4066,7 +4066,7 @@ export function CanvasEditor({
         e.key.startsWith('Arrow') ||
         e.key === 'Delete' ||
         e.key === 'Backspace' ||
-        ((e.ctrlKey || e.metaKey) && ['x', 'v', 'd', 'g', 'z'].includes(key));
+        ((e.ctrlKey || e.metaKey) && ['x', 'v', 'd', 'g', 'y', 'z'].includes(key));
       if (!canEdit && isMutationShortcut) {
         e.preventDefault();
         setEditorNotice(editDisabledReason);
@@ -4128,14 +4128,17 @@ export function CanvasEditor({
         return;
       }
 
+      // Ctrl+Y / Cmd+Y or Shift+Ctrl+Z / Shift+Cmd+Z (Redo)
+      if ((e.ctrlKey || e.metaKey) && (key === 'y' || (key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
       // Ctrl+Z / Cmd+Z (Undo)
       if ((e.ctrlKey || e.metaKey) && key === 'z') {
         e.preventDefault();
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
+        handleUndo();
         return;
       }
 
@@ -4577,7 +4580,7 @@ export function CanvasEditor({
               onClick={handleRedo}
               disabled={isCanvasMutationDisabled || historyIndex >= history.length - 1}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Redo (Cmd/Ctrl+Shift+Z)"
+              title="Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)"
               aria-label="Redo"
             >
               <Redo className="h-4 w-4" />
