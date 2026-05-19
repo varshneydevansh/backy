@@ -230,6 +230,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes("e.key === 'ArrowLeft' || e.key === 'ArrowRight'") && layersPanelSource.includes('onToggleExpanded(element.id)'), 'Editor layers panel must support keyboard collapse and expand for nested rows');
   assert(layersPanelSource.includes('data-layer-action="rename"') && layersPanelSource.includes('data-layer-rename-input') && layersPanelSource.includes('getLayerDisplayName'), 'Editor layers panel must support inline top-level layer renaming');
   assert(source.includes('const handleLayerRename') && source.includes('nextElement.name = nextName') && source.includes('onRename={handleLayerRename}'), 'Editor layer rename must update the selected canvas element name through history');
+  assert(source.includes('selectedElement.name || selectedElementTypeLabel') && source.includes('data-testid="editor-inspector-selection-label"') && source.includes('data-testid="editor-inspector-selection-detail"'), 'Editor inspector selection card must display custom layer names with type/id detail');
   assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
   assert(layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') && layersPanelSource.includes('data-testid="editor-layer-search-empty"'), 'Editor layer search must reveal matching descendants and expose an empty state');
   assert(layersPanelSource.includes('data-testid="editor-layer-expand-all"') && layersPanelSource.includes('data-testid="editor-layer-collapse-all"') && layersPanelSource.includes('collapsibleLayerIds'), 'Editor layers panel must support bulk expand and collapse controls');
@@ -10377,6 +10378,31 @@ const testLayersPanelControls = async (client, pageId) => {
       renameLayer.inputStillOpen === false,
     `Layer inline rename did not update the row label: ${JSON.stringify({ renameLayerClick, renamedLayer })}`,
   );
+  const renamedInspector = await evaluate(client, `(() => {
+    const propertiesTab = document.querySelector('[data-testid="editor-tab-properties"]');
+    if (!(propertiesTab instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-properties-tab' };
+    }
+    propertiesTab.click();
+    const selection = document.querySelector('[data-testid="editor-inspector-selection"]');
+    const label = document.querySelector('[data-testid="editor-inspector-selection-label"]');
+    const detail = document.querySelector('[data-testid="editor-inspector-selection-detail"]');
+    return {
+      ok: true,
+      hasSelection: Boolean(selection),
+      label: label?.textContent || '',
+      detail: detail?.textContent || '',
+      selectedText: selection?.textContent || '',
+    };
+  })()`);
+  assert(
+    renamedInspector?.ok &&
+      renamedInspector.hasSelection &&
+      renamedInspector.label === renamedLayerName &&
+      /link/i.test(renamedInspector.detail) &&
+      renamedInspector.detail.includes('smoke-link'),
+    `Inspector selection card did not show renamed layer name with type/id detail: ${JSON.stringify(renamedInspector)}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10505,6 +10531,7 @@ const testLayersPanelControls = async (client, pageId) => {
     renameLayerClick,
     renamedLayerName,
     renameLayer,
+    renamedInspector,
     reorder,
     hiddenState,
     toolbarVisibleState,

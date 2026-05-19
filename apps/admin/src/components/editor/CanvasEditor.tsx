@@ -3058,8 +3058,16 @@ export function CanvasEditor({
   const selectedLayersAreLocked = selectedActiveElements.length > 0
     && selectedActiveElements.every((element) => element.locked === true);
   const selectedLayerActionLabel = selectedIds.length > 1 ? 'selected layers' : 'selected layer';
-  const selectedElementLabel = selectedElement
+  const selectedElementTypeLabel = selectedElement
     ? normalizeElementType(selectedElement.type)
+    : null;
+  const selectedElementLabel = selectedElement
+    ? selectedElement.name || selectedElementTypeLabel
+    : null;
+  const selectedElementDetail = selectedElement
+    ? selectedElement.name
+      ? `${selectedElementTypeLabel} - ${selectedElement.id}`
+      : selectedElement.id
     : null;
   const selectableChildLayer = selectedElement?.children?.find((child) => (
     child.visible !== false && !child.locked
@@ -5644,10 +5652,10 @@ export function CanvasEditor({
                     <>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold capitalize text-slate-950">
+                          <div className="truncate text-sm font-semibold text-slate-950" data-testid="editor-inspector-selection-label">
                             {selectedElementLabel}
                           </div>
-                          <div className="truncate text-xs text-slate-500">{selectedElement.id}</div>
+                          <div className="truncate text-xs text-slate-500" data-testid="editor-inspector-selection-detail">{selectedElementDetail}</div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
                           {selectedElement.locked && (
