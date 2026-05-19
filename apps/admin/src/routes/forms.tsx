@@ -134,6 +134,9 @@ const FORM_VALIDATION_RULES: Array<{
   { type: 'min', label: 'Min value', valuePlaceholder: '1', valueMode: 'number' },
   { type: 'max', label: 'Max value', valuePlaceholder: '100', valueMode: 'number' },
 ];
+const formValidationRuleHasValue = (rule: Pick<FormValidationRule, 'value'> | undefined): boolean => (
+  rule?.value !== undefined && String(rule.value).trim().length > 0
+);
 const DEFAULT_FORM_SPAM_SETTINGS: Required<FormSpamSettings> = {
   minFillMs: 900,
   rateLimitWindowMs: 60_000,
@@ -1692,9 +1695,8 @@ function FormsRoute() {
             ...patch,
           };
           const withoutRule = existingRules.filter((rule) => rule.type !== ruleType);
-          const hasValue = nextRule.value !== undefined && String(nextRule.value).trim().length > 0;
-          const hasMessage = Boolean(nextRule.message?.trim());
-          const validation = hasValue || hasMessage
+          const hasValue = formValidationRuleHasValue(nextRule);
+          const validation = hasValue
             ? [...withoutRule, nextRule]
             : withoutRule;
 
@@ -4332,6 +4334,7 @@ function FormsRoute() {
                                       {fieldValidationRuleDefinitions.map((ruleDefinition) => {
                                         const rule = getValidationRule(field, ruleDefinition.type);
                                         const value = rule?.value ?? '';
+                                        const ruleHasValue = formValidationRuleHasValue(rule);
                                         return (
                                           <div key={ruleDefinition.type} className="rounded-lg border border-border bg-card p-3">
                                             <div className="grid gap-2 sm:grid-cols-[minmax(100px,0.7fr)_minmax(100px,0.7fr)_minmax(140px,1fr)]">
@@ -4359,10 +4362,11 @@ function FormsRoute() {
                                                 <input
                                                   value={rule?.message || ''}
                                                   placeholder={defaultValidationMessage(field.label, ruleDefinition.type)}
+                                                  disabled={!ruleHasValue}
                                                   onChange={(event) => patchFormDraftFieldValidation(fieldIndex, ruleDefinition.type, {
                                                     message: event.target.value,
                                                   })}
-                                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                                   aria-label={`${field.label} ${ruleDefinition.label} message`}
                                                 />
                                               </label>
@@ -5827,14 +5831,11 @@ const normalizeValidationRules = (field: FormFieldDefinition): FormValidationRul
       return;
     }
 
-    const value = typeof rule.value === 'number'
-      ? rule.value
-      : typeof rule.value === 'string'
-        ? rule.value.trim()
-        : undefined;
-    if (value === undefined || value === '') {
+    if (!formValidationRuleHasValue(rule)) {
       return;
     }
+
+    const value = typeof rule.value === 'number' ? rule.value : String(rule.value).trim();
 
     rules.push({
         type,

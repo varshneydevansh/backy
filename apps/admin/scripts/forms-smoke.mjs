@@ -115,7 +115,10 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('data-testid="form-field-validation-unavailable"') &&
       source.includes('const allowedValidationTypes = new Set(validationTypesForFieldType(normalizeFormFieldType(field.type)))') &&
       source.includes('if (!allowedValidationTypes.has(ruleType))') &&
-      source.includes('normalizeValidationRules({ ...field, type: fieldType })'),
+      source.includes('normalizeValidationRules({ ...field, type: fieldType })') &&
+      source.includes('formValidationRuleHasValue') &&
+      source.includes('const validation = hasValue') &&
+      source.includes('disabled={!ruleHasValue}'),
     'Forms builder must only expose and persist validation rules compatible with each field type',
   );
   assert(
