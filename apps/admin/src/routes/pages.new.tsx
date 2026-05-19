@@ -7713,24 +7713,40 @@ function buildTemplateElements(input: {
                 height: 300,
                 dataBindings: [{ source: 'commerce', mode: 'cart', fields: ['items', 'itemCount', 'subtotal', 'discount', 'shipping', 'tax', 'total'] }],
                 props: { backgroundColor: '#f0fdfa', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 430 },
+                    mobile: { width: 375, height: 560 },
+                },
                 children: [
                     createCanvasElement('text', 76, 58, {
                         id: 'cart-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Cart review', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'cart-heading',
                         width: 560,
                         height: 86,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 120, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 198, {
                         id: 'cart-copy',
                         width: 560,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 194, width: 480, height: 70, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 222, width: 323, height: 100, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 768, 72, {
                         id: 'cart-status-card',
@@ -7738,6 +7754,10 @@ function buildTemplateElements(input: {
                         height: 132,
                         dataBindings: [{ source: 'commerce', mode: 'cart-summary', fields: ['itemCount', 'total'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 300, width: 330, height: 112 },
+                            mobile: { x: 24, y: 390, width: 327, height: 122 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'cart-status-label',
@@ -7761,12 +7781,20 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 520,
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 430, width: 768, height: 930 },
+                    mobile: { y: 560, width: 375, height: 1160 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 52, {
                         id: 'cart-items-heading',
                         width: 340,
                         height: 42,
                         props: { content: 'Your items', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 340 },
+                            mobile: { x: 24, y: 42, width: 300, props: { fontSize: 28 } },
+                        },
                     }),
                     createCanvasElement('box', 72, 120, {
                         id: 'cart-item-list',
@@ -7774,12 +7802,19 @@ function buildTemplateElements(input: {
                         height: 330,
                         dataBindings: [{ source: 'commerce', mode: 'cart-items', limit: 10 }],
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 118, width: 660, height: 330 },
+                            mobile: { x: 24, y: 110, width: 327, height: 530 },
+                        },
                         children: ['Digital kit', 'Service package', 'Consultation'].map((item, index) => createCanvasElement('box', 20, 20 + index * 98, {
                             id: `cart-item-row-${index}`,
                             width: 620,
                             height: 78,
                             dataBindings: [{ source: 'commerce', mode: 'cart-item', index }],
                             props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                            responsive: {
+                                mobile: { x: 20, y: 20 + index * 160, width: 287, height: 150 },
+                            },
                             children: [
                                 createCanvasElement('heading', 18, 15, {
                                     id: `cart-item-title-${index}`,
@@ -7787,6 +7822,9 @@ function buildTemplateElements(input: {
                                     height: 28,
                                     props: { content: item, level: 'h3', fontSize: 18, fontWeight: '750', color: '#111827' },
                                     dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'title', targetPath: 'props.content' }],
+                                    responsive: {
+                                        mobile: { width: 240 },
+                                    },
                                 }),
                                 createCanvasElement('text', 18, 48, {
                                     id: `cart-item-price-${index}`,
@@ -7794,6 +7832,9 @@ function buildTemplateElements(input: {
                                     height: 22,
                                     props: { content: '$49.00', fontSize: 14, fontWeight: '700', color: '#0f766e' },
                                     dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'price', targetPath: 'props.content' }],
+                                    responsive: {
+                                        mobile: { y: 50 },
+                                    },
                                 }),
                                 createCanvasElement('input', 322, 18, {
                                     id: `cart-quantity-control-${index}`,
@@ -7801,6 +7842,9 @@ function buildTemplateElements(input: {
                                     height: 44,
                                     props: { label: 'Qty', name: `quantity_${index}`, inputType: 'number', value: '1', min: 1 },
                                     dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'quantity', targetPath: 'props.value' }],
+                                    responsive: {
+                                        mobile: { x: 18, y: 84, width: 94, height: 44 },
+                                    },
                                 }),
                                 createCanvasElement('text', 450, 26, {
                                     id: `cart-item-total-${index}`,
@@ -7808,12 +7852,18 @@ function buildTemplateElements(input: {
                                     height: 24,
                                     props: { content: '$49.00', fontSize: 15, fontWeight: '800', color: '#111827', textAlign: 'right' },
                                     dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'lineTotal', targetPath: 'props.content' }],
+                                    responsive: {
+                                        mobile: { x: 120, y: 94, width: 70 },
+                                    },
                                 }),
                                 createCanvasElement('button', 542, 22, {
                                     id: `cart-remove-button-${index}`,
                                     width: 58,
                                     height: 36,
                                     props: { label: 'Remove', backgroundColor: '#f1f5f9', color: '#334155', borderRadius: 8, fontSize: 12, fontWeight: '700', action: 'commerce.cart.remove' },
+                                    responsive: {
+                                        mobile: { x: 204, y: 86, width: 68, height: 44 },
+                                    },
                                 }),
                             ],
                         })),
@@ -7824,6 +7874,10 @@ function buildTemplateElements(input: {
                         height: 330,
                         dataBindings: [{ source: 'commerce', mode: 'cart-summary', fields: ['subtotal', 'discount', 'shipping', 'tax', 'total'] }],
                         props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        responsive: {
+                            tablet: { x: 54, y: 500, width: 660, height: 330 },
+                            mobile: { x: 24, y: 680, width: 327, height: 350 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'cart-summary-heading',
@@ -7842,6 +7896,10 @@ function buildTemplateElements(input: {
                                 width: 70,
                                 height: 22,
                                 props: { content: item, fontSize: 14, fontWeight: '700', color: '#ffffff', textAlign: 'right' },
+                                responsive: {
+                                    tablet: { x: 540, width: 80 },
+                                    mobile: { x: 214, width: 70 },
+                                },
                             })),
                             createCanvasElement('text', 24, 244, {
                                 id: 'cart-total-label',
@@ -7855,6 +7913,10 @@ function buildTemplateElements(input: {
                                 height: 30,
                                 props: { content: '$154.44', fontSize: 20, fontWeight: '800', color: '#99f6e4', textAlign: 'right' },
                                 dataBindings: [{ source: 'commerce', mode: 'cart-summary', field: 'total', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { x: 530, width: 90 },
+                                    mobile: { x: 200, width: 94 },
+                                },
                             }),
                         ],
                     }),
@@ -7865,24 +7927,40 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 220,
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1360, width: 768, height: 300 },
+                    mobile: { y: 1720, width: 375, height: 420 },
+                },
                 children: [
                     createCanvasElement('button', 72, 70, {
                         id: 'cart-continue-shopping-button',
                         width: 190,
                         height: 52,
                         props: { label: 'Continue shopping', href: '/store', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid', fontSize: 16, fontWeight: '700' },
+                        responsive: {
+                            tablet: { x: 54, y: 66 },
+                            mobile: { x: 24, y: 54, width: 327, height: 52 },
+                        },
                     }),
                     createCanvasElement('button', 828, 70, {
                         id: 'cart-checkout-button',
                         width: 220,
                         height: 54,
                         props: { label: 'Proceed to checkout', href: '/checkout', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '800', action: 'commerce.checkout' },
+                        responsive: {
+                            tablet: { x: 494, y: 66 },
+                            mobile: { x: 24, y: 126, width: 327, height: 54 },
+                        },
                     }),
                     createCanvasElement('paragraph', 828, 142, {
                         id: 'cart-checkout-copy',
                         width: 280,
                         height: 44,
                         props: { content: 'Checkout can use Backy public order intake plus your configured payment, tax, shipping, and discount providers.', fontSize: 13, lineHeight: 1.45, color: '#64748b' },
+                        responsive: {
+                            tablet: { x: 388, y: 140, width: 326, height: 60 },
+                            mobile: { x: 26, y: 210, width: 323, height: 78 },
+                        },
                     }),
                 ],
             }),

@@ -1593,6 +1593,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
     'Shipping policy page starter must seed explicit tablet/mobile responsive overrides for commerce delivery sections.',
   );
+  assert(
+    source.includes("id: 'cart-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 560 }") &&
+      source.includes("id: 'cart-status-card'") &&
+      source.includes("mobile: { x: 24, y: 390, width: 327, height: 122 }") &&
+      source.includes("id: 'cart-items-section'") &&
+      source.includes("tablet: { y: 430, width: 768, height: 930 }") &&
+      source.includes("id: 'cart-item-list'") &&
+      source.includes("mobile: { x: 24, y: 110, width: 327, height: 530 }") &&
+      source.includes("id: `cart-item-row-${index}`") &&
+      source.includes("mobile: { x: 20, y: 20 + index * 160, width: 287, height: 150 }") &&
+      source.includes("id: 'cart-summary-card'") &&
+      source.includes("tablet: { x: 54, y: 500, width: 660, height: 330 }") &&
+      source.includes("id: 'cart-actions-section'") &&
+      source.includes("mobile: { y: 1720, width: 375, height: 420 }") &&
+      source.includes("id: 'cart-checkout-button'") &&
+      source.includes("mobile: { x: 24, y: 126, width: 327, height: 54 }"),
+    'Cart page starter must seed explicit tablet/mobile responsive overrides for cart review and checkout actions.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
