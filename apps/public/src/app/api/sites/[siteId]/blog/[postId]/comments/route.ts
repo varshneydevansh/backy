@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Comment } from '@backy-cms/core';
+import type { Comment, CommentStatus } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
@@ -26,8 +26,14 @@ interface RouteParams {
   }>;
 }
 
-function parseStatus(raw: string | null) {
-  if (!raw) return 'approved';
+type CommentStatusFilter = CommentStatus | 'all';
+type CommentSort = 'newest' | 'oldest';
+
+function parseStatus(raw: string | null): { value: CommentStatusFilter; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: 'approved' };
+  }
+
   if (
     raw === 'pending' ||
     raw === 'approved' ||
@@ -36,19 +42,40 @@ function parseStatus(raw: string | null) {
     raw === 'blocked' ||
     raw === 'all'
   ) {
-    return raw;
+    return { value: raw };
   }
-  return 'approved';
+
+  return { value: 'approved', invalid: raw };
 }
 
-function parseSort(raw: string | null) {
-  return raw === 'oldest' ? 'oldest' : 'newest';
+function parseSort(raw: string | null): { value: CommentSort; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: 'newest' };
+  }
+
+  if (raw === 'oldest' || raw === 'newest') {
+    return { value: raw };
+  }
+
+  return { value: 'newest', invalid: raw };
 }
 
-function parseBoundedInteger(raw: string | null, fallback: number, min: number, max: number) {
-  const parsed = Number.parseInt(raw || '', 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(Math.max(parsed, min), max);
+function integerQueryFromInput(
+  raw: string | null,
+  fallback: number,
+  min: number,
+  max?: number,
+): { value: number; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: fallback };
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < min || (max !== undefined && parsed > max)) {
+    return { value: fallback, invalid: raw };
+  }
+
+  return { value: parsed };
 }
 
 function parseTextInput(raw: unknown) {
@@ -128,13 +155,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { siteId, postId } = await params;
     const { searchParams } = new URL(request.url);
 
-    const status = parseStatus(searchParams.get('status'));
+    const statusFilter = parseStatus(searchParams.get('status'));
+    if (statusFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_BLOG_COMMENT_STATUS',
+        'Invalid blog comment status filter. Use pending, approved, rejected, spam, blocked, or all.',
+        requestId,
+      );
+    }
+    const status = statusFilter.value;
     const parentId = searchParams.get('parentId');
     const parentOnly = searchParams.get('parentOnly') === 'true' || Boolean(parentId);
-    const sort = parseSort(searchParams.get('sort'));
+    const sortFilter = parseSort(searchParams.get('sort'));
+    if (sortFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_BLOG_COMMENT_SORT',
+        'Invalid blog comment sort. Use newest or oldest.',
+        requestId,
+      );
+    }
+    const sort = sortFilter.value;
     const commentThreadId = parseTextInput(searchParams.get('commentThreadId'));
-    const limit = parseBoundedInteger(searchParams.get('limit'), 20, 1, 100);
-    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+    const limitFilter = integerQueryFromInput(searchParams.get('limit'), 20, 1, 100);
+    if (limitFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_BLOG_COMMENT_LIMIT',
+        'Invalid blog comment limit. Use an integer from 1 to 100.',
+        requestId,
+      );
+    }
+    const offsetFilter = integerQueryFromInput(searchParams.get('offset'), 0, 0);
+    if (offsetFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_BLOG_COMMENT_OFFSET',
+        'Invalid blog comment offset. Use an integer greater than or equal to 0.',
+        requestId,
+      );
+    }
+    const limit = limitFilter.value;
+    const offset = offsetFilter.value;
 
     if (status !== 'approved') {
       const access = await requireAdminAccess(request, requestId, { permission: 'comments.view' });

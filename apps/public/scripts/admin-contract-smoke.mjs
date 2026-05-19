@@ -304,6 +304,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
   );
+  const publicBlogCommentsRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/blog/[postId]/comments/route.ts', import.meta.url),
+    'utf8',
+  );
   const apiContracts = fs.readFileSync(
     new URL('../../../specs/backy-api-contracts.md', import.meta.url),
     'utf8',
@@ -342,6 +346,13 @@ function assertAdminPageContentValidationSource() {
   assert(publicBlogRoute.includes("'INVALID_BLOG_ARCHIVE_YEAR'"), 'public blog list route must reject invalid archive year filters');
   assert(publicBlogRoute.includes("'INVALID_BLOG_ARCHIVE_MONTH'"), 'public blog list route must reject invalid archive month filters');
   assert(publicBlogRoute.includes('statusFilter.invalid'), 'public blog list route must reject invalid status filters');
+  assert(publicBlogCommentsRoute.includes("'INVALID_BLOG_COMMENT_STATUS'"), 'public blog comments route must reject invalid status filters');
+  assert(publicBlogCommentsRoute.includes("'INVALID_BLOG_COMMENT_SORT'"), 'public blog comments route must reject invalid sort filters');
+  assert(publicBlogCommentsRoute.includes("'INVALID_BLOG_COMMENT_LIMIT'"), 'public blog comments route must reject invalid limit filters');
+  assert(publicBlogCommentsRoute.includes("'INVALID_BLOG_COMMENT_OFFSET'"), 'public blog comments route must reject invalid offset filters');
+  assert(publicBlogCommentsRoute.includes('integerQueryFromInput'), 'public blog comments route must parse pagination filters strictly');
+  assert(publicBlogCommentsRoute.includes('statusFilter.invalid'), 'public blog comments route must branch on invalid status filters');
+  assert(publicBlogCommentsRoute.includes('sortFilter.invalid'), 'public blog comments route must branch on invalid sort filters');
   assert(publicPagesRoute.includes("'INVALID_PAGE_LIMIT'"), 'public pages list route must reject invalid limit filters');
   assert(publicPagesRoute.includes("'INVALID_PAGE_OFFSET'"), 'public pages list route must reject invalid offset filters');
   assert(publicPagesRoute.includes('parseBoundedInteger'), 'public pages list route must parse pagination filters strictly');
@@ -390,6 +401,10 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_BLOG_OFFSET') &&
       apiContracts.includes('INVALID_BLOG_ARCHIVE_YEAR') &&
       apiContracts.includes('INVALID_BLOG_ARCHIVE_MONTH') &&
+      apiContracts.includes('INVALID_BLOG_COMMENT_STATUS') &&
+      apiContracts.includes('INVALID_BLOG_COMMENT_SORT') &&
+      apiContracts.includes('INVALID_BLOG_COMMENT_LIMIT') &&
+      apiContracts.includes('INVALID_BLOG_COMMENT_OFFSET') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
     'API contracts must document invalid admin page/blog editor content and status errors',
   );

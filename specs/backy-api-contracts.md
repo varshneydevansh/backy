@@ -376,6 +376,7 @@ Public page payload should include:
 - `POST /api/sites/:siteId/blog/:postId/comments`
 - `GET /api/sites/:siteId/blog/:postId/comments?status=approved&limit=&offset=`
   - Blog comment submit/list endpoints follow the same envelope and legacy compatibility behavior as page comments.
+  - Invalid blog comment list filters return explicit `400` errors instead of silently falling back or clamping: `INVALID_BLOG_COMMENT_STATUS`, `INVALID_BLOG_COMMENT_SORT`, `INVALID_BLOG_COMMENT_LIMIT`, or `INVALID_BLOG_COMMENT_OFFSET`.
 
 - `GET /api/sites/:siteId/comments`
 - `PATCH /api/sites/:siteId/comments`
