@@ -1387,6 +1387,18 @@ const assertPageCreateSourceContracts = () => {
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
     'Page create must keep safe member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, careers, newsletter, and survey starters',
   );
+  assert(
+    source.includes("id: 'product-detail-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 820 }") &&
+      source.includes("id: 'product-detail-media'") &&
+      source.includes("mobile: { x: 24, y: 76, width: 327, height: 240 }") &&
+      source.includes("id: 'product-detail-buy-button'") &&
+      source.includes("mobile: { x: 26, y: 776, width: 154 }") &&
+      source.includes("id: 'product-detail-related-section'") &&
+      source.includes("mobile: { y: 820, width: 375, height: 520 }") &&
+      source.includes("tablet: { x: 54 + index * 230, y: 120, width: 196, height: 150 }"),
+    'Product-detail page starter must seed explicit tablet/mobile responsive overrides for composed commerce sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

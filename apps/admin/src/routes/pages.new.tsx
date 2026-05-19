@@ -4508,6 +4508,10 @@ function buildTemplateElements(input: {
                 height: 640,
                 dataBindings: [{ source: 'products', mode: 'detail', fields: ['title', 'description', 'price', 'image', 'inventory', 'slug'] }],
                 props: { backgroundColor: '#fff7ed', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 760 },
+                    mobile: { width: 375, height: 820 },
+                },
                 children: [
                     createCanvasElement('box', 72, 72, {
                         id: 'product-detail-media',
@@ -4515,6 +4519,10 @@ function buildTemplateElements(input: {
                         height: 430,
                         dataBindings: [{ source: 'products', mode: 'detail', field: 'image' }],
                         props: { backgroundColor: '#ffedd5', borderRadius: 8, borderColor: '#fed7aa', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 72, width: 300, height: 300 },
+                            mobile: { x: 24, y: 76, width: 327, height: 240 },
+                        },
                         children: [
                             createCanvasElement('text', 36, 36, {
                                 id: 'product-detail-media-label',
@@ -4529,6 +4537,10 @@ function buildTemplateElements(input: {
                         width: 240,
                         height: 28,
                         props: { content: 'Featured product', fontSize: 13, fontWeight: '800', color: '#c2410c', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 394, y: 82, width: 220 },
+                            mobile: { x: 26, y: 352, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 646, 116, {
                         id: 'product-detail-heading',
@@ -4536,6 +4548,10 @@ function buildTemplateElements(input: {
                         height: 100,
                         props: { content: title, level: 'h1', fontSize: 48, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
                         dataBindings: [{ source: 'products', mode: 'detail', field: 'title', targetPath: 'props.content' }],
+                        responsive: {
+                            tablet: { x: 390, y: 120, width: 310, height: 110, props: { fontSize: 36 } },
+                            mobile: { x: 24, y: 388, width: 327, height: 112, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 650, 236, {
                         id: 'product-detail-copy',
@@ -4543,6 +4559,10 @@ function buildTemplateElements(input: {
                         height: 104,
                         props: { content: description, fontSize: 17, lineHeight: 1.58, color: '#4b5563' },
                         dataBindings: [{ source: 'products', mode: 'detail', field: 'description', targetPath: 'props.content' }],
+                        responsive: {
+                            tablet: { x: 394, y: 250, width: 310, height: 142, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 514, width: 323, height: 126, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('text', 650, 362, {
                         id: 'product-detail-price',
@@ -4550,18 +4570,30 @@ function buildTemplateElements(input: {
                         height: 38,
                         props: { content: '$49', fontSize: 28, fontWeight: '800', color: '#0f766e' },
                         dataBindings: [{ source: 'products', mode: 'detail', field: 'price', targetPath: 'props.content' }],
+                        responsive: {
+                            tablet: { x: 394, y: 414, width: 150 },
+                            mobile: { x: 26, y: 662, width: 140 },
+                        },
                     }),
                     createCanvasElement('select', 650, 422, {
                         id: 'product-detail-option',
                         width: 240,
                         height: 54,
                         props: { label: 'Option', name: 'option', options: ['Standard', 'Premium', 'Bundle'], placeholder: 'Choose an option' },
+                        responsive: {
+                            tablet: { x: 394, y: 474, width: 240 },
+                            mobile: { x: 26, y: 708, width: 200 },
+                        },
                     }),
                     createCanvasElement('button', 650, 506, {
                         id: 'product-detail-buy-button',
                         width: 180,
                         height: 52,
                         props: { label: 'Buy now', backgroundColor: '#c2410c', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '800', action: 'commerce.checkout' },
+                        responsive: {
+                            tablet: { x: 394, y: 548, width: 168 },
+                            mobile: { x: 26, y: 776, width: 154 },
+                        },
                     }),
                     createCanvasElement('text', 850, 520, {
                         id: 'product-detail-stock',
@@ -4569,6 +4601,10 @@ function buildTemplateElements(input: {
                         height: 28,
                         props: { content: 'In stock', fontSize: 14, fontWeight: '700', color: '#15803d' },
                         dataBindings: [{ source: 'products', mode: 'detail', field: 'inventory', targetPath: 'props.content' }],
+                        responsive: {
+                            tablet: { x: 578, y: 560, width: 130 },
+                            mobile: { x: 198, y: 788, width: 124 },
+                        },
                     }),
                 ],
             }),
@@ -4578,12 +4614,20 @@ function buildTemplateElements(input: {
                 height: 300,
                 dataBindings: [{ source: 'products', mode: 'related', limit: 3 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 760, width: 768, height: 360 },
+                    mobile: { y: 820, width: 375, height: 520 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 48, {
                         id: 'product-detail-related-heading',
                         width: 420,
                         height: 44,
                         props: { content: 'Related products', level: 'h2', fontSize: 32, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 44, width: 360 },
+                            mobile: { x: 24, y: 36, width: 310, props: { fontSize: 28 } },
+                        },
                     }),
                     ...['Bundle add-on', 'Digital guide', 'Consultation'].map((item, index) => createCanvasElement('box', 72 + index * 360, 124, {
                         id: `product-detail-related-card-${index}`,
@@ -4591,12 +4635,20 @@ function buildTemplateElements(input: {
                         height: 128,
                         dataBindings: [{ source: 'products', mode: 'related', index }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54 + index * 230, y: 120, width: 196, height: 150 },
+                            mobile: { x: 24, y: 102 + index * 126, width: 327, height: 104 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 20, {
                                 id: `product-detail-related-title-${index}`,
                                 width: 220,
                                 height: 30,
                                 props: { content: item, level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 150, props: { fontSize: 18 } },
+                                    mobile: { width: 230, props: { fontSize: 18 } },
+                                },
                             }),
                             createCanvasElement('text', 20, 66, {
                                 id: `product-detail-related-price-${index}`,
