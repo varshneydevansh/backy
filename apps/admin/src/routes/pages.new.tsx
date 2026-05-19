@@ -7473,24 +7473,40 @@ function buildTemplateElements(input: {
                 height: 320,
                 dataBindings: [{ source: 'commerce', mode: 'shipping-policy', fields: ['shippingZones', 'deliveryMethods', 'rates', 'trackingUrl'] }],
                 props: { backgroundColor: '#f0f9ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 590 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'shipping-policy-kicker',
                         width: 240,
                         height: 28,
                         props: { content: 'Shipping and delivery', fontSize: 13, fontWeight: '800', color: '#0369a1', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'shipping-policy-heading',
                         width: 660,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0c4a6e' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'shipping-policy-copy',
                         width: 610,
                         height: 64,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#075985' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 86, {
                         id: 'shipping-policy-timeline-card',
@@ -7498,6 +7514,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'commerce', mode: 'shipping-timeline', fields: ['processingDays', 'standardDeliveryDays', 'expressDeliveryDays'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bae6fd', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 330, height: 130 },
+                            mobile: { x: 24, y: 388, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'shipping-policy-timeline-label',
@@ -7517,6 +7537,10 @@ function buildTemplateElements(input: {
                                 width: 230,
                                 height: 32,
                                 props: { content: 'Bind delivery estimates from Settings, carrier rates, or fulfillment rules.', fontSize: 13, lineHeight: 1.35, color: '#0369a1' },
+                                responsive: {
+                                    tablet: { width: 260 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -7528,12 +7552,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'commerce', mode: 'shipping-methods', fields: ['methods', 'rates', 'zones', 'cutoffTimes', 'pickup'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 590, width: 375, height: 1160 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'shipping-policy-methods-heading',
                         width: 500,
                         height: 42,
                         props: { content: 'Delivery options', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 500 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Standard delivery', body: 'Explain processing time, standard carrier options, rate thresholds, free-shipping rules, and delivery windows.' },
@@ -7545,6 +7577,10 @@ function buildTemplateElements(input: {
                         height: 290,
                         dataBindings: [{ source: 'commerce', mode: 'shipping-method', index }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#dbeafe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 324, width: 660, height: 286 },
+                            mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `shipping-policy-method-card-title-${index}`,
@@ -7552,6 +7588,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: method.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#0c4a6e' },
                                 dataBindings: [{ source: 'commerce', mode: 'shipping-method', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 320 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: `shipping-policy-method-card-copy-${index}`,
@@ -7559,12 +7599,20 @@ function buildTemplateElements(input: {
                                 height: 124,
                                 props: { content: method.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
                                 dataBindings: [{ source: 'commerce', mode: 'shipping-method', index, field: 'body', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500, height: 104 },
+                                    mobile: { width: 268, height: 132 },
+                                },
                             }),
                             createCanvasElement('text', 24, 232, {
                                 id: `shipping-policy-method-card-note-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: 'Editable shipping content', fontSize: 13, fontWeight: '800', color: '#0369a1' },
+                                responsive: {
+                                    tablet: { y: 228 },
+                                    mobile: { y: 252 },
+                                },
                             }),
                         ],
                     })),
@@ -7576,6 +7624,10 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'commerce', mode: 'shipping-actions', fields: ['trackingUrl', 'supportEmail', 'orderLookupUrl', 'carrierProviders'] }],
                 props: { backgroundColor: '#eff6ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 620 },
+                    mobile: { y: 1750, width: 375, height: 680 },
+                },
                 children: [
                     createCanvasElement('box', 74, 62, {
                         id: 'shipping-policy-tracking-card',
@@ -7583,18 +7635,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'commerce', mode: 'shipping-tracking', fields: ['trackingUrl', 'carrier', 'orderLookupRequired', 'notificationEvents'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bfdbfe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 250 },
+                            mobile: { x: 24, y: 46, width: 327, height: 308 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 26, {
                                 id: 'shipping-policy-tracking-heading',
                                 width: 360,
                                 height: 34,
                                 props: { content: 'Tracking and delivery support', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64, props: { fontSize: 24 } },
+                                },
                             }),
                             ...['Tracking link', 'Carrier updates', 'Delivery issues', 'Address changes'].map((step, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
                                 id: `shipping-policy-tracking-item-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: step, fontSize: 15, fontWeight: '800', color: '#075985' },
+                                responsive: {
+                                    tablet: { x: 30 + (index % 2) * 300, y: 92 + Math.floor(index / 2) * 48, width: 240 },
+                                    mobile: { x: 28, y: 104 + index * 44, width: 240 },
+                                },
                             })),
                         ],
                     }),
@@ -7604,6 +7667,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'commerce', mode: 'shipping-contact', fields: ['trackingUrl', 'supportEmail', 'orderLookupUrl'] }],
                         props: { backgroundColor: '#0c4a6e', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 350, width: 660, height: 190 },
+                            mobile: { x: 24, y: 410, width: 327, height: 214 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 26, {
                                 id: 'shipping-policy-contact-heading',
@@ -7616,12 +7683,20 @@ function buildTemplateElements(input: {
                                 width: 250,
                                 height: 46,
                                 props: { content: 'Bind this action to order lookup, carrier tracking, or a support handoff.', fontSize: 14, lineHeight: 1.45, color: '#dbeafe' },
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('button', 26, 138, {
                                 id: 'shipping-policy-contact-button',
                                 width: 136,
                                 height: 40,
                                 props: { label: 'Track order', backgroundColor: '#dbeafe', color: '#0c4a6e', borderRadius: 8, fontWeight: '800', action: 'shipping.tracking.open' },
+                                responsive: {
+                                    tablet: { x: 470, y: 112 },
+                                    mobile: { x: 26, y: 150 },
+                                },
                             }),
                         ],
                     }),
