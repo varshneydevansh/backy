@@ -15,6 +15,7 @@ const assert = (condition, message) => {
 };
 
 const mediaRoute = read('../src/app/api/admin/sites/[siteId]/media/route.ts');
+const adminSignedMediaUrlRoute = read('../src/app/api/admin/sites/[siteId]/media/[mediaId]/signed-url/route.ts');
 const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
 const publicFontManifestRoute = read('../src/app/api/sites/[siteId]/media/fonts/route.ts');
 const publicMediaFileRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts');
@@ -54,6 +55,12 @@ assert(
   mediaRoute.includes('value === "other"') ||
     mediaRoute.includes("value === 'other'"),
   'Media list filters must accept type=other for generic files.',
+);
+assert(
+  adminSignedMediaUrlRoute.includes("'INVALID_MEDIA_DISPOSITION'") &&
+    adminSignedMediaUrlRoute.includes('parseSignedUrlDisposition') &&
+    adminSignedMediaUrlRoute.includes('disposition: disposition.value'),
+  'Admin signed media URL route must reject invalid disposition values before minting delivery signatures.',
 );
 assert(
   publicMediaRoute.includes("'INVALID_MEDIA_TYPE'") &&
@@ -215,6 +222,10 @@ assert(
 assert(
   apiContracts.includes('Invalid media file disposition values return `400 INVALID_MEDIA_DISPOSITION`'),
   'API contract docs must describe invalid public media file disposition errors.',
+);
+assert(
+  apiContracts.includes('Signed media URL requests also reject invalid `disposition` values before minting tokens'),
+  'API contract docs must describe signed media URL disposition validation.',
 );
 assert(
   apiContracts.includes('Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`') &&

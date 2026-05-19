@@ -41,6 +41,18 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
+const parseSignedUrlDisposition = (value: unknown): { value?: 'inline' | 'attachment'; invalid?: boolean } => {
+  if (value === undefined || value === null || value === '') {
+    return {};
+  }
+
+  if (value === 'inline' || value === 'attachment') {
+    return { value };
+  }
+
+  return { invalid: true };
+};
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'media.view' });
@@ -71,11 +83,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(423, 'MEDIA_QUARANTINED', 'Quarantined media cannot generate signed delivery URLs.', requestId);
     }
 
+    const disposition = parseSignedUrlDisposition(body.disposition);
+    if (disposition.invalid) {
+      return errorResponse(400, 'INVALID_MEDIA_DISPOSITION', 'Invalid media disposition. Use inline or attachment.', requestId);
+    }
+
     const signedAccess = createSignedMediaAccess({
       siteId: site.id,
       mediaId: media.id,
       expiresInSeconds: body.expiresInSeconds,
-      disposition: body.disposition,
+      disposition: disposition.value,
     });
     const path = buildSignedMediaPath({
       siteId: site.id,
