@@ -30,6 +30,7 @@ const assert = (condition, message) => {
 
 const assertFormsPersistenceCertificationSource = () => {
   const source = fs.readFileSync(new URL('../src/routes/forms.tsx', import.meta.url), 'utf8');
+  const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   assert(
@@ -58,6 +59,9 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('title="No consent fields detected"'), 'Forms consent export panel must keep the no-consent-fields empty-state title visible');
   assert(source.includes('title="No submissions match this view"'), 'Forms submission inbox filter empty state must keep the shared title visible');
   assert(source.includes('Change the submission search or status filter to review more entries for this form.'), 'Forms submission filter empty state must explain filter recovery');
+  assert(source.includes('cloneForm,') && source.includes('handleCloneSelectedForm') && source.includes('data-testid="form-clone-button"'), 'Forms page must expose a selected-form clone action');
+  assert(source.includes('setIsCloningForm(true)') && source.includes("isActive: false") && source.includes('cloned as an inactive form.'), 'Forms clone action must create inactive clones with busy and notice states');
+  assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',
     'npm run test:forms --workspace @backy-cms/admin',
@@ -1007,9 +1011,16 @@ const getAdminForm = async (formId) => {
   return payload.data?.form || payload.form;
 };
 
-const assertFormDeleteActionWired = async (client) => {
+const assertFormActionsWired = async (client) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
+      const cloneButton = document.querySelector('[data-testid="form-clone-button"]');
+      if (!(cloneButton instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'clone-button-missing', body: document.body?.innerText?.slice(0, 500) || '' };
+      }
+      if (cloneButton.disabled) {
+        return { ok: false, reason: 'clone-button-disabled', text: cloneButton.textContent || '' };
+      }
       const deleteButton = document.querySelector('[data-testid="form-delete-button"]');
       if (!(deleteButton instanceof HTMLButtonElement)) {
         return { ok: false, reason: 'delete-button-missing', body: document.body?.innerText?.slice(0, 500) || '' };
@@ -1035,7 +1046,7 @@ const assertFormDeleteActionWired = async (client) => {
     if (result.ok) return;
 
     if (attempt === 79) {
-      throw new Error(`Form delete action was not wired: ${JSON.stringify(result)}`);
+      throw new Error(`Form selected actions were not wired: ${JSON.stringify(result)}`);
     }
 
     await sleep(250);
@@ -2168,7 +2179,7 @@ const main = async () => {
     await clickRegistrationCreateForm(client);
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
-    await assertFormDeleteActionWired(client);
+    await assertFormActionsWired(client);
     await editFormBuilderInUi(client, createdFormId, smokeCollection.id, webhookReceiver.url);
     const embedSection = await createEmbedBlockInUi(client, createdFormId);
     createdEmbedSectionId = embedSection.id;

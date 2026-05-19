@@ -33,6 +33,7 @@ import {
   listAdminAuditLogs,
   listFormDeliveryEvents,
   listCollections,
+  cloneForm,
   listForms,
   createForm,
   deleteForm,
@@ -530,6 +531,7 @@ function FormsRoute() {
   const [isRetryingDeliveryId, setIsRetryingDeliveryId] = useState<string | null>(null);
   const [isApplyingConsentRetention, setIsApplyingConsentRetention] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
+  const [isCloningForm, setIsCloningForm] = useState(false);
   const [isCreatingEmbedBlock, setIsCreatingEmbedBlock] = useState(false);
   const [createdEmbedSectionId, setCreatedEmbedSectionId] = useState<string | null>(null);
   const [isSavingForm, setIsSavingForm] = useState(false);
@@ -558,7 +560,7 @@ function FormsRoute() {
   const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
   const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeleteForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId) || isPermissionMatrixPending;
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId) || isPermissionMatrixPending;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1761,6 +1763,54 @@ function FormsRoute() {
     setPendingDeleteForm(selectedForm);
     setError(null);
     setNotice(null);
+  };
+
+  const handleCloneSelectedForm = async () => {
+    if (isFormsBusy || !selectedForm) return;
+    if (!canCreateForms) {
+      setError(createPermissionTitle || 'Your account cannot create forms.');
+      setNotice(null);
+      return;
+    }
+
+    setIsCloningForm(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const cloned = await cloneForm(activeSiteId, selectedForm.id, {
+        title: `${selectedForm.title || selectedForm.name} copy`,
+        name: `${selectedForm.name}-copy`,
+        isActive: false,
+      });
+      setForms((current) => [cloned, ...current.filter((form) => form.id !== cloned.id)]);
+      setInboxByForm((current) => ({
+        ...current,
+        [cloned.id]: {
+          form: cloned,
+          submissions: [],
+          total: 0,
+        },
+      }));
+      setDeliveryEventsByForm((current) => ({ ...current, [cloned.id]: [] }));
+      setSelectedFormId(cloned.id);
+      setFormDraft(cloneFormDefinition(cloned));
+      updateFormsRouteSearch({
+        formId: cloned.id,
+        q: undefined,
+        source: undefined,
+        state: undefined,
+        destination: undefined,
+        readiness: undefined,
+        status: undefined,
+        submissionQ: undefined,
+      });
+      setNotice(`${cloned.title || cloned.name} cloned as an inactive form.`);
+    } catch (cloneError) {
+      setError(cloneError instanceof Error ? cloneError.message : 'Unable to clone form');
+    } finally {
+      setIsCloningForm(false);
+    }
   };
 
   const confirmDeleteForm = async () => {
@@ -3268,6 +3318,16 @@ function FormsRoute() {
                         </Link>
                       )}
                       <StatusBadge status={selectedForm.audience} type="info" />
+                      <Button
+                        variant="outline"
+                        onClick={() => void handleCloneSelectedForm()}
+                        disabled={isFormsBusy || !canCreateForms}
+                        title={!canCreateForms ? createPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="form-clone-button"
+                      >
+                        {isCloningForm ? 'Cloning...' : 'Clone'}
+                      </Button>
                       <Button
                         variant="danger"
                         onClick={requestDeleteSelectedForm}

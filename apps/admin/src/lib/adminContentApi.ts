@@ -5685,6 +5685,28 @@ export async function createForm(
   return form;
 }
 
+export async function cloneForm(
+  siteId: string,
+  formId: string,
+  input: { name?: string; title?: string; isActive?: boolean } = {},
+): Promise<FormDefinition> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/clone`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiFormDetailResponse>(response);
+  const form = payload.data?.form || payload.form;
+
+  if (!response.ok || !payload.success || !form) {
+    throw new Error(payload.error?.message || 'Unable to clone form');
+  }
+
+  return form;
+}
+
 export async function updateForm(
   siteId: string,
   formId: string,
