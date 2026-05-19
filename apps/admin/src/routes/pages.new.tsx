@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -260,6 +260,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['FAQ hero', 'Question list', 'Support CTA'],
     },
     {
+        id: 'testimonials',
+        name: 'Testimonials page',
+        desc: 'Customer quotes, rating summaries, source filters, proof cards, and inquiry CTA.',
+        detail: 'Creates a public testimonials page ready to bind reviews, customer logos, ratings, industries, media, and trust-building actions.',
+        sections: ['Proof hero', 'Review cards', 'Inquiry CTA'],
+    },
+    {
         id: 'blog-index',
         name: 'Blog index',
         desc: 'Editorial intro, featured story, and article list blocks.',
@@ -416,6 +423,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'faq',
         description: 'A public FAQ page ready to answer common questions with searchable categories, accordion answers, and support escalation.',
     },
+    testimonials: {
+        title: 'Testimonials',
+        slug: 'testimonials',
+        description: 'A public testimonials page ready to showcase customer quotes, ratings, source attribution, industries, and inquiry actions.',
+    },
     'blog-index': {
         title: 'Blog',
         slug: 'blog',
@@ -483,6 +495,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     'order-confirmation': 'primary',
     'help-center': 'primary',
     faq: 'primary',
+    testimonials: 'primary',
     'blog-index': 'primary',
     'blog-post': 'primary',
     team: 'primary',
@@ -724,6 +737,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
     'help-center': ['Home', 'Help', 'Orders', 'Contact'],
     faq: ['Home', 'FAQ', 'Help', 'Contact'],
+    testimonials: ['Home', 'Testimonials', 'Services', 'Contact'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     'blog-post': ['Home', 'Blog', 'Categories', 'Contact'],
     team: ['Home', 'Team', 'About', 'Contact'],
@@ -901,6 +915,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { x: 8, y: 60, w: 56, h: 8, className: 'border-blue-100 bg-white' },
         { x: 8, y: 72, w: 56, h: 8, className: 'border-blue-100 bg-white' },
         { label: 'Contact', x: 70, y: 48, w: 22, h: 32, className: 'border-slate-200 bg-white' },
+    ],
+    testimonials: [
+        { label: 'Proof', x: 8, y: 14, w: 84, h: 24, className: 'border-amber-200 bg-amber-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-amber-800' },
+        { label: 'Rating', x: 64, y: 24, w: 20, h: 6, className: 'border-amber-100 bg-white' },
+        { label: 'Quote', x: 8, y: 48, w: 26, h: 28, className: 'border-amber-100 bg-white' },
+        { label: 'Quote', x: 38, y: 48, w: 26, h: 28, className: 'border-amber-100 bg-white' },
+        { label: 'Quote', x: 68, y: 48, w: 24, h: 28, className: 'border-amber-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     'blog-index': [
         { label: 'Feature', x: 8, y: 16, w: 84, h: 28, className: 'border-indigo-200 bg-indigo-50' },
@@ -1977,6 +2000,8 @@ function NewPageRoute() {
                         ? 'Backy help center placeholders'
                     : formData.template === 'faq'
                         ? 'Backy FAQ placeholders'
+                    : formData.template === 'testimonials'
+                        ? 'Backy testimonial and review placeholders'
             : selectedDatasetCollection
                 ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
@@ -2092,7 +2117,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -2142,7 +2167,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, FAQ, blog index, blog post, team, and careers templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, reusable answers, posts, people profiles, and job postings.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, FAQ, testimonials, blog index, blog post, team, and careers templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, reusable answers, reviews, posts, people profiles, and job postings.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4194,6 +4219,8 @@ function buildTemplateElements(input: {
                 ? 'Track order'
             : input.template === 'faq'
                 ? 'Ask question'
+            : input.template === 'testimonials'
+                ? 'Read stories'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'team'
@@ -7025,6 +7052,185 @@ function buildTemplateElements(input: {
                                 height: 42,
                                 props: { label: 'Contact support', backgroundColor: '#ffffff', color: '#1e3a8a', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'faq.contact.open' },
                                 dataBindings: [{ source: 'faq', mode: 'contact', field: 'contactUrl', targetPath: 'props.href' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'testimonials') {
+        const reviews = [
+            { name: 'Harper Lee', role: 'Studio owner', quote: 'Backy gave us a clean way to update launches, products, and landing pages without rebuilding the frontend.', rating: '5.0' },
+            { name: 'Jon Bell', role: 'Commerce lead', quote: 'Our team can manage catalog content, support pages, and campaign proof from one backend workspace.', rating: '4.9' },
+            { name: 'Nia Wells', role: 'Founder', quote: 'The editor keeps our custom site flexible while still giving non-technical teammates safe control.', rating: '5.0' },
+        ];
+
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'testimonials-hero-section',
+                width: 1200,
+                height: 360,
+                dataBindings: [{ source: 'testimonials', mode: 'overview', fields: ['reviews', 'averageRating', 'featuredLogo', 'inquiryUrl'] }],
+                props: { backgroundColor: '#fffbeb', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'testimonials-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Customer proof', fontSize: 13, fontWeight: '800', color: '#b45309', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 98, {
+                        id: 'testimonials-heading',
+                        width: 640,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 212, {
+                        id: 'testimonials-intro-copy',
+                        width: 620,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                    }),
+                    createCanvasElement('box', 784, 92, {
+                        id: 'testimonials-rating-card',
+                        width: 300,
+                        height: 150,
+                        dataBindings: [{ source: 'testimonials', mode: 'rating-summary', fields: ['averageRating', 'reviewCount', 'sources'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 26, 24, {
+                                id: 'testimonials-rating-label',
+                                width: 180,
+                                height: 24,
+                                props: { content: 'Average rating', fontSize: 13, fontWeight: '800', color: '#92400e', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 26, 58, {
+                                id: 'testimonials-rating-value',
+                                width: 120,
+                                height: 54,
+                                props: { content: '4.9 / 5', level: 'h2', fontSize: 38, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'testimonials', mode: 'rating-summary', field: 'averageRating', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 360, {
+                id: 'testimonials-review-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'testimonials', mode: 'reviews', fields: ['reviews', 'ratings', 'industries', 'sources'], limit: 9 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 58, {
+                        id: 'testimonials-review-heading',
+                        width: 420,
+                        height: 42,
+                        props: { content: 'What customers say', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('box', 780, 54, {
+                        id: 'testimonials-source-filter',
+                        width: 300,
+                        height: 56,
+                        dataBindings: [{ source: 'testimonials', mode: 'filters', fields: ['sources', 'industries', 'ratings'] }],
+                        props: { backgroundColor: '#fffbeb', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 20, 17, {
+                                id: 'testimonials-source-filter-label',
+                                width: 240,
+                                height: 24,
+                                props: { content: 'Filter by source, industry, or rating', fontSize: 13, fontWeight: '800', color: '#92400e' },
+                            }),
+                        ],
+                    }),
+                    ...reviews.map((review, index) => createCanvasElement('box', 74 + index * 350, 146, {
+                        id: `testimonials-review-card-${index}`,
+                        width: 300,
+                        height: 300,
+                        dataBindings: [{ source: 'testimonials', mode: 'review', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: `testimonials-review-rating-${index}`,
+                                width: 84,
+                                height: 24,
+                                props: { content: review.rating, fontSize: 15, fontWeight: '800', color: '#b45309' },
+                                dataBindings: [{ source: 'testimonials', mode: 'review', index, field: 'rating', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 66, {
+                                id: `testimonials-review-quote-${index}`,
+                                width: 238,
+                                height: 104,
+                                props: { content: review.quote, fontSize: 15, lineHeight: 1.5, color: '#374151' },
+                                dataBindings: [{ source: 'testimonials', mode: 'review', index, field: 'quote', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('heading', 24, 200, {
+                                id: `testimonials-review-name-${index}`,
+                                width: 220,
+                                height: 28,
+                                props: { content: review.name, level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'testimonials', mode: 'review', index, field: 'name', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 238, {
+                                id: `testimonials-review-role-${index}`,
+                                width: 220,
+                                height: 24,
+                                props: { content: review.role, fontSize: 13, fontWeight: '700', color: '#92400e' },
+                                dataBindings: [{ source: 'testimonials', mode: 'review', index, field: 'role', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 920, {
+                id: 'testimonials-cta-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'testimonials', mode: 'trust-actions', fields: ['caseStudyUrl', 'inquiryUrl', 'logoWall', 'reviewSources'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 64, {
+                        id: 'testimonials-logo-wall',
+                        width: 470,
+                        height: 150,
+                        dataBindings: [{ source: 'testimonials', mode: 'logo-wall', fields: ['logos', 'industries'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 26, 24, {
+                                id: 'testimonials-logo-heading',
+                                width: 270,
+                                height: 32,
+                                props: { content: 'Trusted by growing teams', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 26, 78, {
+                                id: 'testimonials-logo-copy',
+                                width: 360,
+                                height: 42,
+                                props: { content: 'Bind customer logos, industries, source badges, or review-platform snippets from Backy data.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 650, 64, {
+                        id: 'testimonials-inquiry-card',
+                        width: 390,
+                        height: 150,
+                        dataBindings: [{ source: 'testimonials', mode: 'inquiry', fields: ['inquiryUrl', 'caseStudyUrl', 'contactEmail'] }],
+                        props: { backgroundColor: '#78350f', borderRadius: 8, borderColor: '#78350f', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 26, 22, {
+                                id: 'testimonials-inquiry-heading',
+                                width: 250,
+                                height: 32,
+                                props: { content: 'Want results like these?', level: 'h2', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('button', 26, 82, {
+                                id: 'testimonials-inquiry-button',
+                                width: 142,
+                                height: 42,
+                                props: { label: 'Start inquiry', backgroundColor: '#ffffff', color: '#78350f', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'testimonials.inquiry.open' },
+                                dataBindings: [{ source: 'testimonials', mode: 'inquiry', field: 'inquiryUrl', targetPath: 'props.href' }],
                             }),
                         ],
                     }),

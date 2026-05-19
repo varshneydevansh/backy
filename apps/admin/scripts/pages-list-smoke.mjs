@@ -75,13 +75,15 @@ const assertPagesListSourceContract = () => {
       source.includes('helpCenterPageTemplate') &&
       source.includes("key: 'faq'") &&
       source.includes('faqPageTemplate') &&
+      source.includes("key: 'testimonials'") &&
+      source.includes('testimonialsPageTemplate') &&
       source.includes("key: 'blog-post'") &&
       source.includes('blogPostPageTemplate') &&
       source.includes("key: 'team'") &&
       source.includes('teamPageTemplate') &&
       source.includes("key: 'careers'") &&
       source.includes('careersPageTemplate'),
-    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, blog, team, and careers starters and handoff routes',
+    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
   );
 };
 
@@ -1662,6 +1664,12 @@ const main = async () => {
       ['template=faq'],
       { title: 'FAQ', slug: 'faq', template: 'faq', homepage: false },
     );
+    const testimonialsShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-testimonials',
+      ['template=testimonials'],
+      { title: 'Testimonials', slug: 'testimonials', template: 'testimonials', homepage: false },
+    );
     const careersShortcut = await clickEmptyCreate(
       client,
       'pages-create-careers',
@@ -1772,6 +1780,7 @@ const main = async () => {
       blogPostShortcut,
       teamShortcut,
       faqShortcut,
+      testimonialsShortcut,
       careersShortcut,
       childHierarchy,
       parentHierarchy,

@@ -745,6 +745,55 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'testimonials',
+    title: 'Smoke Testimonials Template',
+    slugBase: 'smoke-testimonials-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'testimonials',
+    navigationItem: 'Testimonials',
+    headingId: 'testimonials-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 40,
+    minCanvasHeight: 1400,
+    requiredElementIds: [
+      'testimonials-site-header',
+      'testimonials-site-navigation',
+      'testimonials-site-footer',
+      'testimonials-hero-section',
+      'testimonials-heading',
+      'testimonials-intro-copy',
+      'testimonials-rating-card',
+      'testimonials-rating-value',
+      'testimonials-review-section',
+      'testimonials-source-filter',
+      'testimonials-review-card-0',
+      'testimonials-review-rating-0',
+      'testimonials-review-quote-0',
+      'testimonials-review-name-0',
+      'testimonials-review-role-0',
+      'testimonials-cta-section',
+      'testimonials-logo-wall',
+      'testimonials-inquiry-card',
+      'testimonials-inquiry-button',
+    ],
+    dataBindingElementIds: [
+      'testimonials-hero-section',
+      'testimonials-rating-card',
+      'testimonials-rating-value',
+      'testimonials-review-section',
+      'testimonials-source-filter',
+      'testimonials-review-card-0',
+      'testimonials-review-rating-0',
+      'testimonials-review-quote-0',
+      'testimonials-review-name-0',
+      'testimonials-review-role-0',
+      'testimonials-cta-section',
+      'testimonials-logo-wall',
+      'testimonials-inquiry-card',
+      'testimonials-inquiry-button',
+    ],
+  },
+  {
     template: 'blog-index',
     title: 'Smoke Blog Index Template',
     slugBase: 'smoke-blog-index-template',
@@ -1135,6 +1184,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('faq-question-item-${index}') &&
       source.includes('faq-contact-card') &&
       source.includes('faq.contact.open') &&
+      source.includes("'testimonials'") &&
+      source.includes('testimonials-review-card-${index}') &&
+      source.includes('testimonials-rating-card') &&
+      source.includes('testimonials.inquiry.open') &&
       source.includes("'blog-post'") &&
       source.includes('blog-post-body-section') &&
       source.includes('blog-post-author-card') &&
@@ -1148,7 +1201,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('careers-benefits-card') &&
       source.includes('careers.application.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, blog-post, team, and careers starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, and careers starters',
   );
 };
 
@@ -1833,6 +1886,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'FAQ page',
       forms: 'none',
       dynamicData: 'Backy FAQ placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'testimonials',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Testimonials page',
+      forms: 'none',
+      dynamicData: 'Backy testimonial and review placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
