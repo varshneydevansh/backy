@@ -1630,6 +1630,138 @@
               },
               "required": ["schemaVersion", "mode", "currency", "paymentProvider", "providerAccountId", "provider", "capabilities", "checkout", "pricing", "inventory", "webhooks", "reconciliation"]
             },
+            "commerceRuntime": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.commerce-discovery.v1" },
+                "enabled": { "type": "boolean" },
+                "mode": { "enum": ["catalog-only", "manual-orders", "checkout-provider"] },
+                "currency": { "type": "string", "minLength": 3 },
+                "paymentProvider": { "enum": ["none", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "manual"] },
+                "catalogCollection": {
+                  "type": ["object", "null"],
+                  "additionalProperties": true,
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "slug": { "type": "string", "minLength": 1 },
+                    "name": { "type": "string", "minLength": 1 },
+                    "status": { "type": "string" },
+                    "publicRead": { "type": "boolean" }
+                  },
+                  "required": ["id", "slug", "name", "status", "publicRead"]
+                },
+                "ordersCollection": {
+                  "type": ["object", "null"],
+                  "additionalProperties": true,
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "slug": { "type": "string", "minLength": 1 },
+                    "name": { "type": "string", "minLength": 1 },
+                    "status": { "type": "string" },
+                    "publicRead": { "type": "boolean" }
+                  },
+                  "required": ["id", "slug", "name", "status", "publicRead"]
+                },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "catalog": { "type": "string", "minLength": 1 },
+                    "productDetail": { "type": "string", "minLength": 1 },
+                    "orderContract": { "type": "string", "minLength": 1 },
+                    "createOrder": { "type": "string", "minLength": 1 },
+                    "providerWebhook": { "type": "string", "minLength": 1 },
+                    "productCollectionRecords": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["catalog", "productDetail", "orderContract", "createOrder", "providerWebhook", "productCollectionRecords"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "catalog": { "const": "GET" },
+                    "productDetail": { "const": "GET" },
+                    "orderContract": { "const": "GET" },
+                    "createOrder": { "const": "POST" },
+                    "providerWebhook": { "const": "POST" }
+                  },
+                  "required": ["catalog", "productDetail", "orderContract", "createOrder", "providerWebhook"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "catalog": { "type": "boolean" },
+                    "orderIntake": { "type": "boolean" },
+                    "providerCheckout": { "type": "boolean" },
+                    "productFilters": { "type": "boolean" },
+                    "productFacets": { "type": "boolean" },
+                    "inventoryReservations": { "type": "boolean" },
+                    "pricingRules": { "type": "boolean" },
+                    "guestCheckout": { "type": "boolean" },
+                    "providerWebhooks": { "type": "boolean" },
+                    "providerCertification": { "type": "boolean" },
+                    "conditionalRequests": { "type": "boolean" },
+                    "cacheableCatalog": { "type": "boolean" }
+                  },
+                  "required": ["catalog", "orderIntake", "providerCheckout", "productFilters", "productFacets", "inventoryReservations", "pricingRules", "guestCheckout", "providerWebhooks", "providerCertification", "conditionalRequests", "cacheableCatalog"]
+                },
+                "cache": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "catalog": { "type": "string" },
+                    "productDetail": { "type": "string" },
+                    "orderContract": { "type": "string" },
+                    "createOrder": { "type": "string" },
+                    "providerWebhook": { "type": "string" }
+                  },
+                  "required": ["catalog", "productDetail", "orderContract", "createOrder", "providerWebhook"]
+                },
+                "privacy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicCatalogExcludesPrivateOrderQueue": { "type": "boolean" },
+                    "ordersCollectionMustRemainPrivate": { "type": "boolean" },
+                    "publicOrderPayloadContainsCustomerData": { "type": "boolean" },
+                    "providerSecretsNeverReturned": { "type": "boolean" }
+                  },
+                  "required": ["publicCatalogExcludesPrivateOrderQueue", "ordersCollectionMustRemainPrivate", "publicOrderPayloadContainsCustomerData", "providerSecretsNeverReturned"]
+                },
+                "filters": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "queryParams": { "type": "array", "items": { "type": "string" } },
+                    "maxLimit": { "type": "number", "minimum": 1 },
+                    "sortDirections": { "type": "array", "items": { "enum": ["asc", "desc"] } },
+                    "productTypes": { "type": "array", "items": { "enum": ["physical", "digital", "service"] } }
+                  },
+                  "required": ["queryParams", "maxLimit", "sortDirections", "productTypes"]
+                },
+                "schemas": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "catalog": { "const": "backy.commerce-catalog.v1" },
+                    "settings": { "const": "backy.commerce-settings.v1" },
+                    "orderContract": { "const": "backy.commerce-orders.v1" },
+                    "product": { "const": "backy.commerce-product.v1" },
+                    "providerCertification": { "const": "backy.commerce-provider-certification-handoff.v1" },
+                    "productCatalogNotFound": { "const": "PRODUCT_CATALOG_NOT_FOUND" },
+                    "productNotFound": { "const": "PRODUCT_NOT_FOUND" },
+                    "orderQueueNotFound": { "const": "ORDER_QUEUE_NOT_FOUND" },
+                    "orderQueueNotPrivate": { "const": "ORDER_QUEUE_NOT_PRIVATE" },
+                    "validationError": { "const": "VALIDATION_ERROR" },
+                    "productOutOfStock": { "const": "PRODUCT_OUT_OF_STOCK" }
+                  },
+                  "required": ["catalog", "settings", "orderContract", "product", "providerCertification", "productCatalogNotFound", "productNotFound", "orderQueueNotFound", "orderQueueNotPrivate", "validationError", "productOutOfStock"]
+                }
+              },
+              "required": ["schemaVersion", "enabled", "mode", "currency", "paymentProvider", "catalogCollection", "ordersCollection", "endpoints", "methods", "capabilities", "cache", "privacy", "filters", "schemas"]
+            },
             "interactiveComponents": {
               "type": "object",
               "additionalProperties": true,
@@ -1706,7 +1838,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "theme", "liveManagement", "pages", "pagesRuntime", "blog", "blogRuntime", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "reusableSectionsRuntime", "media"]
+          "required": ["routing", "theme", "liveManagement", "pages", "pagesRuntime", "blog", "blogRuntime", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "reusableSectionsRuntime", "media", "commerce", "commerceRuntime"]
         },
         "admin": {
           "type": "object",

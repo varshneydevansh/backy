@@ -90,6 +90,19 @@ type ManifestBlogPostDiscoverySource = {
   meta?: unknown;
 };
 
+type ManifestCommerceCollectionDiscoverySource = {
+  id: string;
+  slug: string;
+  name?: string;
+  status?: string;
+  permissions: {
+    publicRead?: boolean;
+    publicCreate?: boolean;
+    publicUpdate?: boolean;
+    publicDelete?: boolean;
+  };
+};
+
 type ManifestAdminDiscovery = {
   auth: {
     authenticated: boolean;
@@ -847,6 +860,98 @@ const buildManifestBlogDiscovery = (
   },
 });
 
+const buildManifestCommerceDiscovery = (
+  siteId: string,
+  commerce: ReturnType<typeof buildCommerceStorefrontContract>,
+  productCollection: ManifestCommerceCollectionDiscoverySource | undefined,
+  ordersCollection: ManifestCommerceCollectionDiscoverySource | undefined,
+) => ({
+  schemaVersion: 'backy.commerce-discovery.v1',
+  enabled: commerce.capabilities.catalog,
+  mode: commerce.mode,
+  currency: commerce.currency,
+  paymentProvider: commerce.paymentProvider,
+  catalogCollection: productCollection
+    ? {
+        id: productCollection.id,
+        slug: productCollection.slug,
+        name: productCollection.name || productCollection.slug,
+        status: productCollection.status || 'published',
+        publicRead: productCollection.permissions.publicRead === true,
+      }
+    : null,
+  ordersCollection: ordersCollection
+    ? {
+        id: ordersCollection.id,
+        slug: ordersCollection.slug,
+        name: ordersCollection.name || ordersCollection.slug,
+        status: ordersCollection.status || 'published',
+        publicRead: ordersCollection.permissions.publicRead === true,
+      }
+    : null,
+  endpoints: {
+    catalog: `/api/sites/${siteId}/commerce/catalog`,
+    productDetail: `/api/sites/${siteId}/commerce/catalog?slug={slug}`,
+    orderContract: `/api/sites/${siteId}/commerce/orders`,
+    createOrder: `/api/sites/${siteId}/commerce/orders`,
+    providerWebhook: `/api/sites/${siteId}/commerce/webhook`,
+    productCollectionRecords: `/api/sites/${siteId}/collections/${PRODUCT_COLLECTION_SLUG}/records`,
+  },
+  methods: {
+    catalog: 'GET',
+    productDetail: 'GET',
+    orderContract: 'GET',
+    createOrder: 'POST',
+    providerWebhook: 'POST',
+  },
+  capabilities: {
+    catalog: commerce.capabilities.catalog,
+    orderIntake: commerce.capabilities.orderIntake,
+    providerCheckout: commerce.capabilities.providerCheckout,
+    productFilters: true,
+    productFacets: true,
+    inventoryReservations: commerce.inventory.reservations,
+    pricingRules: true,
+    guestCheckout: commerce.checkout.guestCheckout,
+    providerWebhooks: commerce.webhooks.eventsEnabled,
+    providerCertification: true,
+    conditionalRequests: true,
+    cacheableCatalog: true,
+  },
+  cache: {
+    catalog: 'public-discovery',
+    productDetail: 'public-discovery',
+    orderContract: 'public-discovery',
+    createOrder: 'private-no-store',
+    providerWebhook: 'private-no-store',
+  },
+  privacy: {
+    publicCatalogExcludesPrivateOrderQueue: true,
+    ordersCollectionMustRemainPrivate: true,
+    publicOrderPayloadContainsCustomerData: true,
+    providerSecretsNeverReturned: true,
+  },
+  filters: {
+    queryParams: ['slug', 'limit', 'offset', 'sortBy', 'sortDirection', 'q', 'search', 'category', 'tag', 'vendor', 'productType', 'featured'],
+    maxLimit: 100,
+    sortDirections: ['asc', 'desc'],
+    productTypes: ['physical', 'digital', 'service'],
+  },
+  schemas: {
+    catalog: 'backy.commerce-catalog.v1',
+    settings: 'backy.commerce-settings.v1',
+    orderContract: 'backy.commerce-orders.v1',
+    product: 'backy.commerce-product.v1',
+    providerCertification: 'backy.commerce-provider-certification-handoff.v1',
+    productCatalogNotFound: 'PRODUCT_CATALOG_NOT_FOUND',
+    productNotFound: 'PRODUCT_NOT_FOUND',
+    orderQueueNotFound: 'ORDER_QUEUE_NOT_FOUND',
+    orderQueueNotPrivate: 'ORDER_QUEUE_NOT_PRIVATE',
+    validationError: 'VALIDATION_ERROR',
+    productOutOfStock: 'PRODUCT_OUT_OF_STOCK',
+  },
+});
+
 const buildManifestFormsDiscovery = (
   siteId: string,
   forms: FormDefinition[],
@@ -1066,6 +1171,8 @@ const buildRepositoryManifest = (
 ) => {
   const fonts = input.media.filter((item) => item.type === 'font');
   const publicCollections = input.collections.filter((collection) => collection.permissions.publicRead);
+  const productCollection = publicCollections.find((collection) => collection.slug === PRODUCT_COLLECTION_SLUG);
+  const ordersCollection = input.collections.find((collection) => collection.slug === 'orders');
   const hasCommerceCatalog = publicCollections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG);
   const hasPrivateOrders = input.collections.some((collection) => (
     collection.slug === 'orders' &&
@@ -1306,6 +1413,7 @@ const buildRepositoryManifest = (
         comments: buildManifestCommentDiscovery(input.site.id, input.site.settings),
         media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length),
         commerce,
+        commerceRuntime: buildManifestCommerceDiscovery(input.site.id, commerce, productCollection, ordersCollection),
         interactiveComponents,
       },
       admin: input.admin,
@@ -1396,6 +1504,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const fonts = media.media.filter((item) => item.type === 'font');
     const redirectRules = manifestRedirectRules(site.id, site.settings);
     const blogFeeds = blogFeedDiscovery(site);
+    const productCollection = collections.find((collection) => collection.slug === PRODUCT_COLLECTION_SLUG && collection.permissions.publicRead);
+    const ordersCollection = collections.find((collection) => collection.slug === 'orders');
     const hasCommerceCatalog = collections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG && collection.permissions.publicRead);
     const hasPrivateOrders = collections.some((collection) => (
       collection.slug === 'orders' &&
@@ -1645,6 +1755,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           comments: buildManifestCommentDiscovery(site.id, site.settings),
           media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total),
           commerce,
+          commerceRuntime: buildManifestCommerceDiscovery(site.id, commerce, productCollection, ordersCollection),
           interactiveComponents,
         },
         admin,

@@ -8,6 +8,7 @@ import type {
   BackyManifestBlogModule,
   BackyManifestBlogRuntimeModule,
   BackyManifestBlogTag,
+  BackyManifestCommerceRuntimeModule,
   BackyManifestCollectionSchema,
   BackyManifestCollectionsRuntimeModule,
   BackyManifestLocalizedRoutePatternGroup,
@@ -1368,6 +1369,88 @@ const manifest = {
       },
       providerCertification: commerceProviderCertification,
     },
+    commerceRuntime: {
+      schemaVersion: "backy.commerce-discovery.v1",
+      enabled: true,
+      mode: "checkout-provider",
+      currency: "USD",
+      paymentProvider: "stripe",
+      catalogCollection: {
+        id: "collection_products",
+        slug: "products",
+        name: "Products",
+        status: "published",
+        publicRead: true,
+      },
+      ordersCollection: {
+        id: "collection_orders",
+        slug: "orders",
+        name: "Orders",
+        status: "published",
+        publicRead: false,
+      },
+      endpoints: {
+        catalog: "/api/sites/site_demo/commerce/catalog",
+        productDetail: "/api/sites/site_demo/commerce/catalog?slug={slug}",
+        orderContract: "/api/sites/site_demo/commerce/orders",
+        createOrder: "/api/sites/site_demo/commerce/orders",
+        providerWebhook: "/api/sites/site_demo/commerce/webhook",
+        productCollectionRecords: "/api/sites/site_demo/collections/products/records",
+      },
+      methods: {
+        catalog: "GET",
+        productDetail: "GET",
+        orderContract: "GET",
+        createOrder: "POST",
+        providerWebhook: "POST",
+      },
+      capabilities: {
+        catalog: true,
+        orderIntake: true,
+        providerCheckout: true,
+        productFilters: true,
+        productFacets: true,
+        inventoryReservations: true,
+        pricingRules: true,
+        guestCheckout: true,
+        providerWebhooks: true,
+        providerCertification: true,
+        conditionalRequests: true,
+        cacheableCatalog: true,
+      },
+      cache: {
+        catalog: "public-discovery",
+        productDetail: "public-discovery",
+        orderContract: "public-discovery",
+        createOrder: "private-no-store",
+        providerWebhook: "private-no-store",
+      },
+      privacy: {
+        publicCatalogExcludesPrivateOrderQueue: true,
+        ordersCollectionMustRemainPrivate: true,
+        publicOrderPayloadContainsCustomerData: true,
+        providerSecretsNeverReturned: true,
+      },
+      filters: {
+        queryParams: ["slug", "limit", "offset", "sortBy", "sortDirection", "q", "search", "category", "tag", "vendor", "productType", "featured"],
+        maxLimit: 100,
+        sortDirections: ["asc", "desc"],
+        productTypes: ["physical", "digital", "service"],
+      },
+      schemas: {
+        catalog: "backy.commerce-catalog.v1",
+        settings: "backy.commerce-settings.v1",
+        orderContract: "backy.commerce-orders.v1",
+        product: "backy.commerce-product.v1",
+        providerCertification: "backy.commerce-provider-certification-handoff.v1",
+        productCatalogNotFound: "PRODUCT_CATALOG_NOT_FOUND",
+        productNotFound: "PRODUCT_NOT_FOUND",
+        orderQueueNotFound: "ORDER_QUEUE_NOT_FOUND",
+        orderQueueNotPrivate: "ORDER_QUEUE_NOT_PRIVATE",
+        validationError: "VALIDATION_ERROR",
+        productOutOfStock: "PRODUCT_OUT_OF_STOCK",
+      },
+    },
     interactiveComponents: {
       schemaVersion: "backy.interactive-components.v1",
       elementTypes: ["interactiveFigure", "codeComponent"],
@@ -1962,6 +2045,89 @@ const sdkManifestMedia = {
     queryParams: ["type", "q", "folder", "pageId", "postId", "global", "limit", "offset"],
   },
 } satisfies BackyManifestMediaModule;
+
+const sdkManifestCommerceRuntime = {
+  schemaVersion: "backy.commerce-discovery.v1",
+  enabled: true,
+  mode: "checkout-provider",
+  currency: "USD",
+  paymentProvider: "stripe",
+  catalogCollection: {
+    id: "collection_products",
+    slug: "products",
+    name: "Products",
+    status: "published",
+    publicRead: true,
+  },
+  ordersCollection: {
+    id: "collection_orders",
+    slug: "orders",
+    name: "Orders",
+    status: "published",
+    publicRead: false,
+  },
+  endpoints: {
+    catalog: "/api/sites/site_demo/commerce/catalog",
+    productDetail: "/api/sites/site_demo/commerce/catalog?slug={slug}",
+    orderContract: "/api/sites/site_demo/commerce/orders",
+    createOrder: "/api/sites/site_demo/commerce/orders",
+    providerWebhook: "/api/sites/site_demo/commerce/webhook",
+    productCollectionRecords: "/api/sites/site_demo/collections/products/records",
+  },
+  methods: {
+    catalog: "GET",
+    productDetail: "GET",
+    orderContract: "GET",
+    createOrder: "POST",
+    providerWebhook: "POST",
+  },
+  capabilities: {
+    catalog: true,
+    orderIntake: true,
+    providerCheckout: true,
+    productFilters: true,
+    productFacets: true,
+    inventoryReservations: true,
+    pricingRules: true,
+    guestCheckout: true,
+    providerWebhooks: true,
+    providerCertification: true,
+    conditionalRequests: true,
+    cacheableCatalog: true,
+  },
+  cache: {
+    catalog: "public-discovery",
+    productDetail: "public-discovery",
+    orderContract: "public-discovery",
+    createOrder: "private-no-store",
+    providerWebhook: "private-no-store",
+  },
+  privacy: {
+    publicCatalogExcludesPrivateOrderQueue: true,
+    ordersCollectionMustRemainPrivate: true,
+    publicOrderPayloadContainsCustomerData: true,
+    providerSecretsNeverReturned: true,
+  },
+  filters: {
+    queryParams: ["slug", "limit", "offset", "sortBy", "sortDirection", "q", "search", "category", "tag", "vendor", "productType", "featured"],
+    maxLimit: 100,
+    sortDirections: ["asc", "desc"],
+    productTypes: ["physical", "digital", "service"],
+  },
+  schemas: {
+    catalog: "backy.commerce-catalog.v1",
+    settings: "backy.commerce-settings.v1",
+    orderContract: "backy.commerce-orders.v1",
+    product: "backy.commerce-product.v1",
+    providerCertification: "backy.commerce-provider-certification-handoff.v1",
+    productCatalogNotFound: "PRODUCT_CATALOG_NOT_FOUND",
+    productNotFound: "PRODUCT_NOT_FOUND",
+    orderQueueNotFound: "ORDER_QUEUE_NOT_FOUND",
+    orderQueueNotPrivate: "ORDER_QUEUE_NOT_PRIVATE",
+    validationError: "VALIDATION_ERROR",
+    productOutOfStock: "PRODUCT_OUT_OF_STOCK",
+  },
+} satisfies BackyManifestCommerceRuntimeModule;
 
 const sdkManifestTheme = {
   schemaVersion: "backy.theme-discovery.v1",
@@ -4158,6 +4324,15 @@ const invalidGeneratedManifestCommerceCapabilities = {
   },
 } satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
 
+const invalidGeneratedManifestCommerceRuntimeDiscovery = {
+  ...manifest.modules.commerceRuntime,
+  // @ts-expect-error generated manifest commerce discovery uses a versioned schema marker.
+  schemaVersion: "backy.commerce-discovery.v0",
+} satisfies GeneratedBackyFrontendManifest["modules"]["commerceRuntime"];
+
+// @ts-expect-error manifest commerce runtime modules require order privacy metadata.
+const invalidSdkManifestCommerceRuntime = { ...sdkManifestCommerceRuntime, privacy: undefined, } satisfies BackyManifestCommerceRuntimeModule;
+
 const invalidGeneratedInteractiveRegistry = {
   ...manifest.modules.interactiveComponents,
   registry: {
@@ -4594,6 +4769,7 @@ void sdkManifestForm;
 void sdkManifestFormsRuntime;
 void sdkManifestCollectionsRuntime;
 void sdkManifestMedia;
+void sdkManifestCommerceRuntime;
 void sdkManifestTheme;
 void sdkManifestLiveManagement;
 void sdkManifestCollection;
@@ -4646,6 +4822,8 @@ void invalidGeneratedManifestLiveManagementDiscovery;
 void invalidGeneratedManifestFormsRuntimeDiscovery;
 void invalidGeneratedManifestCommerceMode;
 void invalidGeneratedManifestCommerceCapabilities;
+void invalidGeneratedManifestCommerceRuntimeDiscovery;
+void invalidSdkManifestCommerceRuntime;
 void invalidGeneratedInteractiveRegistry;
 void invalidGeneratedInteractiveSecurity;
 void sdkInteractiveComponentsContract;

@@ -992,6 +992,17 @@ assert(Array.isArray(events.data.events), 'events() missing events array');
 
 let commerceCatalogChecked = false;
 try {
+  const manifestCommerceRuntime = manifest.data.modules?.commerceRuntime;
+  assert(manifestCommerceRuntime?.schemaVersion === 'backy.commerce-discovery.v1', 'manifest() missing commerce runtime discovery module');
+  assert(manifestCommerceRuntime.endpoints?.catalog === manifest.data.endpoints.commerceCatalog, 'manifest() commerce runtime catalog endpoint drifted');
+  assert(manifestCommerceRuntime.endpoints?.orderContract === manifest.data.endpoints.commerceOrders, 'manifest() commerce runtime order contract endpoint drifted');
+  assert(manifestCommerceRuntime.methods?.createOrder === 'POST', 'manifest() commerce runtime create order method drifted');
+  assert(manifestCommerceRuntime.capabilities?.productFilters === true, 'manifest() commerce runtime missing product filters capability');
+  assert(manifestCommerceRuntime.cache?.createOrder === 'private-no-store', 'manifest() commerce runtime create order cache policy drifted');
+  assert(manifestCommerceRuntime.privacy?.ordersCollectionMustRemainPrivate === true, 'manifest() commerce runtime missing private order queue boundary');
+  assert(manifestCommerceRuntime.filters?.queryParams?.includes?.('productType'), 'manifest() commerce runtime missing productType filter metadata');
+  assert(manifestCommerceRuntime.schemas?.orderQueueNotPrivate === 'ORDER_QUEUE_NOT_PRIVATE', 'manifest() commerce runtime order queue privacy schema drifted');
+
   const commerceOrderContract = await client.commerceOrderContract();
   assert(commerceOrderContract.data.schemaVersion === 'backy.commerce-orders.v1', 'commerceOrderContract() missing schema version');
   assert(commerceOrderContract.data.relatedEndpoints?.catalog, 'commerceOrderContract() missing catalog endpoint');

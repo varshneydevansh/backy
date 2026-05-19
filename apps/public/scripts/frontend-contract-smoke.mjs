@@ -192,6 +192,22 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestCommerceDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.commerce-discovery.v1'") &&
+    manifestRoute.includes("ordersCollectionMustRemainPrivate: true") &&
+    manifestRoute.includes("orderQueueNotPrivate: 'ORDER_QUEUE_NOT_PRIVATE'") &&
+    manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(input.site.id, commerce, productCollection, ordersCollection)') &&
+    manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(site.id, commerce, productCollection, ordersCollection)') &&
+    frontendManifestSchema.includes('"backy.commerce-discovery.v1"') &&
+    frontendManifestSchema.includes('"providerSecretsNeverReturned"') &&
+    frontendManifestSchema.includes('"PRODUCT_OUT_OF_STOCK"') &&
+    sdkSource.includes('BackyManifestCommerceRuntimeModule') &&
+    sdkSmoke.includes('manifest() missing commerce runtime discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestCommerceRuntimeDiscovery'),
+  'Frontend manifest and SDK must expose structured commerce runtime discovery for custom frontend product catalog and checkout UIs.',
+);
+
+assert(
   publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
     publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
     publicSiteDiscoveryRoute.includes('cacheRevision') &&

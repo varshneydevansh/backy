@@ -3313,7 +3313,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         };
         [key: string]: unknown;
       };
-      commerce?: {
+      commerce: {
         schemaVersion: "backy.commerce-settings.v1";
         mode: "catalog-only" | "manual-orders" | "checkout-provider";
         currency: string;
@@ -3369,6 +3369,98 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           mode: "manual" | "webhook" | "scheduled";
           windowHours: number;
           requiresManualReview: boolean;
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
+      commerceRuntime: {
+        schemaVersion: "backy.commerce-discovery.v1";
+        enabled: boolean;
+        mode: "catalog-only" | "manual-orders" | "checkout-provider";
+        currency: string;
+        paymentProvider: "none" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "manual";
+        catalogCollection: {
+          id: string;
+          slug: string;
+          name: string;
+          status: string;
+          publicRead: boolean;
+          [key: string]: unknown;
+        } | null;
+        ordersCollection: {
+          id: string;
+          slug: string;
+          name: string;
+          status: string;
+          publicRead: boolean;
+          [key: string]: unknown;
+        } | null;
+        endpoints: {
+          catalog: string;
+          productDetail: string;
+          orderContract: string;
+          createOrder: string;
+          providerWebhook: string;
+          productCollectionRecords: string;
+          [key: string]: unknown;
+        };
+        methods: {
+          catalog: "GET";
+          productDetail: "GET";
+          orderContract: "GET";
+          createOrder: "POST";
+          providerWebhook: "POST";
+          [key: string]: unknown;
+        };
+        capabilities: {
+          catalog: boolean;
+          orderIntake: boolean;
+          providerCheckout: boolean;
+          productFilters: boolean;
+          productFacets: boolean;
+          inventoryReservations: boolean;
+          pricingRules: boolean;
+          guestCheckout: boolean;
+          providerWebhooks: boolean;
+          providerCertification: boolean;
+          conditionalRequests: boolean;
+          cacheableCatalog: boolean;
+          [key: string]: unknown;
+        };
+        cache: {
+          catalog: string;
+          productDetail: string;
+          orderContract: string;
+          createOrder: string;
+          providerWebhook: string;
+          [key: string]: unknown;
+        };
+        privacy: {
+          publicCatalogExcludesPrivateOrderQueue: boolean;
+          ordersCollectionMustRemainPrivate: boolean;
+          publicOrderPayloadContainsCustomerData: boolean;
+          providerSecretsNeverReturned: boolean;
+          [key: string]: unknown;
+        };
+        filters: {
+          queryParams: Array<string>;
+          maxLimit: number;
+          sortDirections: Array<"asc" | "desc">;
+          productTypes: Array<"physical" | "digital" | "service">;
+          [key: string]: unknown;
+        };
+        schemas: {
+          catalog: "backy.commerce-catalog.v1";
+          settings: "backy.commerce-settings.v1";
+          orderContract: "backy.commerce-orders.v1";
+          product: "backy.commerce-product.v1";
+          providerCertification: "backy.commerce-provider-certification-handoff.v1";
+          productCatalogNotFound: "PRODUCT_CATALOG_NOT_FOUND";
+          productNotFound: "PRODUCT_NOT_FOUND";
+          orderQueueNotFound: "ORDER_QUEUE_NOT_FOUND";
+          orderQueueNotPrivate: "ORDER_QUEUE_NOT_PRIVATE";
+          validationError: "VALIDATION_ERROR";
+          productOutOfStock: "PRODUCT_OUT_OF_STOCK";
           [key: string]: unknown;
         };
         [key: string]: unknown;
