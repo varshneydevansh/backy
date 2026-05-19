@@ -41,6 +41,11 @@ assert(
     manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'") &&
     manifestRoute.includes('disposable_database_confirmed=true') &&
     manifestRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
+    manifestRoute.includes('getFrontendDatabaseCertificationRuntime') &&
+    manifestRoute.includes('databaseUrlConfigured') &&
+    manifestRoute.includes('readyForCertification') &&
+    manifestRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
+    manifestRoute.includes('Database URLs and service credentials are never returned') &&
     manifestRoute.includes("'media'") &&
     manifestRoute.includes("'forms'") &&
     manifestRoute.includes("'interactive-components'") &&
@@ -59,6 +64,11 @@ assert(
     openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
     openApiRoute.includes('disposable_database_confirmed=true') &&
     openApiRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
+    openApiRoute.includes('getFrontendDatabaseCertificationRuntime') &&
+    openApiRoute.includes('databaseUrlConfigured') &&
+    openApiRoute.includes('readyForCertification') &&
+    openApiRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
+    openApiRoute.includes('Database URLs and service credentials are never returned') &&
     openApiRoute.includes('"media"') &&
     openApiRoute.includes('"forms"') &&
     openApiRoute.includes('"interactive-components"') &&
@@ -74,6 +84,9 @@ assert(
     frontendManifestSchema.includes('"BACKY_DATABASE_URL"') &&
     frontendManifestSchema.includes('"DATABASE_URL"') &&
     frontendManifestSchema.includes('"requiredConfirmationEnv": { "const": "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true" }') &&
+    frontendManifestSchema.includes('"runtime"') &&
+    frontendManifestSchema.includes('"databaseUrlConfigured"') &&
+    frontendManifestSchema.includes('"readyForCertification"') &&
     frontendManifestSchema.includes('"version", "schemas", "databaseCertification"'),
   'Frontend manifest schema must require and type the database certification handoff.',
 );
@@ -84,6 +97,8 @@ assert(
     generatedSdkTypes.includes('databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('"npm run ci:sdk-postgres-smoke"') &&
     generatedSdkTypes.includes('requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"') &&
+    generatedSdkTypes.includes('databaseUrlConfigured: boolean') &&
+    generatedSdkTypes.includes('readyForCertification: boolean') &&
     generatedSdkTypes.includes('"npm run test:frontend-contract-types"'),
   'Generated SDK types must export the manifest/OpenAPI database certification contract.',
 );

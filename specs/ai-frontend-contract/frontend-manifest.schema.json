@@ -54,9 +54,34 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "dataMode": { "type": "string", "minLength": 1 },
+            "databaseType": { "type": "string", "minLength": 1 },
+            "databaseUrlConfigured": { "type": "boolean" },
+            "databaseUrlAlias": {
+              "anyOf": [
+                { "enum": ["BACKY_DATABASE_URL", "DATABASE_URL"] },
+                { "type": "null" }
+              ]
+            },
+            "disposableConfirmed": { "type": "boolean" },
+            "expectedHostConfigured": { "type": "boolean" },
+            "expectedDatabaseConfigured": { "type": "boolean" },
+            "readyForCertification": { "type": "boolean" },
+            "missing": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["dataMode", "databaseType", "databaseUrlConfigured", "databaseUrlAlias", "disposableConfirmed", "expectedHostConfigured", "expectedDatabaseConfigured", "readyForCertification", "missing", "secretHandling"]
+        },
         "secretHandling": { "type": "string", "minLength": 1 }
       },
-      "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "secretHandling"]
+      "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "runtime", "secretHandling"]
     },
     "navigationItem": {
       "type": "object",

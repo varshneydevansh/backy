@@ -285,8 +285,12 @@ assert(
     manifestRoute.includes('backy.frontend-database-certification.v1') &&
     manifestRoute.includes('npm run ci:sdk-postgres-smoke') &&
     manifestRoute.includes('npm run test:frontend-contract-types') &&
+    manifestRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
+    manifestRoute.includes('readyForCertification') &&
     openApiRoute.includes('"x-backy-database-certification": frontendDatabaseCertification') &&
+    openApiRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestDatabaseCertification') &&
+    generatedSdkTypes.includes('readyForCertification: boolean') &&
     generatedSdkTypes.includes('"x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkSmoke.includes('frontendDatabaseCertification') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestDatabaseCertification'),

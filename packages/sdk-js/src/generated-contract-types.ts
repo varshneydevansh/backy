@@ -2355,6 +2355,19 @@ export type GeneratedBackyFrontendManifestDatabaseCertification = {
   };
   requires: Array<string>;
   coverage: Array<string>;
+  runtime: {
+    dataMode: string;
+    databaseType: string;
+    databaseUrlConfigured: boolean;
+    databaseUrlAlias: "BACKY_DATABASE_URL" | "DATABASE_URL" | null;
+    disposableConfirmed: boolean;
+    expectedHostConfigured: boolean;
+    expectedDatabaseConfigured: boolean;
+    readyForCertification: boolean;
+    missing: Array<string>;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
   secretHandling: string;
   [key: string]: unknown;
 };

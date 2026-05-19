@@ -333,6 +333,19 @@ const frontendDatabaseCertification = {
     "public schema, RLS policies, indexes, and constraints migrated",
   ],
   coverage: ["manifest", "openapi", "render", "collections", "forms"],
+  runtime: {
+    dataMode: "database",
+    databaseType: "postgres",
+    databaseUrlConfigured: false,
+    databaseUrlAlias: null,
+    disposableConfirmed: false,
+    expectedHostConfigured: false,
+    expectedDatabaseConfigured: false,
+    readyForCertification: false,
+    missing: ["BACKY_DATABASE_URL or DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
+    secretHandling:
+      "Database URLs and service credentials are never returned; this runtime summary exposes alias/configuration state only.",
+  },
   secretHandling:
     "Database URLs and service credentials stay in CI/runtime environment.",
 } satisfies GeneratedBackyFrontendManifestDatabaseCertification;

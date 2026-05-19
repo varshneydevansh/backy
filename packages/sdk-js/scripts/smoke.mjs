@@ -660,6 +660,16 @@ assert(manifest.data.contract?.databaseCertification?.requires?.includes('dispos
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('media'), 'manifest() missing media database certification coverage');
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('forms'), 'manifest() missing forms database certification coverage');
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('interactive-components'), 'manifest() missing interactive component database certification coverage');
+assert(typeof manifest.data.contract?.databaseCertification?.runtime?.databaseUrlConfigured === 'boolean', 'manifest() missing non-secret database URL runtime state');
+assert(Object.prototype.hasOwnProperty.call(manifest.data.contract.databaseCertification.runtime, 'databaseUrlAlias'), 'manifest() missing non-secret database URL alias runtime field');
+assert(typeof manifest.data.contract.databaseCertification.runtime.disposableConfirmed === 'boolean', 'manifest() missing disposable confirmation runtime state');
+assert(typeof manifest.data.contract.databaseCertification.runtime.readyForCertification === 'boolean', 'manifest() missing SDK Postgres readiness runtime state');
+assert(Array.isArray(manifest.data.contract.databaseCertification.runtime.missing), 'manifest() missing SDK Postgres runtime missing-input list');
+assert(
+  typeof manifest.data.contract.databaseCertification.runtime.secretHandling === 'string' &&
+    manifest.data.contract.databaseCertification.runtime.secretHandling.includes('Database URLs and service credentials are never returned'),
+  'manifest() missing non-secret SDK Postgres runtime boundary',
+);
 assert(
   typeof manifest.data.contract?.databaseCertification?.secretHandling === 'string' &&
     manifest.data.contract.databaseCertification.secretHandling.includes('Database URLs and service credentials stay in CI/runtime environment'),
@@ -710,6 +720,8 @@ assert(openapi['x-backy-database-certification']?.environment?.targetGuards?.inc
 assert(openapi['x-backy-database-certification']?.requires?.includes('disposable_database_confirmed=true'), 'openapi() missing disposable database confirmation requirement');
 assert(openapi['x-backy-database-certification']?.coverage?.includes('media'), 'openapi() missing media database certification coverage');
 assert(openapi['x-backy-database-certification']?.coverage?.includes('forms'), 'openapi() missing forms database certification coverage');
+assert(typeof openapi['x-backy-database-certification']?.runtime?.databaseUrlConfigured === 'boolean', 'openapi() missing non-secret database URL runtime state');
+assert(typeof openapi['x-backy-database-certification']?.runtime?.readyForCertification === 'boolean', 'openapi() missing SDK Postgres readiness runtime state');
 assert(openapi['x-backy-database-certification']?.coverage?.includes('interactive-components'), 'openapi() missing interactive component database certification coverage');
 assert(
   typeof openapi['x-backy-database-certification']?.secretHandling === 'string' &&
