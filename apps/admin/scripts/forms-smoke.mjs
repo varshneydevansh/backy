@@ -101,6 +101,15 @@ const assertFormsPersistenceCertificationSource = () => {
     'Forms builder must clear contact-share and collection-write mappings when a mapped field is removed',
   );
   assert(
+    source.includes('normalizeFormCollectionTarget') &&
+      source.includes('normalizeFormCollectionFieldMap') &&
+      source.includes('normalizedCollectionFieldKey') &&
+      source.includes('delete fieldMap[field.key]') &&
+      source.includes('const collectionTarget = normalizeFormCollectionTarget(form.collectionTarget, form.fields)') &&
+      source.includes('return normalizeFormCollectionFieldMap(fieldMap, form.fields)'),
+    'Forms builder must persist only current non-empty collection write mappings',
+  );
+  assert(
     source.includes('patchFormDraftFieldType') &&
       source.includes('applyFormFieldTypeDefaults') &&
       source.includes("type === 'select' || type === 'radio'") &&

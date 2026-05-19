@@ -1757,10 +1757,11 @@ function FormsRoute() {
         ...currentTarget,
         ...patch,
       };
+      const normalizedTarget = normalizeFormCollectionTarget(nextTarget, current.fields) || nextTarget;
 
       return {
         ...current,
-        collectionTarget: nextTarget.enabled ? nextTarget : { ...nextTarget, enabled: false },
+        collectionTarget: normalizedTarget.enabled ? normalizedTarget : { ...normalizedTarget, enabled: false },
       };
     });
   };
@@ -4122,12 +4123,15 @@ function FormsRoute() {
                                     <span>{field.label} <span className="font-mono font-normal">({field.key})</span></span>
                                     <select
                                       value={formDraft.collectionTarget?.fieldMap?.[field.key] || ''}
-                                      onChange={(event) => patchFormDraftCollectionTarget({
-                                        fieldMap: {
-                                          ...(formDraft.collectionTarget?.fieldMap || {}),
-                                          [field.key]: event.target.value,
-                                        },
-                                      })}
+                                      onChange={(event) => {
+                                        const fieldMap = { ...(formDraft.collectionTarget?.fieldMap || {}) };
+                                        if (event.target.value) {
+                                          fieldMap[field.key] = event.target.value;
+                                        } else {
+                                          delete fieldMap[field.key];
+                                        }
+                                        patchFormDraftCollectionTarget({ fieldMap });
+                                      }}
                                       disabled={!canEditForms}
                                       className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                       aria-label={`Map ${field.label} to collection field`}
@@ -5346,6 +5350,47 @@ const clearFieldKeyReference = (value: string | undefined, removedKey: string): 
   value === removedKey ? undefined : value
 );
 
+const formFieldKeySet = (fields: FormFieldDefinition[]): Set<string> => (
+  new Set(fields.map((field) => normalizeFieldKey(field.key)).filter(Boolean))
+);
+
+const normalizeFormCollectionFieldMap = (
+  fieldMap: Record<string, string> | undefined,
+  fields: FormFieldDefinition[],
+): Record<string, string> => {
+  const allowedFormFieldKeys = formFieldKeySet(fields);
+  return Object.fromEntries(Object.entries(fieldMap || {}).flatMap(([formFieldKey, collectionFieldKey]) => {
+    const normalizedFormFieldKey = normalizeFieldKey(formFieldKey);
+    const normalizedCollectionFieldKey = collectionFieldKey.trim();
+    if (!normalizedFormFieldKey || !normalizedCollectionFieldKey || !allowedFormFieldKeys.has(normalizedFormFieldKey)) {
+      return [];
+    }
+
+    return [[normalizedFormFieldKey, normalizedCollectionFieldKey]];
+  }));
+};
+
+const normalizeFormCollectionTarget = (
+  collectionTarget: FormDefinition['collectionTarget'],
+  fields: FormFieldDefinition[],
+): FormDefinition['collectionTarget'] => {
+  if (!collectionTarget) return collectionTarget;
+
+  const allowedFormFieldKeys = formFieldKeySet(fields);
+  const collectionId = collectionTarget.collectionId.trim();
+  const slugFieldKey = collectionTarget.slugField ? normalizeFieldKey(collectionTarget.slugField) : '';
+  const slugField = slugFieldKey && allowedFormFieldKeys.has(slugFieldKey)
+    ? slugFieldKey
+    : undefined;
+
+  return {
+    ...collectionTarget,
+    collectionId,
+    slugField,
+    fieldMap: normalizeFormCollectionFieldMap(collectionTarget.fieldMap, fields),
+  };
+};
+
 const remapFormContactShareFieldKey = (
   contactShare: FormDefinition['contactShare'],
   oldKey: string,
@@ -5854,7 +5899,7 @@ const buildDefaultCollectionFieldMap = (
   if (!collection) return {};
 
   const collectionFields = collection.fields;
-  return Object.fromEntries(form.fields.map((field) => {
+  const fieldMap = Object.fromEntries(form.fields.map((field) => {
     const normalizedFieldKey = field.key.toLowerCase();
     const normalizedFieldLabel = field.label.toLowerCase();
     const matched = collectionFields.find((collectionField) => (
@@ -5864,57 +5909,62 @@ const buildDefaultCollectionFieldMap = (
 
     return [field.key, matched?.key || ''];
   }));
+  return normalizeFormCollectionFieldMap(fieldMap, form.fields);
 };
 
-const buildFormUpdatePayload = (form: FormDefinition) => ({
-  ...(() => {
-    const spamSettings = readFormSpamSettings(form);
-    const consentSettings = readFormConsentSettings(form);
-    return {
-      spamSettings,
-      consentSettings,
-      settings: {
-        ...(form.settings || {}),
-        spam: spamSettings,
-        consent: consentSettings,
-      },
-    };
-  })(),
-  name: form.name.trim(),
-  title: normalizeOptionalText(form.title),
-  description: normalizeOptionalText(form.description),
-  audience: form.audience,
-  isActive: form.isActive,
-  fields: form.fields.map((field, index) => {
-    const type = normalizeFormFieldType(field.type);
-    const options = formFieldTypeSupportsOptions(type) ? normalizeFormFieldOptions(field.options) : undefined;
-    const defaultValue = normalizeFormFieldDefaultValue(field.defaultValue, type, options);
-    const validation = normalizeValidationRules({ ...field, type });
+const buildFormUpdatePayload = (form: FormDefinition) => {
+  const collectionTarget = normalizeFormCollectionTarget(form.collectionTarget, form.fields);
 
-    return {
-      key: normalizeFieldKey(field.key) || `field_${index + 1}`,
-      label: field.label.trim() || `Field ${index + 1}`,
-      type,
-      required: Boolean(field.required),
-      ...(normalizeOptionalText(field.placeholder) ? { placeholder: normalizeOptionalText(field.placeholder) || undefined } : {}),
-      ...(normalizeOptionalText(field.helpText) ? { helpText: normalizeOptionalText(field.helpText) || undefined } : {}),
-      ...(defaultValue ? { defaultValue } : {}),
-      ...(options ? { options } : {}),
-      ...(validation ? { validation } : {}),
-    };
-  }),
-  notificationEmail: normalizeOptionalText(form.notificationEmail),
-  notificationWebhook: normalizeOptionalText(form.notificationWebhook),
-  successRedirectUrl: normalizeOptionalText(form.successRedirectUrl),
-  successMessage: normalizeOptionalText(form.successMessage),
-  enableHoneypot: form.enableHoneypot !== false,
-  enableCaptcha: form.enableCaptcha === true,
-  moderationMode: form.moderationMode || 'manual',
-  contactShare: form.contactShare?.enabled ? form.contactShare : { enabled: false },
-  collectionTarget: form.collectionTarget?.enabled
-    ? form.collectionTarget
-    : { enabled: false, collectionId: form.collectionTarget?.collectionId || '', fieldMap: form.collectionTarget?.fieldMap || {} },
-});
+  return {
+    ...(() => {
+      const spamSettings = readFormSpamSettings(form);
+      const consentSettings = readFormConsentSettings(form);
+      return {
+        spamSettings,
+        consentSettings,
+        settings: {
+          ...(form.settings || {}),
+          spam: spamSettings,
+          consent: consentSettings,
+        },
+      };
+    })(),
+    name: form.name.trim(),
+    title: normalizeOptionalText(form.title),
+    description: normalizeOptionalText(form.description),
+    audience: form.audience,
+    isActive: form.isActive,
+    fields: form.fields.map((field, index) => {
+      const type = normalizeFormFieldType(field.type);
+      const options = formFieldTypeSupportsOptions(type) ? normalizeFormFieldOptions(field.options) : undefined;
+      const defaultValue = normalizeFormFieldDefaultValue(field.defaultValue, type, options);
+      const validation = normalizeValidationRules({ ...field, type });
+
+      return {
+        key: normalizeFieldKey(field.key) || `field_${index + 1}`,
+        label: field.label.trim() || `Field ${index + 1}`,
+        type,
+        required: Boolean(field.required),
+        ...(normalizeOptionalText(field.placeholder) ? { placeholder: normalizeOptionalText(field.placeholder) || undefined } : {}),
+        ...(normalizeOptionalText(field.helpText) ? { helpText: normalizeOptionalText(field.helpText) || undefined } : {}),
+        ...(defaultValue ? { defaultValue } : {}),
+        ...(options ? { options } : {}),
+        ...(validation ? { validation } : {}),
+      };
+    }),
+    notificationEmail: normalizeOptionalText(form.notificationEmail),
+    notificationWebhook: normalizeOptionalText(form.notificationWebhook),
+    successRedirectUrl: normalizeOptionalText(form.successRedirectUrl),
+    successMessage: normalizeOptionalText(form.successMessage),
+    enableHoneypot: form.enableHoneypot !== false,
+    enableCaptcha: form.enableCaptcha === true,
+    moderationMode: form.moderationMode || 'manual',
+    contactShare: form.contactShare?.enabled ? form.contactShare : { enabled: false },
+    collectionTarget: collectionTarget?.enabled
+      ? collectionTarget
+      : { enabled: false, collectionId: collectionTarget?.collectionId || '', fieldMap: collectionTarget?.fieldMap || {} },
+  };
+};
 
 const formatSubmissionValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return 'Empty';
