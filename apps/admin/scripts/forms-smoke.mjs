@@ -225,6 +225,21 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('onChange={(event) => patchFormDraftFieldOptions(fieldIndex, parseOptionsText(event.target.value))}'),
     'Forms builder must keep field defaults compatible with type and option changes',
   );
+  assert(
+    source.includes('frontendTemplateValidationRequiresField') &&
+      source.includes('frontendTemplateValidationRequiresField(record.validation)') &&
+      source.includes('const validation = normalizeValidationRules({') &&
+      source.includes("validation: Array.isArray(record.validation)") &&
+      source.includes("const ruleRecord = isPlainRecord(rule) ? rule : null") &&
+      source.includes("const definition = FORM_VALIDATION_RULES.find((candidate) => candidate.type === type)") &&
+      source.includes("definition.valueMode === 'number'") &&
+      source.includes('const contactShare = normalizeFormContactShare(') &&
+      source.includes('return normalizeFormCollectionTarget({') &&
+      source.includes('inferFrontendTemplateCollectionTarget(normalizedFields, content)') &&
+      source.includes('contactShare: contactShare?.enabled ? contactShare : undefined') &&
+      source.includes('collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined'),
+    'Frontend design form templates must normalize imported field validation and routing before creating backend forms',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',

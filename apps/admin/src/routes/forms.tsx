@@ -5719,7 +5719,13 @@ const optionalStringListFromRecord = (record: Record<string, unknown> | undefine
   return options.length > 0 ? options : undefined;
 };
 
-const normalizeFrontendFieldType = (value: unknown): FormFieldDefinition['type'] => {
+const frontendTemplateValidationRequiresField = (value: unknown): boolean => (
+  Array.isArray(value) && value.some((rule) => (
+    isPlainRecord(rule) && optionalStringFromRecord(rule, 'type') === 'required'
+  ))
+);
+
+const normalizeFrontendFieldType = (value: unknown): FormFieldType => {
   const type = typeof value === 'string' ? value.trim() : undefined;
   return normalizeFormFieldType(type);
 };
@@ -5728,30 +5734,37 @@ const normalizeFrontendTemplateField = (value: unknown, index: number): FormFiel
   const record = isPlainRecord(value) ? value : {};
   const label = optionalStringFromRecord(record, 'label') || optionalStringFromRecord(record, 'name') || `Field ${index + 1}`;
   const key = normalizeFieldKey(optionalStringFromRecord(record, 'key') || optionalStringFromRecord(record, 'id') || label) || `field_${index + 1}`;
+  const type = normalizeFrontendFieldType(record.type);
   const field: FormFieldDefinition = {
     key,
     label,
-    type: normalizeFrontendFieldType(record.type),
-    required: optionalBooleanFromRecord(record, 'required') === true,
+    type,
+    required:
+      optionalBooleanFromRecord(record, 'required') === true ||
+      frontendTemplateValidationRequiresField(record.validation),
   };
   const placeholder = optionalStringFromRecord(record, 'placeholder');
   const helpText = optionalStringFromRecord(record, 'helpText') || optionalStringFromRecord(record, 'description');
-  const options = formFieldTypeSupportsOptions(normalizeFormFieldType(field.type))
-    ? optionalStringListFromRecord(record, 'options')
+  const options = formFieldTypeSupportsOptions(type)
+    ? normalizeFormFieldOptions(optionalStringListFromRecord(record, 'options'))
     : undefined;
   const defaultValue = normalizeFormFieldDefaultValue(
     optionalStringFromRecord(record, 'defaultValue'),
-    normalizeFormFieldType(field.type),
+    type,
     options,
   );
+  const validation = normalizeValidationRules({
+    ...field,
+    validation: Array.isArray(record.validation)
+      ? record.validation as FormFieldDefinition['validation']
+      : undefined,
+  });
 
   if (placeholder) field.placeholder = placeholder;
   if (helpText) field.helpText = helpText;
   if (defaultValue) field.defaultValue = defaultValue;
   if (options) field.options = options;
-  if (Array.isArray(record.validation)) {
-    field.validation = record.validation as FormFieldDefinition['validation'];
-  }
+  if (validation) field.validation = validation;
 
   return field;
 };
@@ -5814,20 +5827,21 @@ const inferFrontendTemplateContactShare = (
 };
 
 const inferFrontendTemplateCollectionTarget = (
+  fields: FormFieldDefinition[],
   content: Record<string, unknown> | undefined,
 ): FormDefinition['collectionTarget'] => {
   const configured = isPlainRecord(content?.collectionTarget) ? content.collectionTarget : undefined;
   const collectionId = optionalStringFromRecord(configured, 'collectionId');
   if (!configured?.enabled || !collectionId) return undefined;
 
-  return {
+  return normalizeFormCollectionTarget({
     enabled: true,
     collectionId,
     fieldMap: isPlainRecord(configured.fieldMap)
       ? Object.fromEntries(Object.entries(configured.fieldMap).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
       : undefined,
     slugField: optionalStringFromRecord(configured, 'slugField'),
-  };
+  }, fields);
 };
 
 const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate): FormTemplateBlueprint => {
@@ -5835,6 +5849,11 @@ const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate
   const fields = frontendTemplateFieldsFromContent(content);
   const normalizedFields = fields.length > 0 ? fields : defaultFrontendTemplateFields();
   const pageTemplate = optionalStringFromRecord(content, 'pageTemplate');
+  const contactShare = normalizeFormContactShare(
+    inferFrontendTemplateContactShare(normalizedFields, content),
+    normalizedFields,
+  );
+  const collectionTarget = inferFrontendTemplateCollectionTarget(normalizedFields, content);
 
   return {
     id: `frontend-${normalizeFieldKey(template.id) || 'form'}`,
@@ -5845,8 +5864,8 @@ const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate
     moderationMode: content?.moderationMode === 'auto-approve' ? 'auto-approve' : 'manual',
     successMessage: optionalStringFromRecord(content, 'successMessage') || 'Thanks. We received your submission.',
     fields: normalizedFields,
-    contactShare: inferFrontendTemplateContactShare(normalizedFields, content),
-    collectionTarget: inferFrontendTemplateCollectionTarget(content),
+    contactShare: contactShare?.enabled ? contactShare : undefined,
+    collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined,
   };
 };
 
@@ -5902,21 +5921,33 @@ const normalizeValidationRules = (field: FormFieldDefinition): FormValidationRul
   const allowedValidationTypes = new Set(validationTypesForFieldType(normalizeFormFieldType(field.type)));
 
   (field.validation || []).forEach((rule) => {
-    const type = rule.type as FormValidationRuleType;
-    if (!allowedValidationTypes.has(type) || !FORM_VALIDATION_RULES.some((definition) => definition.type === type)) {
+    const ruleRecord = isPlainRecord(rule) ? rule : null;
+    if (!ruleRecord) {
       return;
     }
 
-    if (!formValidationRuleHasValue(rule)) {
+    const type = optionalStringFromRecord(ruleRecord, 'type') as FormValidationRuleType;
+    const definition = FORM_VALIDATION_RULES.find((candidate) => candidate.type === type);
+    if (!allowedValidationTypes.has(type) || !definition) {
       return;
     }
 
-    const value = typeof rule.value === 'number' ? rule.value : String(rule.value).trim();
+    if (!formValidationRuleHasValue({ value: ruleRecord.value as string | number | undefined })) {
+      return;
+    }
+
+    const value = definition.valueMode === 'number'
+      ? Number(ruleRecord.value)
+      : String(ruleRecord.value).trim();
+
+    if (definition.valueMode === 'number' && !Number.isFinite(value)) {
+      return;
+    }
 
     rules.push({
         type,
         value,
-        message: rule.message?.trim() || defaultValidationMessage(field.label, type),
+        message: optionalStringFromRecord(ruleRecord, 'message') || defaultValidationMessage(field.label, type),
     });
   });
 
