@@ -6753,24 +6753,40 @@ function buildTemplateElements(input: {
                 height: 320,
                 dataBindings: [{ source: 'settings', mode: 'cookie-policy', fields: ['cookieCategories', 'consentMode', 'effectiveDate', 'preferencesUrl'] }],
                 props: { backgroundColor: '#fdf4ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 590 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'cookie-policy-kicker',
                         width: 230,
                         height: 28,
                         props: { content: 'Cookies and consent', fontSize: 13, fontWeight: '800', color: '#a21caf', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'cookie-policy-heading',
                         width: 660,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#701a75' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'cookie-policy-copy',
                         width: 610,
                         height: 64,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#86198f' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 86, {
                         id: 'cookie-policy-consent-card',
@@ -6778,6 +6794,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'settings', mode: 'cookie-consent', fields: ['consentMode', 'effectiveDate', 'preferencesUrl'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#f5d0fe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 330, height: 130 },
+                            mobile: { x: 24, y: 388, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'cookie-policy-consent-label',
@@ -6797,6 +6817,10 @@ function buildTemplateElements(input: {
                                 width: 230,
                                 height: 32,
                                 props: { content: 'Bind consent mode and effective dates from Settings legal metadata.', fontSize: 13, lineHeight: 1.35, color: '#a21caf' },
+                                responsive: {
+                                    tablet: { width: 260 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -6808,12 +6832,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'settings', mode: 'cookie-categories', fields: ['essential', 'analytics', 'marketing', 'preferences', 'retention'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 590, width: 375, height: 1160 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'cookie-policy-categories-heading',
                         width: 500,
                         height: 42,
                         props: { content: 'Cookie categories', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 500 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Essential cookies', body: 'Explain cookies needed for security, sessions, checkout, consent storage, and core site functionality.' },
@@ -6825,6 +6857,10 @@ function buildTemplateElements(input: {
                         height: 290,
                         dataBindings: [{ source: 'settings', mode: 'cookie-category', index }],
                         props: { backgroundColor: '#fdf4ff', borderRadius: 8, borderColor: '#fae8ff', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 324, width: 660, height: 286 },
+                            mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `cookie-policy-category-card-title-${index}`,
@@ -6832,6 +6868,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: category.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#701a75' },
                                 dataBindings: [{ source: 'settings', mode: 'cookie-category', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 320 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: `cookie-policy-category-card-copy-${index}`,
@@ -6839,12 +6879,20 @@ function buildTemplateElements(input: {
                                 height: 124,
                                 props: { content: category.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
                                 dataBindings: [{ source: 'settings', mode: 'cookie-category', index, field: 'body', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500, height: 104 },
+                                    mobile: { width: 268, height: 132 },
+                                },
                             }),
                             createCanvasElement('text', 24, 232, {
                                 id: `cookie-policy-category-card-note-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: 'Editable consent content', fontSize: 13, fontWeight: '800', color: '#a21caf' },
+                                responsive: {
+                                    tablet: { y: 228 },
+                                    mobile: { y: 252 },
+                                },
                             }),
                         ],
                     })),
@@ -6856,6 +6904,10 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'settings', mode: 'cookie-preferences', fields: ['preferencesUrl', 'consentCategories', 'contactEmail', 'processors'] }],
                 props: { backgroundColor: '#fdf2f8', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 620 },
+                    mobile: { y: 1750, width: 375, height: 680 },
+                },
                 children: [
                     createCanvasElement('box', 74, 62, {
                         id: 'cookie-policy-retention-card',
@@ -6863,18 +6915,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'cookie-retention', fields: ['retention', 'processors', 'thirdParties', 'renewalCadence'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fbcfe8', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 250 },
+                            mobile: { x: 24, y: 46, width: 327, height: 308 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 26, {
                                 id: 'cookie-policy-retention-heading',
                                 width: 360,
                                 height: 34,
                                 props: { content: 'Retention and processors', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64, props: { fontSize: 24 } },
+                                },
                             }),
                             ...['Session cookies', 'Analytics retention', 'Third parties', 'Consent renewal'].map((item, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
                                 id: `cookie-policy-retention-item-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: item, fontSize: 15, fontWeight: '800', color: '#86198f' },
+                                responsive: {
+                                    tablet: { x: 30 + (index % 2) * 300, y: 92 + Math.floor(index / 2) * 48, width: 240 },
+                                    mobile: { x: 28, y: 104 + index * 44, width: 240 },
+                                },
                             })),
                         ],
                     }),
@@ -6884,6 +6947,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'cookie-preferences-action', fields: ['preferencesUrl', 'contactEmail'] }],
                         props: { backgroundColor: '#701a75', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 350, width: 660, height: 190 },
+                            mobile: { x: 24, y: 410, width: 327, height: 214 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 26, {
                                 id: 'cookie-policy-preferences-heading',
@@ -6896,12 +6963,20 @@ function buildTemplateElements(input: {
                                 width: 250,
                                 height: 46,
                                 props: { content: 'Bind this action to a consent banner, settings modal, or external preference center.', fontSize: 14, lineHeight: 1.45, color: '#f5d0fe' },
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('button', 26, 138, {
                                 id: 'cookie-policy-preferences-button',
                                 width: 178,
                                 height: 40,
                                 props: { label: 'Manage cookies', backgroundColor: '#f5d0fe', color: '#701a75', borderRadius: 8, fontWeight: '800', action: 'cookies.preferences.open' },
+                                responsive: {
+                                    tablet: { x: 470, y: 112 },
+                                    mobile: { x: 26, y: 150 },
+                                },
                             }),
                         ],
                     }),

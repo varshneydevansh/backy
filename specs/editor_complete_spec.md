@@ -548,6 +548,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Events starter pages now seed explicit tablet/mobile responsive overrides for event format filters, stacked event cards, agenda steps, and RSVP CTAs so event registration pages are authored for narrower canvases instead of scaled from desktop.
   - Privacy starter pages now seed explicit tablet/mobile responsive overrides for legal metadata cards, policy sections, visitor-rights lists, and privacy request CTAs so legal pages remain readable and actionable across breakpoints.
   - Terms starter pages now seed explicit tablet/mobile responsive overrides for legal metadata cards, terms overview sections, commerce/service acceptance lists, and support contact CTAs so terms pages remain readable and actionable across breakpoints.
+  - Cookie-policy starter pages now seed explicit tablet/mobile responsive overrides for consent metadata cards, cookie category sections, retention/processor lists, and preferences CTAs so consent pages remain readable and actionable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves

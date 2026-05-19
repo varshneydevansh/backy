@@ -1525,6 +1525,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
     'Terms page starter must seed explicit tablet/mobile responsive overrides for legal terms sections.',
   );
+  assert(
+    source.includes("id: 'cookie-policy-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 590 }") &&
+      source.includes("id: 'cookie-policy-consent-card'") &&
+      source.includes("mobile: { x: 24, y: 388, width: 327, height: 150 }") &&
+      source.includes("id: 'cookie-policy-categories-section'") &&
+      source.includes("tablet: { y: 460, width: 768, height: 1120 }") &&
+      source.includes("id: `cookie-policy-category-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 }") &&
+      source.includes("id: 'cookie-policy-preferences-section'") &&
+      source.includes("mobile: { y: 1750, width: 375, height: 680 }") &&
+      source.includes("id: 'cookie-policy-retention-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 308 }") &&
+      source.includes("id: 'cookie-policy-preferences-card'") &&
+      source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
+    'Cookie policy page starter must seed explicit tablet/mobile responsive overrides for consent sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
