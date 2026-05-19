@@ -5813,7 +5813,7 @@ const normalizeFrontendTemplateField = (
   if (options) field.options = options;
   if (validation) field.validation = validation;
 
-  [sourceKey, recordKey, recordId, recordName, label].forEach((alias) => {
+  [key, sourceKey, recordKey, recordId, recordName, label].forEach((alias) => {
     addFrontendTemplateFieldKeyAlias(fieldKeyAliases, alias, key);
   });
 
@@ -5854,13 +5854,24 @@ const defaultFrontendTemplateFields = (): FormFieldDefinition[] => [
   { key: 'message', label: 'Message', type: 'textarea', required: false, placeholder: 'How can we help?' },
 ];
 
+const frontendTemplateFieldAliasesFromFields = (fields: FormFieldDefinition[]): Map<string, string> => {
+  const fieldKeyAliases = new Map<string, string>();
+
+  fields.forEach((field) => {
+    addFrontendTemplateFieldKeyAlias(fieldKeyAliases, field.key, field.key);
+    addFrontendTemplateFieldKeyAlias(fieldKeyAliases, field.label, field.key);
+  });
+
+  return fieldKeyAliases;
+};
+
 const remapFrontendTemplateFieldReference = (
   value: string | undefined,
   fieldKeyAliases: Map<string, string>,
 ): string | undefined => {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
-  return fieldKeyAliases.get(trimmed) || fieldKeyAliases.get(normalizeFieldKey(trimmed)) || trimmed;
+  return fieldKeyAliases.get(trimmed) || fieldKeyAliases.get(normalizeFieldKey(trimmed));
 };
 
 const remapFrontendTemplateFieldMap = (
@@ -5933,12 +5944,15 @@ const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate
   const fieldImport = frontendTemplateFieldsFromContent(content);
   const fields = fieldImport.fields;
   const normalizedFields = fields.length > 0 ? fields : defaultFrontendTemplateFields();
+  const fieldKeyAliases = fields.length > 0
+    ? fieldImport.fieldKeyAliases
+    : frontendTemplateFieldAliasesFromFields(normalizedFields);
   const pageTemplate = optionalStringFromRecord(content, 'pageTemplate');
   const contactShare = normalizeFormContactShare(
-    inferFrontendTemplateContactShare(normalizedFields, fieldImport.fieldKeyAliases, content),
+    inferFrontendTemplateContactShare(normalizedFields, fieldKeyAliases, content),
     normalizedFields,
   );
-  const collectionTarget = inferFrontendTemplateCollectionTarget(normalizedFields, fieldImport.fieldKeyAliases, content);
+  const collectionTarget = inferFrontendTemplateCollectionTarget(normalizedFields, fieldKeyAliases, content);
 
   return {
     id: `frontend-${normalizeFieldKey(template.id) || 'form'}`,

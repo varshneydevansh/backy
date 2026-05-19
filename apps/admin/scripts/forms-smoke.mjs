@@ -232,6 +232,10 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('FrontendTemplateFieldsImport') &&
       source.includes('addFrontendTemplateFieldKeyAlias') &&
       source.includes('fieldKeyAliases.set(alias, normalizedKey)') &&
+      source.includes('frontendTemplateFieldAliasesFromFields') &&
+      source.includes('addFrontendTemplateFieldKeyAlias(fieldKeyAliases, field.label, field.key)') &&
+      source.includes('return fieldKeyAliases.get(trimmed) || fieldKeyAliases.get(normalizeFieldKey(trimmed))') &&
+      source.includes('const fieldKeyAliases = fields.length > 0') &&
       source.includes('usedKeys.add(candidate)') &&
       source.includes('const usedKeys = new Set<string>()') &&
       source.includes('const fieldKeyAliases = new Map<string, string>()') &&
@@ -246,7 +250,7 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("definition.valueMode === 'number'") &&
       source.includes('const contactShare = normalizeFormContactShare(') &&
       source.includes('return normalizeFormCollectionTarget({') &&
-      source.includes('inferFrontendTemplateCollectionTarget(normalizedFields, fieldImport.fieldKeyAliases, content)') &&
+      source.includes('inferFrontendTemplateCollectionTarget(normalizedFields, fieldKeyAliases, content)') &&
       source.includes('contactShare: contactShare?.enabled ? contactShare : undefined') &&
       source.includes('collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined'),
     'Frontend design form templates must normalize imported field validation and routing before creating backend forms',
