@@ -53,6 +53,8 @@ const assertPagesListSourceContract = () => {
       source.includes('bookingPageTemplate') &&
       source.includes("key: 'portfolio'") &&
       source.includes('portfolioPageTemplate') &&
+      source.includes("key: 'gallery'") &&
+      source.includes('galleryPageTemplate') &&
       source.includes("key: 'events'") &&
       source.includes('eventsPageTemplate') &&
       source.includes("key: 'privacy'") &&
@@ -85,7 +87,7 @@ const assertPagesListSourceContract = () => {
       source.includes('teamPageTemplate') &&
       source.includes("key: 'careers'") &&
       source.includes('careersPageTemplate'),
-    'Pages list must expose the member, commerce, pricing, services, booking, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
+    'Pages list must expose the member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
   );
 };
 
@@ -1588,6 +1590,12 @@ const main = async () => {
       ['template=portfolio'],
       { title: 'Portfolio', slug: 'portfolio', template: 'portfolio', homepage: false },
     );
+    const galleryShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-gallery',
+      ['template=gallery'],
+      { title: 'Gallery', slug: 'gallery', template: 'gallery', homepage: false },
+    );
     const eventsShortcut = await clickEmptyCreate(
       client,
       'pages-create-events',
@@ -1775,6 +1783,7 @@ const main = async () => {
       servicesShortcut,
       bookingShortcut,
       portfolioShortcut,
+      galleryShortcut,
       eventsShortcut,
       privacyShortcut,
       termsShortcut,

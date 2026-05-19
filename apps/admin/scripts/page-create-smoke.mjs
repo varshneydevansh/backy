@@ -320,6 +320,55 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'gallery',
+    title: 'Smoke Gallery Template',
+    slugBase: 'smoke-gallery-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'gallery',
+    navigationItem: 'Gallery',
+    headingId: 'gallery-heading',
+    minRootElementCount: 6,
+    minTotalElementCount: 58,
+    minCanvasHeight: 1500,
+    requiredElementIds: [
+      'gallery-site-header',
+      'gallery-site-navigation',
+      'gallery-site-footer',
+      'gallery-hero-section',
+      'gallery-featured-asset',
+      'gallery-featured-thumbnail',
+      'gallery-filter-section',
+      'gallery-folder-filter',
+      'gallery-filter-all',
+      'gallery-filter-images',
+      'gallery-filter-videos',
+      'gallery-filter-files',
+      'gallery-filter-fonts',
+      'gallery-upload-handoff-button',
+      'gallery-grid-section',
+      'gallery-media-card-0',
+      'gallery-media-thumbnail-0',
+      'gallery-media-title-0',
+      'gallery-media-open-button-0',
+      'gallery-lightbox-section',
+      'gallery-lightbox-button',
+    ],
+    dataBindingElementIds: [
+      'gallery-hero-section',
+      'gallery-featured-asset',
+      'gallery-featured-thumbnail',
+      'gallery-filter-section',
+      'gallery-folder-filter',
+      'gallery-grid-section',
+      'gallery-media-card-0',
+      'gallery-media-thumbnail-0',
+      'gallery-media-title-0',
+      'gallery-media-open-button-0',
+      'gallery-lightbox-section',
+      'gallery-lightbox-button',
+    ],
+  },
+  {
     template: 'events',
     title: 'Smoke Events Template',
     slugBase: 'smoke-events-template',
@@ -1200,6 +1249,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('portfolio-category-filter') &&
       source.includes('portfolio-project-card-${index}') &&
       source.includes('portfolio.inquiry.open') &&
+      source.includes("'gallery'") &&
+      source.includes('gallery-folder-filter') &&
+      source.includes('gallery-media-card-${index}') &&
+      source.includes('media.lightbox.open') &&
       source.includes("'events'") &&
       source.includes('events-format-filter') &&
       source.includes('events-card-${index}') &&
@@ -1260,7 +1313,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('careers-benefits-card') &&
       source.includes('careers.application.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, booking, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, and careers starters',
+    'Page create must keep safe member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, and careers starters',
   );
 };
 
@@ -1857,6 +1910,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Portfolio page',
       forms: 'none',
       dynamicData: 'Backy portfolio project placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'gallery',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Gallery page',
+      forms: 'none',
+      dynamicData: 'Backy media gallery placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

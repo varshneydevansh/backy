@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -396,6 +396,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'portfolio',
     title: 'Portfolio',
     detail: 'Create a media-backed project gallery with filters, case-study cards, and inquiry CTA.',
+    badge: 'Media',
+    icon: Layout,
+  },
+  {
+    key: 'gallery',
+    title: 'Gallery',
+    detail: 'Create media folders, asset-type filters, image/video/file cards, and lightbox handoff.',
     badge: 'Media',
     icon: Layout,
   },
@@ -1986,6 +1993,7 @@ function PagesListView() {
       servicesPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
       bookingPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=booking`,
       portfolioPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
+      galleryPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=gallery`,
       eventsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
       privacyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
       termsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,
@@ -2030,6 +2038,7 @@ function PagesListView() {
         services: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
         booking: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=booking`,
         portfolio: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
+        gallery: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=gallery`,
         events: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
         privacy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
         terms: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,

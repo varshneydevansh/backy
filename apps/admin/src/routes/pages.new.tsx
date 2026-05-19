@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -181,6 +181,13 @@ const TEMPLATE_OPTIONS: Array<{
         desc: 'Featured work, project filters, media-backed cards, and inquiry CTA.',
         detail: 'Creates a public portfolio page ready to bind project records, media assets, categories, and case-study links.',
         sections: ['Portfolio hero', 'Project gallery', 'Case study CTA'],
+    },
+    {
+        id: 'gallery',
+        name: 'Gallery page',
+        desc: 'Media folders, image/video/file filters, featured assets, and lightbox actions.',
+        detail: 'Creates a public gallery page ready to bind Backy media folders, tags, asset types, thumbnails, captions, and download or lightbox actions.',
+        sections: ['Gallery hero', 'Media filters', 'Asset grid'],
     },
     {
         id: 'events',
@@ -375,6 +382,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'portfolio',
         description: 'A public portfolio page ready to bind projects, media assets, categories, outcomes, and inquiry actions.',
     },
+    gallery: {
+        title: 'Gallery',
+        slug: 'gallery',
+        description: 'A public gallery page ready to bind media folders, images, videos, files, fonts, tags, captions, and lightbox or download actions.',
+    },
     events: {
         title: 'Events',
         slug: 'events',
@@ -496,6 +508,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     services: 'primary',
     booking: 'primary',
     portfolio: 'primary',
+    gallery: 'primary',
     events: 'primary',
     privacy: 'footer',
     terms: 'footer',
@@ -739,6 +752,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     services: ['Home', 'Services', 'Pricing', 'Contact'],
     booking: ['Home', 'Book', 'Services', 'Contact'],
     portfolio: ['Home', 'Portfolio', 'Services', 'Contact'],
+    gallery: ['Home', 'Gallery', 'Collections', 'Contact'],
     events: ['Home', 'Events', 'Blog', 'Contact'],
     privacy: ['Home', 'Privacy', 'Terms', 'Contact'],
     terms: ['Home', 'Terms', 'Privacy', 'Contact'],
@@ -830,6 +844,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Media', x: 38, y: 48, w: 26, h: 28, className: 'border-cyan-100 bg-white' },
         { label: 'Launch', x: 68, y: 48, w: 24, h: 28, className: 'border-cyan-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    gallery: [
+        { label: 'Gallery', x: 8, y: 14, w: 84, h: 24, className: 'border-blue-200 bg-blue-50' },
+        { x: 16, y: 24, w: 38, h: 5, className: 'bg-blue-800' },
+        { label: 'Folders', x: 62, y: 24, w: 22, h: 6, className: 'border-blue-100 bg-white' },
+        { label: 'Image', x: 8, y: 48, w: 24, h: 18, className: 'border-blue-100 bg-white' },
+        { label: 'Video', x: 36, y: 48, w: 24, h: 18, className: 'border-blue-100 bg-white' },
+        { label: 'File', x: 64, y: 48, w: 28, h: 18, className: 'border-blue-100 bg-white' },
+        { label: 'Lightbox', x: 8, y: 76, w: 84, h: 12, className: 'border-slate-200 bg-white' },
     ],
     events: [
         { label: 'Events', x: 8, y: 14, w: 84, h: 24, className: 'border-lime-200 bg-lime-50' },
@@ -2001,6 +2024,8 @@ function NewPageRoute() {
                     ? 'Backy booking and appointment placeholders'
                 : formData.template === 'portfolio'
                     ? 'Backy portfolio project placeholders'
+                : formData.template === 'gallery'
+                    ? 'Backy media gallery placeholders'
                 : formData.template === 'events'
                     ? 'Backy event schedule placeholders'
                 : formData.template === 'privacy'
@@ -2142,7 +2167,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'booking', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'booking', 'portfolio', 'gallery', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -4230,6 +4255,8 @@ function buildTemplateElements(input: {
                 ? 'Book now'
             : input.template === 'portfolio'
                 ? 'View work'
+            : input.template === 'gallery'
+                ? 'View gallery'
             : input.template === 'events'
                 ? 'RSVP'
             : input.template === 'privacy'
@@ -5251,6 +5278,193 @@ function buildTemplateElements(input: {
                         width: 178,
                         height: 52,
                         props: { label: 'Request project', backgroundColor: '#06b6d4', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'portfolio.inquiry.open' },
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'gallery') {
+        const galleryAssets = [
+            { title: 'Launch visuals', type: 'Image', folder: 'Campaigns', color: '#dbeafe' },
+            { title: 'Studio reel', type: 'Video', folder: 'Video', color: '#e0e7ff' },
+            { title: 'Brand kit', type: 'File', folder: 'Documents', color: '#fef3c7' },
+            { title: 'Typeface set', type: 'Font', folder: 'Fonts', color: '#dcfce7' },
+            { title: 'Product detail', type: 'Image', folder: 'Products', color: '#fae8ff' },
+            { title: 'Press pack', type: 'File', folder: 'Downloads', color: '#f1f5f9' },
+        ];
+
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'gallery-hero-section',
+                width: 1200,
+                height: 360,
+                dataBindings: [{ source: 'media', mode: 'gallery-overview', fields: ['folders', 'assetTypes', 'tags', 'featuredAsset', 'downloadUrl'] }],
+                props: { backgroundColor: '#eff6ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'gallery-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Media gallery', fontSize: 13, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'gallery-heading',
+                        width: 620,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 214, {
+                        id: 'gallery-copy',
+                        width: 590,
+                        height: 74,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                    }),
+                    createCanvasElement('box', 760, 76, {
+                        id: 'gallery-featured-asset',
+                        width: 330,
+                        height: 220,
+                        dataBindings: [{ source: 'media', mode: 'featured-asset', fields: ['title', 'thumbnailUrl', 'assetType', 'folder', 'altText'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bfdbfe', borderWidth: 1, borderStyle: 'solid', boxShadow: '0 18px 45px rgba(37, 99, 235, 0.12)' },
+                        children: [
+                            createCanvasElement('box', 24, 24, {
+                                id: 'gallery-featured-thumbnail',
+                                width: 282,
+                                height: 118,
+                                dataBindings: [{ source: 'media', mode: 'featured-asset', field: 'thumbnailUrl', targetPath: 'props.media' }],
+                                props: { backgroundColor: '#dbeafe', borderRadius: 8, borderColor: '#bfdbfe', borderWidth: 1, borderStyle: 'solid' },
+                            }),
+                            createCanvasElement('text', 24, 158, {
+                                id: 'gallery-featured-type',
+                                width: 110,
+                                height: 22,
+                                dataBindings: [{ source: 'media', mode: 'featured-asset', field: 'assetType', targetPath: 'props.content' }],
+                                props: { content: 'Featured', fontSize: 12, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 184, {
+                                id: 'gallery-featured-title',
+                                width: 230,
+                                height: 28,
+                                dataBindings: [{ source: 'media', mode: 'featured-asset', field: 'title', targetPath: 'props.content' }],
+                                props: { content: 'Selected media asset', level: 'h3', fontSize: 20, fontWeight: '800', color: '#111827' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 360, {
+                id: 'gallery-filter-section',
+                width: 1200,
+                height: 160,
+                dataBindings: [{ source: 'media', mode: 'filters', fields: ['folders', 'assetTypes', 'tags'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 50, {
+                        id: 'gallery-filter-heading',
+                        width: 260,
+                        height: 38,
+                        props: { content: 'Browse library', level: 'h2', fontSize: 30, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('box', 426, 42, {
+                        id: 'gallery-folder-filter',
+                        width: 520,
+                        height: 70,
+                        dataBindings: [{ source: 'media', mode: 'folder-filter', fields: ['all', 'campaigns', 'products', 'downloads', 'fonts'] }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('button', 14, 14, { id: 'gallery-filter-all', width: 70, height: 42, props: { label: 'All', backgroundColor: '#1d4ed8', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'media.gallery.filter.all' } }),
+                            createCanvasElement('button', 96, 14, { id: 'gallery-filter-images', width: 92, height: 42, props: { label: 'Images', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'media.gallery.filter.images' } }),
+                            createCanvasElement('button', 200, 14, { id: 'gallery-filter-videos', width: 88, height: 42, props: { label: 'Videos', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'media.gallery.filter.videos' } }),
+                            createCanvasElement('button', 300, 14, { id: 'gallery-filter-files', width: 74, height: 42, props: { label: 'Files', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'media.gallery.filter.files' } }),
+                            createCanvasElement('button', 386, 14, { id: 'gallery-filter-fonts', width: 78, height: 42, props: { label: 'Fonts', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'media.gallery.filter.fonts' } }),
+                        ],
+                    }),
+                    createCanvasElement('button', 980, 52, {
+                        id: 'gallery-upload-handoff-button',
+                        width: 138,
+                        height: 46,
+                        props: { label: 'Open media', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'media.library.open' },
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 520, {
+                id: 'gallery-grid-section',
+                width: 1200,
+                height: 620,
+                dataBindings: [{ source: 'media', mode: 'asset-list', limit: 12, fields: ['title', 'thumbnailUrl', 'assetType', 'folder', 'tags', 'downloadUrl'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    ...galleryAssets.map((asset, index) => createCanvasElement('box', 74 + (index % 3) * 350, 54 + Math.floor(index / 3) * 258, {
+                        id: `gallery-media-card-${index}`,
+                        width: 310,
+                        height: 220,
+                        dataBindings: [{ source: 'media', mode: 'asset', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#dbe3ea', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('box', 18, 18, {
+                                id: `gallery-media-thumbnail-${index}`,
+                                width: 274,
+                                height: 112,
+                                dataBindings: [{ source: 'media', mode: 'asset', index, field: 'thumbnailUrl', targetPath: 'props.media' }],
+                                props: { backgroundColor: asset.color, borderRadius: 8, borderColor: '#bfdbfe', borderWidth: 1, borderStyle: 'solid' },
+                            }),
+                            createCanvasElement('text', 22, 146, {
+                                id: `gallery-media-type-${index}`,
+                                width: 106,
+                                height: 22,
+                                dataBindings: [{ source: 'media', mode: 'asset', index, field: 'assetType', targetPath: 'props.content' }],
+                                props: { content: asset.type, fontSize: 12, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 22, 170, {
+                                id: `gallery-media-title-${index}`,
+                                width: 186,
+                                height: 28,
+                                dataBindings: [{ source: 'media', mode: 'asset', index, field: 'title', targetPath: 'props.content' }],
+                                props: { content: asset.title, level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('button', 210, 158, {
+                                id: `gallery-media-open-button-${index}`,
+                                width: 74,
+                                height: 38,
+                                dataBindings: [{ source: 'media', mode: 'asset', index, field: 'downloadUrl', targetPath: 'props.href' }],
+                                props: { label: 'Open', backgroundColor: '#dbeafe', color: '#1e3a8a', borderRadius: 8, fontWeight: '800', action: 'media.asset.open' },
+                            }),
+                            createCanvasElement('text', 22, 198, {
+                                id: `gallery-media-folder-${index}`,
+                                width: 180,
+                                height: 20,
+                                dataBindings: [{ source: 'media', mode: 'asset', index, field: 'folder', targetPath: 'props.content' }],
+                                props: { content: asset.folder, fontSize: 12, fontWeight: '700', color: '#64748b' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 1140, {
+                id: 'gallery-lightbox-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'media', mode: 'lightbox', fields: ['selectedAsset', 'caption', 'altText', 'downloadUrl', 'license'] }],
+                props: { backgroundColor: '#0f172a', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 70, {
+                        id: 'gallery-lightbox-heading',
+                        width: 520,
+                        height: 44,
+                        props: { content: 'Lightbox and downloads', level: 'h2', fontSize: 36, fontWeight: '800', color: '#ffffff' },
+                    }),
+                    createCanvasElement('paragraph', 78, 134, {
+                        id: 'gallery-lightbox-copy',
+                        width: 570,
+                        height: 66,
+                        props: { content: 'Bind the selected asset, caption, alt text, license notes, and download URL from the central Backy media library so custom frontends can render a public gallery without scraping admin screens.', fontSize: 16, lineHeight: 1.55, color: '#cbd5e1' },
+                    }),
+                    createCanvasElement('button', 820, 112, {
+                        id: 'gallery-lightbox-button',
+                        width: 168,
+                        height: 52,
+                        dataBindings: [{ source: 'media', mode: 'lightbox', field: 'downloadUrl', targetPath: 'props.href' }],
+                        props: { label: 'Open asset', backgroundColor: '#60a5fa', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'media.lightbox.open' },
                     }),
                 ],
             }),
