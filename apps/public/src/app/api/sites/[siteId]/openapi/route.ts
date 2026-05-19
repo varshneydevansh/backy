@@ -5696,6 +5696,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "liveCertificationGate",
                 "requiredFor",
                 "secretHandling",
+                "runtime",
                 "groups",
               ],
               properties: {
@@ -5720,6 +5721,40 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   const: "live-commerce-provider-launch",
                 },
                 secretHandling: { type: "string" },
+                runtime: {
+                  type: "object",
+                  required: [
+                    "paymentConfigured",
+                    "taxConfigured",
+                    "shippingConfigured",
+                    "discountConfigured",
+                    "catalogSyncConfigured",
+                    "subscriptionConfigured",
+                    "webhookSecretConfigured",
+                    "configuredFamilies",
+                    "missingFamilies",
+                    "secretHandling",
+                  ],
+                  properties: {
+                    paymentConfigured: { type: "boolean" },
+                    taxConfigured: { type: "boolean" },
+                    shippingConfigured: { type: "boolean" },
+                    discountConfigured: { type: "boolean" },
+                    catalogSyncConfigured: { type: "boolean" },
+                    subscriptionConfigured: { type: "boolean" },
+                    webhookSecretConfigured: { type: "boolean" },
+                    configuredFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    missingFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    secretHandling: { type: "string" },
+                  },
+                  additionalProperties: true,
+                },
                 groups: {
                   type: "array",
                   items: {

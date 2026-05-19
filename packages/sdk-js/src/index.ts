@@ -997,6 +997,19 @@ export interface BackyCommerceStorefrontContract {
     liveCertificationGate: "ci:commerce-provider-certification";
     requiredFor: "live-commerce-provider-launch";
     secretHandling: string;
+    runtime?: {
+      paymentConfigured: boolean;
+      taxConfigured: boolean;
+      shippingConfigured: boolean;
+      discountConfigured: boolean;
+      catalogSyncConfigured: boolean;
+      subscriptionConfigured: boolean;
+      webhookSecretConfigured: boolean;
+      configuredFamilies: string[];
+      missingFamilies: string[];
+      secretHandling: string;
+      [key: string]: unknown;
+    };
     groups: Array<{
       family: string;
       providers: string[];

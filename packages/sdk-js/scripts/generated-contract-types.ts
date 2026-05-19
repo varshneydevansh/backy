@@ -620,6 +620,18 @@ const commerceProviderCertification = {
   liveCertificationGate: "ci:commerce-provider-certification",
   requiredFor: "live-commerce-provider-launch",
   secretHandling: "Provider credentials stay in server env.",
+  runtime: {
+    paymentConfigured: false,
+    taxConfigured: false,
+    shippingConfigured: false,
+    discountConfigured: false,
+    catalogSyncConfigured: false,
+    subscriptionConfigured: false,
+    webhookSecretConfigured: false,
+    configuredFamilies: [],
+    missingFamilies: ["payment", "tax", "shipping", "discount", "catalog-sync", "subscription", "webhooks"],
+    secretHandling: "Provider secret values are never returned; this runtime summary exposes provider-family readiness booleans only.",
+  },
   groups: [
     {
       family: "Tax quote providers",

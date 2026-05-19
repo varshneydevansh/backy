@@ -170,6 +170,18 @@ export interface CommerceStorefrontContract {
     liveCertificationGate: 'ci:commerce-provider-certification';
     requiredFor: 'live-commerce-provider-launch';
     secretHandling: string;
+    runtime: {
+      paymentConfigured: boolean;
+      taxConfigured: boolean;
+      shippingConfigured: boolean;
+      discountConfigured: boolean;
+      catalogSyncConfigured: boolean;
+      subscriptionConfigured: boolean;
+      webhookSecretConfigured: boolean;
+      configuredFamilies: string[];
+      missingFamilies: string[];
+      secretHandling: string;
+    };
     groups: Array<{
       family: string;
       providers: string[];
@@ -226,6 +238,86 @@ const readProductValue = (
   if (Object.prototype.hasOwnProperty.call(values, normalizedKey)) return values[normalizedKey];
   if (Object.prototype.hasOwnProperty.call(values, key)) return values[key];
   return fallback;
+};
+
+const envValue = (keys: string[]): string | null => {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+
+  return null;
+};
+
+const hasEnv = (keys: string[]): boolean => Boolean(envValue(keys));
+
+const commerceProviderCertificationRuntime = (): CommerceStorefrontContract['providerCertification']['runtime'] => {
+  const paymentConfigured =
+    hasEnv(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']) ||
+    hasEnv(['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN']) ||
+    hasEnv(['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']) ||
+    hasEnv(['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN']) ||
+    hasEnv(['BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY']) ||
+    hasEnv(['BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY']) ||
+    (
+      hasEnv(['BACKY_RAZORPAY_KEY_ID', 'RAZORPAY_KEY_ID']) &&
+      hasEnv(['BACKY_RAZORPAY_KEY_SECRET', 'RAZORPAY_KEY_SECRET'])
+    );
+  const taxConfigured =
+    hasEnv(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']) ||
+    hasEnv(['BACKY_TAXJAR_API_KEY', 'TAXJAR_API_KEY']) ||
+    (
+      hasEnv(['BACKY_AVALARA_ACCOUNT_ID', 'AVALARA_ACCOUNT_ID']) &&
+      hasEnv(['BACKY_AVALARA_LICENSE_KEY', 'AVALARA_LICENSE_KEY']) &&
+      hasEnv(['BACKY_AVALARA_COMPANY_CODE', 'AVALARA_COMPANY_CODE'])
+    ) ||
+    hasEnv(['BACKY_COMMERCE_TAX_PROVIDER_URL', 'COMMERCE_TAX_PROVIDER_URL']);
+  const shippingConfigured =
+    hasEnv(['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY']) ||
+    hasEnv(['BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY']) ||
+    hasEnv(['BACKY_COMMERCE_SHIPPING_PROVIDER_URL', 'COMMERCE_SHIPPING_PROVIDER_URL']);
+  const discountConfigured =
+    hasEnv(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']) ||
+    hasEnv(['BACKY_COMMERCE_DISCOUNT_PROVIDER_URL', 'COMMERCE_DISCOUNT_PROVIDER_URL']);
+  const catalogSyncConfigured =
+    hasEnv(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']) ||
+    hasEnv(['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN']) ||
+    hasEnv(['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']) ||
+    hasEnv(['BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_ADMIN_ACCESS_TOKEN']) ||
+    hasEnv(['BACKY_BIGCOMMERCE_ACCESS_TOKEN', 'BIGCOMMERCE_ACCESS_TOKEN']) ||
+    (
+      hasEnv(['BACKY_WOOCOMMERCE_CONSUMER_KEY', 'WOOCOMMERCE_CONSUMER_KEY']) &&
+      hasEnv(['BACKY_WOOCOMMERCE_CONSUMER_SECRET', 'WOOCOMMERCE_CONSUMER_SECRET'])
+    ) ||
+    hasEnv(['BACKY_ETSY_ACCESS_TOKEN', 'ETSY_ACCESS_TOKEN']) ||
+    hasEnv(['BACKY_MAGENTO_ACCESS_TOKEN', 'MAGENTO_ACCESS_TOKEN']) ||
+    hasEnv(['BACKY_COMMERCE_PRODUCT_SYNC_URL', 'COMMERCE_PRODUCT_SYNC_URL']);
+  const subscriptionConfigured =
+    paymentConfigured ||
+    hasEnv(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL']);
+  const webhookSecretConfigured = hasEnv(['BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET']);
+  const familyReadiness = [
+    ['payment', paymentConfigured],
+    ['tax', taxConfigured],
+    ['shipping', shippingConfigured],
+    ['discount', discountConfigured],
+    ['catalog-sync', catalogSyncConfigured],
+    ['subscription', subscriptionConfigured],
+    ['webhooks', webhookSecretConfigured],
+  ] as const;
+
+  return {
+    paymentConfigured,
+    taxConfigured,
+    shippingConfigured,
+    discountConfigured,
+    catalogSyncConfigured,
+    subscriptionConfigured,
+    webhookSecretConfigured,
+    configuredFamilies: familyReadiness.filter(([, configured]) => configured).map(([family]) => family),
+    missingFamilies: familyReadiness.filter(([, configured]) => !configured).map(([family]) => family),
+    secretHandling: 'Provider secret values are never returned; this runtime summary exposes provider-family readiness booleans only.',
+  };
 };
 
 const normalizeText = (value: unknown): string => (
@@ -304,6 +396,7 @@ const commerceProviderCertification = (): CommerceStorefrontContract['providerCe
   liveCertificationGate: 'ci:commerce-provider-certification',
   requiredFor: 'live-commerce-provider-launch',
   secretHandling: 'Provider credentials stay in server environment/configuration; storefront contracts expose only non-secret readiness gates and provider-family requirements.',
+  runtime: commerceProviderCertificationRuntime(),
   groups: [
     {
       family: 'Checkout and payment settlement',

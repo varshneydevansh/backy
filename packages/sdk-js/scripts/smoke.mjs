@@ -53,6 +53,19 @@ function assertCommerceProviderCertification(commerce, label) {
       certification.secretHandling.includes('Provider credentials stay in server environment/configuration'),
     `${label} missing non-secret credential handling guidance`,
   );
+  assert(typeof certification.runtime?.paymentConfigured === 'boolean', `${label} missing payment provider runtime readiness`);
+  assert(typeof certification.runtime?.taxConfigured === 'boolean', `${label} missing tax provider runtime readiness`);
+  assert(typeof certification.runtime?.shippingConfigured === 'boolean', `${label} missing shipping provider runtime readiness`);
+  assert(typeof certification.runtime?.catalogSyncConfigured === 'boolean', `${label} missing catalog provider runtime readiness`);
+  assert(typeof certification.runtime?.subscriptionConfigured === 'boolean', `${label} missing subscription provider runtime readiness`);
+  assert(typeof certification.runtime?.webhookSecretConfigured === 'boolean', `${label} missing webhook secret runtime readiness`);
+  assert(Array.isArray(certification.runtime?.configuredFamilies), `${label} missing configured provider-family runtime list`);
+  assert(Array.isArray(certification.runtime?.missingFamilies), `${label} missing missing provider-family runtime list`);
+  assert(
+    typeof certification.runtime?.secretHandling === 'string' &&
+      certification.runtime.secretHandling.includes('Provider secret values are never returned'),
+    `${label} missing non-secret runtime credential boundary`,
+  );
 
   const groups = Array.isArray(certification.groups) ? certification.groups : [];
   const families = groups.map((group) => group.family);
