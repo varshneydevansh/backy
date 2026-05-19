@@ -664,6 +664,65 @@ const buildManifestLiveManagementDiscovery = (siteId: string) => ({
   },
 });
 
+const buildManifestFormsDiscovery = (
+  siteId: string,
+  forms: FormDefinition[],
+) => {
+  const collectionTargetCount = forms.filter((form) => form.collectionTarget?.enabled).length;
+
+  return {
+    schemaVersion: 'backy.forms-discovery.v1',
+    count: forms.length,
+    activeCount: forms.filter((form) => form.isActive).length,
+    collectionTargetCount,
+    moderationModes: Array.from(new Set(forms.map((form) => form.moderationMode))).sort(),
+    endpoints: {
+      list: `/api/sites/${siteId}/forms`,
+      detail: `/api/sites/${siteId}/forms/{formId}`,
+      definition: `/api/sites/${siteId}/forms/{formId}/definition`,
+      submit: `/api/sites/${siteId}/forms/{formId}/submissions`,
+      submissions: `/api/sites/${siteId}/forms/{formId}/submissions`,
+      contacts: `/api/sites/${siteId}/forms/{formId}/contacts`,
+    },
+    methods: {
+      list: 'GET',
+      detail: 'GET',
+      definition: 'GET',
+      submit: 'POST',
+      reviewSubmission: 'PATCH',
+      updateContact: 'PATCH',
+    },
+    capabilities: {
+      publicDefinitions: true,
+      publicSubmissions: true,
+      fieldValidation: true,
+      collectionWriteTargets: collectionTargetCount > 0,
+      moderation: true,
+      contactShare: true,
+      conditionalRequests: true,
+      cacheableDefinitions: true,
+      privateSubmissionData: true,
+    },
+    cache: {
+      list: 'public-discovery',
+      definition: 'public-discovery',
+      detail: 'private-no-store',
+      submissions: 'private-no-store',
+      contacts: 'private-no-store',
+    },
+    privacy: {
+      submissionPayloadsContainVisitorData: true,
+      publicDefinitionExcludesSubmissions: true,
+      contactPayloadsArePrivate: true,
+    },
+    schemas: {
+      definition: 'backy.form-definition.v1',
+      validationError: 'FORM_VALIDATION_ERROR',
+      collectionRecordLink: 'backy.form-collection-record-link.v1',
+    },
+  };
+};
+
 const buildRepositoryManifest = (
   input: {
     requestId: string;
@@ -916,6 +975,7 @@ const buildRepositoryManifest = (
           collectionTarget: form.collectionTarget || null,
           frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
         })),
+        formsRuntime: buildManifestFormsDiscovery(input.site.id, input.forms),
         comments: buildManifestCommentDiscovery(input.site.id, input.site.settings),
         media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length),
         commerce,
@@ -1250,6 +1310,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             collectionTarget: form.collectionTarget || null,
             frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
           })),
+          formsRuntime: buildManifestFormsDiscovery(site.id, forms),
           comments: buildManifestCommentDiscovery(site.id, site.settings),
           media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total),
           commerce,

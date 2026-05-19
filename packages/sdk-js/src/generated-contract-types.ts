@@ -2873,6 +2873,64 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         };
         [key: string]: unknown;
       }>;
+      formsRuntime: {
+        schemaVersion: "backy.forms-discovery.v1";
+        count: number;
+        activeCount: number;
+        collectionTargetCount: number;
+        moderationModes: Array<string>;
+        endpoints: {
+          list: string;
+          detail: string;
+          definition: string;
+          submit: string;
+          submissions: string;
+          contacts: string;
+          [key: string]: unknown;
+        };
+        methods: {
+          list: "GET";
+          detail: "GET";
+          definition: "GET";
+          submit: "POST";
+          reviewSubmission: "PATCH";
+          updateContact: "PATCH";
+          [key: string]: unknown;
+        };
+        capabilities: {
+          publicDefinitions: boolean;
+          publicSubmissions: boolean;
+          fieldValidation: boolean;
+          collectionWriteTargets: boolean;
+          moderation: boolean;
+          contactShare: boolean;
+          conditionalRequests: boolean;
+          cacheableDefinitions: boolean;
+          privateSubmissionData: boolean;
+          [key: string]: unknown;
+        };
+        cache: {
+          list: string;
+          definition: string;
+          detail: string;
+          submissions: string;
+          contacts: string;
+          [key: string]: unknown;
+        };
+        privacy: {
+          submissionPayloadsContainVisitorData: boolean;
+          publicDefinitionExcludesSubmissions: boolean;
+          contactPayloadsArePrivate: boolean;
+          [key: string]: unknown;
+        };
+        schemas: {
+          definition: "backy.form-definition.v1";
+          validationError: "FORM_VALIDATION_ERROR";
+          collectionRecordLink: "backy.form-collection-record-link.v1";
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
       comments: {
         schemaVersion: "backy.comments-discovery.v1";
         enabled: boolean;

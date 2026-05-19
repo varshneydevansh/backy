@@ -886,6 +886,92 @@
                 "required": ["id", "active", "fields", "submitUrl"]
               }
             },
+            "formsRuntime": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.forms-discovery.v1" },
+                "count": { "type": "number", "minimum": 0 },
+                "activeCount": { "type": "number", "minimum": 0 },
+                "collectionTargetCount": { "type": "number", "minimum": 0 },
+                "moderationModes": { "type": "array", "items": { "type": "string" } },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string", "minLength": 1 },
+                    "detail": { "type": "string", "minLength": 1 },
+                    "definition": { "type": "string", "minLength": 1 },
+                    "submit": { "type": "string", "minLength": 1 },
+                    "submissions": { "type": "string", "minLength": 1 },
+                    "contacts": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["list", "detail", "definition", "submit", "submissions", "contacts"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "const": "GET" },
+                    "detail": { "const": "GET" },
+                    "definition": { "const": "GET" },
+                    "submit": { "const": "POST" },
+                    "reviewSubmission": { "const": "PATCH" },
+                    "updateContact": { "const": "PATCH" }
+                  },
+                  "required": ["list", "detail", "definition", "submit", "reviewSubmission", "updateContact"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicDefinitions": { "type": "boolean" },
+                    "publicSubmissions": { "type": "boolean" },
+                    "fieldValidation": { "type": "boolean" },
+                    "collectionWriteTargets": { "type": "boolean" },
+                    "moderation": { "type": "boolean" },
+                    "contactShare": { "type": "boolean" },
+                    "conditionalRequests": { "type": "boolean" },
+                    "cacheableDefinitions": { "type": "boolean" },
+                    "privateSubmissionData": { "type": "boolean" }
+                  },
+                  "required": ["publicDefinitions", "publicSubmissions", "fieldValidation", "collectionWriteTargets", "moderation", "contactShare", "conditionalRequests", "cacheableDefinitions", "privateSubmissionData"]
+                },
+                "cache": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" },
+                  "properties": {
+                    "list": { "type": "string" },
+                    "definition": { "type": "string" },
+                    "detail": { "type": "string" },
+                    "submissions": { "type": "string" },
+                    "contacts": { "type": "string" }
+                  },
+                  "required": ["list", "definition", "detail", "submissions", "contacts"]
+                },
+                "privacy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "submissionPayloadsContainVisitorData": { "type": "boolean" },
+                    "publicDefinitionExcludesSubmissions": { "type": "boolean" },
+                    "contactPayloadsArePrivate": { "type": "boolean" }
+                  },
+                  "required": ["submissionPayloadsContainVisitorData", "publicDefinitionExcludesSubmissions", "contactPayloadsArePrivate"]
+                },
+                "schemas": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" },
+                  "properties": {
+                    "definition": { "const": "backy.form-definition.v1" },
+                    "validationError": { "const": "FORM_VALIDATION_ERROR" },
+                    "collectionRecordLink": { "const": "backy.form-collection-record-link.v1" }
+                  },
+                  "required": ["definition", "validationError", "collectionRecordLink"]
+                }
+              },
+              "required": ["schemaVersion", "count", "activeCount", "collectionTargetCount", "moderationModes", "endpoints", "methods", "capabilities", "cache", "privacy", "schemas"]
+            },
             "comments": {
               "type": "object",
               "additionalProperties": true,
@@ -1215,7 +1301,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "forms", "comments", "reusableSections", "media"]
+          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "forms", "formsRuntime", "comments", "reusableSections", "media"]
         },
         "admin": {
           "type": "object",

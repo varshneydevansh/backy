@@ -19,6 +19,7 @@ import type {
   BackyManifestRoutePattern,
   BackyManifestDeliveryDiscovery,
   BackyManifestFormDefinition,
+  BackyManifestFormsRuntimeModule,
   BackyManifestLiveManagementModule,
   BackyManifestMediaModule,
   BackyManifestThemeModule,
@@ -930,6 +931,57 @@ const manifest = {
         },
       },
     ],
+    formsRuntime: {
+      schemaVersion: "backy.forms-discovery.v1",
+      count: 1,
+      activeCount: 1,
+      collectionTargetCount: 1,
+      moderationModes: ["manual"],
+      endpoints: {
+        list: "/api/sites/site_demo/forms",
+        detail: "/api/sites/site_demo/forms/{formId}",
+        definition: "/api/sites/site_demo/forms/{formId}/definition",
+        submit: "/api/sites/site_demo/forms/{formId}/submissions",
+        submissions: "/api/sites/site_demo/forms/{formId}/submissions",
+        contacts: "/api/sites/site_demo/forms/{formId}/contacts",
+      },
+      methods: {
+        list: "GET",
+        detail: "GET",
+        definition: "GET",
+        submit: "POST",
+        reviewSubmission: "PATCH",
+        updateContact: "PATCH",
+      },
+      capabilities: {
+        publicDefinitions: true,
+        publicSubmissions: true,
+        fieldValidation: true,
+        collectionWriteTargets: true,
+        moderation: true,
+        contactShare: true,
+        conditionalRequests: true,
+        cacheableDefinitions: true,
+        privateSubmissionData: true,
+      },
+      cache: {
+        list: "public-discovery",
+        definition: "public-discovery",
+        detail: "private-no-store",
+        submissions: "private-no-store",
+        contacts: "private-no-store",
+      },
+      privacy: {
+        submissionPayloadsContainVisitorData: true,
+        publicDefinitionExcludesSubmissions: true,
+        contactPayloadsArePrivate: true,
+      },
+      schemas: {
+        definition: "backy.form-definition.v1",
+        validationError: "FORM_VALIDATION_ERROR",
+        collectionRecordLink: "backy.form-collection-record-link.v1",
+      },
+    },
     comments: {
       schemaVersion: "backy.comments-discovery.v1",
       enabled: true,
@@ -1397,6 +1449,58 @@ const sdkManifestForm = {
   collectionTarget: null,
   frontendDesign: sdkRouteFrontendDesign,
 } satisfies BackyManifestFormDefinition;
+
+const sdkManifestFormsRuntime = {
+  schemaVersion: "backy.forms-discovery.v1",
+  count: 1,
+  activeCount: 1,
+  collectionTargetCount: 1,
+  moderationModes: ["manual"],
+  endpoints: {
+    list: "/api/sites/site_demo/forms",
+    detail: "/api/sites/site_demo/forms/{formId}",
+    definition: "/api/sites/site_demo/forms/{formId}/definition",
+    submit: "/api/sites/site_demo/forms/{formId}/submissions",
+    submissions: "/api/sites/site_demo/forms/{formId}/submissions",
+    contacts: "/api/sites/site_demo/forms/{formId}/contacts",
+  },
+  methods: {
+    list: "GET",
+    detail: "GET",
+    definition: "GET",
+    submit: "POST",
+    reviewSubmission: "PATCH",
+    updateContact: "PATCH",
+  },
+  capabilities: {
+    publicDefinitions: true,
+    publicSubmissions: true,
+    fieldValidation: true,
+    collectionWriteTargets: true,
+    moderation: true,
+    contactShare: true,
+    conditionalRequests: true,
+    cacheableDefinitions: true,
+    privateSubmissionData: true,
+  },
+  cache: {
+    list: "public-discovery",
+    definition: "public-discovery",
+    detail: "private-no-store",
+    submissions: "private-no-store",
+    contacts: "private-no-store",
+  },
+  privacy: {
+    submissionPayloadsContainVisitorData: true,
+    publicDefinitionExcludesSubmissions: true,
+    contactPayloadsArePrivate: true,
+  },
+  schemas: {
+    definition: "backy.form-definition.v1",
+    validationError: "FORM_VALIDATION_ERROR",
+    collectionRecordLink: "backy.form-collection-record-link.v1",
+  },
+} satisfies BackyManifestFormsRuntimeModule;
 
 const sdkManifestMedia = {
   schemaVersion: "backy.media-discovery.v1",
@@ -3514,6 +3618,9 @@ const invalidGeneratedManifestThemeDiscovery = { ...manifest.modules.theme, sche
 // @ts-expect-error generated manifest live-management discovery uses a versioned schema marker.
 const invalidGeneratedManifestLiveManagementDiscovery = { ...manifest.modules.liveManagement, schemaVersion: "backy.live-management.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["liveManagement"];
 
+// @ts-expect-error generated manifest forms discovery uses a versioned schema marker.
+const invalidGeneratedManifestFormsRuntimeDiscovery = { ...manifest.modules.formsRuntime, schemaVersion: "backy.forms-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["formsRuntime"];
+
 // @ts-expect-error generated manifest commerce modes are limited to documented storefront modes.
 const invalidGeneratedManifestCommerceMode = { ...manifest.modules.commerce, mode: "marketplace", } satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
 
@@ -3586,6 +3693,9 @@ const invalidGeneratedManifestFormDetailUrl = { ...manifest.modules.forms[0], de
 
 // @ts-expect-error manifest form entries require public submission URLs.
 const invalidSdkManifestForm = { ...sdkManifestForm, submitUrl: undefined, } satisfies BackyManifestFormDefinition;
+
+// @ts-expect-error manifest forms runtime modules require cache policy metadata.
+const invalidSdkManifestFormsRuntime = { ...sdkManifestFormsRuntime, cache: undefined, } satisfies BackyManifestFormsRuntimeModule;
 
 // @ts-expect-error manifest media modules require a media list URL for asset discovery.
 const invalidSdkManifestMedia = { ...sdkManifestMedia, listUrl: undefined, } satisfies BackyManifestMediaModule;
@@ -3944,6 +4054,7 @@ void sdkManifestBlog;
 void sdkManifestReusableSection;
 void sdkManifestReusableSections;
 void sdkManifestForm;
+void sdkManifestFormsRuntime;
 void sdkManifestMedia;
 void sdkManifestTheme;
 void sdkManifestLiveManagement;
@@ -3988,6 +4099,7 @@ void invalidGeneratedManifestMediaTypes;
 void invalidGeneratedManifestMediaDiscovery;
 void invalidGeneratedManifestThemeDiscovery;
 void invalidGeneratedManifestLiveManagementDiscovery;
+void invalidGeneratedManifestFormsRuntimeDiscovery;
 void invalidGeneratedManifestCommerceMode;
 void invalidGeneratedManifestCommerceCapabilities;
 void invalidGeneratedInteractiveRegistry;
@@ -3999,6 +4111,7 @@ void invalidGeneratedManifestCollectionPermissions;
 void invalidGeneratedManifestFormField;
 void invalidGeneratedManifestFormDetailUrl;
 void invalidSdkManifestForm;
+void invalidSdkManifestFormsRuntime;
 void invalidSdkManifestMedia;
 void invalidSdkManifestTheme;
 void invalidSdkManifestLiveManagement;

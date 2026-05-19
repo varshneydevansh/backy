@@ -620,6 +620,18 @@ assert(manifestLiveManagement.capabilities?.optimisticConcurrency === true, 'man
 assert(manifestLiveManagement.editableTargets?.includes?.('props.content'), 'manifest() live-management missing content editable target');
 assert(manifestLiveManagement.updateBody?.expectedUpdatedAt, 'manifest() live-management missing expectedUpdatedAt update guidance');
 assert(manifestLiveManagement.errors?.conflict === 'PAGE_VERSION_CONFLICT', 'manifest() live-management conflict code drifted');
+const manifestFormsRuntime = manifest.data.modules?.formsRuntime;
+assert(manifestFormsRuntime?.schemaVersion === 'backy.forms-discovery.v1', 'manifest() missing forms runtime discovery module');
+assert(manifestFormsRuntime.endpoints?.list === manifest.data.endpoints.forms, 'manifest() forms runtime list endpoint drifted');
+assert(manifestFormsRuntime.endpoints?.definition === manifest.data.endpoints.formDefinition, 'manifest() forms runtime definition endpoint drifted');
+assert(manifestFormsRuntime.endpoints?.submit === manifest.data.endpoints.formSubmissions, 'manifest() forms runtime submit endpoint drifted');
+assert(manifestFormsRuntime.methods?.submit === 'POST', 'manifest() forms runtime submit method drifted');
+assert(manifestFormsRuntime.capabilities?.fieldValidation === true, 'manifest() forms runtime missing field validation capability');
+assert(manifestFormsRuntime.capabilities?.cacheableDefinitions === true, 'manifest() forms runtime missing cacheable definition capability');
+assert(manifestFormsRuntime.cache?.definition === 'public-discovery', 'manifest() forms runtime definition cache policy drifted');
+assert(manifestFormsRuntime.cache?.submissions === 'private-no-store', 'manifest() forms runtime submissions cache policy drifted');
+assert(manifestFormsRuntime.privacy?.publicDefinitionExcludesSubmissions === true, 'manifest() forms runtime missing public definition privacy boundary');
+assert(manifestFormsRuntime.schemas?.definition === 'backy.form-definition.v1', 'manifest() forms runtime definition schema drifted');
 assert(manifest.data.contract?.databaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', 'manifest() missing database certification schema');
 assert(manifest.data.contract?.databaseCertification?.status === 'external-database-gate', 'manifest() missing external database certification status');
 assert(manifest.data.contract?.databaseCertification?.gate?.command === 'npm run ci:sdk-postgres-smoke', 'manifest() missing SDK Postgres certification command');

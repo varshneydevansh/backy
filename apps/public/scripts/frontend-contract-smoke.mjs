@@ -112,6 +112,23 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestFormsDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.forms-discovery.v1'") &&
+    manifestRoute.includes("cacheableDefinitions: true") &&
+    manifestRoute.includes("privateSubmissionData: true") &&
+    manifestRoute.includes("publicDefinitionExcludesSubmissions: true") &&
+    manifestRoute.includes('formsRuntime: buildManifestFormsDiscovery(input.site.id, input.forms)') &&
+    manifestRoute.includes('formsRuntime: buildManifestFormsDiscovery(site.id, forms)') &&
+    frontendManifestSchema.includes('"backy.forms-discovery.v1"') &&
+    frontendManifestSchema.includes('"cacheableDefinitions"') &&
+    frontendManifestSchema.includes('"FORM_VALIDATION_ERROR"') &&
+    sdkSource.includes('BackyManifestFormsRuntimeModule') &&
+    sdkSmoke.includes('manifest() missing forms runtime discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestFormsRuntimeDiscovery'),
+  'Frontend manifest and SDK must expose structured forms runtime discovery for custom frontend form UIs.',
+);
+
+assert(
   publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
     publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
     publicSiteDiscoveryRoute.includes('cacheRevision') &&
