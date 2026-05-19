@@ -2915,6 +2915,12 @@ export function CanvasEditor({
       .filter((entry): entry is { element: CanvasElement; parentId: string | null } => !!entry),
     [elements, findElementEntry, selectedIds],
   );
+  const selectedActiveElements = useMemo(
+    () => selectedIds
+      .map((id) => findElementById(displayedElements, id) || findElementById(elements, id))
+      .filter((element): element is CanvasElement => Boolean(element)),
+    [displayedElements, elements, findElementById, selectedIds],
+  );
   const selectedParentId = selectedEntries[0]?.parentId ?? null;
   const selectableSiblingIds = useMemo(() => {
     const selectedEntry = selectedId ? findElementEntry(elements, selectedId) : null;
@@ -2952,9 +2958,56 @@ export function CanvasEditor({
       !entry.element.locked &&
       entry.element.visible !== false
     ));
+  const canToggleSelectedVisibility = selectedActiveElements.length > 0
+    && selectedActiveElements.every((element) => !element.locked);
+  const selectedLayersAreHidden = selectedActiveElements.length > 0
+    && selectedActiveElements.every((element) => element.visible === false);
+  const selectedLayersAreLocked = selectedActiveElements.length > 0
+    && selectedActiveElements.every((element) => element.locked === true);
+  const selectedLayerActionLabel = selectedIds.length > 1 ? 'selected layers' : 'selected layer';
   const selectedElementLabel = selectedElement
     ? normalizeElementType(selectedElement.type)
     : null;
+
+  const handleSelectedVisibilityToggle = useCallback(() => {
+    if (!canToggleSelectedVisibility || selectedActiveElements.length === 0) return;
+    const nextVisible = selectedActiveElements.every((element) => element.visible === false);
+
+    updateElementsWithHistory((currentElements) => {
+      let nextElements = currentElements;
+      let changed = false;
+      for (const id of selectedIds) {
+        const result = updateElementById(nextElements, id, (element) => (
+          element.locked ? element : applyUpdatesForBreakpoint(element, { visible: nextVisible }, breakpoint)
+        ));
+        if (result.updated) {
+          nextElements = result.elements;
+          changed = true;
+        }
+      }
+      return changed ? nextElements : currentElements;
+    }, selectedId, selectedIds);
+  }, [breakpoint, canToggleSelectedVisibility, selectedActiveElements, selectedId, selectedIds, updateElementsWithHistory]);
+
+  const handleSelectedLockToggle = useCallback(() => {
+    if (selectedActiveElements.length === 0) return;
+    const nextLocked = !selectedActiveElements.every((element) => element.locked === true);
+
+    updateElementsWithHistory((currentElements) => {
+      let nextElements = currentElements;
+      let changed = false;
+      for (const id of selectedIds) {
+        const result = updateElementById(nextElements, id, (element) => (
+          applyUpdatesForBreakpoint(element, { locked: nextLocked }, breakpoint)
+        ));
+        if (result.updated) {
+          nextElements = result.elements;
+          changed = true;
+        }
+      }
+      return changed ? nextElements : currentElements;
+    }, selectedId, selectedIds);
+  }, [breakpoint, selectedActiveElements, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle element selection
@@ -4666,27 +4719,27 @@ export function CanvasEditor({
             </button>
             <button
               type="button"
-              onClick={() => selectedId && handleLayerVisibilityToggle(selectedId)}
-              disabled={isCanvasMutationDisabled || !selectedId || selectedElement?.locked}
+              onClick={handleSelectedVisibilityToggle}
+              disabled={isCanvasMutationDisabled || !canToggleSelectedVisibility}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title={selectedElement?.visible === false ? 'Show selected layer' : 'Hide selected layer'}
-              aria-label={selectedElement?.visible === false ? 'Show selected layer' : 'Hide selected layer'}
-              aria-pressed={selectedElement?.visible === false}
+              title={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
+              aria-label={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
+              aria-pressed={selectedLayersAreHidden}
               data-testid="editor-toggle-selection-visibility"
             >
-              {selectedElement?.visible === false ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {selectedLayersAreHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
             <button
               type="button"
-              onClick={() => selectedId && handleLayerLockToggle(selectedId)}
-              disabled={isCanvasMutationDisabled || !selectedId}
+              onClick={handleSelectedLockToggle}
+              disabled={isCanvasMutationDisabled || selectedActiveElements.length === 0}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title={selectedElement?.locked ? 'Unlock selected layer' : 'Lock selected layer'}
-              aria-label={selectedElement?.locked ? 'Unlock selected layer' : 'Lock selected layer'}
-              aria-pressed={selectedElement?.locked === true}
+              title={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
+              aria-label={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
+              aria-pressed={selectedLayersAreLocked}
               data-testid="editor-toggle-selection-lock"
             >
-              {selectedElement?.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+              {selectedLayersAreLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
             </button>
 
             <div className="w-px h-6 bg-slate-200 mx-1" />

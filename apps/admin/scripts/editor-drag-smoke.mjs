@@ -210,8 +210,9 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
   assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
-  assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleLayerVisibilityToggle(selectedId)'), 'Editor toolbar must expose selected-layer visibility toggle');
-  assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleLayerLockToggle(selectedId)'), 'Editor toolbar must expose selected-layer lock toggle');
+  assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleSelectedVisibilityToggle') && source.includes('selectedLayersAreHidden'), 'Editor toolbar must expose selected-layer visibility toggle');
+  assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleSelectedLockToggle') && source.includes('selectedLayersAreLocked'), 'Editor toolbar must expose selected-layer lock toggle');
+  assert(source.includes("selectedIds.length > 1 ? 'selected layers' : 'selected layer'"), 'Editor selected-layer toolbar actions must label multi-selection states');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -9980,6 +9981,44 @@ const testLayersPanelControls = async (client, pageId) => {
   const toolbarLockedState = await readLayerActionState(client, 'smoke-icon');
   assert(toolbarLockedState.locked === true, `Toolbar selected-layer lock action did not lock smoke-icon: ${JSON.stringify(toolbarLockedState)}`);
 
+  const multiToolbarSelection = await selectLayerIds(client, ['smoke-heading', 'smoke-image']);
+  await clickControlByTestId(client, 'editor-toggle-selection-visibility');
+  const multiToolbarHiddenState = {
+    heading: await readLayerActionState(client, 'smoke-heading'),
+    image: await readLayerActionState(client, 'smoke-image'),
+  };
+  assert(
+    multiToolbarHiddenState.heading.hidden === true && multiToolbarHiddenState.image.hidden === true,
+    `Toolbar multi-selection visibility action did not hide every selected layer: ${JSON.stringify(multiToolbarHiddenState)}`,
+  );
+  await clickControlByTestId(client, 'editor-toggle-selection-visibility');
+  const multiToolbarVisibleState = {
+    heading: await readLayerActionState(client, 'smoke-heading'),
+    image: await readLayerActionState(client, 'smoke-image'),
+  };
+  assert(
+    multiToolbarVisibleState.heading.hidden === false && multiToolbarVisibleState.image.hidden === false,
+    `Toolbar multi-selection visibility action did not show every selected layer: ${JSON.stringify(multiToolbarVisibleState)}`,
+  );
+  await clickControlByTestId(client, 'editor-toggle-selection-lock');
+  const multiToolbarLockedState = {
+    heading: await readLayerActionState(client, 'smoke-heading'),
+    image: await readLayerActionState(client, 'smoke-image'),
+  };
+  assert(
+    multiToolbarLockedState.heading.locked === true && multiToolbarLockedState.image.locked === true,
+    `Toolbar multi-selection lock action did not lock every selected layer: ${JSON.stringify(multiToolbarLockedState)}`,
+  );
+  await clickControlByTestId(client, 'editor-toggle-selection-lock');
+  const multiToolbarUnlockedState = {
+    heading: await readLayerActionState(client, 'smoke-heading'),
+    image: await readLayerActionState(client, 'smoke-image'),
+  };
+  assert(
+    multiToolbarUnlockedState.heading.locked === false && multiToolbarUnlockedState.image.locked === false,
+    `Toolbar multi-selection lock action did not unlock every selected layer: ${JSON.stringify(multiToolbarUnlockedState)}`,
+  );
+
   const duplicateClick = await clickLayerAction(client, 'duplicate', 'smoke-link');
   const selectedAfterDuplicate = await readSelectedLayerIds(client);
   const duplicateId = selectedAfterDuplicate.find((id) => id && id !== 'smoke-link');
@@ -10018,6 +10057,11 @@ const testLayersPanelControls = async (client, pageId) => {
     lockedState,
     toolbarUnlockedState,
     toolbarLockedState,
+    multiToolbarSelection,
+    multiToolbarHiddenState,
+    multiToolbarVisibleState,
+    multiToolbarLockedState,
+    multiToolbarUnlockedState,
     duplicateClick,
     duplicateId,
     duplicateTree,
