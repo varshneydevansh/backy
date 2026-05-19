@@ -331,6 +331,7 @@ const buildFormEmbedContent = (
       formName: form.name,
       formTitle: formTitle(form),
       formDescription: form.description || "",
+      fields: cloneJson(form.fields) as unknown as BackyJsonValue,
       definitionUrl: input.definitionUrl,
       actionUrl: input.submitUrl,
       method: "POST",

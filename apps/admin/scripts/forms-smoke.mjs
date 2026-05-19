@@ -158,9 +158,11 @@ const assertFormsPersistenceCertificationSource = () => {
   );
   assert(
     source.includes('contactShareDedupeByEmail: contactShare?.dedupeByEmail') &&
+      source.includes('fields: template.fields') &&
       source.includes('collectionWriteEnabled: Boolean(collectionTarget?.enabled)') &&
       source.includes('collectionWriteCollectionId: collectionTarget?.collectionId') &&
       source.includes('collectionWriteFieldMap: collectionTarget?.fieldMap') &&
+      embedBlockRouteSource.includes('fields: cloneJson(form.fields) as unknown as BackyJsonValue') &&
       embedBlockRouteSource.includes('contactShareEnabled: Boolean(contactShare?.enabled)') &&
       embedBlockRouteSource.includes('contactShareDedupeByEmail:') &&
       embedBlockRouteSource.includes('collectionWriteEnabled: Boolean(collectionTarget?.enabled)') &&
@@ -2058,6 +2060,7 @@ const createEmbedBlockInUi = async (client, formId) => {
       assert(created.content?.elements?.[0]?.type === 'form', `Embed section does not contain a form element: ${JSON.stringify(created.content)}`);
       assert(created.content.elements[0].props?.formId === formId, `Embed formId not preserved: ${JSON.stringify(created.content.elements[0].props)}`);
       const embedProps = created.content.elements[0].props || {};
+      assert(Array.isArray(embedProps.fields) && embedProps.fields.length > 0, `Embed form schema props missing: ${JSON.stringify(embedProps)}`);
       if (embedProps.contactShare?.enabled) {
         assert(embedProps.contactShareEnabled === true, `Embed contact-share flattened props missing: ${JSON.stringify(embedProps)}`);
         assert(embedProps.contactShareEmailField || embedProps.contactSharePhoneField, `Embed contact-share identity props missing: ${JSON.stringify(embedProps)}`);

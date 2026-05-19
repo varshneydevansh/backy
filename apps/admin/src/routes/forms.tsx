@@ -6116,6 +6116,7 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
       formDescription: template.description,
       formActive: true,
       formAudience: template.audience,
+      fields: template.fields,
       successMessage: template.successMessage,
       enableHoneypot: true,
       enableCaptcha: false,
