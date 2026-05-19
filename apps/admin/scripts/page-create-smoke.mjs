@@ -146,6 +146,44 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'cart',
+    title: 'Smoke Cart Template',
+    slugBase: 'smoke-cart-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'cart',
+    navigationItem: 'Cart',
+    headingId: 'cart-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 42,
+    minCanvasHeight: 1200,
+    requiredElementIds: [
+      'cart-site-header',
+      'cart-site-navigation',
+      'cart-site-footer',
+      'cart-hero-section',
+      'cart-status-card',
+      'cart-items-section',
+      'cart-item-list',
+      'cart-item-row-0',
+      'cart-quantity-control-0',
+      'cart-remove-button-0',
+      'cart-summary-card',
+      'cart-total-value',
+      'cart-actions-section',
+      'cart-continue-shopping-button',
+      'cart-checkout-button',
+    ],
+    dataBindingElementIds: [
+      'cart-hero-section',
+      'cart-status-card',
+      'cart-status-count',
+      'cart-item-list',
+      'cart-item-row-0',
+      'cart-quantity-control-0',
+      'cart-total-value',
+    ],
+  },
+  {
     template: 'checkout',
     title: 'Smoke Checkout Template',
     slugBase: 'smoke-checkout-template',
@@ -385,11 +423,13 @@ const assertPageCreateSourceContracts = () => {
       source.includes('member-account-preferences-form') &&
       source.includes("'product-detail'") &&
       source.includes('product-detail-buy-button') &&
+      source.includes("'cart'") &&
+      source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
       source.includes('checkout-payment-safe-note') &&
       source.includes('No card number, CVV, or raw payment secret is collected by this page starter.') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member starters and commerce product-detail/checkout starters',
+    'Page create must keep safe member starters and commerce product-detail/cart/checkout starters',
   );
 };
 
@@ -954,6 +994,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Product detail',
       forms: 'none',
       dynamicData: 'Backy product detail placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'cart',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Cart page',
+      forms: 'none',
+      dynamicData: 'Backy cart placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

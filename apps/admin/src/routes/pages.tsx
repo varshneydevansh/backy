@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'checkout' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -368,6 +368,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'product-detail',
     title: 'Product detail',
     detail: 'Create a buy-ready product page with media, options, checkout, and related items.',
+    badge: 'Commerce',
+    icon: ShoppingBag,
+  },
+  {
+    key: 'cart',
+    title: 'Cart',
+    detail: 'Create a cart review page with item rows, quantity controls, totals, and checkout handoff.',
     badge: 'Commerce',
     icon: ShoppingBag,
   },
@@ -1849,6 +1856,7 @@ function PagesListView() {
       memberAccountPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
       storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       productDetailPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
+      cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
     },
@@ -1874,6 +1882,7 @@ function PagesListView() {
         memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
         storefront: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
         productDetail: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
+        cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       },

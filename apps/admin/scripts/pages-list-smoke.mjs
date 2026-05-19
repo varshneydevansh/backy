@@ -45,9 +45,11 @@ const assertPagesListSourceContract = () => {
       source.includes('memberAccountPageTemplate') &&
       source.includes("key: 'product-detail'") &&
       source.includes('productDetailPageTemplate') &&
+      source.includes("key: 'cart'") &&
+      source.includes('cartPageTemplate') &&
       source.includes("key: 'checkout'") &&
       source.includes('checkoutPageTemplate'),
-    'Pages list must expose the member, product-detail, and checkout starters and handoff routes',
+    'Pages list must expose the member, product-detail, cart, and checkout starters and handoff routes',
   );
 };
 
@@ -1526,6 +1528,12 @@ const main = async () => {
       ['template=product-detail'],
       { title: 'Product detail', slug: 'product', template: 'product-detail', homepage: false },
     );
+    const cartShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-cart',
+      ['template=cart'],
+      { title: 'Cart', slug: 'cart', template: 'cart', homepage: false },
+    );
     const checkoutShortcut = await clickEmptyCreate(
       client,
       'pages-create-checkout',
@@ -1619,6 +1627,7 @@ const main = async () => {
       memberLoginShortcut,
       memberAccountShortcut,
       productDetailShortcut,
+      cartShortcut,
       checkoutShortcut,
       childHierarchy,
       parentHierarchy,

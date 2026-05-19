@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'checkout' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -155,6 +155,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Product media', 'Purchase panel', 'Related products'],
     },
     {
+        id: 'cart',
+        name: 'Cart page',
+        desc: 'Cart items, quantity controls, totals, and checkout handoff.',
+        detail: 'Creates an editable cart review page that custom frontends can bind to Backy order-intake state.',
+        sections: ['Cart items', 'Quantity controls', 'Order totals'],
+    },
+    {
         id: 'checkout',
         name: 'Checkout page',
         desc: 'Order summary, customer details, shipping choices, and provider checkout handoff.',
@@ -222,6 +229,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'product',
         description: 'A public product detail page ready to bind media, price, variants, and checkout actions.',
     },
+    cart: {
+        title: 'Cart',
+        slug: 'cart',
+        description: 'A cart review page ready to bind line items, quantities, totals, discounts, and checkout handoff.',
+    },
     checkout: {
         title: 'Checkout',
         slug: 'checkout',
@@ -264,6 +276,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     landing: 'primary',
     storefront: 'primary',
     'product-detail': 'primary',
+    cart: 'primary',
     checkout: 'primary',
     'blog-index': 'primary',
     about: 'primary',
@@ -488,6 +501,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     landing: ['Home', 'Features', 'Contact'],
     storefront: ['Home', 'Shop', 'About', 'Contact'],
     'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
+    cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     about: ['Home', 'About', 'Contact'],
@@ -529,6 +543,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Related', x: 8, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
         { x: 38, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
         { x: 68, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
+    ],
+    cart: [
+        { label: 'Cart', x: 8, y: 14, w: 52, h: 20, className: 'border-teal-200 bg-teal-50' },
+        { x: 14, y: 23, w: 34, h: 5, className: 'bg-teal-800' },
+        { label: 'Items', x: 8, y: 42, w: 50, h: 10, className: 'border-slate-200 bg-white' },
+        { x: 8, y: 56, w: 50, h: 10, className: 'border-slate-200 bg-white' },
+        { x: 8, y: 70, w: 50, h: 10, className: 'border-slate-200 bg-white' },
+        { label: 'Totals', x: 64, y: 42, w: 28, h: 38, className: 'border-teal-100 bg-white' },
+        { x: 70, y: 68, w: 16, h: 6, className: 'bg-teal-600' },
     ],
     checkout: [
         { label: 'Checkout', x: 8, y: 14, w: 46, h: 26, className: 'border-emerald-200 bg-emerald-50' },
@@ -1556,6 +1579,8 @@ function NewPageRoute() {
             ? 'Backy products catalog placeholders'
             : formData.template === 'product-detail'
                 ? 'Backy product detail placeholders'
+                : formData.template === 'cart'
+                    ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
                     ? 'Backy checkout and order placeholders'
             : selectedDatasetCollection
@@ -1667,7 +1692,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'checkout', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'cart', 'checkout', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1717,7 +1742,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, checkout, and blog index templates seed dynamic data placeholders for products, orders, and posts.',
+            'Storefront, product-detail, cart, checkout, and blog index templates seed dynamic data placeholders for products, carts, orders, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3741,7 +3766,9 @@ function buildTemplateElements(input: {
         title,
         variant: input.template,
         navItems: templateNavigationItems[input.template],
-        headerActionLabel: input.template === 'checkout'
+        headerActionLabel: input.template === 'cart'
+            ? 'Checkout'
+            : input.template === 'checkout'
             ? 'Checkout'
             : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
     });
@@ -4016,6 +4043,190 @@ function buildTemplateElements(input: {
                             }),
                         ],
                     })),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'cart') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'cart-hero-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'commerce', mode: 'cart', fields: ['items', 'itemCount', 'subtotal', 'discount', 'shipping', 'tax', 'total'] }],
+                props: { backgroundColor: '#f0fdfa', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 58, {
+                        id: 'cart-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Cart review', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'cart-heading',
+                        width: 560,
+                        height: 86,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 76, 198, {
+                        id: 'cart-copy',
+                        width: 560,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                    }),
+                    createCanvasElement('box', 768, 72, {
+                        id: 'cart-status-card',
+                        width: 300,
+                        height: 132,
+                        dataBindings: [{ source: 'commerce', mode: 'cart-summary', fields: ['itemCount', 'total'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'cart-status-label',
+                                width: 180,
+                                height: 24,
+                                props: { content: 'Items in cart', fontSize: 14, fontWeight: '700', color: '#0f766e' },
+                            }),
+                            createCanvasElement('heading', 24, 58, {
+                                id: 'cart-status-count',
+                                width: 150,
+                                height: 44,
+                                props: { content: '3 items', level: 'h2', fontSize: 32, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'commerce', mode: 'cart-summary', field: 'itemCount', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 300, {
+                id: 'cart-items-section',
+                width: 1200,
+                height: 520,
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 52, {
+                        id: 'cart-items-heading',
+                        width: 340,
+                        height: 42,
+                        props: { content: 'Your items', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('box', 72, 120, {
+                        id: 'cart-item-list',
+                        width: 660,
+                        height: 330,
+                        dataBindings: [{ source: 'commerce', mode: 'cart-items', limit: 10 }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        children: ['Digital kit', 'Service package', 'Consultation'].map((item, index) => createCanvasElement('box', 20, 20 + index * 98, {
+                            id: `cart-item-row-${index}`,
+                            width: 620,
+                            height: 78,
+                            dataBindings: [{ source: 'commerce', mode: 'cart-item', index }],
+                            props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                            children: [
+                                createCanvasElement('heading', 18, 15, {
+                                    id: `cart-item-title-${index}`,
+                                    width: 230,
+                                    height: 28,
+                                    props: { content: item, level: 'h3', fontSize: 18, fontWeight: '750', color: '#111827' },
+                                    dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'title', targetPath: 'props.content' }],
+                                }),
+                                createCanvasElement('text', 18, 48, {
+                                    id: `cart-item-price-${index}`,
+                                    width: 90,
+                                    height: 22,
+                                    props: { content: '$49.00', fontSize: 14, fontWeight: '700', color: '#0f766e' },
+                                    dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'price', targetPath: 'props.content' }],
+                                }),
+                                createCanvasElement('input', 322, 18, {
+                                    id: `cart-quantity-control-${index}`,
+                                    width: 94,
+                                    height: 44,
+                                    props: { label: 'Qty', name: `quantity_${index}`, inputType: 'number', value: '1', min: 1 },
+                                    dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'quantity', targetPath: 'props.value' }],
+                                }),
+                                createCanvasElement('text', 450, 26, {
+                                    id: `cart-item-total-${index}`,
+                                    width: 80,
+                                    height: 24,
+                                    props: { content: '$49.00', fontSize: 15, fontWeight: '800', color: '#111827', textAlign: 'right' },
+                                    dataBindings: [{ source: 'commerce', mode: 'cart-item', index, field: 'lineTotal', targetPath: 'props.content' }],
+                                }),
+                                createCanvasElement('button', 542, 22, {
+                                    id: `cart-remove-button-${index}`,
+                                    width: 58,
+                                    height: 36,
+                                    props: { label: 'Remove', backgroundColor: '#f1f5f9', color: '#334155', borderRadius: 8, fontSize: 12, fontWeight: '700', action: 'commerce.cart.remove' },
+                                }),
+                            ],
+                        })),
+                    }),
+                    createCanvasElement('box', 790, 120, {
+                        id: 'cart-summary-card',
+                        width: 330,
+                        height: 330,
+                        dataBindings: [{ source: 'commerce', mode: 'cart-summary', fields: ['subtotal', 'discount', 'shipping', 'tax', 'total'] }],
+                        props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'cart-summary-heading',
+                                width: 220,
+                                height: 34,
+                                props: { content: 'Cart totals', level: 'h2', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            ...['Subtotal', 'Discount', 'Shipping', 'Estimated tax'].map((item, index) => createCanvasElement('text', 24, 86 + index * 36, {
+                                id: `cart-summary-label-${index}`,
+                                width: 160,
+                                height: 22,
+                                props: { content: item, fontSize: 14, color: '#d1d5db' },
+                            })),
+                            ...['$147.00', '-$10.00', '$6.00', '$11.44'].map((item, index) => createCanvasElement('text', 224, 86 + index * 36, {
+                                id: `cart-summary-value-${index}`,
+                                width: 70,
+                                height: 22,
+                                props: { content: item, fontSize: 14, fontWeight: '700', color: '#ffffff', textAlign: 'right' },
+                            })),
+                            createCanvasElement('text', 24, 244, {
+                                id: 'cart-total-label',
+                                width: 100,
+                                height: 30,
+                                props: { content: 'Total', fontSize: 20, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('text', 206, 244, {
+                                id: 'cart-total-value',
+                                width: 88,
+                                height: 30,
+                                props: { content: '$154.44', fontSize: 20, fontWeight: '800', color: '#99f6e4', textAlign: 'right' },
+                                dataBindings: [{ source: 'commerce', mode: 'cart-summary', field: 'total', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 820, {
+                id: 'cart-actions-section',
+                width: 1200,
+                height: 220,
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('button', 72, 70, {
+                        id: 'cart-continue-shopping-button',
+                        width: 190,
+                        height: 52,
+                        props: { label: 'Continue shopping', href: '/store', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid', fontSize: 16, fontWeight: '700' },
+                    }),
+                    createCanvasElement('button', 828, 70, {
+                        id: 'cart-checkout-button',
+                        width: 220,
+                        height: 54,
+                        props: { label: 'Proceed to checkout', href: '/checkout', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '800', action: 'commerce.checkout' },
+                    }),
+                    createCanvasElement('paragraph', 828, 142, {
+                        id: 'cart-checkout-copy',
+                        width: 280,
+                        height: 44,
+                        props: { content: 'Checkout can use Backy public order intake plus your configured payment, tax, shipping, and discount providers.', fontSize: 13, lineHeight: 1.45, color: '#64748b' },
+                    }),
                 ],
             }),
         ]);
