@@ -365,6 +365,50 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'blog-post',
+    title: 'Smoke Blog Post Template',
+    slugBase: 'smoke-blog-post-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'blog-post',
+    navigationItem: 'Blog',
+    headingId: 'blog-post-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 44,
+    minCanvasHeight: 1400,
+    requiredElementIds: [
+      'blog-post-site-header',
+      'blog-post-site-navigation',
+      'blog-post-site-footer',
+      'blog-post-hero-section',
+      'blog-post-heading',
+      'blog-post-excerpt',
+      'blog-post-meta-row',
+      'blog-post-featured-media',
+      'blog-post-body-section',
+      'blog-post-body-card',
+      'blog-post-author-card',
+      'blog-post-taxonomy-card',
+      'blog-post-tag-0',
+      'blog-post-related-section',
+      'blog-post-related-card-0',
+      'blog-post-related-title-0',
+    ],
+    dataBindingElementIds: [
+      'blog-post-hero-section',
+      'blog-post-heading',
+      'blog-post-excerpt',
+      'blog-post-meta-row',
+      'blog-post-featured-media',
+      'blog-post-body-section',
+      'blog-post-body-card',
+      'blog-post-author-card',
+      'blog-post-taxonomy-card',
+      'blog-post-related-section',
+      'blog-post-related-card-0',
+      'blog-post-related-title-0',
+    ],
+  },
+  {
     template: 'about',
     title: 'Smoke About Template',
     slugBase: 'smoke-about-template',
@@ -553,8 +597,12 @@ const assertPageCreateSourceContracts = () => {
       source.includes("'help-center'") &&
       source.includes('help-center-search-input') &&
       source.includes('help-center-contact-button') &&
+      source.includes("'blog-post'") &&
+      source.includes('blog-post-body-section') &&
+      source.includes('blog-post-author-card') &&
+      source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, and help-center starters',
+    'Page create must keep safe member, commerce, pricing, help-center, and blog-post starters',
   );
 };
 
@@ -1167,6 +1215,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Blog index',
       forms: 'none',
       dynamicData: 'Backy blog feed placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'blog-post',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Blog post',
+      forms: 'none',
+      dynamicData: 'Backy blog post placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

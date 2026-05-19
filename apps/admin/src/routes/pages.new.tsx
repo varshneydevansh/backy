@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -197,6 +197,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Editorial hero', 'Featured post', 'Article list'],
     },
     {
+        id: 'blog-post',
+        name: 'Blog post',
+        desc: 'Article hero, post body, author card, taxonomy, and related posts.',
+        detail: 'Creates a public article detail page ready to bind one Backy blog post and related editorial content.',
+        sections: ['Article hero', 'Post body', 'Related posts'],
+    },
+    {
         id: 'about',
         name: 'About page',
         desc: 'Story, values, and team-ready content blocks.',
@@ -280,6 +287,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'blog',
         description: 'A public blog index with featured posts and editable editorial sections.',
     },
+    'blog-post': {
+        title: 'Article',
+        slug: 'article',
+        description: 'A public article page ready to bind title, author, content, taxonomy, and related posts.',
+    },
     about: {
         title: 'About',
         slug: 'about',
@@ -318,6 +330,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     'order-confirmation': 'primary',
     'help-center': 'primary',
     'blog-index': 'primary',
+    'blog-post': 'primary',
     about: 'primary',
     contact: 'footer',
     registration: 'primary',
@@ -546,6 +559,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
     'help-center': ['Home', 'Help', 'Orders', 'Contact'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
+    'blog-post': ['Home', 'Blog', 'Categories', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
@@ -636,6 +650,16 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Posts', x: 8, y: 54, w: 84, h: 7, className: 'border-slate-200 bg-white' },
         { x: 8, y: 65, w: 84, h: 7, className: 'border-slate-200 bg-white' },
         { x: 8, y: 76, w: 84, h: 7, className: 'border-slate-200 bg-white' },
+    ],
+    'blog-post': [
+        { label: 'Article', x: 8, y: 14, w: 84, h: 30, className: 'border-indigo-200 bg-indigo-50' },
+        { x: 16, y: 24, w: 46, h: 5, className: 'bg-indigo-800' },
+        { x: 16, y: 34, w: 30, h: 4, className: 'bg-indigo-300' },
+        { label: 'Body', x: 8, y: 52, w: 54, h: 34, className: 'border-slate-200 bg-white' },
+        { x: 16, y: 62, w: 38, h: 3, className: 'bg-slate-200' },
+        { x: 16, y: 70, w: 32, h: 3, className: 'bg-slate-200' },
+        { label: 'Author', x: 68, y: 52, w: 24, h: 18, className: 'border-indigo-100 bg-white' },
+        { x: 68, y: 78, w: 24, h: 8, className: 'border-slate-200 bg-white' },
     ],
     about: [
         { label: 'Story', x: 8, y: 16, w: 42, h: 30, className: 'border-cyan-200 bg-cyan-50' },
@@ -1661,6 +1685,8 @@ function NewPageRoute() {
                 ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
                 ? 'Backy blog feed placeholders'
+            : formData.template === 'blog-post'
+                ? 'Backy blog post placeholders'
                 : 'none',
         datasetImport: selectedDatasetContract,
         navigation: formData.navigationPlacement === 'none'
@@ -1766,7 +1792,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1816,7 +1842,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, cart, checkout, order-confirmation, help-center, and blog index templates seed dynamic data placeholders for products, plans, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3848,6 +3874,8 @@ function buildTemplateElements(input: {
                 ? 'View order'
             : input.template === 'pricing'
                 ? 'View plans'
+            : input.template === 'blog-post'
+                ? 'Read article'
             : input.template === 'help-center'
                 ? 'Get help'
             : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
@@ -5075,6 +5103,223 @@ function buildTemplateElements(input: {
                                 width: 150,
                                 height: 24,
                                 props: { content: '5 min read', fontSize: 13, color: '#6b7280' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'blog-post') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'blog-post-hero-section',
+                width: 1200,
+                height: 420,
+                dataBindings: [{ source: 'blog', mode: 'post', fields: ['title', 'excerpt', 'slug', 'author', 'publishedAt', 'readingTime', 'featuredImage'] }],
+                props: { backgroundColor: '#eef2ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'blog-post-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Article', fontSize: 13, fontWeight: '800', color: '#4338ca', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'blog-post-heading',
+                        width: 660,
+                        height: 118,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        dataBindings: [{ source: 'blog', mode: 'post', field: 'title', targetPath: 'props.content' }],
+                    }),
+                    createCanvasElement('paragraph', 76, 232, {
+                        id: 'blog-post-excerpt',
+                        width: 620,
+                        height: 76,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                        dataBindings: [{ source: 'blog', mode: 'post', field: 'excerpt', targetPath: 'props.content' }],
+                    }),
+                    createCanvasElement('box', 76, 326, {
+                        id: 'blog-post-meta-row',
+                        width: 520,
+                        height: 44,
+                        dataBindings: [{ source: 'blog', mode: 'post-meta', fields: ['author', 'publishedAt', 'readingTime'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#c7d2fe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 18, 12, {
+                                id: 'blog-post-author-name',
+                                width: 190,
+                                height: 22,
+                                props: { content: 'By Editorial team', fontSize: 14, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'blog', mode: 'post', field: 'author.name', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 236, 12, {
+                                id: 'blog-post-published-at',
+                                width: 120,
+                                height: 22,
+                                props: { content: 'Published today', fontSize: 14, color: '#4b5563' },
+                                dataBindings: [{ source: 'blog', mode: 'post', field: 'publishedAt', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 380, 12, {
+                                id: 'blog-post-reading-time',
+                                width: 100,
+                                height: 22,
+                                props: { content: '6 min read', fontSize: 14, color: '#4b5563' },
+                                dataBindings: [{ source: 'blog', mode: 'post', field: 'readingTime', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 790, 74, {
+                        id: 'blog-post-featured-media',
+                        width: 330,
+                        height: 240,
+                        dataBindings: [{ source: 'blog', mode: 'post', field: 'featuredImage', targetPath: 'props.media' }],
+                        props: { backgroundColor: '#c7d2fe', borderRadius: 8, borderColor: '#a5b4fc', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 38, 104, {
+                                id: 'blog-post-featured-media-label',
+                                width: 230,
+                                height: 28,
+                                props: { content: 'Featured media', fontSize: 16, fontWeight: '800', color: '#3730a3', textAlign: 'center' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 420, {
+                id: 'blog-post-body-section',
+                width: 1200,
+                height: 540,
+                dataBindings: [{ source: 'blog', mode: 'post-body', fields: ['content', 'blocks', 'taxonomy', 'author'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 76, 62, {
+                        id: 'blog-post-body-card',
+                        width: 680,
+                        height: 390,
+                        dataBindings: [{ source: 'blog', mode: 'post-body', field: 'content', targetPath: 'props.content' }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 34, 30, {
+                                id: 'blog-post-body-heading',
+                                width: 420,
+                                height: 40,
+                                props: { content: 'Article section heading', level: 'h2', fontSize: 30, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 34, 88, {
+                                id: 'blog-post-body-copy-0',
+                                width: 580,
+                                height: 86,
+                                props: { content: 'Use this body card as the editable article content area. Bind rich text blocks, media embeds, tables, and callouts from the Backy blog post payload.', fontSize: 17, lineHeight: 1.65, color: '#374151' },
+                            }),
+                            createCanvasElement('box', 34, 198, {
+                                id: 'blog-post-callout',
+                                width: 570,
+                                height: 94,
+                                props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+                                children: [
+                                    createCanvasElement('paragraph', 22, 20, {
+                                        id: 'blog-post-callout-copy',
+                                        width: 500,
+                                        height: 46,
+                                        props: { content: 'Highlight a quote, product note, newsletter prompt, or reusable editorial callout.', fontSize: 16, lineHeight: 1.45, color: '#334155' },
+                                    }),
+                                ],
+                            }),
+                            createCanvasElement('paragraph', 34, 318, {
+                                id: 'blog-post-body-copy-1',
+                                width: 580,
+                                height: 46,
+                                props: { content: 'Continue the article with reusable sections or content synced from the blog editor.', fontSize: 17, lineHeight: 1.55, color: '#374151' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 812, 62, {
+                        id: 'blog-post-author-card',
+                        width: 300,
+                        height: 190,
+                        dataBindings: [{ source: 'blog', mode: 'author', fields: ['name', 'bio', 'avatar'] }],
+                        props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'blog-post-author-heading',
+                                width: 200,
+                                height: 30,
+                                props: { content: 'About the author', level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('text', 24, 68, {
+                                id: 'blog-post-author-display',
+                                width: 210,
+                                height: 24,
+                                props: { content: 'Editorial team', fontSize: 15, fontWeight: '800', color: '#4338ca' },
+                                dataBindings: [{ source: 'blog', mode: 'author', field: 'name', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 106, {
+                                id: 'blog-post-author-bio',
+                                width: 232,
+                                height: 54,
+                                props: { content: 'Bind author bios, avatars, and archive links from Backy editorial profiles.', fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
+                                dataBindings: [{ source: 'blog', mode: 'author', field: 'bio', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 812, 282, {
+                        id: 'blog-post-taxonomy-card',
+                        width: 300,
+                        height: 170,
+                        dataBindings: [{ source: 'blog', mode: 'taxonomy', fields: ['category', 'tags'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'blog-post-taxonomy-heading',
+                                width: 170,
+                                height: 28,
+                                props: { content: 'Filed under', level: 'h3', fontSize: 20, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Product', 'Design', 'CMS'].map((tag, index) => createCanvasElement('button', 24 + index * 86, 76, {
+                                id: `blog-post-tag-${index}`,
+                                width: 74,
+                                height: 36,
+                                props: { label: tag, backgroundColor: '#eef2ff', color: '#3730a3', borderRadius: 8, fontSize: 13, fontWeight: '800', action: 'blog.filter.tag' },
+                            })),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 960, {
+                id: 'blog-post-related-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'blog', mode: 'related-posts', limit: 3 }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 50, {
+                        id: 'blog-post-related-heading',
+                        width: 360,
+                        height: 42,
+                        props: { content: 'Related articles', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...['Editorial workflow', 'Content models', 'Launch checklist'].map((item, index) => createCanvasElement('box', 74 + index * 330, 126, {
+                        id: `blog-post-related-card-${index}`,
+                        width: 290,
+                        height: 112,
+                        dataBindings: [{ source: 'blog', mode: 'related-post', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 18, {
+                                id: `blog-post-related-title-${index}`,
+                                width: 220,
+                                height: 28,
+                                props: { content: item, level: 'h3', fontSize: 18, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'blog', mode: 'related-post', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 20, 62, {
+                                id: `blog-post-related-meta-${index}`,
+                                width: 140,
+                                height: 22,
+                                props: { content: '4 min read', fontSize: 13, color: '#6b7280' },
+                                dataBindings: [{ source: 'blog', mode: 'related-post', index, field: 'readingTime', targetPath: 'props.content' }],
                             }),
                         ],
                     })),

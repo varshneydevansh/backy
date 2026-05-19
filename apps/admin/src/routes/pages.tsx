@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -410,6 +410,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'blog-index',
     title: 'Blog index',
     detail: 'Build a public article hub connected to posts, categories, and editorial routes.',
+    badge: 'Editorial',
+    icon: Newspaper,
+  },
+  {
+    key: 'blog-post',
+    title: 'Blog post',
+    detail: 'Create an article detail page with post body, author, taxonomy, and related-post bindings.',
     badge: 'Editorial',
     icon: Newspaper,
   },
@@ -1883,6 +1890,7 @@ function PagesListView() {
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
       helpCenterPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
+      blogPostPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
     },
     export: {
       format: 'csv',
@@ -1912,6 +1920,7 @@ function PagesListView() {
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
         helpCenter: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
+        blogPost: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
       },
     },
     readiness: {
