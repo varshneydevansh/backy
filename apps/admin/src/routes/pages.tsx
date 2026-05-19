@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -488,6 +488,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     title: 'Team',
     detail: 'Create people profiles with roles, departments, profile links, culture notes, and hiring actions.',
     badge: 'People',
+    icon: UserPlus,
+  },
+  {
+    key: 'careers',
+    title: 'Careers',
+    detail: 'Create open roles, job filters, benefits, hiring process notes, and application actions.',
+    badge: 'Hiring',
     icon: UserPlus,
   },
   {
@@ -1971,6 +1978,7 @@ function PagesListView() {
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       blogPostPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
       teamPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,
+      careersPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=careers`,
     },
     export: {
       format: 'csv',
@@ -2011,6 +2019,7 @@ function PagesListView() {
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
         blogPost: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
         team: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,
+        careers: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=careers`,
       },
     },
     readiness: {

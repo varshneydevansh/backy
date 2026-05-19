@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -274,6 +274,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Team hero', 'Profile cards', 'Hiring CTA'],
     },
     {
+        id: 'careers',
+        name: 'Careers page',
+        desc: 'Open roles, job filters, benefits, hiring process, application CTA, and candidate contact.',
+        detail: 'Creates a public careers page ready to bind job postings, departments, locations, employment types, benefits, and application actions.',
+        sections: ['Careers hero', 'Open roles', 'Application CTA'],
+    },
+    {
         id: 'about',
         name: 'About page',
         desc: 'Story, values, and team-ready content blocks.',
@@ -412,6 +419,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'team',
         description: 'A public team page ready to showcase people, roles, departments, profile media, social links, and hiring or contact actions.',
     },
+    careers: {
+        title: 'Careers',
+        slug: 'careers',
+        description: 'A public careers page ready to showcase open roles, departments, benefits, hiring process, and application actions.',
+    },
     about: {
         title: 'About',
         slug: 'about',
@@ -461,6 +473,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     'blog-index': 'primary',
     'blog-post': 'primary',
     team: 'primary',
+    careers: 'primary',
     about: 'primary',
     contact: 'footer',
     registration: 'primary',
@@ -700,6 +713,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     'blog-post': ['Home', 'Blog', 'Categories', 'Contact'],
     team: ['Home', 'Team', 'About', 'Contact'],
+    careers: ['Home', 'Careers', 'Team', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
@@ -890,6 +904,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Design', x: 38, y: 48, w: 26, h: 28, className: 'border-pink-100 bg-white' },
         { label: 'Careers', x: 68, y: 48, w: 24, h: 28, className: 'border-pink-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    careers: [
+        { label: 'Careers', x: 8, y: 14, w: 84, h: 24, className: 'border-emerald-200 bg-emerald-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-emerald-800' },
+        { label: 'Filters', x: 64, y: 24, w: 20, h: 6, className: 'border-emerald-100 bg-white' },
+        { label: 'Role', x: 8, y: 48, w: 26, h: 24, className: 'border-emerald-100 bg-white' },
+        { label: 'Role', x: 38, y: 48, w: 26, h: 24, className: 'border-emerald-100 bg-white' },
+        { label: 'Apply', x: 68, y: 48, w: 24, h: 24, className: 'border-emerald-100 bg-white' },
+        { x: 8, y: 82, w: 84, h: 8, className: 'border-slate-200 bg-white' },
     ],
     about: [
         { label: 'Story', x: 8, y: 16, w: 42, h: 30, className: 'border-cyan-200 bg-cyan-50' },
@@ -1937,6 +1960,8 @@ function NewPageRoute() {
                 ? 'Backy blog post placeholders'
             : formData.template === 'team'
                 ? 'Backy team profile placeholders'
+            : formData.template === 'careers'
+                ? 'Backy careers and job posting placeholders'
                 : 'none',
         datasetImport: selectedDatasetContract,
         navigation: formData.navigationPlacement === 'none'
@@ -2042,7 +2067,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post', 'team'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -2092,7 +2117,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, blog post, and team templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, posts, and people profiles.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, blog post, team, and careers templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, posts, people profiles, and job postings.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4146,6 +4171,8 @@ function buildTemplateElements(input: {
                 ? 'Read article'
             : input.template === 'team'
                 ? 'Meet team'
+            : input.template === 'careers'
+                ? 'View roles'
             : input.template === 'help-center'
                 ? 'Get help'
             : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
@@ -7290,6 +7317,196 @@ function buildTemplateElements(input: {
                                 height: 40,
                                 props: { label: 'Open roles', backgroundColor: '#ffffff', color: '#831843', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'team.hiring.open' },
                                 dataBindings: [{ source: 'team', mode: 'hiring', field: 'hiringUrl', targetPath: 'props.href' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'careers') {
+        const jobs = [
+            { title: 'Product designer', meta: 'Design / Remote / Full time', summary: 'Shape reusable editor workflows, site templates, and accessible design systems for creators.' },
+            { title: 'Full-stack engineer', meta: 'Engineering / Hybrid / Full time', summary: 'Build APIs, editor infrastructure, and provider integrations that power customer websites.' },
+            { title: 'Customer success lead', meta: 'Operations / Remote / Contract', summary: 'Turn onboarding feedback, support themes, and launch needs into better product workflows.' },
+        ];
+
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'careers-hero-section',
+                width: 1200,
+                height: 360,
+                dataBindings: [{ source: 'careers', mode: 'overview', fields: ['openRoles', 'departments', 'locations', 'applicationUrl'] }],
+                props: { backgroundColor: '#ecfdf5', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'careers-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Careers', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 98, {
+                        id: 'careers-heading',
+                        width: 660,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 212, {
+                        id: 'careers-intro-copy',
+                        width: 630,
+                        height: 78,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                    }),
+                    createCanvasElement('box', 806, 92, {
+                        id: 'careers-role-filter',
+                        width: 270,
+                        height: 138,
+                        dataBindings: [{ source: 'careers', mode: 'filters', fields: ['departments', 'locations', 'employmentTypes'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a7f3d0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'careers-role-filter-heading',
+                                width: 190,
+                                height: 28,
+                                props: { content: 'Filter roles', level: 'h3', fontSize: 20, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('text', 24, 70, {
+                                id: 'careers-role-filter-copy',
+                                width: 210,
+                                height: 24,
+                                props: { content: 'Department / Location / Type', fontSize: 14, color: '#047857' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 360, {
+                id: 'careers-jobs-section',
+                width: 1200,
+                height: 580,
+                dataBindings: [{ source: 'careers', mode: 'jobs', fields: ['openRoles', 'departments', 'locations', 'employmentTypes', 'applicationUrl'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 58, {
+                        id: 'careers-jobs-heading',
+                        width: 360,
+                        height: 42,
+                        props: { content: 'Open roles', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...jobs.map((job, index) => createCanvasElement('box', 74 + index * 350, 136, {
+                        id: `careers-job-card-${index}`,
+                        width: 300,
+                        height: 340,
+                        dataBindings: [{ source: 'careers', mode: 'job', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 28, {
+                                id: `careers-job-title-${index}`,
+                                width: 230,
+                                height: 36,
+                                props: { content: job.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'careers', mode: 'job', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 82, {
+                                id: `careers-job-meta-${index}`,
+                                width: 230,
+                                height: 24,
+                                props: { content: job.meta, fontSize: 13, fontWeight: '800', color: '#047857' },
+                                dataBindings: [{ source: 'careers', mode: 'job', index, field: 'metadata', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 128, {
+                                id: `careers-job-summary-${index}`,
+                                width: 230,
+                                height: 92,
+                                props: { content: job.summary, fontSize: 14, lineHeight: 1.5, color: '#4b5563' },
+                                dataBindings: [{ source: 'careers', mode: 'job', index, field: 'summary', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('button', 24, 270, {
+                                id: `careers-job-apply-${index}`,
+                                width: 116,
+                                height: 40,
+                                props: { label: 'Apply', backgroundColor: '#047857', color: '#ffffff', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'careers.application.open' },
+                                dataBindings: [{ source: 'careers', mode: 'job', index, field: 'applicationUrl', targetPath: 'props.href' }],
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 940, {
+                id: 'careers-culture-section',
+                width: 1200,
+                height: 340,
+                dataBindings: [{ source: 'careers', mode: 'culture', fields: ['benefits', 'hiringProcess', 'contactEmail'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 64, {
+                        id: 'careers-benefits-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'careers', mode: 'benefits', fields: ['benefits', 'workModes', 'locations'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 26, {
+                                id: 'careers-benefits-heading',
+                                width: 230,
+                                height: 32,
+                                props: { content: 'Benefits', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: 'careers-benefits-copy',
+                                width: 250,
+                                height: 74,
+                                props: { content: 'Bind benefits, compensation notes, work modes, and office or remote expectations from careers settings.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 434, 64, {
+                        id: 'careers-process-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'careers', mode: 'hiring-process', fields: ['steps', 'timeline', 'contactEmail'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 26, {
+                                id: 'careers-process-heading',
+                                width: 240,
+                                height: 32,
+                                props: { content: 'Hiring process', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: 'careers-process-copy',
+                                width: 250,
+                                height: 74,
+                                props: { content: 'Explain application review, interviews, trial work, offer timing, and accessibility accommodations.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 794, 64, {
+                        id: 'careers-apply-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'careers', mode: 'application', fields: ['applicationUrl', 'contactEmail', 'talentPoolUrl'] }],
+                        props: { backgroundColor: '#064e3b', borderRadius: 8, borderColor: '#064e3b', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'careers-apply-heading',
+                                width: 230,
+                                height: 32,
+                                props: { content: 'Join the talent pool', level: 'h2', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 24, 74, {
+                                id: 'careers-apply-copy',
+                                width: 250,
+                                height: 50,
+                                props: { content: 'Route candidates to the right application form or external recruiting system.', fontSize: 14, lineHeight: 1.45, color: '#d1fae5' },
+                            }),
+                            createCanvasElement('button', 24, 138, {
+                                id: 'careers-apply-button',
+                                width: 128,
+                                height: 40,
+                                props: { label: 'Apply now', backgroundColor: '#ffffff', color: '#064e3b', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'careers.application.open' },
+                                dataBindings: [{ source: 'careers', mode: 'application', field: 'applicationUrl', targetPath: 'props.href' }],
                             }),
                         ],
                     }),

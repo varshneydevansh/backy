@@ -812,6 +812,53 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'careers',
+    title: 'Smoke Careers Template',
+    slugBase: 'smoke-careers-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'careers',
+    navigationItem: 'Careers',
+    headingId: 'careers-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 42,
+    minCanvasHeight: 1500,
+    requiredElementIds: [
+      'careers-site-header',
+      'careers-site-navigation',
+      'careers-site-footer',
+      'careers-hero-section',
+      'careers-heading',
+      'careers-intro-copy',
+      'careers-role-filter',
+      'careers-jobs-section',
+      'careers-job-card-0',
+      'careers-job-title-0',
+      'careers-job-meta-0',
+      'careers-job-summary-0',
+      'careers-job-apply-0',
+      'careers-culture-section',
+      'careers-benefits-card',
+      'careers-process-card',
+      'careers-apply-card',
+      'careers-apply-button',
+    ],
+    dataBindingElementIds: [
+      'careers-hero-section',
+      'careers-role-filter',
+      'careers-jobs-section',
+      'careers-job-card-0',
+      'careers-job-title-0',
+      'careers-job-meta-0',
+      'careers-job-summary-0',
+      'careers-job-apply-0',
+      'careers-culture-section',
+      'careers-benefits-card',
+      'careers-process-card',
+      'careers-apply-card',
+      'careers-apply-button',
+    ],
+  },
+  {
     template: 'about',
     title: 'Smoke About Template',
     slugBase: 'smoke-about-template',
@@ -1044,8 +1091,12 @@ const assertPageCreateSourceContracts = () => {
       source.includes('team-profile-card-${index}') &&
       source.includes('team-values-card') &&
       source.includes('team.hiring.open') &&
+      source.includes("'careers'") &&
+      source.includes('careers-job-card-${index}') &&
+      source.includes('careers-benefits-card') &&
+      source.includes('careers.application.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, blog-post, and team starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, blog-post, team, and careers starters',
   );
 };
 
@@ -1746,6 +1797,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Team page',
       forms: 'none',
       dynamicData: 'Backy team profile placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'careers',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Careers page',
+      forms: 'none',
+      dynamicData: 'Backy careers and job posting placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
