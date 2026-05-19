@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -362,6 +362,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     title: 'Storefront',
     detail: 'Create editable product sections that can bind to Backy commerce data.',
     badge: 'Products',
+    icon: ShoppingBag,
+  },
+  {
+    key: 'product-detail',
+    title: 'Product detail',
+    detail: 'Create a buy-ready product page with media, options, checkout, and related items.',
+    badge: 'Commerce',
     icon: ShoppingBag,
   },
   {
@@ -1834,6 +1841,7 @@ function PagesListView() {
       memberLoginPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
       memberAccountPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
       storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+      productDetailPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
     },
     export: {
@@ -1857,6 +1865,7 @@ function PagesListView() {
         memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
         memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
         storefront: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+        productDetail: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       },
     },

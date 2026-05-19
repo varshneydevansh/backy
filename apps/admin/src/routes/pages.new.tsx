@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -148,6 +148,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Product hero', 'Catalog grid', 'Checkout CTA'],
     },
     {
+        id: 'product-detail',
+        name: 'Product detail',
+        desc: 'Product media, price, options, buy button, and related items.',
+        detail: 'Creates a focused product page that custom frontends can bind to a single product record.',
+        sections: ['Product media', 'Purchase panel', 'Related products'],
+    },
+    {
         id: 'blog-index',
         name: 'Blog index',
         desc: 'Editorial intro, featured story, and article list blocks.',
@@ -203,6 +210,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'store',
         description: 'A public storefront page ready to connect products, catalog sections, and checkout actions.',
     },
+    'product-detail': {
+        title: 'Product detail',
+        slug: 'product',
+        description: 'A public product detail page ready to bind media, price, variants, and checkout actions.',
+    },
     'blog-index': {
         title: 'Blog',
         slug: 'blog',
@@ -239,6 +251,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     blank: 'none',
     landing: 'primary',
     storefront: 'primary',
+    'product-detail': 'primary',
     'blog-index': 'primary',
     about: 'primary',
     contact: 'footer',
@@ -461,6 +474,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     blank: ['Home', 'About', 'Contact'],
     landing: ['Home', 'Features', 'Contact'],
     storefront: ['Home', 'Shop', 'About', 'Contact'],
+    'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
@@ -491,6 +505,16 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Grid', x: 8, y: 58, w: 24, h: 20, className: 'border-amber-200 bg-white' },
         { x: 38, y: 58, w: 24, h: 20, className: 'border-amber-200 bg-white' },
         { x: 68, y: 58, w: 24, h: 20, className: 'border-amber-200 bg-white' },
+    ],
+    'product-detail': [
+        { label: 'Media', x: 8, y: 16, w: 42, h: 42, className: 'border-orange-200 bg-orange-50' },
+        { label: 'Product', x: 56, y: 16, w: 36, h: 42, className: 'border-slate-200 bg-white' },
+        { x: 62, y: 25, w: 24, h: 5, className: 'bg-slate-900' },
+        { x: 62, y: 38, w: 14, h: 5, className: 'bg-emerald-600' },
+        { x: 62, y: 49, w: 20, h: 7, className: 'bg-orange-600' },
+        { label: 'Related', x: 8, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
+        { x: 38, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
+        { x: 68, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
     ],
     'blog-index': [
         { label: 'Feature', x: 8, y: 16, w: 84, h: 28, className: 'border-indigo-200 bg-indigo-50' },
@@ -1507,6 +1531,8 @@ function NewPageRoute() {
         forms: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
+            : formData.template === 'product-detail'
+                ? 'Backy product detail placeholders'
             : selectedDatasetCollection
                 ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
@@ -1616,7 +1642,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1666,7 +1692,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
+            'Storefront, product-detail, and blog index templates seed dynamic data placeholders for products and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3690,7 +3716,7 @@ function buildTemplateElements(input: {
         title,
         variant: input.template,
         navItems: templateNavigationItems[input.template],
-        headerActionLabel: input.template === 'storefront' ? 'Shop now' : 'Contact',
+        headerActionLabel: ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
     });
 
     if (input.template === 'landing') {
@@ -3849,6 +3875,117 @@ function buildTemplateElements(input: {
                                 width: 128,
                                 height: 38,
                                 props: { label: 'View item', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontSize: 14, fontWeight: '700' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'product-detail') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'product-detail-hero-section',
+                width: 1200,
+                height: 640,
+                dataBindings: [{ source: 'products', mode: 'detail', fields: ['title', 'description', 'price', 'image', 'inventory', 'slug'] }],
+                props: { backgroundColor: '#fff7ed', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 72, 72, {
+                        id: 'product-detail-media',
+                        width: 500,
+                        height: 430,
+                        dataBindings: [{ source: 'products', mode: 'detail', field: 'image' }],
+                        props: { backgroundColor: '#ffedd5', borderRadius: 8, borderColor: '#fed7aa', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 36, 36, {
+                                id: 'product-detail-media-label',
+                                width: 220,
+                                height: 28,
+                                props: { content: 'Product media', fontSize: 13, fontWeight: '800', color: '#9a3412', textTransform: 'uppercase' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('text', 650, 78, {
+                        id: 'product-detail-kicker',
+                        width: 240,
+                        height: 28,
+                        props: { content: 'Featured product', fontSize: 13, fontWeight: '800', color: '#c2410c', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 646, 116, {
+                        id: 'product-detail-heading',
+                        width: 430,
+                        height: 100,
+                        props: { content: title, level: 'h1', fontSize: 48, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        dataBindings: [{ source: 'products', mode: 'detail', field: 'title', targetPath: 'props.content' }],
+                    }),
+                    createCanvasElement('paragraph', 650, 236, {
+                        id: 'product-detail-copy',
+                        width: 430,
+                        height: 104,
+                        props: { content: description, fontSize: 17, lineHeight: 1.58, color: '#4b5563' },
+                        dataBindings: [{ source: 'products', mode: 'detail', field: 'description', targetPath: 'props.content' }],
+                    }),
+                    createCanvasElement('text', 650, 362, {
+                        id: 'product-detail-price',
+                        width: 160,
+                        height: 38,
+                        props: { content: '$49', fontSize: 28, fontWeight: '800', color: '#0f766e' },
+                        dataBindings: [{ source: 'products', mode: 'detail', field: 'price', targetPath: 'props.content' }],
+                    }),
+                    createCanvasElement('select', 650, 422, {
+                        id: 'product-detail-option',
+                        width: 240,
+                        height: 54,
+                        props: { label: 'Option', name: 'option', options: ['Standard', 'Premium', 'Bundle'], placeholder: 'Choose an option' },
+                    }),
+                    createCanvasElement('button', 650, 506, {
+                        id: 'product-detail-buy-button',
+                        width: 180,
+                        height: 52,
+                        props: { label: 'Buy now', backgroundColor: '#c2410c', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '800', action: 'commerce.checkout' },
+                    }),
+                    createCanvasElement('text', 850, 520, {
+                        id: 'product-detail-stock',
+                        width: 170,
+                        height: 28,
+                        props: { content: 'In stock', fontSize: 14, fontWeight: '700', color: '#15803d' },
+                        dataBindings: [{ source: 'products', mode: 'detail', field: 'inventory', targetPath: 'props.content' }],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 640, {
+                id: 'product-detail-related-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'products', mode: 'related', limit: 3 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 48, {
+                        id: 'product-detail-related-heading',
+                        width: 420,
+                        height: 44,
+                        props: { content: 'Related products', level: 'h2', fontSize: 32, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...['Bundle add-on', 'Digital guide', 'Consultation'].map((item, index) => createCanvasElement('box', 72 + index * 360, 124, {
+                        id: `product-detail-related-card-${index}`,
+                        width: 318,
+                        height: 128,
+                        dataBindings: [{ source: 'products', mode: 'related', index }],
+                        props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 20, {
+                                id: `product-detail-related-title-${index}`,
+                                width: 220,
+                                height: 30,
+                                props: { content: item, level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('text', 20, 66, {
+                                id: `product-detail-related-price-${index}`,
+                                width: 120,
+                                height: 24,
+                                props: { content: '$29', fontSize: 16, fontWeight: '800', color: '#0f766e' },
                             }),
                         ],
                     })),

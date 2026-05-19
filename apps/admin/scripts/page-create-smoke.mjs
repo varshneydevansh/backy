@@ -113,6 +113,39 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'product-detail',
+    title: 'Smoke Product Detail Template',
+    slugBase: 'smoke-product-detail-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'product-detail',
+    navigationItem: 'Product',
+    headingId: 'product-detail-heading',
+    minRootElementCount: 4,
+    minTotalElementCount: 24,
+    minCanvasHeight: 1100,
+    requiredElementIds: [
+      'product-detail-site-header',
+      'product-detail-site-navigation',
+      'product-detail-site-footer',
+      'product-detail-hero-section',
+      'product-detail-media',
+      'product-detail-heading',
+      'product-detail-price',
+      'product-detail-option',
+      'product-detail-buy-button',
+      'product-detail-stock',
+      'product-detail-related-section',
+      'product-detail-related-card-0',
+    ],
+    dataBindingElementIds: [
+      'product-detail-hero-section',
+      'product-detail-media',
+      'product-detail-heading',
+      'product-detail-related-section',
+      'product-detail-related-card-0',
+    ],
+  },
+  {
     template: 'blog-index',
     title: 'Smoke Blog Index Template',
     slugBase: 'smoke-blog-index-template',
@@ -314,8 +347,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('member-login-access-form') &&
       source.includes("'member-account'") &&
       source.includes('member-account-preferences-form') &&
+      source.includes("'product-detail'") &&
+      source.includes('product-detail-buy-button') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member-login and member-account starters',
+    'Page create must keep safe member starters and commerce product-detail starter',
   );
 };
 
@@ -872,6 +907,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Storefront page',
       forms: 'none',
       dynamicData: 'Backy products catalog placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'product-detail',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Product detail',
+      forms: 'none',
+      dynamicData: 'Backy product detail placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
