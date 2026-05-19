@@ -43,6 +43,7 @@ import {
   syncCommerceProductProvider,
   updateCollection,
   updateCollectionRecord,
+  bulkUpdateCollectionRecords,
   type Collection,
   type CollectionField,
   type CollectionRecord,
@@ -808,6 +809,7 @@ function ProductsRoute() {
   const [customerProfileDraft, setCustomerProfileDraft] = useState<CustomerProfileDraft>(() => customerProfileToDraft(null));
   const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(routeSearch.productId || null);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>(routeSearch.status || 'all');
   const [productTypeFilter, setProductTypeFilter] = useState<ProductTypeFilter>(routeSearch.type || 'all');
@@ -816,11 +818,12 @@ function ProductsRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBulkUpdatingProducts, setIsBulkUpdatingProducts] = useState(false);
   const [isSavingCustomerProfile, setIsSavingCustomerProfile] = useState(false);
   const [isImportingProducts, setIsImportingProducts] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
   const [isSyncingProviderProduct, setIsSyncingProviderProduct] = useState(false);
-  const isProductsBusy = isLoading || isSaving || isSavingCustomerProfile || isImportingProducts || isSyncingProviderProduct || Boolean(isCreatingTemplateId);
+  const isProductsBusy = isLoading || isSaving || isBulkUpdatingProducts || isSavingCustomerProfile || isImportingProducts || isSyncingProviderProduct || Boolean(isCreatingTemplateId);
   const productImportInputRef = useRef<HTMLInputElement>(null);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
@@ -847,6 +850,7 @@ function ProductsRoute() {
   const [commerceSettings, setCommerceSettings] = useState<CommerceProviderSettings | null>(null);
   const [runtimeCommerce, setRuntimeCommerce] = useState<RuntimeCommerceSettings | null>(null);
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
+  const [pendingBulkDeleteProducts, setPendingBulkDeleteProducts] = useState(false);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -1161,6 +1165,21 @@ function ProductsRoute() {
       return matchesSearch;
     });
   }, [categoryFilter, productTypeFilter, products, searchQuery, statusFilter, stockFilter]);
+  const selectedProductIdSet = useMemo(() => new Set(selectedProductIds), [selectedProductIds]);
+  const selectedLoadedProducts = useMemo(
+    () => products.filter((product) => selectedProductIdSet.has(product.id)),
+    [products, selectedProductIdSet],
+  );
+  const selectedVisibleProducts = useMemo(
+    () => filteredProducts.filter((product) => selectedProductIdSet.has(product.id)),
+    [filteredProducts, selectedProductIdSet],
+  );
+  const selectedVisibleProductIds = useMemo(
+    () => selectedVisibleProducts.map((product) => product.id),
+    [selectedVisibleProducts],
+  );
+  const hiddenSelectedProductCount = Math.max(0, selectedLoadedProducts.length - selectedVisibleProducts.length);
+  const areAllVisibleProductsSelected = filteredProducts.length > 0 && selectedVisibleProducts.length === filteredProducts.length;
   const metrics = useMemo(() => ({
     total: totalProductCount,
     published: products.filter((product) => product.status === 'published').length,
@@ -2036,6 +2055,8 @@ function ProductsRoute() {
       setCommerceSettings(null);
       setRuntimeCommerce(null);
       clearProductEditorState();
+      setSelectedProductIds([]);
+      setPendingBulkDeleteProducts(false);
       setError(viewPermissionTitle || 'Your account cannot view commerce products.');
       return;
     }
@@ -2076,6 +2097,8 @@ function ProductsRoute() {
         setCustomerProfileDraft(customerProfileToDraft(null));
         setProductPagination(null);
         clearProductEditorState();
+        setSelectedProductIds([]);
+        setPendingBulkDeleteProducts(false);
         return;
       }
 
@@ -2213,6 +2236,8 @@ function ProductsRoute() {
     if (siteChanged) {
       setSelectedSiteId(nextSiteId);
       clearProductEditorState();
+      setSelectedProductIds([]);
+      setPendingBulkDeleteProducts(false);
     }
 
     setSelectedProductId(routeSearch.productId || null);
@@ -2297,6 +2322,16 @@ function ProductsRoute() {
   useEffect(() => {
     setCustomerProfileDraft(customerProfileToDraft(selectedCustomerProfile));
   }, [selectedCustomerProfile]);
+
+  useEffect(() => {
+    if (selectedProductIds.length === 0) return;
+
+    const loadedIds = new Set(products.map((product) => product.id));
+    setSelectedProductIds((current) => {
+      const next = current.filter((productId) => loadedIds.has(productId));
+      return next.length === current.length ? current : next;
+    });
+  }, [products, selectedProductIds]);
 
   const clearProductEditorState = () => {
     setSelectedProductId(null);
@@ -2492,6 +2527,8 @@ function ProductsRoute() {
       setProductCollection(collection);
       setProducts([]);
       setProductPagination({ total: 0, limit: PRODUCT_RECORD_PAGE_SIZE, offset: 0, hasMore: false });
+      setSelectedProductIds([]);
+      setPendingBulkDeleteProducts(false);
       setNotice('Products collection created. You can add your first product now.');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to set up products');
@@ -2770,12 +2807,87 @@ function ProductsRoute() {
         clearProductEditorState();
         updateProductsRouteSearch({ productId: undefined });
       }
+      setSelectedProductIds((current) => current.filter((productId) => productId !== product.id));
       setPendingDeleteProduct(null);
       setNotice('Product deleted.');
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete product');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const bulkUpdateProductStatus = async (status: ContentStatus) => {
+    if (!productCollection || selectedLoadedProducts.length === 0) return;
+    if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot update product status.');
+      return;
+    }
+
+    setIsBulkUpdatingProducts(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await bulkUpdateCollectionRecords(activeSiteId, productCollection.id, {
+        action: 'updateStatus',
+        recordIds: selectedLoadedProducts.map((product) => product.id),
+        status,
+      });
+      const updatedProducts = result.records.map(normalizeProductRecord);
+      setProducts((current) => current.map((product) => (
+        updatedProducts.find((updatedProduct) => updatedProduct.id === product.id) || product
+      )));
+      const updatedSelectedProduct = selectedProductId
+        ? updatedProducts.find((product) => product.id === selectedProductId)
+        : null;
+      if (updatedSelectedProduct) {
+        setFormState(productToForm(updatedSelectedProduct));
+      }
+      setSelectedProductIds([]);
+      setPendingBulkDeleteProducts(false);
+      setNotice(`${result.updated} selected product${result.updated === 1 ? '' : 's'} moved to ${status}${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : 'Unable to update selected products');
+    } finally {
+      setIsBulkUpdatingProducts(false);
+    }
+  };
+
+  const bulkDeleteProducts = async () => {
+    if (!productCollection || selectedLoadedProducts.length === 0) return;
+    if (isProductsBusy) return;
+    if (!canDeleteProducts) {
+      setError(deletePermissionTitle || 'Your account cannot delete products.');
+      return;
+    }
+
+    const deletedIds = selectedLoadedProducts.map((product) => product.id);
+    setIsBulkUpdatingProducts(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await bulkUpdateCollectionRecords(activeSiteId, productCollection.id, {
+        action: 'delete',
+        recordIds: deletedIds,
+      });
+      setProducts((current) => current.filter((product) => !deletedIds.includes(product.id)));
+      setProductPagination((current) => current
+        ? { ...current, total: Math.max(0, current.total - result.deleted) }
+        : current);
+      if (selectedProductId && deletedIds.includes(selectedProductId)) {
+        clearProductEditorState();
+        updateProductsRouteSearch({ productId: undefined });
+      }
+      setSelectedProductIds([]);
+      setPendingBulkDeleteProducts(false);
+      setNotice(`${result.deleted} selected product${result.deleted === 1 ? '' : 's'} deleted${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : 'Unable to delete selected products');
+    } finally {
+      setIsBulkUpdatingProducts(false);
     }
   };
 
@@ -2919,14 +3031,14 @@ function ProductsRoute() {
     setNotice('Products provider certification handoff downloaded.');
   };
 
-  const exportProductsCsv = () => {
-    if (filteredProducts.length === 0 || isProductsBusy) return;
+  const exportProductRowsCsv = (productsToExport: CollectionRecord[], scopeLabel: 'visible' | 'selected') => {
+    if (productsToExport.length === 0 || isProductsBusy) return;
     if (!canExportProducts) {
       setError(exportPermissionTitle || 'Your account cannot export products.');
       return;
     }
 
-    const rows = filteredProducts.map((product) => {
+    const rows = productsToExport.map((product) => {
       const exportRecord = productToExportRecord(product, {
         activeSiteId,
         publicBaseUrl,
@@ -2946,8 +3058,10 @@ function ProductsRoute() {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-    setNotice(`${filteredProducts.length} visible product${filteredProducts.length === 1 ? '' : 's'} exported.`);
+    setNotice(`${productsToExport.length} ${scopeLabel} product${productsToExport.length === 1 ? '' : 's'} exported.`);
   };
+  const exportProductsCsv = () => exportProductRowsCsv(filteredProducts, 'visible');
+  const exportSelectedProductsCsv = () => exportProductRowsCsv(selectedLoadedProducts, 'selected');
   const downloadProductImportTemplate = () => {
     if (isProductsBusy) return;
     if (!canEditProducts) {
@@ -2994,6 +3108,8 @@ function ProductsRoute() {
       });
       setProducts(refreshed.records.map(normalizeProductRecord));
       setProductPagination(refreshed.pagination);
+      setSelectedProductIds([]);
+      setPendingBulkDeleteProducts(false);
       setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
       if (result.errors.length > 0) {
         const firstError = result.errors[0];
@@ -3005,6 +3121,43 @@ function ProductsRoute() {
       setIsImportingProducts(false);
       event.target.value = '';
     }
+  };
+  const toggleProductSelection = (productId: string) => {
+    if (isProductsBusy) return;
+    if (!canViewProducts) {
+      setError(viewPermissionTitle || 'Your account cannot view products.');
+      return;
+    }
+
+    setPendingBulkDeleteProducts(false);
+    setSelectedProductIds((current) => (
+      current.includes(productId)
+        ? current.filter((item) => item !== productId)
+        : [...current, productId]
+    ));
+  };
+  const setVisibleProductSelection = (selected: boolean) => {
+    if (isProductsBusy || filteredProducts.length === 0) return;
+    if (!canViewProducts) {
+      setError(viewPermissionTitle || 'Your account cannot view products.');
+      return;
+    }
+
+    setPendingBulkDeleteProducts(false);
+    setSelectedProductIds((current) => {
+      const visibleIds = new Set(selectedVisibleProductIds);
+      if (!selected) {
+        return current.filter((productId) => !visibleIds.has(productId));
+      }
+
+      return [...current, ...selectedVisibleProductIds.filter((productId) => !current.includes(productId))];
+    });
+  };
+  const clearProductSelection = () => {
+    if (isProductsBusy) return;
+
+    setSelectedProductIds([]);
+    setPendingBulkDeleteProducts(false);
   };
   const clearCatalogFilters = () => {
     if (isProductsBusy) return;
@@ -3052,6 +3205,8 @@ function ProductsRoute() {
     setProductTypeFilter('all');
     setStockFilter('all');
     setCategoryFilter('all');
+    setSelectedProductIds([]);
+    setPendingBulkDeleteProducts(false);
     navigate({ to: '/products', search: { siteId: nextSiteId }, replace: true });
   };
 
@@ -4463,10 +4618,112 @@ function ProductsRoute() {
                     </Button>
                   )}
                 </div>
+                {selectedLoadedProducts.length > 0 && (
+                  <div
+                    className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm"
+                    data-testid="products-bulk-toolbar"
+                  >
+                    <div>
+                      <div className="font-medium text-foreground" data-testid="products-bulk-selection-summary">
+                        {selectedLoadedProducts.length} selected product{selectedLoadedProducts.length === 1 ? '' : 's'}
+                      </div>
+                      {hiddenSelectedProductCount > 0 ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Bulk actions will include {hiddenSelectedProductCount} selected product{hiddenSelectedProductCount === 1 ? '' : 's'} outside the current filtered view.
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Bulk actions apply to the selected loaded catalog rows.
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => void bulkUpdateProductStatus('published')}
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                        title={!canEditProducts ? editPermissionTitle : undefined}
+                        iconStart={<CheckCircle2 className="size-4" />}
+                        data-testid="products-bulk-publish"
+                      >
+                        Publish
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void bulkUpdateProductStatus('draft')}
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                        title={!canEditProducts ? editPermissionTitle : undefined}
+                        iconStart={<Edit3 className="size-4" />}
+                        data-testid="products-bulk-draft"
+                      >
+                        Draft
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void bulkUpdateProductStatus('archived')}
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                        title={!canEditProducts ? editPermissionTitle : undefined}
+                        iconStart={<Archive className="size-4" />}
+                        data-testid="products-bulk-archive"
+                      >
+                        Archive
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={exportSelectedProductsCsv}
+                        disabled={isProductsAccessBusy || !canExportProducts}
+                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        iconStart={<Download className="size-4" />}
+                        data-testid="products-bulk-export"
+                      >
+                        Export
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={clearProductSelection}
+                        disabled={isProductsAccessBusy}
+                        data-testid="products-bulk-clear-selection"
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => setPendingBulkDeleteProducts(true)}
+                        disabled={isProductsAccessBusy || !canDeleteProducts}
+                        title={!canDeleteProducts ? deletePermissionTitle : undefined}
+                        iconStart={<Trash2 className="size-4" />}
+                        data-testid="products-bulk-delete"
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                  <span>
-                    Loaded {loadedProductCount} of {totalProductCount} product records. Filters and CSV export apply to loaded rows.
-                  </span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {filteredProducts.length > 0 ? (
+                      <label className="inline-flex items-center gap-2 font-medium text-foreground">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all visible products"
+                          aria-checked={selectedVisibleProducts.length > 0 && !areAllVisibleProductsSelected ? 'mixed' : areAllVisibleProductsSelected}
+                          checked={areAllVisibleProductsSelected}
+                          disabled={isProductsAccessBusy || !canViewProducts}
+                          onChange={(event) => setVisibleProductSelection(event.target.checked)}
+                          className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                        Select visible
+                      </label>
+                    ) : null}
+                    <span>
+                      Loaded {loadedProductCount} of {totalProductCount} product records. Filters and CSV export apply to loaded rows.
+                    </span>
+                  </div>
                   {hasMoreProducts && (
                     <Button
                       variant="outline"
@@ -4501,7 +4758,9 @@ function ProductsRoute() {
                         key={product.id}
                         product={product}
                         selected={product.id === selectedProductId}
+                        selectedForBulk={selectedProductIdSet.has(product.id)}
                         onEdit={() => selectProductForEditing(product.id)}
+                        onToggleBulkSelection={() => toggleProductSelection(product.id)}
                         onPublish={() => void changeProductStatus(product, 'published')}
                         onArchive={() => void changeProductStatus(product, 'archived')}
                         onDelete={() => {
@@ -4512,6 +4771,7 @@ function ProductsRoute() {
                           setPendingDeleteProduct(product);
                         }}
                         disabled={isProductsAccessBusy || !canEditProducts}
+                        bulkSelectionDisabled={isProductsAccessBusy || !canViewProducts}
                         canDelete={canDeleteProducts}
                         deleteDisabledReason={deletePermissionTitle}
                       />
@@ -5408,6 +5668,49 @@ function ProductsRoute() {
         </div>
       )}
 
+      {pendingBulkDeleteProducts && selectedLoadedProducts.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="products-bulk-delete-modal">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Delete {selectedLoadedProducts.length} selected product{selectedLoadedProducts.length === 1 ? '' : 's'}?
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes selected product records from Backy and storefront API responses. Archive them instead if you only want them hidden.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Includes {selectedVisibleProducts.length} visible selected product{selectedVisibleProducts.length === 1 ? '' : 's'}
+              {hiddenSelectedProductCount > 0 ? ` and ${hiddenSelectedProductCount} selected outside this filtered view` : ''}.
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkDeleteProducts(false)}
+                disabled={isProductsAccessBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void bulkDeleteProducts()}
+                disabled={isProductsAccessBusy || !canDeleteProducts}
+                title={!canDeleteProducts ? deletePermissionTitle : undefined}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isBulkUpdatingProducts ? 'Deleting...' : 'Delete products'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <MediaLibraryModal
         isOpen={isMediaLibraryOpen}
         onClose={() => {
@@ -5524,8 +5827,11 @@ function ProductApiSnippet({ label, value }: { label: string; value: string }) {
 function ProductCard({
   product,
   selected,
+  selectedForBulk,
   disabled,
+  bulkSelectionDisabled,
   onEdit,
+  onToggleBulkSelection,
   onPublish,
   onArchive,
   onDelete,
@@ -5534,10 +5840,13 @@ function ProductCard({
 }: {
   product: CollectionRecord;
   selected: boolean;
+  selectedForBulk: boolean;
   disabled: boolean;
+  bulkSelectionDisabled: boolean;
   canDelete: boolean;
   deleteDisabledReason?: string;
   onEdit: () => void;
+  onToggleBulkSelection: () => void;
   onPublish: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -5560,8 +5869,21 @@ function ProductCard({
   const isLowStock = stockState.lowStock;
 
   return (
-    <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
+    <article className={cn(
+      'rounded-lg border bg-background p-4 transition-colors',
+      selected ? 'border-primary ring-2 ring-primary/10' : selectedForBulk ? 'border-primary/50 ring-2 ring-primary/5' : 'border-border',
+    )}>
       <div className="flex items-start gap-3">
+        <label className="mt-0.5 inline-flex items-center">
+          <input
+            type="checkbox"
+            aria-label={`Select ${title}`}
+            checked={selectedForBulk}
+            disabled={bulkSelectionDisabled}
+            onChange={onToggleBulkSelection}
+            className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </label>
         <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
           {imageUrl ? (
             <img src={imageUrl} alt={title} className="size-full object-cover" loading="lazy" />

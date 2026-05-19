@@ -939,6 +939,16 @@ const assertProductsApiContractsSource = () => {
     "Products page must render the live provider certification handoff",
   );
   assert(
+    source.includes("bulkUpdateCollectionRecords") &&
+      source.includes('data-testid="products-bulk-toolbar"') &&
+      source.includes('data-testid="products-bulk-selection-summary"') &&
+      source.includes('data-testid="products-bulk-delete-modal"') &&
+      source.includes("Select all visible products") &&
+      source.includes("exportSelectedProductsCsv") &&
+      source.includes("Bulk actions will include"),
+    "Products catalog must expose selected-row bulk publish, archive, delete, and selected CSV export controls",
+  );
+  assert(
     source.includes('data-testid="products-provider-certification-download-button"') &&
       source.includes('data-testid="products-provider-certification-copy-button"') &&
       source.includes("providerCertificationHandoffText") &&
