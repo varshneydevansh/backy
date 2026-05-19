@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -169,6 +169,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Services hero', 'Service cards', 'Booking process'],
     },
     {
+        id: 'portfolio',
+        name: 'Portfolio page',
+        desc: 'Featured work, project filters, media-backed cards, and inquiry CTA.',
+        detail: 'Creates a public portfolio page ready to bind project records, media assets, categories, and case-study links.',
+        sections: ['Portfolio hero', 'Project gallery', 'Case study CTA'],
+    },
+    {
         id: 'cart',
         name: 'Cart page',
         desc: 'Cart items, quantity controls, totals, and checkout handoff.',
@@ -274,6 +281,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'services',
         description: 'A public services page ready to bind packages, formats, durations, booking actions, and inquiry handoff.',
     },
+    portfolio: {
+        title: 'Portfolio',
+        slug: 'portfolio',
+        description: 'A public portfolio page ready to bind projects, media assets, categories, outcomes, and inquiry actions.',
+    },
     cart: {
         title: 'Cart',
         slug: 'cart',
@@ -338,6 +350,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     'product-detail': 'primary',
     pricing: 'primary',
     services: 'primary',
+    portfolio: 'primary',
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
@@ -568,6 +581,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
     pricing: ['Home', 'Pricing', 'Shop', 'Contact'],
     services: ['Home', 'Services', 'Pricing', 'Contact'],
+    portfolio: ['Home', 'Portfolio', 'Services', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
@@ -629,6 +643,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Consult', x: 8, y: 48, w: 26, h: 28, className: 'border-rose-100 bg-white' },
         { label: 'Build', x: 38, y: 48, w: 26, h: 28, className: 'border-rose-100 bg-white' },
         { label: 'Care', x: 68, y: 48, w: 24, h: 28, className: 'border-rose-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    portfolio: [
+        { label: 'Work', x: 8, y: 14, w: 84, h: 24, className: 'border-cyan-200 bg-cyan-50' },
+        { x: 16, y: 24, w: 38, h: 5, className: 'bg-cyan-800' },
+        { label: 'Filter', x: 62, y: 24, w: 22, h: 6, className: 'border-cyan-100 bg-white' },
+        { label: 'Case', x: 8, y: 48, w: 26, h: 28, className: 'border-cyan-100 bg-white' },
+        { label: 'Media', x: 38, y: 48, w: 26, h: 28, className: 'border-cyan-100 bg-white' },
+        { label: 'Launch', x: 68, y: 48, w: 24, h: 28, className: 'border-cyan-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     cart: [
@@ -1698,6 +1721,8 @@ function NewPageRoute() {
                     ? 'Backy pricing plan placeholders'
                 : formData.template === 'services'
                     ? 'Backy service package placeholders'
+                : formData.template === 'portfolio'
+                    ? 'Backy portfolio project placeholders'
                 : formData.template === 'cart'
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
@@ -1817,7 +1842,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1867,7 +1892,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3901,6 +3926,8 @@ function buildTemplateElements(input: {
                 ? 'View plans'
             : input.template === 'services'
                 ? 'Book now'
+            : input.template === 'portfolio'
+                ? 'View work'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'help-center'
@@ -4524,6 +4551,184 @@ function buildTemplateElements(input: {
                                 props: { label: 'Send inquiry', backgroundColor: '#f43f5e', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'services.inquiry.open' },
                             }),
                         ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'portfolio') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'portfolio-hero-section',
+                width: 1200,
+                height: 350,
+                dataBindings: [{ source: 'portfolio', mode: 'overview', fields: ['projects', 'categories', 'featuredProject', 'mediaAssets'] }],
+                props: { backgroundColor: '#ecfeff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'portfolio-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Portfolio', fontSize: 13, fontWeight: '800', color: '#0e7490', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'portfolio-heading',
+                        width: 640,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 214, {
+                        id: 'portfolio-copy',
+                        width: 580,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                    }),
+                    createCanvasElement('box', 760, 82, {
+                        id: 'portfolio-featured-card',
+                        width: 330,
+                        height: 200,
+                        dataBindings: [{ source: 'portfolio', mode: 'featured-project', fields: ['title', 'summary', 'coverImage', 'outcome'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a5f3fc', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 22, {
+                                id: 'portfolio-featured-label',
+                                width: 150,
+                                height: 22,
+                                props: { content: 'Featured case', fontSize: 12, fontWeight: '800', color: '#0e7490', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 58, {
+                                id: 'portfolio-featured-title',
+                                width: 230,
+                                height: 52,
+                                props: { content: 'Selected project title', level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'portfolio', mode: 'featured-project', field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 120, {
+                                id: 'portfolio-featured-copy',
+                                width: 240,
+                                height: 44,
+                                props: { content: 'Bind outcomes, project notes, and cover media from Backy project records.', fontSize: 13, lineHeight: 1.45, color: '#4b5563' },
+                                dataBindings: [{ source: 'portfolio', mode: 'featured-project', field: 'summary', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 350, {
+                id: 'portfolio-gallery-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'portfolio', mode: 'project-list', limit: 6 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'portfolio-gallery-heading',
+                        width: 420,
+                        height: 42,
+                        props: { content: 'Selected work', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('box', 720, 48, {
+                        id: 'portfolio-category-filter',
+                        width: 340,
+                        height: 58,
+                        dataBindings: [{ source: 'portfolio', mode: 'category-filter', fields: ['all', 'web', 'brand', 'commerce'] }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('button', 12, 10, {
+                                id: 'portfolio-filter-all',
+                                width: 70,
+                                height: 38,
+                                props: { label: 'All', backgroundColor: '#0e7490', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'portfolio.filter.all' },
+                            }),
+                            createCanvasElement('button', 94, 10, {
+                                id: 'portfolio-filter-web',
+                                width: 76,
+                                height: 38,
+                                props: { label: 'Web', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'portfolio.filter.web' },
+                            }),
+                            createCanvasElement('button', 182, 10, {
+                                id: 'portfolio-filter-brand',
+                                width: 84,
+                                height: 38,
+                                props: { label: 'Brand', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'portfolio.filter.brand' },
+                            }),
+                        ],
+                    }),
+                    ...[
+                        { title: 'Launch system', type: 'Web design' },
+                        { title: 'Member portal', type: 'CMS build' },
+                        { title: 'Commerce kit', type: 'Storefront' },
+                    ].map((project, index) => createCanvasElement('box', 74 + index * 350, 140, {
+                        id: `portfolio-project-card-${index}`,
+                        width: 310,
+                        height: 330,
+                        dataBindings: [{ source: 'portfolio', mode: 'project', index }],
+                        props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('box', 18, 18, {
+                                id: `portfolio-project-media-${index}`,
+                                width: 274,
+                                height: 146,
+                                dataBindings: [{ source: 'portfolio', mode: 'project', index, field: 'coverImage', targetPath: 'props.media' }],
+                                props: { backgroundColor: index === 1 ? '#cffafe' : '#e0f2fe', borderRadius: 8, borderColor: '#bae6fd', borderWidth: 1, borderStyle: 'solid' },
+                                children: [
+                                    createCanvasElement('text', 82, 60, {
+                                        id: `portfolio-project-media-label-${index}`,
+                                        width: 110,
+                                        height: 24,
+                                        props: { content: 'Project media', fontSize: 13, fontWeight: '800', color: '#0e7490', textAlign: 'center' },
+                                    }),
+                                ],
+                            }),
+                            createCanvasElement('text', 22, 184, {
+                                id: `portfolio-project-type-${index}`,
+                                width: 150,
+                                height: 22,
+                                props: { content: project.type, fontSize: 12, fontWeight: '800', color: '#0e7490', textTransform: 'uppercase' },
+                                dataBindings: [{ source: 'portfolio', mode: 'project', index, field: 'category', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('heading', 22, 218, {
+                                id: `portfolio-project-title-${index}`,
+                                width: 220,
+                                height: 32,
+                                props: { content: project.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'portfolio', mode: 'project', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('button', 22, 276, {
+                                id: `portfolio-project-button-${index}`,
+                                width: 132,
+                                height: 40,
+                                props: { label: 'View case', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'portfolio.case.open' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 910, {
+                id: 'portfolio-inquiry-section',
+                width: 1200,
+                height: 270,
+                dataBindings: [{ source: 'portfolio', mode: 'inquiry', fields: ['contactUrl', 'services', 'availability'] }],
+                props: { backgroundColor: '#0f172a', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 66, {
+                        id: 'portfolio-inquiry-heading',
+                        width: 520,
+                        height: 44,
+                        props: { content: 'Start a similar project', level: 'h2', fontSize: 36, fontWeight: '800', color: '#ffffff' },
+                    }),
+                    createCanvasElement('paragraph', 78, 132, {
+                        id: 'portfolio-inquiry-copy',
+                        width: 540,
+                        height: 58,
+                        props: { content: 'Connect this CTA to Backy Forms, services, or a custom frontend route so visitors can request project scope and share media references.', fontSize: 16, lineHeight: 1.55, color: '#cbd5e1' },
+                    }),
+                    createCanvasElement('button', 830, 104, {
+                        id: 'portfolio-inquiry-button',
+                        width: 178,
+                        height: 52,
+                        props: { label: 'Request project', backgroundColor: '#06b6d4', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'portfolio.inquiry.open' },
                     }),
                 ],
             }),
