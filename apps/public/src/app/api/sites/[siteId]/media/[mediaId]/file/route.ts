@@ -44,6 +44,19 @@ const contentDispositionHeader = (disposition: string, filename: string) => {
   return `${disposition === 'attachment' ? 'attachment' : 'inline'}; filename="${safeFilename}"`;
 };
 
+const parseContentDisposition = (value: string | null): { value: 'inline' | 'attachment'; invalid?: string } => {
+  if (value === null || value.trim().length === 0) {
+    return { value: 'inline' };
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'inline' || normalized === 'attachment') {
+    return { value: normalized };
+  }
+
+  return { value: 'inline', invalid: value };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -75,7 +88,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return jsonError(423, 'MEDIA_QUARANTINED', 'This media asset is quarantined and cannot be delivered.', requestId);
     }
 
-    const requestedDisposition = searchParams.get('disposition') === 'attachment' ? 'attachment' : 'inline';
+    const dispositionParam = parseContentDisposition(searchParams.get('disposition'));
+    if (dispositionParam.invalid) {
+      return jsonError(400, 'INVALID_MEDIA_DISPOSITION', 'Invalid media disposition. Use inline or attachment.', requestId);
+    }
+    const requestedDisposition = dispositionParam.value;
     const requiresAttachment = requiresAttachmentDelivery(media);
     const disposition = requiresAttachment ? 'attachment' : requestedDisposition;
     const isPrivateMedia = (media.visibility || 'public') === 'private';

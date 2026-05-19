@@ -1153,6 +1153,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     },
                   },
                 },
+                "400": {
+                  description: "Invalid media file disposition",
+                  headers: mediaFileErrorResponseHeaders,
+                },
                 "403": {
                   description: "Private media requires a valid signed URL",
                   headers: mediaFileErrorResponseHeaders,

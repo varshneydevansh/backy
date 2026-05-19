@@ -85,6 +85,12 @@ assert(
   'Public media file route must expose a distinct quarantined delivery error.',
 );
 assert(
+  publicMediaFileRoute.includes("'INVALID_MEDIA_DISPOSITION'") &&
+    publicMediaFileRoute.includes('parseContentDisposition') &&
+    publicMediaFileRoute.includes('Use inline or attachment'),
+  'Public media file route must reject invalid disposition values instead of silently serving inline.',
+);
+assert(
   publicMediaTransformRoute.includes("'INVALID_TRANSFORM_WIDTH'") &&
     publicMediaTransformRoute.includes("'INVALID_TRANSFORM_QUALITY'") &&
     publicMediaTransformRoute.includes('Number.isInteger(parsed)') &&
@@ -161,6 +167,11 @@ assert(
   'Public OpenAPI media file route must document quarantined delivery errors.',
 );
 assert(
+  openApiRoute.includes('"400"') &&
+    openApiRoute.includes('Invalid media file disposition'),
+  'Public OpenAPI media file route must document invalid disposition errors.',
+);
+assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
     sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
@@ -200,6 +211,10 @@ assert(
 assert(
   apiContracts.includes('Quarantined media file requests return `423 MEDIA_QUARANTINED`'),
   'API contract docs must describe quarantined public media file delivery errors.',
+);
+assert(
+  apiContracts.includes('Invalid media file disposition values return `400 INVALID_MEDIA_DISPOSITION`'),
+  'API contract docs must describe invalid public media file disposition errors.',
 );
 assert(
   apiContracts.includes('Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`') &&
