@@ -5670,6 +5670,19 @@ export function CanvasEditor({
                           )}
                         </div>
                       </div>
+                      <label className="mt-2 block space-y-1">
+                        <span className="text-[11px] font-semibold text-slate-500">Layer name</span>
+                        <input
+                          type="text"
+                          value={selectedElement.name || ''}
+                          onChange={(event) => handleLayerRename(selectedElement.id, event.target.value)}
+                          disabled={isCanvasMutationDisabled || selectedElement.locked}
+                          placeholder={selectedElementTypeLabel || 'Layer'}
+                          className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          data-testid="editor-inspector-layer-name"
+                          aria-label="Layer name"
+                        />
+                      </label>
                       {canSelectParentLayer && (
                         <button
                           type="button"

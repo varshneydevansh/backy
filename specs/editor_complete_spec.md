@@ -330,12 +330,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Bulk layer tree controls can expand or collapse every row that contains child layers.
 - Layer search filters rows by custom name, element type, or id, preserves ancestor context for nested matches, and temporarily reveals matching descendants inside collapsed parents.
 - Layer rows can be renamed inline from the layer action menu; custom names persist on the canvas element `name` field without overwriting content/form props.
-- The inspector selection card displays custom layer names while retaining element type and id detail.
+- The inspector selection card displays and edits custom layer names while retaining element type and id detail.
 - Selected layer rows keep their action buttons visible without requiring hover, while unselected rows reveal actions on hover and keep hidden actions out of pointer/keyboard interaction.
 - Dragging layer rows reorders sibling layers and updates sibling z-index ordering.
 - Row actions support move up/down, outdent, nest selected layers into container-like parents, hide/show, lock/unlock, duplicate, and delete; duplicate/delete apply to the selected unlocked sibling set when invoked from a selected row in a multi-selection.
 - Hidden and locked layer state saves into the page canvas payload.
-- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, click/keyboard/bulk collapse-expand, nested layer search/filter behavior, inline rename persistence and inspector display, Ctrl/Cmd multi-select, Shift range-select, roving-focus keyboard row selection/navigation tree semantics, selected-row action visibility, hidden row action interactivity guards, drag reorder, hide, lock, single and multi duplicate/delete, manual save, and persisted layer state.
+- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, click/keyboard/bulk collapse-expand, nested layer search/filter behavior, inline rename persistence and inspector edit/display, Ctrl/Cmd multi-select, Shift range-select, roving-focus keyboard row selection/navigation tree semantics, selected-row action visibility, hidden row action interactivity guards, drag reorder, hide, lock, single and multi duplicate/delete, manual save, and persisted layer state.
 
 ### 20. Copy/Paste
 **Current State:** ✅ Working

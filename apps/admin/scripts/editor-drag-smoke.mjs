@@ -231,6 +231,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('data-layer-action="rename"') && layersPanelSource.includes('data-layer-rename-input') && layersPanelSource.includes('getLayerDisplayName'), 'Editor layers panel must support inline top-level layer renaming');
   assert(source.includes('const handleLayerRename') && source.includes('nextElement.name = nextName') && source.includes('onRename={handleLayerRename}'), 'Editor layer rename must update the selected canvas element name through history');
   assert(source.includes('selectedElement.name || selectedElementTypeLabel') && source.includes('data-testid="editor-inspector-selection-label"') && source.includes('data-testid="editor-inspector-selection-detail"'), 'Editor inspector selection card must display custom layer names with type/id detail');
+  assert(source.includes('data-testid="editor-inspector-layer-name"') && source.includes('handleLayerRename(selectedElement.id') && source.includes('placeholder={selectedElementTypeLabel'), 'Editor inspector must expose a selected-layer name editor');
   assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
   assert(layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') && layersPanelSource.includes('data-testid="editor-layer-search-empty"'), 'Editor layer search must reveal matching descendants and expose an empty state');
   assert(layersPanelSource.includes('data-testid="editor-layer-expand-all"') && layersPanelSource.includes('data-testid="editor-layer-collapse-all"') && layersPanelSource.includes('collapsibleLayerIds'), 'Editor layers panel must support bulk expand and collapse controls');
@@ -10403,6 +10404,46 @@ const testLayersPanelControls = async (client, pageId) => {
       renamedInspector.detail.includes('smoke-link'),
     `Inspector selection card did not show renamed layer name with type/id detail: ${JSON.stringify(renamedInspector)}`,
   );
+  const inspectorLayerName = `Inspector CTA ${Date.now().toString(36)}`;
+  const inspectorRename = await evaluate(client, `(async () => {
+    const input = document.querySelector('[data-testid="editor-inspector-layer-name"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-inspector-layer-name-input' };
+    }
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(inspectorLayerName)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const label = document.querySelector('[data-testid="editor-inspector-selection-label"]');
+    const detail = document.querySelector('[data-testid="editor-inspector-selection-detail"]');
+    const layersTab = document.querySelector('[data-testid="editor-tab-layers"]');
+    if (!(layersTab instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-layers-tab' };
+    }
+    layersTab.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const row = document.querySelector('[data-layer-id="smoke-link"]');
+
+    return {
+      ok: true,
+      inputValue: input.value,
+      label: label?.textContent || '',
+      detail: detail?.textContent || '',
+      rowText: row?.textContent || '',
+    };
+  })()`);
+  assert(
+    inspectorRename?.ok &&
+      inspectorRename.inputValue === inspectorLayerName &&
+      inspectorRename.label === inspectorLayerName &&
+      /link/i.test(inspectorRename.detail) &&
+      inspectorRename.detail.includes('smoke-link') &&
+      inspectorRename.rowText.includes(inspectorLayerName),
+    `Inspector layer name input did not update inspector and layer row labels: ${JSON.stringify(inspectorRename)}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10508,7 +10549,7 @@ const testLayersPanelControls = async (client, pageId) => {
   const persisted = await waitForPersistedLayerState(pageId, {
     'smoke-form': { hidden: true },
     'smoke-icon': { locked: true },
-    'smoke-link': { name: renamedLayerName },
+    'smoke-link': { name: inspectorLayerName },
   });
 
   return {
@@ -10532,6 +10573,8 @@ const testLayersPanelControls = async (client, pageId) => {
     renamedLayerName,
     renameLayer,
     renamedInspector,
+    inspectorLayerName,
+    inspectorRename,
     reorder,
     hiddenState,
     toolbarVisibleState,
