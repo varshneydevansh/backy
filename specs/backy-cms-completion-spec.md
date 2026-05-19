@@ -434,7 +434,8 @@ Use this file as the persistent baseline before any implementation pass.
 - Current media coverage includes centralized upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, and binding-aware previews.
 - Remaining media work is provider-account automation, secret rotation execution, and cross-channel attribution beyond provider feeds.
 - Accessibility and discoverability:
-  - all media actions need labels, focus rings, and destructive confirmation.
+  - destructive asset, bulk asset, and folder delete flows now expose labelled modal dialogs, explicit confirm/cancel action labels, visible focus rings, and source guards in `apps/admin/scripts/media-smoke.mjs`.
+  - keep labels, focus rings, and destructive confirmation guarded as new media actions are added.
 
 ### 9.3 Settings/admin dashboard UX gaps
 - Consistent status vocabulary and badges across pages.

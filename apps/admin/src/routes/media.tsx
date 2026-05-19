@@ -5263,7 +5263,7 @@ function MediaPage() {
                     type="button"
                     disabled={isMediaLibraryBusy || !canEditMedia || !editingFolderName.trim()}
                     onClick={() => void handleRenameFolder(folder.id)}
-                    className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
                     title={canEditMedia ? 'Save folder name' : editPermissionTitle}
                     aria-label={`Save folder name for ${folder.name}`}
                   >
@@ -5273,7 +5273,7 @@ function MediaPage() {
                     type="button"
                     disabled={isMediaLibraryBusy}
                     onClick={cancelEditingFolder}
-                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"
                     title="Cancel rename"
                     aria-label={`Cancel renaming ${folder.name}`}
                   >
@@ -5305,7 +5305,7 @@ function MediaPage() {
                     type="button"
                     onClick={() => startEditingFolder(folder)}
                     disabled={isMediaLibraryBusy || !canEditMedia}
-                    className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-50"
                     title={canEditMedia ? 'Rename folder' : editPermissionTitle}
                     aria-label={`Rename folder ${folder.name}`}
                   >
@@ -5318,7 +5318,7 @@ function MediaPage() {
                       setPendingDeleteFolder(folder);
                     }}
                     disabled={isMediaLibraryBusy || !canDeleteMedia}
-                    className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
                     title={canDeleteMedia ? 'Delete folder' : deletePermissionTitle}
                     aria-label={`Delete folder ${folder.name}`}
                   >
@@ -5646,7 +5646,7 @@ function MediaPage() {
 
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
-                    className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isMediaLibraryBusy || !canEditMedia}
                     title={canEditMedia ? 'Edit metadata' : editPermissionTitle}
                     onClick={() => {
@@ -5660,7 +5660,7 @@ function MediaPage() {
                   {file.visibility !== 'private' && (
                     <>
                       <button
-                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={isMediaLibraryBusy}
                         onClick={() => void copyMediaApiText(getAssetDeliveryUrl(file), `${file.name} delivery URL`)}
                         title="Copy delivery URL"
@@ -5672,7 +5672,7 @@ function MediaPage() {
                         href={getAssetDeliveryUrl(file)}
                         target="_blank"
                         rel="noreferrer"
-                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100"
+                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring"
                         title="Open delivered file"
                         aria-label={`Open delivered file for ${file.name}`}
                       >
@@ -5681,7 +5681,7 @@ function MediaPage() {
                     </>
                   )}
                   <button
-                    className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isMediaLibraryBusy || !canDeleteMedia}
                     onClick={() => {
                       if (isMediaLibraryBusy || !canDeleteMedia) return;
@@ -7253,14 +7253,20 @@ function MediaPage() {
 
       {pendingDeleteAsset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="media-delete-asset-title"
+            aria-describedby="media-delete-asset-description"
+          >
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeleteAsset.name}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="media-delete-asset-title" className="text-lg font-semibold text-foreground">Delete {pendingDeleteAsset.name}?</h2>
+                <p id="media-delete-asset-description" className="mt-1 text-sm text-muted-foreground">
                   This removes the file from the media library and from public delivery. Check references first if the asset is used on pages or posts.
                 </p>
               </div>
@@ -7276,7 +7282,8 @@ function MediaPage() {
                 type="button"
                 onClick={() => setPendingDeleteAsset(null)}
                 disabled={isDeletingAsset}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={`Cancel deleting ${pendingDeleteAsset.name}`}
               >
                 Cancel
               </button>
@@ -7285,7 +7292,8 @@ function MediaPage() {
                 onClick={() => void handleDeleteAsset(pendingDeleteAsset)}
                 disabled={isDeletingAsset || !canDeleteMedia}
                 title={canDeleteMedia ? undefined : deletePermissionTitle}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={`Confirm deleting ${pendingDeleteAsset.name}`}
               >
                 {isDeletingAsset ? 'Deleting...' : 'Delete asset'}
               </button>
@@ -7296,16 +7304,22 @@ function MediaPage() {
 
       {pendingBulkDelete && selectedMediaAssets.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="media-bulk-delete-title"
+            aria-describedby="media-bulk-delete-description"
+          >
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">
+                <h2 id="media-bulk-delete-title" className="text-lg font-semibold text-foreground">
                   Delete {selectedMediaAssets.length} selected asset{selectedMediaAssets.length === 1 ? '' : 's'}?
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p id="media-bulk-delete-description" className="mt-1 text-sm text-muted-foreground">
                   Selected files will be removed from Backy storage and frontend media APIs.
                 </p>
               </div>
@@ -7315,7 +7329,8 @@ function MediaPage() {
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
                 disabled={isBulkUpdating}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Cancel deleting selected media"
               >
                 Cancel
               </button>
@@ -7324,7 +7339,8 @@ function MediaPage() {
                 onClick={() => void handleBulkDelete()}
                 disabled={isBulkUpdating || !canDeleteMedia}
                 title={canDeleteMedia ? undefined : deletePermissionTitle}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={`Confirm deleting ${selectedMediaAssets.length} selected media asset${selectedMediaAssets.length === 1 ? '' : 's'}`}
               >
                 {isBulkUpdating ? 'Deleting...' : 'Delete assets'}
               </button>
@@ -7335,14 +7351,20 @@ function MediaPage() {
 
       {pendingDeleteFolder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="media-delete-folder-title"
+            aria-describedby="media-delete-folder-description"
+          >
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete folder {pendingDeleteFolder.name}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="media-delete-folder-title" className="text-lg font-semibold text-foreground">Delete folder {pendingDeleteFolder.name}?</h2>
+                <p id="media-delete-folder-description" className="mt-1 text-sm text-muted-foreground">
                   The folder will be removed. Media inside it will stay in the library and move back to Root.
                 </p>
               </div>
@@ -7355,7 +7377,8 @@ function MediaPage() {
                 type="button"
                 onClick={() => setPendingDeleteFolder(null)}
                 disabled={isDeletingFolder}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={`Cancel deleting folder ${pendingDeleteFolder.name}`}
               >
                 Cancel
               </button>
@@ -7364,7 +7387,8 @@ function MediaPage() {
                 onClick={() => void handleDeleteFolder(pendingDeleteFolder.id)}
                 disabled={isDeletingFolder || !canDeleteMedia}
                 title={canDeleteMedia ? undefined : deletePermissionTitle}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={`Confirm deleting folder ${pendingDeleteFolder.name}`}
               >
                 {isDeletingFolder ? 'Deleting...' : 'Delete folder'}
               </button>

@@ -74,6 +74,13 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('title="No replacements recorded"'), 'Media asset replacement empty state must keep the shared title visible');
   assert(source.includes('title="No page or post references"'), 'Media asset reference empty state must keep the shared title visible');
   assert(source.includes('title="No asset activity yet"'), 'Media asset activity empty state must keep the shared title visible');
+  assert(source.includes('aria-labelledby="media-delete-asset-title"') && source.includes('aria-describedby="media-delete-asset-description"'), 'Media asset delete confirmation must expose accessible dialog title and description');
+  assert(source.includes('aria-labelledby="media-bulk-delete-title"') && source.includes('aria-describedby="media-bulk-delete-description"'), 'Media bulk delete confirmation must expose accessible dialog title and description');
+  assert(source.includes('aria-labelledby="media-delete-folder-title"') && source.includes('aria-describedby="media-delete-folder-description"'), 'Media folder delete confirmation must expose accessible dialog title and description');
+  assert(source.includes('aria-label={`Confirm deleting ${pendingDeleteAsset.name}`}') && source.includes('aria-label={`Cancel deleting ${pendingDeleteAsset.name}`}'), 'Media asset delete confirmation actions must have explicit labels');
+  assert(source.includes('aria-label={`Confirm deleting folder ${pendingDeleteFolder.name}`}') && source.includes('aria-label={`Cancel deleting folder ${pendingDeleteFolder.name}`}'), 'Media folder delete confirmation actions must have explicit labels');
+  assert(source.includes('aria-label={`Confirm deleting ${selectedMediaAssets.length} selected media asset') && source.includes('aria-label="Cancel deleting selected media"'), 'Media bulk delete confirmation actions must have explicit labels');
+  assert(source.includes('hover:bg-red-50 hover:text-red-600 focus-ring') && source.includes('text-red-600 hover:bg-red-50 focus-ring'), 'Media destructive icon controls must keep visible focus rings');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -2701,6 +2708,10 @@ const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderIds,
 
 const main = async () => {
   assertMediaRouteSourceContract();
+  if (process.env.BACKY_MEDIA_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'media-source' }));
+    return;
+  }
   let client;
   let childProcess;
   let userDataDir;
