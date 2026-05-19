@@ -83,6 +83,8 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('aria-label={`Confirm deleting folder ${pendingDeleteFolder.name}`}') && source.includes('aria-label={`Cancel deleting folder ${pendingDeleteFolder.name}`}'), 'Media folder delete confirmation actions must have explicit labels');
   assert(source.includes('aria-label={`Confirm deleting ${selectedMediaAssets.length} selected media asset') && source.includes('aria-label="Cancel deleting selected media"'), 'Media bulk delete confirmation actions must have explicit labels');
   assert(source.includes('hover:bg-red-50 hover:text-red-600 focus-ring') && source.includes('text-red-600 hover:bg-red-50 focus-ring'), 'Media destructive icon controls must keep visible focus rings');
+  assert(source.includes("value: 'all'") && source.includes("label: 'All files'") && source.includes('if (mode === \'all\') return true;'), 'Media upload mode controls must keep an unrestricted All files intake mode.');
+  assert(source.includes('Backy accepts any file and classifies known formats for editor, API, and delivery workflows.'), 'Media upload intake rules must explain arbitrary file support.');
   assert(modalSource.includes('listMediaLibrary') && modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must keep loading scoped media through the admin media API');
   assert(modalSource.includes('scope: targetScope') && modalSource.includes('scopeTargetId: targetId || null'), 'Editor media uploads must keep persisting page/post scope metadata');
   assert(!editorSpec.includes('shared in-memory store state inside admin'), 'Editor spec must not regress to stale in-memory media contract language');
@@ -1160,7 +1162,9 @@ const assertMediaPaginationControls = async (client) => {
 
 const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName, options = {}) => {
   const mode = options.mode || 'file';
-  const acceptIncludes = options.acceptIncludes || '.pdf';
+  const acceptIncludes = Object.prototype.hasOwnProperty.call(options, 'acceptIncludes')
+    ? options.acceptIncludes
+    : '.pdf';
   let modeResult = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     modeResult = await evaluate(client, `(() => {
@@ -1198,7 +1202,10 @@ const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName, optio
         selected: selectedButton instanceof HTMLButtonElement ? selectedButton.className.includes('bg-primary') : false,
       };
     })()`);
-    if (state.hasInput && state.selected && (!acceptIncludes || state.accept.includes(acceptIncludes))) {
+    const acceptMatches = acceptIncludes === null
+      ? state.accept === ''
+      : (!acceptIncludes || state.accept.includes(acceptIncludes));
+    if (state.hasInput && state.selected && acceptMatches) {
       break;
     }
     if (attempt === 39) {
@@ -1229,7 +1236,7 @@ const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName, optio
     if (state.hasSummary && !state.uploading) {
       if (typeof options.verifyUploaded === 'function') {
         const uploaded = await options.verifyUploaded();
-        return { ...state, uploadedMediaId: uploaded.id };
+        return { ...state, uploadedMedia: uploaded, uploadedMediaId: uploaded.id };
       }
       return state;
     }
@@ -2723,6 +2730,7 @@ const main = async () => {
   let userDataDir;
   let folderId;
   let childFolderId;
+  let allUploadedFile;
   let centralUploadedFile;
   let fontUploadedFile;
   let fontSmokeResult;
@@ -2737,6 +2745,7 @@ const main = async () => {
   const renamedImageName = `${marker}-renamed.png`;
   const privateName = `${marker}.pdf`;
   const childFolderAssetName = `${marker}-child-folder.pdf`;
+  const allUploadName = `${marker}-custom-preset.zip`;
   const centralUploadName = `${marker}-central-upload.pdf`;
   const fontUploadName = `${marker}-brand-font.woff2`;
   const rejectedUploadModeName = `${marker}-image-mode-rejected.txt`;
@@ -2748,9 +2757,10 @@ const main = async () => {
   const fontDisplay = 'optional';
   const fontFallback = 'Inter, system-ui, sans-serif';
   const replacementPath = path.join(os.tmpdir(), `${replacementName}`);
+  const allUploadPath = path.join(os.tmpdir(), allUploadName);
   const centralUploadPath = path.join(os.tmpdir(), centralUploadName);
   const fontUploadPath = path.join(os.tmpdir(), fontUploadName);
-  const tempFiles = [replacementPath, centralUploadPath, fontUploadPath];
+  const tempFiles = [replacementPath, allUploadPath, centralUploadPath, fontUploadPath];
 
   try {
     await loginAdminApi();
@@ -2761,6 +2771,7 @@ const main = async () => {
     await assertMediaMutationPermissionOverridesAreEnforced();
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
+    fs.writeFileSync(allUploadPath, Buffer.from(`Backy custom all-files upload smoke ${suffix}\n`, 'utf8'));
     fs.writeFileSync(centralUploadPath, minimalPdf(`Backy central upload UI smoke ${suffix}`));
     fs.writeFileSync(fontUploadPath, MINIMAL_WOFF2);
     const existing = await listMedia(marker);
@@ -2917,6 +2928,17 @@ const main = async () => {
         item.visibility === 'public'
       )),
     });
+    const allUploadResult = await uploadCentralMediaThroughUi(client, allUploadPath, allUploadName, {
+      mode: 'all',
+      acceptIncludes: null,
+      verifyUploaded: () => waitForMedia(marker, (item) => (
+        item.originalName === allUploadName &&
+        item.type === 'other' &&
+        item.visibility === 'public'
+      )),
+    });
+    allUploadedFile = allUploadResult.uploadedMedia;
+    mediaIds.push(allUploadedFile.id);
     await assertUploadModeRejectsDroppedFiles(client, rejectedUploadModeName);
     const rejectedModeMatches = await listMedia(rejectedUploadModeName);
     assert(rejectedModeMatches.length === 0, `Upload mode rejected file should not be persisted: ${JSON.stringify(rejectedModeMatches).slice(0, 500)}`);
@@ -3154,6 +3176,14 @@ const main = async () => {
         mediaIds.splice(centralUploadIndex, 1);
       }
       centralUploadedFile = null;
+    }
+    if (allUploadedFile) {
+      await deleteMedia(allUploadedFile.id);
+      const allUploadIndex = mediaIds.indexOf(allUploadedFile.id);
+      if (allUploadIndex !== -1) {
+        mediaIds.splice(allUploadIndex, 1);
+      }
+      allUploadedFile = null;
     }
     if (fontUploadedFile) {
       await deleteMedia(fontUploadedFile.id);

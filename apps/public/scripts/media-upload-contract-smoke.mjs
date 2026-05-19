@@ -26,6 +26,7 @@ const publicMediaFileRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]
 const publicMediaTransformRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
+const adminMediaApi = read('../../../apps/admin/src/lib/mediaApi.ts');
 const coreTypes = read('../../../packages/core/src/types/index.ts');
 const dbSchema = read('../../../packages/db/src/schema/index.ts');
 const dbMediaRepository = read('../../../packages/db/src/repositories/media.ts');
@@ -315,6 +316,11 @@ assert(
     sdkSource.includes('global?: boolean') &&
     sdkSource.includes('siteId?: string'),
   'SDK media list options must expose public route aliases for custom frontend media pickers.',
+);
+assert(
+  adminMediaApi.includes("type MediaListType = 'image' | 'video' | 'audio' | 'document' | 'file' | 'font' | 'other'") &&
+    adminMediaApi.includes("type === 'file' ? 'document' : type"),
+  'Admin media API helper must accept the UI/custom-frontend type=file alias and normalize it to document for Backy media endpoints.',
 );
 assert(
   sdkSource.includes('BackyMediaFolder') &&

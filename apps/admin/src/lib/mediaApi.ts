@@ -3,6 +3,7 @@ import type { MediaAsset } from '@/stores/mockStore';
 
 type MediaScope = 'global' | 'page' | 'post';
 type MediaVisibility = 'public' | 'private';
+type MediaListType = 'image' | 'video' | 'audio' | 'document' | 'file' | 'font' | 'other';
 
 interface ApiMediaItem {
   id: string;
@@ -244,7 +245,7 @@ export interface MediaListOptions {
   siteId?: string;
   scope?: MediaScope | 'all';
   visibility?: MediaVisibility;
-  type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other';
+  type?: MediaListType;
   search?: string;
   tag?: string;
   folderId?: string | null;
@@ -458,6 +459,10 @@ const toAdminMediaType = (type: ApiMediaItem['type']): MediaAsset['type'] => {
   return 'file';
 };
 
+const toApiMediaListType = (type: MediaListType): ApiMediaItem['type'] => (
+  type === 'file' ? 'document' : type
+);
+
 const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   id: item.id,
   name: item.originalName || item.filename,
@@ -498,7 +503,7 @@ export async function listMediaLibrary(options: MediaListOptions = {}): Promise<
 
   if (options.scope && options.scope !== 'all') query.set('scope', options.scope);
   if (options.visibility) query.set('visibility', options.visibility);
-  if (options.type) query.set('type', options.type);
+  if (options.type) query.set('type', toApiMediaListType(options.type));
   if (options.search) query.set('search', options.search);
   if (options.tag) query.set('tag', options.tag);
   if (options.folderId !== undefined) query.set('folderId', options.folderId || '');
