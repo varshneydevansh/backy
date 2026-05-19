@@ -46,6 +46,9 @@ assert(
 
 assert(
   publicProxy.includes('BACKY_CORS_EXPOSED_HEADERS') &&
+    publicProxy.includes('normalizeCorsOrigin') &&
+    publicProxy.includes("trimmed === '*'") &&
+    publicProxy.includes('new URL(trimmed).origin') &&
     publicProxy.includes('process.env.BACKY_CORS_ALLOWED_ORIGINS') &&
     publicProxy.includes("headers.set('Access-Control-Allow-Origin', origin as string)") &&
     publicProxy.includes("headers.set('Access-Control-Expose-Headers', BACKY_CORS_EXPOSED_HEADERS)") &&

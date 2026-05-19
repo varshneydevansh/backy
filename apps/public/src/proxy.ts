@@ -28,21 +28,38 @@ const BACKY_CORS_EXPOSED_HEADERS = [
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const normalizeCorsOrigin = (origin: string | null | undefined) => {
+  const trimmed = origin?.trim();
+  if (!trimmed || trimmed === '*') {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+};
+
 const getAllowedOrigins = () => {
   const configured = process.env.BACKY_CORS_ALLOWED_ORIGINS
     ?.split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean) ?? [];
+    .map(normalizeCorsOrigin)
+    .filter((origin): origin is string => Boolean(origin)) ?? [];
 
-  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured]);
+  return new Set([
+    ...DEFAULT_ALLOWED_ORIGINS.map(normalizeCorsOrigin).filter((origin): origin is string => Boolean(origin)),
+    ...configured,
+  ]);
 };
 
 const isAllowedOrigin = (origin: string | null) => {
-  if (!origin) {
+  const normalizedOrigin = normalizeCorsOrigin(origin);
+  if (!normalizedOrigin) {
     return false;
   }
 
-  return getAllowedOrigins().has(origin);
+  return getAllowedOrigins().has(normalizedOrigin);
 };
 
 const isAdminApiRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/');
