@@ -944,6 +944,7 @@ const assertProductsApiContractsSource = () => {
       source.includes("providerCertificationHandoffText") &&
       source.includes("catalogEvidence") &&
       source.includes("endpointEvidence") &&
+      source.includes("providerRuntimeEvidence") &&
       source.includes("-backy-products-provider-certification.json") &&
       source.includes("Products provider certification handoff downloaded."),
     "Products page must expose a focused provider certification JSON export",
@@ -954,6 +955,8 @@ const assertProductsApiContractsSource = () => {
       source.includes("requiredFor: 'live-commerce-provider-launch'") &&
       source.includes("ci:commerce-provider-smoke") &&
       source.includes("ci:commerce-provider-certification") &&
+      source.includes('data-testid="products-provider-runtime-evidence"') &&
+      source.includes("Provider secret values are never returned") &&
       source.includes("requiredInputs"),
     "Products handoff manifest must expose mock and live provider certification gates",
   );
