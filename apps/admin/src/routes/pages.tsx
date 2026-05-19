@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -391,6 +391,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create a media-backed project gallery with filters, case-study cards, and inquiry CTA.',
     badge: 'Media',
     icon: Layout,
+  },
+  {
+    key: 'events',
+    title: 'Events',
+    detail: 'Create event cards, schedule metadata, format filters, agenda steps, and RSVP actions.',
+    badge: 'Events',
+    icon: Sparkles,
   },
   {
     key: 'cart',
@@ -1901,6 +1908,7 @@ function PagesListView() {
       pricingPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=pricing`,
       servicesPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
       portfolioPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
+      eventsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
@@ -1933,6 +1941,7 @@ function PagesListView() {
         pricing: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=pricing`,
         services: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
         portfolio: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
+        events: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,

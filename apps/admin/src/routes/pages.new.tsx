@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -176,6 +176,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Portfolio hero', 'Project gallery', 'Case study CTA'],
     },
     {
+        id: 'events',
+        name: 'Events page',
+        desc: 'Event cards, date/location metadata, format filters, agenda, and RSVP CTA.',
+        detail: 'Creates a public events page ready to bind workshops, webinars, schedules, locations, capacity, and registration actions.',
+        sections: ['Events hero', 'Event cards', 'RSVP section'],
+    },
+    {
         id: 'cart',
         name: 'Cart page',
         desc: 'Cart items, quantity controls, totals, and checkout handoff.',
@@ -286,6 +293,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'portfolio',
         description: 'A public portfolio page ready to bind projects, media assets, categories, outcomes, and inquiry actions.',
     },
+    events: {
+        title: 'Events',
+        slug: 'events',
+        description: 'A public events page ready to bind event records, schedules, locations, capacity, and RSVP actions.',
+    },
     cart: {
         title: 'Cart',
         slug: 'cart',
@@ -351,6 +363,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     pricing: 'primary',
     services: 'primary',
     portfolio: 'primary',
+    events: 'primary',
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
@@ -582,6 +595,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     pricing: ['Home', 'Pricing', 'Shop', 'Contact'],
     services: ['Home', 'Services', 'Pricing', 'Contact'],
     portfolio: ['Home', 'Portfolio', 'Services', 'Contact'],
+    events: ['Home', 'Events', 'Blog', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
@@ -652,6 +666,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Case', x: 8, y: 48, w: 26, h: 28, className: 'border-cyan-100 bg-white' },
         { label: 'Media', x: 38, y: 48, w: 26, h: 28, className: 'border-cyan-100 bg-white' },
         { label: 'Launch', x: 68, y: 48, w: 24, h: 28, className: 'border-cyan-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    events: [
+        { label: 'Events', x: 8, y: 14, w: 84, h: 24, className: 'border-lime-200 bg-lime-50' },
+        { x: 16, y: 24, w: 38, h: 5, className: 'bg-lime-800' },
+        { label: 'Format', x: 62, y: 24, w: 22, h: 6, className: 'border-lime-100 bg-white' },
+        { label: 'Webinar', x: 8, y: 48, w: 26, h: 28, className: 'border-lime-100 bg-white' },
+        { label: 'Meetup', x: 38, y: 48, w: 26, h: 28, className: 'border-lime-100 bg-white' },
+        { label: 'RSVP', x: 68, y: 48, w: 24, h: 28, className: 'border-lime-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     cart: [
@@ -1723,6 +1746,8 @@ function NewPageRoute() {
                     ? 'Backy service package placeholders'
                 : formData.template === 'portfolio'
                     ? 'Backy portfolio project placeholders'
+                : formData.template === 'events'
+                    ? 'Backy event schedule placeholders'
                 : formData.template === 'cart'
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
@@ -1842,7 +1867,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1892,7 +1917,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, events, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3928,6 +3953,8 @@ function buildTemplateElements(input: {
                 ? 'Book now'
             : input.template === 'portfolio'
                 ? 'View work'
+            : input.template === 'events'
+                ? 'RSVP'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'help-center'
@@ -4729,6 +4756,185 @@ function buildTemplateElements(input: {
                         width: 178,
                         height: 52,
                         props: { label: 'Request project', backgroundColor: '#06b6d4', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'portfolio.inquiry.open' },
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'events') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'events-hero-section',
+                width: 1200,
+                height: 350,
+                dataBindings: [{ source: 'events', mode: 'overview', fields: ['events', 'formats', 'locations', 'registrationUrl'] }],
+                props: { backgroundColor: '#f7fee7', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'events-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Events', fontSize: 13, fontWeight: '800', color: '#4d7c0f', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'events-heading',
+                        width: 640,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 214, {
+                        id: 'events-copy',
+                        width: 580,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                    }),
+                    createCanvasElement('box', 760, 98, {
+                        id: 'events-format-filter',
+                        width: 340,
+                        height: 86,
+                        dataBindings: [{ source: 'events', mode: 'format-filter', fields: ['all', 'online', 'inPerson'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#d9f99d', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('button', 16, 20, {
+                                id: 'events-filter-all',
+                                width: 86,
+                                height: 46,
+                                props: { label: 'All', backgroundColor: '#4d7c0f', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'events.filter.all' },
+                            }),
+                            createCanvasElement('button', 116, 20, {
+                                id: 'events-filter-online',
+                                width: 92,
+                                height: 46,
+                                props: { label: 'Online', backgroundColor: '#f7fee7', color: '#3f6212', borderRadius: 8, fontWeight: '800', action: 'events.filter.online' },
+                            }),
+                            createCanvasElement('button', 222, 20, {
+                                id: 'events-filter-in-person',
+                                width: 102,
+                                height: 46,
+                                props: { label: 'In person', backgroundColor: '#f7fee7', color: '#3f6212', borderRadius: 8, fontWeight: '800', action: 'events.filter.in_person' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 350, {
+                id: 'events-list-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'events', mode: 'list', limit: 6, sort: 'startsAt:asc' }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'events-list-heading',
+                        width: 440,
+                        height: 42,
+                        props: { content: 'Upcoming events', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Product workshop', date: 'Jun 18', location: 'Online', capacity: '24 seats' },
+                        { title: 'Creator meetup', date: 'Jul 02', location: 'New York', capacity: '40 seats' },
+                        { title: 'Launch clinic', date: 'Jul 16', location: 'Online', capacity: '18 seats' },
+                    ].map((event, index) => createCanvasElement('box', 74 + index * 350, 132, {
+                        id: `events-card-${index}`,
+                        width: 310,
+                        height: 330,
+                        dataBindings: [{ source: 'events', mode: 'event', index }],
+                        props: { backgroundColor: index === 1 ? '#111827' : '#f9fafb', borderRadius: 8, borderColor: index === 1 ? '#111827' : '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: `events-card-date-${index}`,
+                                width: 90,
+                                height: 28,
+                                props: { content: event.date, fontSize: 18, fontWeight: '800', color: index === 1 ? '#bef264' : '#4d7c0f' },
+                                dataBindings: [{ source: 'events', mode: 'event', index, field: 'startsAt', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('heading', 24, 72, {
+                                id: `events-card-title-${index}`,
+                                width: 230,
+                                height: 60,
+                                props: { content: event.title, level: 'h3', fontSize: 24, fontWeight: '800', color: index === 1 ? '#ffffff' : '#111827' },
+                                dataBindings: [{ source: 'events', mode: 'event', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 152, {
+                                id: `events-card-location-${index}`,
+                                width: 190,
+                                height: 24,
+                                props: { content: event.location, fontSize: 14, fontWeight: '800', color: index === 1 ? '#d1d5db' : '#334155' },
+                                dataBindings: [{ source: 'events', mode: 'event', index, field: 'location', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 190, {
+                                id: `events-card-capacity-${index}`,
+                                width: 150,
+                                height: 24,
+                                props: { content: event.capacity, fontSize: 14, color: index === 1 ? '#d1d5db' : '#4b5563' },
+                                dataBindings: [{ source: 'events', mode: 'event', index, field: 'capacity', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('button', 24, 256, {
+                                id: `events-rsvp-button-${index}`,
+                                width: 132,
+                                height: 42,
+                                props: { label: 'RSVP', backgroundColor: index === 1 ? '#84cc16' : '#111827', color: index === 1 ? '#111827' : '#ffffff', borderRadius: 8, fontWeight: '800', action: 'events.registration.open' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 910, {
+                id: 'events-agenda-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'events', mode: 'agenda', fields: ['steps', 'speakers', 'faq'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'events-agenda-heading',
+                        width: 420,
+                        height: 42,
+                        props: { content: 'What to expect', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...['Welcome and setup', 'Live walkthrough', 'Q&A and next steps'].map((step, index) => createCanvasElement('box', 74 + index * 270, 130, {
+                        id: `events-agenda-step-${index}`,
+                        width: 230,
+                        height: 104,
+                        dataBindings: [{ source: 'events', mode: 'agenda-step', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 22, 18, {
+                                id: `events-agenda-time-${index}`,
+                                width: 80,
+                                height: 24,
+                                props: { content: `${index + 1}:00`, fontSize: 14, fontWeight: '800', color: '#4d7c0f' },
+                                dataBindings: [{ source: 'events', mode: 'agenda-step', index, field: 'time', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('heading', 22, 52, {
+                                id: `events-agenda-title-${index}`,
+                                width: 170,
+                                height: 28,
+                                props: { content: step, level: 'h3', fontSize: 18, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'events', mode: 'agenda-step', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    })),
+                    createCanvasElement('box', 906, 130, {
+                        id: 'events-rsvp-card',
+                        width: 220,
+                        height: 104,
+                        props: { backgroundColor: '#111827', borderRadius: 8 },
+                        children: [
+                            createCanvasElement('paragraph', 22, 18, {
+                                id: 'events-rsvp-copy',
+                                width: 160,
+                                height: 36,
+                                props: { content: 'Ready to join?', fontSize: 15, fontWeight: '800', lineHeight: 1.35, color: '#ffffff' },
+                            }),
+                            createCanvasElement('button', 22, 64, {
+                                id: 'events-main-rsvp-button',
+                                width: 120,
+                                height: 34,
+                                props: { label: 'Reserve spot', backgroundColor: '#84cc16', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'events.registration.open' },
+                            }),
+                        ],
                     }),
                 ],
             }),

@@ -265,6 +265,48 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'events',
+    title: 'Smoke Events Template',
+    slugBase: 'smoke-events-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'events',
+    navigationItem: 'Events',
+    headingId: 'events-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 46,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'events-site-header',
+      'events-site-navigation',
+      'events-site-footer',
+      'events-hero-section',
+      'events-format-filter',
+      'events-filter-all',
+      'events-list-section',
+      'events-card-0',
+      'events-card-date-0',
+      'events-card-title-0',
+      'events-card-location-0',
+      'events-rsvp-button-0',
+      'events-agenda-section',
+      'events-agenda-step-0',
+      'events-rsvp-card',
+      'events-main-rsvp-button',
+    ],
+    dataBindingElementIds: [
+      'events-hero-section',
+      'events-format-filter',
+      'events-list-section',
+      'events-card-0',
+      'events-card-date-0',
+      'events-card-title-0',
+      'events-card-location-0',
+      'events-card-capacity-0',
+      'events-agenda-section',
+      'events-agenda-step-0',
+    ],
+  },
+  {
     template: 'cart',
     title: 'Smoke Cart Template',
     slugBase: 'smoke-cart-template',
@@ -673,6 +715,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('portfolio-category-filter') &&
       source.includes('portfolio-project-card-${index}') &&
       source.includes('portfolio.inquiry.open') &&
+      source.includes("'events'") &&
+      source.includes('events-format-filter') &&
+      source.includes('events-card-${index}') &&
+      source.includes('events.registration.open') &&
       source.includes("'cart'") &&
       source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
@@ -689,7 +735,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, help-center, and blog-post starters',
   );
 };
 
@@ -1278,6 +1324,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Portfolio page',
       forms: 'none',
       dynamicData: 'Backy portfolio project placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'events',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Events page',
+      forms: 'none',
+      dynamicData: 'Backy event schedule placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
