@@ -4219,7 +4219,7 @@ function FormsRoute() {
                                     </Button>
                                   </div>
                                 </div>
-                                <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                                <div className="mt-3 grid gap-3 lg:grid-cols-4">
                                   <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
                                     Placeholder
                                     <input
@@ -4233,6 +4233,16 @@ function FormsRoute() {
                                     <input
                                       value={field.helpText || ''}
                                       onChange={(event) => patchFormDraftField(fieldIndex, { helpText: event.target.value })}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                    Default value
+                                    <input
+                                      value={field.defaultValue || ''}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}
+                                      placeholder={field.options?.[0] || field.placeholder || 'Optional default'}
+                                      data-testid="form-field-default-value-input"
                                       className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
                                     />
                                   </label>

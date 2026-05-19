@@ -109,6 +109,13 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('Dedupe contacts by email'),
     'Forms builder must expose explicit contact-share mapping controls',
   );
+  assert(
+    source.includes('data-testid="form-field-default-value-input"') &&
+      source.includes('onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}') &&
+      source.includes('placeholder={field.options?.[0] || field.placeholder ||') &&
+      source.includes('defaultValue: field.defaultValue'),
+    'Forms builder must expose default-value editing for field definitions',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',
