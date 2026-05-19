@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { buildPublicFontManifest } from '@/lib/fontManifest';
+import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -53,7 +54,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         limit: 10000,
         offset: 0,
       });
-      const manifest = buildPublicFontManifest(site.id, result.items);
+      const manifest = buildPublicFontManifest(
+        site.id,
+        result.items.filter((item) => !isMediaQuarantined(item)),
+      );
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
         scope: 'media',
@@ -83,7 +87,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       visibility: 'public',
       limit: 10000,
     }).media;
-    const manifest = buildPublicFontManifest(site.id, fonts);
+    const manifest = buildPublicFontManifest(
+      site.id,
+      fonts.filter((item) => !isMediaQuarantined(item)),
+    );
 
     return publicContractJson({
       success: true,

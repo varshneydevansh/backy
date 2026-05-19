@@ -16,6 +16,7 @@ const assert = (condition, message) => {
 
 const mediaRoute = read('../src/app/api/admin/sites/[siteId]/media/route.ts');
 const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
+const publicFontManifestRoute = read('../src/app/api/sites/[siteId]/media/fonts/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
 const coreTypes = read('../../../packages/core/src/types/index.ts');
@@ -71,6 +72,12 @@ assert(
   'Public media list route must reject invalid global filters instead of silently returning all assets.',
 );
 assert(
+  publicFontManifestRoute.includes("from '@/lib/mediaSafety'") &&
+    publicFontManifestRoute.includes('!isMediaQuarantined(item)') &&
+    publicFontManifestRoute.includes('buildPublicFontManifest('),
+  'Public font manifest route must exclude quarantined font assets before generating @font-face CSS.',
+);
+assert(
   mediaRoute.includes('const mimeType = file.type || "application/octet-stream"') ||
     mediaRoute.includes("const mimeType = file.type || 'application/octet-stream'"),
   'Media upload route must preserve a safe default MIME type for generic file uploads.',
@@ -120,6 +127,10 @@ assert(
   'Public OpenAPI media list route must document invalid type/scope/global filter error envelopes.',
 );
 assert(
+  openApiRoute.includes('Fetch public, non-quarantined uploaded font families'),
+  'Public OpenAPI font manifest route must advertise that quarantined fonts are excluded.',
+);
+assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
     sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
@@ -151,6 +162,10 @@ assert(
 assert(
   apiContracts.includes('Invalid public media global filters return `400 INVALID_MEDIA_GLOBAL_FILTER`'),
   'API contract docs must describe invalid public media global filter errors.',
+);
+assert(
+  apiContracts.includes('Public font manifests exclude quarantined font assets'),
+  'API contract docs must describe public font manifest quarantine filtering.',
 );
 
 console.log(JSON.stringify({

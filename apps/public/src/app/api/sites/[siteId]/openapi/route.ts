@@ -1068,7 +1068,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             get: {
               tags: ["Media"],
               summary:
-                "Fetch public uploaded font families, variants, and @font-face CSS",
+                "Fetch public, non-quarantined uploaded font families, variants, and @font-face CSS",
               operationId: "getBackyFontManifest",
               responses: {
                 "200": {
