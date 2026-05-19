@@ -99,7 +99,7 @@ The manual **Backy Release Certification** workflow (`.github/workflows/backy-re
 npm run test:partial-gate-preflights
 ```
 
-That aggregate command runs the Forms, SDK, Settings provider, Commerce provider, release doctor, and release workflow source preflight contracts without connecting to live databases or providers.
+That aggregate command runs the Forms, SDK, admin contract source guard, Settings provider, Commerce provider, release doctor, and release workflow source preflight contracts without connecting to live databases or providers or requiring an MFA-backed admin login.
 
 Current Partial-to-gate map:
 

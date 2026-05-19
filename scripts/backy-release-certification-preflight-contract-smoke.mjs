@@ -413,6 +413,8 @@ includesAll(
     'Backy Release Certification',
     '.github/workflows/backy-release-certification.yml',
     'npm run test:partial-gate-preflights',
+    'admin contract source guard',
+    'without connecting to live databases or providers or requiring an MFA-backed admin login',
     'without connecting to live databases or providers',
     'npm run doctor:release-certification',
     'Current Partial-to-gate map',
