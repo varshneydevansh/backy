@@ -11,6 +11,7 @@ interface ManagedPage {
   status?: ManagedPageStatus;
   isHomepage?: boolean;
   updatedAt?: string;
+  content?: Record<string, unknown>;
 }
 
 interface ManagedElementTarget {
@@ -27,6 +28,7 @@ interface LivePageManagementOverlayProps {
 }
 
 const STATUS_OPTIONS: ManagedPageStatus[] = ['draft', 'published', 'scheduled', 'archived'];
+const INLINE_TEXT_ELEMENT_TYPES = new Set(['text', 'heading', 'paragraph', 'quote', 'button', 'link']);
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -47,6 +49,7 @@ const managedPageFromResponse = (payload: unknown): ManagedPage | null => {
     status: STATUS_OPTIONS.includes(status as ManagedPageStatus) ? status as ManagedPageStatus : 'draft',
     isHomepage: page.isHomepage === true,
     updatedAt: typeof page.updatedAt === 'string' ? page.updatedAt : '',
+    content: isRecord(page.content) ? { ...page.content } : undefined,
   };
 };
 
@@ -76,6 +79,102 @@ const findRenderedElement = (elementId: string): HTMLElement | null => (
     .find((element) => (element.dataset.backyElementId || element.dataset.elementId || '') === elementId) || null
 );
 
+const slatePlainText = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(slatePlainText).join('\n').trim();
+  }
+
+  if (!isRecord(value)) {
+    return '';
+  }
+
+  if (typeof value.text === 'string') {
+    return value.text;
+  }
+
+  return Array.isArray(value.children) ? value.children.map(slatePlainText).join('') : '';
+};
+
+const stripMarkup = (value: string): string => (
+  value.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim()
+);
+
+const elementFromContent = (content: Record<string, unknown> | undefined, elementId: string): Record<string, unknown> | null => {
+  const roots = [
+    ...(Array.isArray(content?.elements) ? content?.elements || [] : []),
+    ...(isRecord(content?.contentDocument) && Array.isArray(content.contentDocument.elements)
+      ? content.contentDocument.elements
+      : []),
+  ];
+
+  const visit = (items: unknown[]): Record<string, unknown> | null => {
+    for (const item of items) {
+      if (!isRecord(item)) continue;
+      if (item.id === elementId) return item;
+      if (Array.isArray(item.children)) {
+        const found = visit(item.children);
+        if (found) return found;
+      }
+    }
+
+    return null;
+  };
+
+  return visit(roots);
+};
+
+const inlineTextFromElement = (element: Record<string, unknown> | null): string => {
+  if (!element || !INLINE_TEXT_ELEMENT_TYPES.has(String(element.type || ''))) {
+    return '';
+  }
+
+  const props = isRecord(element.props) ? element.props : {};
+  const value = props.content ?? props.label ?? props.text;
+  return stripMarkup(slatePlainText(value));
+};
+
+const updateElementText = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  nextText: string,
+): Record<string, unknown> | null => {
+  if (!content) {
+    return null;
+  }
+
+  const nextContent = JSON.parse(JSON.stringify(content)) as Record<string, unknown>;
+  let changed = false;
+
+  const visit = (items: unknown[]) => {
+    items.forEach((item) => {
+      if (!isRecord(item)) return;
+      if (item.id === elementId) {
+        item.props = {
+          ...(isRecord(item.props) ? item.props : {}),
+          content: nextText,
+        };
+        changed = true;
+      }
+      if (Array.isArray(item.children)) {
+        visit(item.children);
+      }
+    });
+  };
+
+  if (Array.isArray(nextContent.elements)) {
+    visit(nextContent.elements);
+  }
+  if (isRecord(nextContent.contentDocument) && Array.isArray(nextContent.contentDocument.elements)) {
+    visit(nextContent.contentDocument.elements);
+  }
+
+  return changed ? nextContent : null;
+};
+
 export function LivePageManagementOverlay({
   enabled,
   siteId,
@@ -94,6 +193,8 @@ export function LivePageManagementOverlay({
   const [elementTargets, setElementTargets] = useState<ManagedElementTarget[]>([]);
   const [selectedElementId, setSelectedElementId] = useState('');
   const [selectedElementRect, setSelectedElementRect] = useState<DOMRect | null>(null);
+  const [inlineText, setInlineText] = useState('');
+  const [inlineTextSaving, setInlineTextSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
     if (!siteId || !pageId) return '';
@@ -185,6 +286,7 @@ export function LivePageManagementOverlay({
   useEffect(() => {
     if (!selectedElementId) {
       setSelectedElementRect(null);
+      setInlineText('');
       return;
     }
 
@@ -201,6 +303,17 @@ export function LivePageManagementOverlay({
       window.removeEventListener('resize', updateRect);
     };
   }, [selectedElementId]);
+
+  const selectedContentElement = useMemo(
+    () => elementFromContent(page?.content, selectedElementId),
+    [page?.content, selectedElementId],
+  );
+  const selectedElementType = String(selectedContentElement?.type || '');
+  const selectedElementSupportsInlineText = INLINE_TEXT_ELEMENT_TYPES.has(selectedElementType);
+
+  useEffect(() => {
+    setInlineText(inlineTextFromElement(selectedContentElement));
+  }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
     const element = findRenderedElement(elementId);
@@ -251,6 +364,50 @@ export function LivePageManagementOverlay({
       setError(saveError instanceof Error ? saveError.message : 'Unable to save the live page changes.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveInlineText = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+
+    const nextContent = updateElementText(page.content, selectedElementId, inlineText.trim());
+    if (!nextContent) {
+      setError('Unable to update this element from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineTextSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected element.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Element saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected element.');
+    } finally {
+      setInlineTextSaving(false);
     }
   };
 
@@ -409,6 +566,52 @@ export function LivePageManagementOverlay({
                   )}
                 </div>
               </div>
+              {selectedElementId ? (
+                <div data-backy-live-inline-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Inline element text
+                  </span>
+                  {selectedElementSupportsInlineText ? (
+                    <>
+                      <textarea
+                        value={inlineText}
+                        onChange={(event) => setInlineText(event.target.value)}
+                        rows={3}
+                        style={{
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 6,
+                          font: 'inherit',
+                          fontSize: 13,
+                          lineHeight: 1.4,
+                          padding: '8px 9px',
+                          resize: 'vertical',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={saveInlineText}
+                        disabled={inlineTextSaving || inlineText.trim().length === 0}
+                        style={{
+                          justifySelf: 'start',
+                          border: 0,
+                          borderRadius: 6,
+                          background: inlineTextSaving || inlineText.trim().length === 0 ? '#94a3b8' : '#2563eb',
+                          color: '#fff',
+                          cursor: inlineTextSaving || inlineText.trim().length === 0 ? 'not-allowed' : 'pointer',
+                          fontWeight: 700,
+                          padding: '7px 10px',
+                        }}
+                      >
+                        {inlineTextSaving ? 'Saving element...' : 'Save element text'}
+                      </button>
+                    </>
+                  ) : (
+                    <span style={{ color: '#64748b', fontSize: 12 }}>
+                      This element type opens in the full editor for changes.
+                    </span>
+                  )}
+                </div>
+              ) : null}
               {error ? <p role="alert" style={{ margin: 0, color: '#b91c1c', fontSize: 12, lineHeight: 1.4 }}>{error}</p> : null}
               {message ? <p style={{ margin: 0, color: '#166534', fontSize: 12, lineHeight: 1.4 }}>{message}</p> : null}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
