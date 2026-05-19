@@ -86,6 +86,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const textValue = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
+const hasOwn = (body: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(body, key);
+
 const recordValue = (value: unknown): Record<string, unknown> | undefined =>
   isRecord(value) ? value : undefined;
 
@@ -96,6 +99,28 @@ const normalizeSlug = (value: unknown): string =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+
+const parsePublicBaseUrl = (
+  body: Record<string, unknown>,
+  fallback: string,
+): { value: string; invalid?: true } => {
+  if (!hasOwn(body, "publicBaseUrl")) return { value: fallback };
+  const raw = textValue(body.publicBaseUrl);
+  if (!raw) return { value: fallback, invalid: true };
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { value: fallback, invalid: true };
+    }
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    url.search = "";
+    url.hash = "";
+    return { value: url.toString().replace(/\/$/, "") };
+  } catch {
+    return { value: fallback, invalid: true };
+  }
+};
 
 const uniqueSlug = async (
   siteId: string,
@@ -429,8 +454,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { siteId, formId } = await params;
     const body = await parseJsonBody(request);
     const actor = textValue(body.actor) || "admin";
-    const publicBaseUrl =
-      textValue(body.publicBaseUrl) || new URL(request.url).origin;
+    const publicBaseUrlFilter = parsePublicBaseUrl(
+      body,
+      new URL(request.url).origin,
+    );
+    if (publicBaseUrlFilter.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_ADMIN_FORM_EMBED_PUBLIC_BASE_URL",
+        "publicBaseUrl must be a valid http(s) URL when provided.",
+        requestId,
+      );
+    }
+    const publicBaseUrl = publicBaseUrlFilter.value;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
