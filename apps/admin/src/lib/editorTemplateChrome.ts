@@ -32,7 +32,16 @@ const shiftCanvasElement = (element: CanvasElement, offsetY: number): CanvasElem
 });
 
 export const getTemplateBottom = (elements: CanvasElement[]) => (
-  elements.reduce((bottom, element) => Math.max(bottom, element.y + element.height), 0)
+  elements.reduce((bottom, element) => {
+    const responsiveBottom = Object.values(element.responsive || {}).reduce((breakpointBottom, override) => (
+      Math.max(
+        breakpointBottom,
+        (override.y ?? element.y) + (override.height ?? element.height),
+      )
+    ), 0);
+
+    return Math.max(bottom, element.y + element.height, responsiveBottom);
+  }, 0)
 );
 
 export const getCanvasHeightForElements = (elements: CanvasElement[]) => (

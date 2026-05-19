@@ -4671,24 +4671,40 @@ function buildTemplateElements(input: {
                 height: 360,
                 dataBindings: [{ source: 'commerce', mode: 'pricing', fields: ['plans', 'currency', 'billingIntervals'] }],
                 props: { backgroundColor: '#f5f3ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 560 },
+                },
                 children: [
                     createCanvasElement('text', 76, 62, {
                         id: 'pricing-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Pricing', fontSize: 13, fontWeight: '800', color: '#6d28d9', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 200 },
+                            mobile: { x: 24, y: 44, width: 180 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 100, {
                         id: 'pricing-heading',
                         width: 650,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 470, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 80, width: 327, height: 120, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 216, {
                         id: 'pricing-copy',
                         width: 590,
                         height: 72,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4b5563' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 470, height: 86, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 216, width: 323, height: 106, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 760, 104, {
                         id: 'pricing-billing-toggle',
@@ -4696,18 +4712,28 @@ function buildTemplateElements(input: {
                         height: 78,
                         dataBindings: [{ source: 'commerce', mode: 'billing-toggle', fields: ['monthly', 'annual'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#ddd6fe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 318, width: 300 },
+                            mobile: { x: 24, y: 374, width: 327, height: 78 },
+                        },
                         children: [
                             createCanvasElement('button', 16, 16, {
                                 id: 'pricing-monthly-toggle',
                                 width: 124,
                                 height: 46,
                                 props: { label: 'Monthly', backgroundColor: '#6d28d9', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'pricing.interval.monthly' },
+                                responsive: {
+                                    mobile: { width: 140 },
+                                },
                             }),
                             createCanvasElement('button', 156, 16, {
                                 id: 'pricing-annual-toggle',
                                 width: 124,
                                 height: 46,
                                 props: { label: 'Annual', backgroundColor: '#f5f3ff', color: '#5b21b6', borderRadius: 8, fontWeight: '800', action: 'pricing.interval.annual' },
+                                responsive: {
+                                    mobile: { x: 170, width: 140 },
+                                },
                             }),
                         ],
                     }),
@@ -4719,6 +4745,10 @@ function buildTemplateElements(input: {
                 height: 430,
                 dataBindings: [{ source: 'commerce', mode: 'pricing-plans', limit: 3 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 560, width: 375, height: 1130 },
+                },
                 children: [
                     ...[
                         { name: 'Starter', price: '$19', cta: 'Start starter' },
@@ -4736,6 +4766,10 @@ function buildTemplateElements(input: {
                             borderWidth: 1,
                             borderStyle: 'solid',
                         },
+                        responsive: {
+                            tablet: { x: 54, y: 48 + index * 340, width: 660, height: 292 },
+                            mobile: { x: 24, y: 44 + index * 336, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `pricing-plan-name-${index}`,
@@ -4743,6 +4777,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: plan.name, level: 'h2', fontSize: 24, fontWeight: '800', color: index === 1 ? '#ffffff' : '#111827' },
                                 dataBindings: [{ source: 'commerce', mode: 'pricing-plan', index, field: 'name', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 250 },
+                                    mobile: { width: 220 },
+                                },
                             }),
                             createCanvasElement('text', 24, 82, {
                                 id: `pricing-plan-price-${index}`,
@@ -4756,12 +4794,20 @@ function buildTemplateElements(input: {
                                 width: 238,
                                 height: 72,
                                 props: { content: 'Includes hosted pages, CMS content, media library, commerce handoff, and editor controls.', fontSize: 14, lineHeight: 1.45, color: index === 1 ? '#d1d5db' : '#4b5563' },
+                                responsive: {
+                                    tablet: { width: 480 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('button', 24, 232, {
                                 id: `pricing-plan-button-${index}`,
                                 width: 166,
                                 height: 48,
                                 props: { label: plan.cta, backgroundColor: index === 1 ? '#8b5cf6' : '#111827', color: '#ffffff', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'commerce.checkout' },
+                                responsive: {
+                                    tablet: { x: 460, y: 222, width: 160 },
+                                    mobile: { x: 24, y: 232, width: 166 },
+                                },
                             }),
                         ],
                     })),
@@ -4773,12 +4819,20 @@ function buildTemplateElements(input: {
                 height: 370,
                 dataBindings: [{ source: 'commerce', mode: 'pricing-features', limit: 8 }],
                 props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 600 },
+                    mobile: { y: 1690, width: 375, height: 650 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 52, {
                         id: 'pricing-comparison-heading',
                         width: 460,
                         height: 42,
                         props: { content: 'Compare plan features', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     createCanvasElement('box', 72, 126, {
                         id: 'pricing-comparison-table',
@@ -4786,24 +4840,39 @@ function buildTemplateElements(input: {
                         height: 176,
                         dataBindings: [{ source: 'commerce', mode: 'pricing-comparison', fields: ['feature', 'starter', 'growth', 'scale'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 126, width: 660, height: 176 },
+                            mobile: { x: 24, y: 118, width: 327, height: 220 },
+                        },
                         children: ['Pages and sites', 'Products and orders', 'Team seats'].map((feature, index) => createCanvasElement('box', 18, 18 + index * 52, {
                             id: `pricing-comparison-row-${index}`,
                             width: 682,
                             height: 42,
                             dataBindings: [{ source: 'commerce', mode: 'pricing-feature', index }],
                             props: { backgroundColor: '#ffffff', borderRadius: 8 },
+                            responsive: {
+                                tablet: { width: 624 },
+                                mobile: { x: 14, y: 16 + index * 64, width: 299, height: 56 },
+                            },
                             children: [
                                 createCanvasElement('text', 18, 10, {
                                     id: `pricing-comparison-feature-${index}`,
                                     width: 240,
                                     height: 24,
                                     props: { content: feature, fontSize: 14, fontWeight: '800', color: '#111827' },
+                                    responsive: {
+                                        mobile: { x: 12, y: 8, width: 130 },
+                                    },
                                 }),
                                 createCanvasElement('text', 342, 10, {
                                     id: `pricing-comparison-check-${index}`,
                                     width: 240,
                                     height: 24,
                                     props: { content: 'Included on Growth and Scale', fontSize: 14, color: '#4b5563' },
+                                    responsive: {
+                                        tablet: { x: 320, width: 260 },
+                                        mobile: { x: 148, y: 8, width: 130 },
+                                    },
                                 }),
                             ],
                         })),
@@ -4813,18 +4882,30 @@ function buildTemplateElements(input: {
                         width: 270,
                         height: 176,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 340, width: 660, height: 180 },
+                            mobile: { x: 24, y: 380, width: 327, height: 190 },
+                        },
                         children: [
                             createCanvasElement('heading', 22, 22, {
                                 id: 'pricing-faq-heading',
                                 width: 190,
                                 height: 30,
                                 props: { content: 'Pricing FAQ', level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 280 },
+                                    mobile: { width: 250 },
+                                },
                             }),
                             createCanvasElement('paragraph', 22, 70, {
                                 id: 'pricing-faq-copy',
                                 width: 214,
                                 height: 70,
                                 props: { content: 'Bind plan terms, billing intervals, refunds, and trial rules from Backy commerce settings or custom collections.', fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
+                                responsive: {
+                                    tablet: { width: 520, height: 62 },
+                                    mobile: { width: 270, height: 92 },
+                                },
                             }),
                         ],
                     }),

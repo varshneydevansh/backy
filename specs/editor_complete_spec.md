@@ -540,6 +540,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Page-create smoke now also verifies frontend-design template-backed pages in mobile/tablet hosted previews, including the captured template wrapper, heading, editable-region binding surface, breakpoint/scale metadata, overflow checks, and pixel-threshold screenshots.
   - Page-create smoke now also covers collection dataset list and detail page seeds, including repeater/list metadata, single-record bindings, canvas sizing, content-document hydration, and mobile/tablet hosted-preview rendering.
   - Product-detail starter pages now seed explicit tablet/mobile responsive overrides for the commerce hero, media block, purchase controls, stock label, and related-product cards instead of relying only on scaled desktop geometry; `BACKY_PAGE_CREATE_SOURCE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin` guards the authored breakpoint data.
+  - Pricing starter pages now seed explicit tablet/mobile responsive overrides for the pricing hero, billing toggle, stacked plan cards, comparison table, and FAQ card so commerce pricing layouts carry authored breakpoint behavior into generated pages.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves
