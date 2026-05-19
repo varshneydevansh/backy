@@ -284,12 +284,18 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(
     publicFormSubmissionsRouteSource.includes('normalizeFrontendSubmissionValueKeys') &&
       publicFormSubmissionsRouteSource.includes('normalizeFrontendSubmissionAliasKey') &&
+      publicFormSubmissionsRouteSource.includes('normalizeContactShareOverride') &&
+      publicFormSubmissionsRouteSource.includes('normalizeFrontendSubmissionFieldReference') &&
       publicFormSubmissionsRouteSource.includes('frontendFormFieldKeyMapFromMetadata(form.settings)') &&
       publicFormSubmissionsRouteSource.includes('frontendFieldKeyMap[normalizeFrontendSubmissionAliasKey(rawKey)]') &&
+      publicFormSubmissionsRouteSource.includes('contactShareOverride = normalizeContactShareOverride(form, parsed.contactShareOverride)') &&
+      publicFormSubmissionsRouteSource.includes('contact = await buildRepositoryContactShare(repositories, form, submissionValues, submission, contactShareOverride)') &&
+      publicFormSubmissionsRouteSource.includes('}, contactShareOverride)') &&
       publicFormSubmissionsRouteSource.includes('const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values)') &&
       publicFormSubmissionsRouteSource.includes('const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues)') &&
       publicOpenApiRouteSource.includes('canonical field keys or frontendFieldKeyMap aliases') &&
       publicOpenApiRouteSource.includes('alias lookup also normalizes casing, spaces, hyphens, and punctuation') &&
+      publicOpenApiRouteSource.includes('Optional contact-share mapping override') &&
       publicOpenApiRouteSource.includes('Accepts canonical field keys or normalized frontendFieldKeyMap aliases.'),
     'Public form submissions must accept frontend field key map aliases before validation and storage',
   );
@@ -1236,6 +1242,13 @@ const assertFrontendTemplateForm = async (formId) => {
         EMAIL: 'forms-frontend-alias@example.com',
         'Project Budget!': '$25k+',
         message: 'Submitted with frontend aliases.',
+      },
+      contactShareOverride: {
+        enabled: true,
+        nameField: 'FULL NAME',
+        emailField: 'email',
+        notesField: 'Message!',
+        dedupeByEmail: true,
       },
     }),
   });

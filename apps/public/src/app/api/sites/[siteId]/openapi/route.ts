@@ -5192,6 +5192,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   additionalProperties: true,
                   description: "Alias accepted for legacy submitters.",
                 },
+                contactShareOverride: {
+                  type: "object",
+                  additionalProperties: true,
+                  description:
+                    "Optional contact-share mapping override. nameField, emailField, phoneField, and notesField accept canonical field keys or normalized frontendFieldKeyMap aliases.",
+                },
                 requestId: { type: "string" },
                 pageId: { type: "string" },
                 postId: { type: "string" },
