@@ -61,6 +61,14 @@ type InlineAppearanceFields = {
   boxShadow: string;
   opacity: string;
 };
+type InlineLayoutFields = {
+  x: string;
+  y: string;
+  width: string;
+  height: string;
+  zIndex: string;
+  rotation: string;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -195,6 +203,14 @@ const lengthProp = (props: Record<string, unknown>, key: string): string => {
   return typeof value === 'string' ? value : '';
 };
 
+const numberField = (element: Record<string, unknown> | null, key: string): string => {
+  const value = element?.[key];
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}`;
+  }
+  return typeof value === 'string' ? value : '';
+};
+
 const hexColorInputValue = (value: string): string => (
   /^#[0-9a-fA-F]{6}$/.test(value.trim()) ? value.trim() : '#000000'
 );
@@ -248,6 +264,15 @@ const appearanceFieldsFromElement = (element: Record<string, unknown> | null): I
   };
 };
 
+const layoutFieldsFromElement = (element: Record<string, unknown> | null): InlineLayoutFields => ({
+  x: numberField(element, 'x'),
+  y: numberField(element, 'y'),
+  width: numberField(element, 'width'),
+  height: numberField(element, 'height'),
+  zIndex: numberField(element, 'zIndex'),
+  rotation: numberField(element, 'rotation'),
+});
+
 const updateElementProps = (
   content: Record<string, unknown> | undefined,
   elementId: string,
@@ -284,6 +309,59 @@ const updateElementProps = (
   }
 
   return changed ? nextContent : null;
+};
+
+const updateElementFields = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  patch: Record<string, unknown>,
+): Record<string, unknown> | null => {
+  if (!content) {
+    return null;
+  }
+
+  const nextContent = JSON.parse(JSON.stringify(content)) as Record<string, unknown>;
+  let changed = false;
+
+  const visit = (items: unknown[]) => {
+    items.forEach((item) => {
+      if (!isRecord(item)) return;
+      if (item.id === elementId) {
+        Object.entries(patch).forEach(([key, value]) => {
+          item[key] = value;
+        });
+        changed = true;
+      }
+      if (Array.isArray(item.children)) {
+        visit(item.children);
+      }
+    });
+  };
+
+  if (Array.isArray(nextContent.elements)) {
+    visit(nextContent.elements);
+  }
+  if (isRecord(nextContent.contentDocument) && Array.isArray(nextContent.contentDocument.elements)) {
+    visit(nextContent.contentDocument.elements);
+  }
+
+  return changed ? nextContent : null;
+};
+
+const numericPatchValue = (value: string, label: string, required = false): number | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    if (required) {
+      throw new Error(`${label} is required.`);
+    }
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} must be a number.`);
+  }
+  return parsed;
 };
 
 const updateElementText = (
@@ -344,6 +422,38 @@ const updateElementAppearance = (
   opacity: input.opacity.trim(),
 });
 
+const updateElementLayout = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  input: InlineLayoutFields,
+): Record<string, unknown> | null => {
+  const width = numericPatchValue(input.width, 'Width', true);
+  const height = numericPatchValue(input.height, 'Height', true);
+  if (width !== undefined && width <= 0) {
+    throw new Error('Width must be greater than 0.');
+  }
+  if (height !== undefined && height <= 0) {
+    throw new Error('Height must be greater than 0.');
+  }
+
+  const patch: Record<string, unknown> = {
+    x: numericPatchValue(input.x, 'X', true),
+    y: numericPatchValue(input.y, 'Y', true),
+    width,
+    height,
+  };
+  const zIndex = numericPatchValue(input.zIndex, 'Layer');
+  const rotation = numericPatchValue(input.rotation, 'Rotation');
+  if (zIndex !== undefined) {
+    patch.zIndex = zIndex;
+  }
+  if (rotation !== undefined) {
+    patch.rotation = rotation;
+  }
+
+  return updateElementFields(content, elementId, patch);
+};
+
 export function LivePageManagementOverlay({
   enabled,
   siteId,
@@ -391,6 +501,13 @@ export function LivePageManagementOverlay({
   const [inlineAppearanceBoxShadow, setInlineAppearanceBoxShadow] = useState('');
   const [inlineAppearanceOpacity, setInlineAppearanceOpacity] = useState('');
   const [inlineAppearanceSaving, setInlineAppearanceSaving] = useState(false);
+  const [inlineLayoutX, setInlineLayoutX] = useState('');
+  const [inlineLayoutY, setInlineLayoutY] = useState('');
+  const [inlineLayoutWidth, setInlineLayoutWidth] = useState('');
+  const [inlineLayoutHeight, setInlineLayoutHeight] = useState('');
+  const [inlineLayoutZIndex, setInlineLayoutZIndex] = useState('');
+  const [inlineLayoutRotation, setInlineLayoutRotation] = useState('');
+  const [inlineLayoutSaving, setInlineLayoutSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
     if (!siteId || !pageId) return '';
@@ -507,6 +624,12 @@ export function LivePageManagementOverlay({
       setInlineAppearanceMargin('');
       setInlineAppearanceBoxShadow('');
       setInlineAppearanceOpacity('');
+      setInlineLayoutX('');
+      setInlineLayoutY('');
+      setInlineLayoutWidth('');
+      setInlineLayoutHeight('');
+      setInlineLayoutZIndex('');
+      setInlineLayoutRotation('');
       return;
     }
 
@@ -561,6 +684,13 @@ export function LivePageManagementOverlay({
     setInlineAppearanceMargin(appearanceFields.margin);
     setInlineAppearanceBoxShadow(appearanceFields.boxShadow);
     setInlineAppearanceOpacity(appearanceFields.opacity);
+    const layoutFields = layoutFieldsFromElement(selectedContentElement);
+    setInlineLayoutX(layoutFields.x);
+    setInlineLayoutY(layoutFields.y);
+    setInlineLayoutWidth(layoutFields.width);
+    setInlineLayoutHeight(layoutFields.height);
+    setInlineLayoutZIndex(layoutFields.zIndex);
+    setInlineLayoutRotation(layoutFields.rotation);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -812,6 +942,63 @@ export function LivePageManagementOverlay({
       setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected appearance.');
     } finally {
       setInlineAppearanceSaving(false);
+    }
+  };
+
+  const saveInlineLayout = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+
+    let nextContent: Record<string, unknown> | null = null;
+    try {
+      nextContent = updateElementLayout(page.content, selectedElementId, {
+        x: inlineLayoutX,
+        y: inlineLayoutY,
+        width: inlineLayoutWidth,
+        height: inlineLayoutHeight,
+        zIndex: inlineLayoutZIndex,
+        rotation: inlineLayoutRotation,
+      });
+    } catch (layoutError) {
+      setError(layoutError instanceof Error ? layoutError.message : 'Unable to update this layout.');
+      return;
+    }
+    if (!nextContent) {
+      setError('Unable to update this layout from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineLayoutSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected layout.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Layout saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected layout.');
+    } finally {
+      setInlineLayoutSaving(false);
     }
   };
 
@@ -1133,6 +1320,96 @@ export function LivePageManagementOverlay({
                     }}
                   >
                     {inlineImageSaving ? 'Saving image...' : 'Save image'}
+                  </button>
+                </div>
+              ) : null}
+              {selectedElementId ? (
+                <div data-backy-live-layout-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Layout
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      X
+                      <input
+                        value={inlineLayoutX}
+                        onChange={(event) => setInlineLayoutX(event.target.value)}
+                        placeholder="0"
+                        inputMode="decimal"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Y
+                      <input
+                        value={inlineLayoutY}
+                        onChange={(event) => setInlineLayoutY(event.target.value)}
+                        placeholder="0"
+                        inputMode="decimal"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Width
+                      <input
+                        value={inlineLayoutWidth}
+                        onChange={(event) => setInlineLayoutWidth(event.target.value)}
+                        placeholder="320"
+                        inputMode="decimal"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Height
+                      <input
+                        value={inlineLayoutHeight}
+                        onChange={(event) => setInlineLayoutHeight(event.target.value)}
+                        placeholder="180"
+                        inputMode="decimal"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Layer
+                      <input
+                        value={inlineLayoutZIndex}
+                        onChange={(event) => setInlineLayoutZIndex(event.target.value)}
+                        placeholder="1"
+                        inputMode="numeric"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Rotation
+                      <input
+                        value={inlineLayoutRotation}
+                        onChange={(event) => setInlineLayoutRotation(event.target.value)}
+                        placeholder="0"
+                        inputMode="decimal"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveInlineLayout}
+                    disabled={inlineLayoutSaving}
+                    style={{
+                      justifySelf: 'start',
+                      border: 0,
+                      borderRadius: 6,
+                      background: inlineLayoutSaving ? '#94a3b8' : '#2563eb',
+                      color: '#fff',
+                      cursor: inlineLayoutSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      padding: '7px 10px',
+                    }}
+                  >
+                    {inlineLayoutSaving ? 'Saving layout...' : 'Save layout'}
                   </button>
                 </div>
               ) : null}
