@@ -71,6 +71,7 @@ type InlineLayoutFields = {
   zIndex: string;
   rotation: string;
   visible: boolean;
+  locked: boolean;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -318,6 +319,7 @@ const layoutFieldsFromElement = (element: Record<string, unknown> | null): Inlin
   zIndex: numberField(element, 'zIndex'),
   rotation: numberField(element, 'rotation'),
   visible: element?.visible !== false,
+  locked: element?.locked === true,
 });
 
 const updateElementProps = (
@@ -489,6 +491,7 @@ const updateElementLayout = (
     width,
     height,
     visible: input.visible,
+    locked: input.locked,
   };
   const zIndex = numericPatchValue(input.zIndex, 'Layer');
   const rotation = numericPatchValue(input.rotation, 'Rotation');
@@ -556,6 +559,7 @@ export function LivePageManagementOverlay({
   const [inlineLayoutZIndex, setInlineLayoutZIndex] = useState('');
   const [inlineLayoutRotation, setInlineLayoutRotation] = useState('');
   const [inlineLayoutVisible, setInlineLayoutVisible] = useState(true);
+  const [inlineLayoutLocked, setInlineLayoutLocked] = useState(false);
   const [inlineLayoutSaving, setInlineLayoutSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
@@ -682,6 +686,7 @@ export function LivePageManagementOverlay({
       setInlineLayoutZIndex('');
       setInlineLayoutRotation('');
       setInlineLayoutVisible(true);
+      setInlineLayoutLocked(false);
       return;
     }
 
@@ -704,6 +709,7 @@ export function LivePageManagementOverlay({
     [page?.content, selectedElementId],
   );
   const selectedElementType = String(selectedContentElement?.type || '');
+  const selectedElementLocked = selectedContentElement?.locked === true;
   const selectedElementSupportsInlineText = INLINE_TEXT_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineLink = INLINE_LINK_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineImage = INLINE_IMAGE_ELEMENT_TYPES.has(selectedElementType);
@@ -744,6 +750,7 @@ export function LivePageManagementOverlay({
     setInlineLayoutZIndex(layoutFields.zIndex);
     setInlineLayoutRotation(layoutFields.rotation);
     setInlineLayoutVisible(layoutFields.visible);
+    setInlineLayoutLocked(layoutFields.locked);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -800,6 +807,10 @@ export function LivePageManagementOverlay({
 
   const saveInlineText = async () => {
     if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its content.');
+      return;
+    }
 
     const nextContent = updateElementText(page.content, selectedElementId, inlineText.trim());
     if (!nextContent) {
@@ -844,6 +855,10 @@ export function LivePageManagementOverlay({
 
   const saveInlineLink = async () => {
     if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its destination.');
+      return;
+    }
 
     const nextContent = updateElementLink(page.content, selectedElementId, inlineHref.trim(), inlineTargetBlank);
     if (!nextContent) {
@@ -888,6 +903,10 @@ export function LivePageManagementOverlay({
 
   const saveInlineImage = async () => {
     if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its image fields.');
+      return;
+    }
 
     const nextContent = updateElementImage(page.content, selectedElementId, {
       src: inlineImageSrc.trim(),
@@ -937,6 +956,10 @@ export function LivePageManagementOverlay({
 
   const saveInlineAppearance = async () => {
     if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its appearance.');
+      return;
+    }
 
     const nextContent = updateElementAppearance(page.content, selectedElementId, {
       color: inlineAppearanceColor,
@@ -1011,6 +1034,7 @@ export function LivePageManagementOverlay({
         zIndex: inlineLayoutZIndex,
         rotation: inlineLayoutRotation,
         visible: inlineLayoutVisible,
+        locked: inlineLayoutLocked,
       });
     } catch (layoutError) {
       setError(layoutError instanceof Error ? layoutError.message : 'Unable to update this layout.');
@@ -1237,14 +1261,14 @@ export function LivePageManagementOverlay({
                       <button
                         type="button"
                         onClick={saveInlineText}
-                        disabled={inlineTextSaving || inlineText.trim().length === 0}
+                        disabled={selectedElementLocked || inlineTextSaving || inlineText.trim().length === 0}
                         style={{
                           justifySelf: 'start',
                           border: 0,
                           borderRadius: 6,
-                          background: inlineTextSaving || inlineText.trim().length === 0 ? '#94a3b8' : '#2563eb',
+                          background: selectedElementLocked || inlineTextSaving || inlineText.trim().length === 0 ? '#94a3b8' : '#2563eb',
                           color: '#fff',
-                          cursor: inlineTextSaving || inlineText.trim().length === 0 ? 'not-allowed' : 'pointer',
+                          cursor: selectedElementLocked || inlineTextSaving || inlineText.trim().length === 0 ? 'not-allowed' : 'pointer',
                           fontWeight: 700,
                           padding: '7px 10px',
                         }}
@@ -1287,14 +1311,14 @@ export function LivePageManagementOverlay({
                   <button
                     type="button"
                     onClick={saveInlineLink}
-                    disabled={inlineLinkSaving}
+                    disabled={selectedElementLocked || inlineLinkSaving}
                     style={{
                       justifySelf: 'start',
                       border: 0,
                       borderRadius: 6,
-                      background: inlineLinkSaving ? '#94a3b8' : '#2563eb',
+                      background: selectedElementLocked || inlineLinkSaving ? '#94a3b8' : '#2563eb',
                       color: '#fff',
-                      cursor: inlineLinkSaving ? 'not-allowed' : 'pointer',
+                      cursor: selectedElementLocked || inlineLinkSaving ? 'not-allowed' : 'pointer',
                       fontWeight: 700,
                       padding: '7px 10px',
                     }}
@@ -1363,14 +1387,14 @@ export function LivePageManagementOverlay({
                   <button
                     type="button"
                     onClick={saveInlineImage}
-                    disabled={inlineImageSaving || inlineImageSrc.trim().length === 0}
+                    disabled={selectedElementLocked || inlineImageSaving || inlineImageSrc.trim().length === 0}
                     style={{
                       justifySelf: 'start',
                       border: 0,
                       borderRadius: 6,
-                      background: inlineImageSaving || inlineImageSrc.trim().length === 0 ? '#94a3b8' : '#2563eb',
+                      background: selectedElementLocked || inlineImageSaving || inlineImageSrc.trim().length === 0 ? '#94a3b8' : '#2563eb',
                       color: '#fff',
-                      cursor: inlineImageSaving || inlineImageSrc.trim().length === 0 ? 'not-allowed' : 'pointer',
+                      cursor: selectedElementLocked || inlineImageSaving || inlineImageSrc.trim().length === 0 ? 'not-allowed' : 'pointer',
                       fontWeight: 700,
                       padding: '7px 10px',
                     }}
@@ -1384,6 +1408,11 @@ export function LivePageManagementOverlay({
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
                     Layout
                   </span>
+                  {selectedElementLocked ? (
+                    <span style={{ color: '#b45309', fontSize: 12 }}>
+                      Unlock this element to edit content or appearance.
+                    </span>
+                  ) : null}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
                       X
@@ -1457,6 +1486,14 @@ export function LivePageManagementOverlay({
                       onChange={(event) => setInlineLayoutVisible(event.target.checked)}
                     />
                     Visible on page
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={inlineLayoutLocked}
+                      onChange={(event) => setInlineLayoutLocked(event.target.checked)}
+                    />
+                    Locked in editor
                   </label>
                   <button
                     type="button"
@@ -1696,14 +1733,14 @@ export function LivePageManagementOverlay({
                   <button
                     type="button"
                     onClick={saveInlineAppearance}
-                    disabled={inlineAppearanceSaving}
+                    disabled={selectedElementLocked || inlineAppearanceSaving}
                     style={{
                       justifySelf: 'start',
                       border: 0,
                       borderRadius: 6,
-                      background: inlineAppearanceSaving ? '#94a3b8' : '#2563eb',
+                      background: selectedElementLocked || inlineAppearanceSaving ? '#94a3b8' : '#2563eb',
                       color: '#fff',
-                      cursor: inlineAppearanceSaving ? 'not-allowed' : 'pointer',
+                      cursor: selectedElementLocked || inlineAppearanceSaving ? 'not-allowed' : 'pointer',
                       fontWeight: 700,
                       padding: '7px 10px',
                     }}
