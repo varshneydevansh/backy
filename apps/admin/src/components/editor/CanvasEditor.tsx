@@ -2677,9 +2677,45 @@ export function CanvasEditor({
   }, [breakpoint, displayedElements, elements, findElementById, selectedId, updateElementsWithHistory]);
 
   const handleLayerDelete = useCallback((elementId: string) => {
+    if (isCanvasMutationDisabled) {
+      return;
+    }
+
     const currentElements = elementsRef.current;
-    const element = findElementById(currentElements, elementId);
-    if (element?.locked) {
+    const selectedLayerEntries = selectedIds.includes(elementId) && selectedIds.length > 1
+      ? getSelectedSiblingEntries(currentElements, { requireUnlocked: true })
+      : [];
+    const selectedLayerAction = selectedLayerEntries.some((entry) => entry.element.id === elementId);
+    if (selectedLayerAction) {
+      const entries = selectedLayerEntries;
+      if (entries.length === 0) {
+        return;
+      }
+
+      let nextElements = currentElements;
+      let parentSelection: string | null = entries[0]?.parentId ?? null;
+      let removed = false;
+      for (const entry of entries) {
+        const result = removeElementById(nextElements, entry.element.id);
+        if (!result.updated) continue;
+
+        nextElements = result.elements;
+        parentSelection = result.removedParentId || parentSelection;
+        removed = true;
+      }
+
+      if (!removed) {
+        return;
+      }
+
+      setSelectedId(parentSelection);
+      setSelectedIds(parentSelection ? [parentSelection] : []);
+      updateElementsWithHistory(nextElements, parentSelection, parentSelection ? [parentSelection] : []);
+      return;
+    }
+
+    const entry = findElementEntry(currentElements, elementId);
+    if (!entry || entry.element.locked) {
       return;
     }
 
@@ -2702,21 +2738,50 @@ export function CanvasEditor({
     setSelectedId(nextSelectedId);
     setSelectedIds(nextSelectedIds);
     updateElementsWithHistory(result.elements, nextSelectedId, nextSelectedIds);
-  }, [findElementById, selectedId, selectedIds, updateElementsWithHistory]);
+  }, [findElementById, findElementEntry, getSelectedSiblingEntries, isCanvasMutationDisabled, selectedId, selectedIds, updateElementsWithHistory]);
 
   const handleLayerDuplicate = useCallback((elementId: string) => {
+    if (isCanvasMutationDisabled) {
+      return;
+    }
+
     const currentElements = elementsRef.current;
     const selectedEntry = findElementEntry(currentElements, elementId);
     if (!selectedEntry || selectedEntry.element.locked) return;
 
-    const duplicate = cloneElementTreeWithFreshIds(selectedEntry.element, 20, 20, selectedEntry.parentId);
-    const duplicated = insertElementAsSibling(currentElements, selectedEntry.element.id, duplicate);
-    if (!duplicated.updated) return;
+    const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1;
+    const selectedLayerEntries = selectedLayerAction
+      ? getSelectedSiblingEntries(currentElements, { requireUnlocked: true })
+      : [];
+    const entries = selectedLayerEntries.some((entry) => entry.element.id === elementId)
+      ? selectedLayerEntries
+      : [selectedEntry];
+    if (entries.length === 0) return;
 
-    setSelectedId(duplicate.id);
-    setSelectedIds([duplicate.id]);
-    updateElementsWithHistory(duplicated.elements, duplicate.id, [duplicate.id]);
-  }, [cloneElementTreeWithFreshIds, findElementEntry, updateElementsWithHistory]);
+    let nextElements = currentElements;
+    const duplicatedIds: string[] = [];
+    for (const entry of entries) {
+      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId);
+      const duplicated = insertElementAsSibling(nextElements, entry.element.id, duplicate);
+      if (!duplicated.updated) continue;
+
+      nextElements = duplicated.elements;
+      duplicatedIds.push(duplicate.id);
+    }
+
+    if (duplicatedIds.length === 0) return;
+
+    setSelectedId(duplicatedIds[0] ?? null);
+    setSelectedIds(duplicatedIds);
+    updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null, duplicatedIds);
+  }, [
+    cloneElementTreeWithFreshIds,
+    findElementEntry,
+    getSelectedSiblingEntries,
+    isCanvasMutationDisabled,
+    selectedIds,
+    updateElementsWithHistory,
+  ]);
 
   const handleGroupSelected = useCallback(() => {
     if (isCanvasMutationDisabled) {

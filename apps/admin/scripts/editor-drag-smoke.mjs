@@ -218,6 +218,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('handleSelectFirstChildLayer') && source.includes('data-testid="editor-select-child-layer"'), 'Editor inspector must expose a nested-layer child selection action');
   assert(source.includes("e.key === 'Enter'") && source.includes('handleSelectFirstChildLayer();') && source.includes('handleSelectParentLayer();'), 'Editor keyboard handler must support Enter child selection and Shift+Enter parent selection');
   assert(source.includes('isLayerOrderShortcut') && source.includes("handleZOrderChange(isBackward") && source.includes('Cmd/Ctrl+]'), 'Editor keyboard handler must support Cmd/Ctrl bracket layer ordering shortcuts');
+  assert(source.includes('const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1') && source.includes('const duplicatedIds: string[] = [];'), 'Editor layer row duplicate/delete actions must support selected multi-layer actions');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10091,6 +10092,22 @@ const testLayersPanelControls = async (client, pageId) => {
   const deleteClick = await clickLayerAction(client, 'delete', duplicateId);
   const deletedDuplicate = await waitForElementPresence(client, duplicateId, false, 'after layer duplicate delete');
 
+  await selectLayerIds(client, ['smoke-heading', 'smoke-image']);
+  const multiDuplicateClick = await clickLayerAction(client, 'duplicate', 'smoke-heading');
+  const selectedAfterMultiDuplicate = await readSelectedLayerIds(client);
+  const multiDuplicateIds = selectedAfterMultiDuplicate.filter((id) => (
+    id && id !== 'smoke-heading' && id !== 'smoke-image'
+  ));
+  assert(
+    multiDuplicateIds.length >= 2,
+    `Layer multi-duplicate did not select duplicate rows for every selected layer: ${JSON.stringify({ multiDuplicateClick, selectedAfterMultiDuplicate })}`,
+  );
+  const multiDeleteClick = await clickLayerAction(client, 'delete', multiDuplicateIds[0]);
+  const deletedMultiDuplicates = [];
+  for (const multiDuplicateId of multiDuplicateIds) {
+    deletedMultiDuplicates.push(await waitForElementPresence(client, multiDuplicateId, false, `after layer multi-delete ${multiDuplicateId}`));
+  }
+
   await clickSave(client);
   const savedStatus = await waitForEditorSaveStatus(
     client,
@@ -10127,6 +10144,10 @@ const testLayersPanelControls = async (client, pageId) => {
     duplicateTree,
     deleteClick,
     deletedDuplicate,
+    multiDuplicateClick,
+    multiDuplicateIds,
+    multiDeleteClick,
+    deletedMultiDuplicates,
     savedStatus,
     persisted,
   };
