@@ -6513,24 +6513,40 @@ function buildTemplateElements(input: {
                 height: 320,
                 dataBindings: [{ source: 'settings', mode: 'legal-terms', fields: ['terms', 'effectiveDate', 'supportEmail', 'commerceTerms'] }],
                 props: { backgroundColor: '#fafafa', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 580 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'terms-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Terms', fontSize: 13, fontWeight: '800', color: '#52525b', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 200 },
+                            mobile: { x: 24, y: 44, width: 180 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'terms-heading',
                         width: 660,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 80, width: 327, height: 124, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'terms-copy',
                         width: 600,
                         height: 64,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#3f3f46' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 222, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 86, {
                         id: 'terms-effective-card',
@@ -6538,6 +6554,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'settings', mode: 'legal-terms', fields: ['effectiveDate', 'version', 'jurisdiction'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#d4d4d8', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 330, height: 130 },
+                            mobile: { x: 24, y: 378, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'terms-effective-label',
@@ -6557,6 +6577,10 @@ function buildTemplateElements(input: {
                                 width: 220,
                                 height: 32,
                                 props: { content: 'Bind this card from Settings terms metadata.', fontSize: 13, lineHeight: 1.35, color: '#71717a' },
+                                responsive: {
+                                    tablet: { width: 260 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -6568,12 +6592,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'settings', mode: 'terms-sections', fields: ['acceptableUse', 'accounts', 'commerce', 'services', 'liability'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 580, width: 375, height: 1160 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'terms-policy-heading',
                         width: 420,
                         height: 42,
                         props: { content: 'Terms overview', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Using this site', body: 'Explain acceptable use, content ownership, account responsibilities, and restrictions for public visitors and members.' },
@@ -6585,6 +6617,10 @@ function buildTemplateElements(input: {
                         height: 290,
                         dataBindings: [{ source: 'settings', mode: 'terms-section', index }],
                         props: { backgroundColor: '#fafafa', borderRadius: 8, borderColor: '#e4e4e7', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 324, width: 660, height: 286 },
+                            mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `terms-policy-card-title-${index}`,
@@ -6592,6 +6628,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: section.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'settings', mode: 'terms-section', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 300 },
+                                    mobile: { width: 250 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: `terms-policy-card-copy-${index}`,
@@ -6599,12 +6639,20 @@ function buildTemplateElements(input: {
                                 height: 120,
                                 props: { content: section.body, fontSize: 14, lineHeight: 1.55, color: '#52525b' },
                                 dataBindings: [{ source: 'settings', mode: 'terms-section', index, field: 'body', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500, height: 104 },
+                                    mobile: { width: 268, height: 132 },
+                                },
                             }),
                             createCanvasElement('text', 24, 232, {
                                 id: `terms-policy-card-note-${index}`,
                                 width: 210,
                                 height: 24,
                                 props: { content: 'Editable terms content', fontSize: 13, fontWeight: '800', color: '#52525b' },
+                                responsive: {
+                                    tablet: { y: 228 },
+                                    mobile: { y: 252 },
+                                },
                             }),
                         ],
                     })),
@@ -6616,6 +6664,10 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'settings', mode: 'terms-contact', fields: ['supportEmail', 'requestUrl', 'commerceTerms', 'serviceTerms'] }],
                 props: { backgroundColor: '#f4f4f5', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 620 },
+                    mobile: { y: 1740, width: 375, height: 680 },
+                },
                 children: [
                     createCanvasElement('box', 74, 62, {
                         id: 'terms-acceptance-card',
@@ -6623,18 +6675,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'commerce-terms', fields: ['refunds', 'subscriptions', 'shipping', 'tax'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e4e4e7', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 250 },
+                            mobile: { x: 24, y: 46, width: 327, height: 308 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 26, {
                                 id: 'terms-acceptance-heading',
                                 width: 320,
                                 height: 34,
                                 props: { content: 'Commerce and services', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, props: { fontSize: 24 } },
+                                },
                             }),
                             ...['Refunds', 'Subscriptions', 'Shipping', 'Service scope'].map((term, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
                                 id: `terms-acceptance-item-${index}`,
                                 width: 210,
                                 height: 24,
                                 props: { content: term, fontSize: 15, fontWeight: '800', color: '#3f3f46' },
+                                responsive: {
+                                    tablet: { x: 30 + (index % 2) * 300, y: 92 + Math.floor(index / 2) * 48, width: 240 },
+                                    mobile: { x: 28, y: 86 + index * 48, width: 240 },
+                                },
                             })),
                         ],
                     }),
@@ -6644,6 +6707,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'legal-contact', fields: ['supportEmail', 'requestUrl'] }],
                         props: { backgroundColor: '#111827', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 350, width: 660, height: 190 },
+                            mobile: { x: 24, y: 410, width: 327, height: 214 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 26, {
                                 id: 'terms-contact-heading',
@@ -6656,12 +6723,20 @@ function buildTemplateElements(input: {
                                 width: 240,
                                 height: 46,
                                 props: { content: 'Bind support contact details to Settings or a custom frontend legal request route.', fontSize: 14, lineHeight: 1.45, color: '#d4d4d8' },
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('button', 26, 138, {
                                 id: 'terms-contact-button',
                                 width: 146,
                                 height: 40,
                                 props: { label: 'Contact terms', backgroundColor: '#e4e4e7', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'terms.contact.open' },
+                                responsive: {
+                                    tablet: { x: 470, y: 112 },
+                                    mobile: { x: 26, y: 150 },
+                                },
                             }),
                         ],
                     }),
