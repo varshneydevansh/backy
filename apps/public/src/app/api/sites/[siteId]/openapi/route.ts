@@ -1183,9 +1183,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   "Target image width",
                 ),
                 queryParameter(
+                  "w",
+                  { type: "integer", minimum: 16, maximum: 3840 },
+                  "Alias for width",
+                ),
+                queryParameter(
                   "quality",
                   { type: "integer", minimum: 1, maximum: 100 },
                   "Output quality, default 75",
+                ),
+                queryParameter(
+                  "q",
+                  { type: "integer", minimum: 1, maximum: 100 },
+                  "Alias for quality",
                 ),
               ],
               responses: {

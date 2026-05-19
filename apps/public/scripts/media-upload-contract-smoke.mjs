@@ -143,6 +143,13 @@ assert(
   'Public OpenAPI media transform route must document invalid width/quality errors.',
 );
 assert(
+  openApiRoute.includes('"w"') &&
+    openApiRoute.includes('Alias for width') &&
+    openApiRoute.includes('"q"') &&
+    openApiRoute.includes('Alias for quality'),
+  'Public OpenAPI media transform route must advertise w/q aliases supported by the runtime and docs.',
+);
+assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
     sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
