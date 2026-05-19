@@ -17,6 +17,7 @@ const assert = (condition, message) => {
 const mediaRoute = read('../src/app/api/admin/sites/[siteId]/media/route.ts');
 const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
 const publicFontManifestRoute = read('../src/app/api/sites/[siteId]/media/fonts/route.ts');
+const publicMediaFileRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts');
 const publicMediaTransformRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
@@ -77,6 +78,11 @@ assert(
     publicFontManifestRoute.includes('!isMediaQuarantined(item)') &&
     publicFontManifestRoute.includes('buildPublicFontManifest('),
   'Public font manifest route must exclude quarantined font assets before generating @font-face CSS.',
+);
+assert(
+  publicMediaFileRoute.includes("jsonError(423, 'MEDIA_QUARANTINED'") &&
+    publicMediaFileRoute.includes('This media asset is quarantined and cannot be delivered.'),
+  'Public media file route must expose a distinct quarantined delivery error.',
 );
 assert(
   publicMediaTransformRoute.includes("'INVALID_TRANSFORM_WIDTH'") &&
@@ -150,6 +156,11 @@ assert(
   'Public OpenAPI media transform route must advertise w/q aliases supported by the runtime and docs.',
 );
 assert(
+  openApiRoute.includes('"423"') &&
+    openApiRoute.includes('Media asset is quarantined and cannot be delivered'),
+  'Public OpenAPI media file route must document quarantined delivery errors.',
+);
+assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
     sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
@@ -185,6 +196,10 @@ assert(
 assert(
   apiContracts.includes('Public font manifests exclude quarantined font assets'),
   'API contract docs must describe public font manifest quarantine filtering.',
+);
+assert(
+  apiContracts.includes('Quarantined media file requests return `423 MEDIA_QUARANTINED`'),
+  'API contract docs must describe quarantined public media file delivery errors.',
 );
 assert(
   apiContracts.includes('Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`') &&

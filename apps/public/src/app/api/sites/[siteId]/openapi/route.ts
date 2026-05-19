@@ -1161,6 +1161,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   description: "Media file not found",
                   headers: mediaFileErrorResponseHeaders,
                 },
+                "423": {
+                  description: "Media asset is quarantined and cannot be delivered",
+                  headers: mediaFileErrorResponseHeaders,
+                },
               },
             },
           },
