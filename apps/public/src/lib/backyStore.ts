@@ -3472,6 +3472,211 @@ function normalizeFieldOptions(rawOptions: unknown): string[] {
   return parseFieldOptions(rawOptions).map(parseOptionValue).filter(Boolean);
 }
 
+function canvasFormFieldSupportsOptions(
+  type: FormFieldDefinition["type"],
+): boolean {
+  return type === "select" || type === "checkbox" || type === "radio";
+}
+
+function normalizeCanvasFormFieldOptions(
+  type: FormFieldDefinition["type"],
+  rawOptions: unknown,
+): string[] | undefined {
+  if (!canvasFormFieldSupportsOptions(type)) {
+    return undefined;
+  }
+
+  const options = parseFieldOptions(rawOptions)
+    .map((option) => option.trim())
+    .filter(Boolean);
+
+  return options.length > 0 ? options : undefined;
+}
+
+function findMatchingCanvasFormFieldOption(
+  value: string,
+  options: string[] | undefined,
+): string | undefined {
+  const normalizedValue = value.trim().toLowerCase();
+  return (options || []).find(
+    (option) => option.toLowerCase() === normalizedValue,
+  );
+}
+
+function normalizeCanvasFormFieldDefaultValue(
+  defaultValue: unknown,
+  type: FormFieldDefinition["type"],
+  options: string[] | undefined,
+): string | undefined {
+  const value = sanitizeString(defaultValue);
+  if (!value) {
+    return undefined;
+  }
+
+  if (type === "select" || type === "radio") {
+    return findMatchingCanvasFormFieldOption(value, options);
+  }
+
+  if (type === "checkbox") {
+    if (options?.length) {
+      const selections = value
+        .split(",")
+        .map((selection) => selection.trim())
+        .filter(Boolean);
+      const matchedSelections = selections
+        .map((selection) => findMatchingCanvasFormFieldOption(selection, options))
+        .filter((selection): selection is string => Boolean(selection));
+
+      return matchedSelections.length === selections.length &&
+        matchedSelections.length > 0
+        ? matchedSelections.join(", ")
+        : undefined;
+    }
+
+    return ["true", "on", "1", "yes", "false", "off", "0", "no"].includes(
+      value.toLowerCase(),
+    )
+      ? value
+      : undefined;
+  }
+
+  if (type === "number") {
+    return Number.isFinite(Number(value)) ? value : undefined;
+  }
+
+  if (type === "email") {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? value : undefined;
+  }
+
+  if (type === "date") {
+    return isValidDateSubmissionValue(value) ? value : undefined;
+  }
+
+  if (type === "tel") {
+    return isValidTelSubmissionValue(value) ? value : undefined;
+  }
+
+  if (type === "url") {
+    try {
+      const parsedUrl = new URL(value);
+      return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:"
+        ? value
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (type === "file") {
+    return undefined;
+  }
+
+  return value;
+}
+
+function canvasValidationTypesForFieldType(
+  type: FormFieldDefinition["type"],
+): Array<NonNullable<FormFieldDefinition["validation"]>[number]["type"]> {
+  if (type === "number") {
+    return ["min", "max"];
+  }
+
+  if (
+    type === "text" ||
+    type === "textarea" ||
+    type === "email" ||
+    type === "tel" ||
+    type === "url"
+  ) {
+    return ["minLength", "maxLength", "pattern"];
+  }
+
+  return [];
+}
+
+function defaultCanvasValidationMessage(
+  fieldLabel: string,
+  ruleType: NonNullable<FormFieldDefinition["validation"]>[number]["type"],
+): string {
+  const label = fieldLabel.trim() || "This field";
+  if (ruleType === "minLength") return `${label} is too short.`;
+  if (ruleType === "maxLength") return `${label} is too long.`;
+  if (ruleType === "pattern") return `${label} format is invalid.`;
+  if (ruleType === "min") return `${label} is too small.`;
+  if (ruleType === "max") return `${label} is too large.`;
+  return `${label} is required.`;
+}
+
+function normalizeCanvasFormFieldValidation(
+  value: unknown,
+  fieldType: FormFieldDefinition["type"],
+  fieldLabel: string,
+): FormFieldDefinition["validation"] {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const allowedValidationTypes = new Set(
+    canvasValidationTypesForFieldType(fieldType),
+  );
+  const rules = value
+    .filter(
+      (rule): rule is Record<string, unknown> =>
+        Boolean(rule) && typeof rule === "object" && !Array.isArray(rule),
+    )
+    .map(
+      (rule): NonNullable<FormFieldDefinition["validation"]>[number] | null => {
+        const type = sanitizeString(rule.type) as NonNullable<
+          FormFieldDefinition["validation"]
+        >[number]["type"];
+        if (!allowedValidationTypes.has(type)) {
+          return null;
+        }
+
+        const isNumericRule =
+          type === "min" ||
+          type === "max" ||
+          type === "minLength" ||
+          type === "maxLength";
+        const value = isNumericRule
+          ? parseNumberValue(rule.value)
+          : sanitizeString(rule.value);
+
+        if (value === undefined || sanitizeString(value).length === 0) {
+          return null;
+        }
+
+        return {
+          type,
+          value,
+          message:
+            sanitizeString(rule.message) ||
+            defaultCanvasValidationMessage(fieldLabel, type),
+        };
+      },
+    )
+    .filter(
+      (rule): rule is NonNullable<FormFieldDefinition["validation"]>[number] =>
+        Boolean(rule),
+    );
+
+  return rules.length > 0 ? rules : undefined;
+}
+
+function canvasFormSchemaValidationRequiresField(value: unknown): boolean {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return value.some(
+    (rule) =>
+      Boolean(rule) &&
+      typeof rule === "object" &&
+      !Array.isArray(rule) &&
+      sanitizeString((rule as Record<string, unknown>).type) === "required",
+  );
+}
+
 function parseSubmissionValues(value: unknown): string[] {
   if (value === null || value === undefined) {
     return [];
@@ -3551,6 +3756,31 @@ function buildDynamicValidationRules(
   return rules.length > 0 ? rules : undefined;
 }
 
+function normalizeCanvasFormField(
+  field: FormFieldDefinition,
+): FormFieldDefinition {
+  const type = normalizeFormSchemaFieldType(field.type);
+  const options = normalizeCanvasFormFieldOptions(type, field.options);
+  const defaultValue = normalizeCanvasFormFieldDefaultValue(
+    field.defaultValue,
+    type,
+    options,
+  );
+  const validation = normalizeCanvasFormFieldValidation(
+    field.validation,
+    type,
+    field.label,
+  );
+
+  return {
+    ...field,
+    type,
+    defaultValue,
+    options,
+    validation,
+  };
+}
+
 function buildDynamicFieldFromElement(
   node: CanvasElement,
   usedKeys: Set<string>,
@@ -3571,7 +3801,7 @@ function buildDynamicFieldFromElement(
 
   const key = ensureUniqueFieldKey(requestedKey, usedKeys);
 
-  return {
+  return normalizeCanvasFormField({
     key,
     label: labelCandidate.length > 0 ? labelCandidate : key,
     type: fieldType,
@@ -3585,11 +3815,9 @@ function buildDynamicFieldFromElement(
       node.props.defaultValue !== undefined
         ? sanitizeString(node.props.defaultValue)
         : sanitizeString(node.props.value),
-    options: ["select", "checkbox", "radio"].includes(fieldType)
-      ? parseFieldOptions(node.props.options)
-      : undefined,
+    options: normalizeCanvasFormFieldOptions(fieldType, node.props.options),
     validation: buildDynamicValidationRules(fieldType, node.props),
-  };
+  });
 }
 
 function normalizeFormSchemaFieldType(
@@ -3611,55 +3839,10 @@ function normalizeFormSchemaFieldType(
 
 function normalizeFormSchemaValidation(
   value: unknown,
+  fieldType: FormFieldDefinition["type"],
+  fieldLabel: string,
 ): FormFieldDefinition["validation"] {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-
-  const rules = value
-    .filter(
-      (rule): rule is Record<string, unknown> =>
-        Boolean(rule) && typeof rule === "object" && !Array.isArray(rule),
-    )
-    .map(
-      (rule): NonNullable<FormFieldDefinition["validation"]>[number] | null => {
-        const type = sanitizeString(rule.type);
-        if (
-          ![
-            "required",
-            "minLength",
-            "maxLength",
-            "pattern",
-            "min",
-            "max",
-          ].includes(type)
-        ) {
-          return null;
-        }
-
-        const normalizedRule: NonNullable<
-          FormFieldDefinition["validation"]
-        >[number] = {
-          type: type as NonNullable<
-            FormFieldDefinition["validation"]
-          >[number]["type"],
-          message: sanitizeString(rule.message) || `${type} validation failed`,
-        };
-        if (typeof rule.value === "number" || typeof rule.value === "string") {
-          normalizedRule.value = rule.value;
-        }
-
-        return {
-          ...normalizedRule,
-        };
-      },
-    )
-    .filter(
-      (rule): rule is NonNullable<FormFieldDefinition["validation"]>[number] =>
-        Boolean(rule),
-    );
-
-  return rules.length > 0 ? rules : undefined;
+  return normalizeCanvasFormFieldValidation(value, fieldType, fieldLabel);
 }
 
 function normalizeFormSchemaField(
@@ -3678,30 +3861,32 @@ function normalizeFormSchemaField(
     sanitizeString(record.id) ||
     `field_${index}`;
   const key = ensureUniqueFieldKey(requestedKey, usedKeys);
-  const validation = normalizeFormSchemaValidation(record.validation);
+  const type = normalizeFormSchemaFieldType(record.type || record.inputType);
+  const label = sanitizeString(record.label) || key;
+  const validation = normalizeFormSchemaValidation(
+    record.validation,
+    type,
+    label,
+  );
 
-  return {
+  return normalizeCanvasFormField({
     key,
-    label: sanitizeString(record.label) || key,
-    type: normalizeFormSchemaFieldType(record.type || record.inputType),
+    label,
+    type,
     placeholder: sanitizeString(record.placeholder),
     helpText: sanitizeString(record.helpText),
     defaultValue:
       record.defaultValue !== undefined
         ? sanitizeString(record.defaultValue)
         : sanitizeString(record.value),
-    options: ["select", "checkbox", "radio"].includes(
-      sanitizeString(record.type || record.inputType).toLowerCase(),
-    )
-      ? parseFieldOptions(record.options)
-      : undefined,
+    options: normalizeCanvasFormFieldOptions(type, record.options),
     required:
       record.required === true ||
       sanitizeString(record.required).toLowerCase() === "true" ||
-      validation?.some((rule) => rule.type === "required") ||
+      canvasFormSchemaValidationRequiresField(record.validation) ||
       false,
     validation,
-  };
+  });
 }
 
 function collectFormFieldsFromSchema(

@@ -197,6 +197,18 @@ const assertFormsPersistenceCertificationSource = () => {
     'Canvas-derived forms must normalize contact-share and collection-write routing against collected form fields',
   );
   assert(
+    publicStoreSource.includes('normalizeCanvasFormField') &&
+      publicStoreSource.includes('normalizeCanvasFormFieldDefaultValue') &&
+      publicStoreSource.includes('normalizeCanvasFormFieldValidation') &&
+      publicStoreSource.includes('canvasValidationTypesForFieldType') &&
+      publicStoreSource.includes('return normalizeCanvasFormField({') &&
+      publicStoreSource.includes('validation: buildDynamicValidationRules(fieldType, node.props)') &&
+      publicStoreSource.includes('const validation = normalizeFormSchemaValidation(') &&
+      publicStoreSource.includes('options: normalizeCanvasFormFieldOptions(type, record.options)') &&
+      publicStoreSource.includes('canvasFormSchemaValidationRequiresField(record.validation)'),
+    'Canvas-derived forms must normalize field options, defaults, and type-compatible validation before becoming backend definitions',
+  );
+  assert(
     source.includes('data-testid="form-field-default-value-input"') &&
       source.includes('onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}') &&
       source.includes('placeholder={field.options?.[0] || field.placeholder ||') &&
