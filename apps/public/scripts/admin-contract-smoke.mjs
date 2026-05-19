@@ -340,6 +340,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/import/route.ts', import.meta.url),
     'utf8',
   );
+  const adminContactListsRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/contact-lists/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -468,6 +472,9 @@ function assertAdminPageContentValidationSource() {
   assert(adminFormContactDetailRoute.includes('statusProvided'), 'admin form contact detail route must distinguish missing status from invalid status values');
   assert(adminFormContactImportRoute.includes("'INVALID_ADMIN_FORM_CONTACT_STATUS'"), 'admin form contact import route must reject invalid status rows');
   assert(adminFormContactImportRoute.includes('statusInvalid'), 'admin form contact import route must distinguish invalid imported status from the default status');
+  assert(adminContactListsRoute.includes("'INVALID_ADMIN_CONTACT_LIST_STATUS'"), 'admin contact lists route must reject invalid saved-list status filters');
+  assert(adminContactListsRoute.includes("'INVALID_ADMIN_CONTACT_LIST_QUALITY'"), 'admin contact lists route must reject invalid saved-list quality filters');
+  assert(adminContactListsRoute.includes('validateExplicitFilters'), 'admin contact lists route must validate explicit filters before normalizing');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -511,6 +518,8 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_ADMIN_FORM_CONTACT_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_FORM_CONTACT_LIMIT') &&
       apiContracts.includes('INVALID_ADMIN_FORM_CONTACT_OFFSET') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_STATUS') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_QUALITY') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
     'API contracts must document invalid page, blog, comment, and form filter/content errors',
   );

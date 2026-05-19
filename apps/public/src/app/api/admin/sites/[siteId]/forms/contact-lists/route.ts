@@ -66,6 +66,29 @@ const normalizeFilters = (value: unknown): SiteContactSavedListFilters => {
   };
 };
 
+const validateExplicitFilters = (value: unknown, requestId: string) => {
+  if (value === undefined) {
+    return null;
+  }
+  if (!isRecord(value)) {
+    return errorResponse(400, 'INVALID_ADMIN_CONTACT_LIST_FILTERS', 'Saved list filters must be an object.', requestId);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(value, 'status') &&
+    !CONTACT_STATUSES.includes(value.status as (typeof CONTACT_STATUSES)[number])
+  ) {
+    return errorResponse(400, 'INVALID_ADMIN_CONTACT_LIST_STATUS', 'Invalid saved list status filter. Use all, new, contacted, qualified, or archived.', requestId);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(value, 'quality') &&
+    !CONTACT_QUALITIES.includes(value.quality as (typeof CONTACT_QUALITIES)[number])
+  ) {
+    return errorResponse(400, 'INVALID_ADMIN_CONTACT_LIST_QUALITY', 'Invalid saved list quality filter.', requestId);
+  }
+
+  return null;
+};
+
 const normalizeSavedLists = (settings: SiteSettings): SiteContactSavedList[] => (
   Array.isArray(settings.contacts?.savedLists)
     ? settings.contacts.savedLists
@@ -230,6 +253,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const now = new Date().toISOString();
     const name = textValue(body.name);
     if (!name) return errorResponse(400, 'VALIDATION_ERROR', 'Saved list requires a name.', requestId);
+    const filterValidationError = validateExplicitFilters(body.filters, requestId);
+    if (filterValidationError) return filterValidationError;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
