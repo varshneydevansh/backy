@@ -25,6 +25,7 @@ const assert = (condition, message) => {
 
 const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   const source = fs.readFileSync(new URL('../src/routes/blog.tsx', import.meta.url), 'utf8');
+  const completionSpec = fs.readFileSync(new URL('../../../specs/backy-cms-completion-spec.md', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog list route must use the shared EmptyState component');
   assert(source.includes('title="No categories yet"'), 'Blog taxonomy manager must keep the categories empty-state title visible');
   assert(source.includes('Create category terms to power blog archive navigation'), 'Blog categories empty state must explain frontend archive/filter value');
@@ -44,6 +45,9 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
       source.includes('Schedule integrity'),
     'Blog list must surface scheduled post health in the table, export, handoff, and readiness checklist',
   );
+  assert(!completionSpec.includes('Missing dedicated blog content model'), 'Completion spec must not regress to stale blog-missing language');
+  assert(completionSpec.includes('Blog authoring is implemented through the dedicated admin blog surfaces'), 'Completion spec must document current blog authoring implementation');
+  assert(completionSpec.includes('templateType: "blogPost"'), 'Completion spec must document frontend-design blog template provenance');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

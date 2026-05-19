@@ -455,28 +455,23 @@ Use this file as the persistent baseline before any implementation pass.
 
 ## 10) Blog editor and template strategy
 
-### 10.1 Current state issue
-- Blog editor currently reuses general page editor path and is not enough for article workflows.
-- Missing dedicated blog content model and reusable editorial template flow.
+### 10.1 Current implemented scope
+- Blog authoring is implemented through the dedicated admin blog surfaces:
+  - `apps/admin/src/routes/blog.tsx` for list, taxonomy, authors, SEO/comment row controls, revisions, bulk workflows, CSV export, and handoff JSON.
+  - `apps/admin/src/routes/blog.new.tsx` for post creation with article-specific fields, featured media, taxonomy/author assignment, SEO/social metadata, scheduling validation, autosave, and frontend-design template seeding.
+  - `apps/admin/src/routes/blog.$postId.tsx` for post editing with `CanvasEditor`, focus mode, featured/taxonomy/readiness/publish/comments/handoff/revision panels, optimistic save guards, preview, publish, archive, rollback, and read-only fallback behavior when backend loading fails.
+- Blog templates are represented by frontend design templates with `templateType: "blogPost"` and persisted provenance (`frontendDesignTemplateId`, source/chrome/tokens/binding hints) on created posts instead of a separate legacy `Template` entity.
+- Public blog output is served from the same content contract family as pages: public list/detail APIs, render/resolve payloads, preview-token reads, RSS/feed discovery, taxonomy/author filters, scheduled visibility rules, and frontend-design metadata are contract-tested for custom frontends.
 
-### 10.2 Required approach
-- Add a dedicated blog post compose page:
-  - `apps/admin/src/routes/sites.$siteId.blog.$postId.edit.tsx` (or equivalent dedicated route)
-  - keeps authoring defaults specific to posts.
-- Introduce blog post template system:
-  - `Template` entity (title/body/sidebar blocks/reusable component tree).
-  - Template selector in `blog.new` and blog editor.
-  - Template versioning and per-site template assignment.
-- Blog-specific fields:
-  - featured image, excerpt, category(s), tag(s), author, reading time, publish schedule.
-  - SEO block, canonical URL, social image, slug suggestion from title.
-- Public output:
-  - feed-like rendering rules for list/detail pages must be deterministic from same underlying data model.
+### 10.2 Current coverage
+- `apps/admin/scripts/blog-list-smoke.mjs` covers backend list workflows, taxonomy CRUD, author filters, revision summaries, row SEO/comment controls, scheduled-state health, error/permission states, bulk publish readiness preflight, CSV/handoff export, and public taxonomy feed visibility.
+- `apps/admin/scripts/blog-create-smoke.mjs` covers frontend blog template selection, template canvas seeding, autosave/recovery, featured media picker, article metadata, future-date scheduling validation, backend create, and persisted frontend-design provenance.
+- `apps/admin/scripts/blog-editor-smoke.mjs` covers editor fallback read-only mode, scheduled save validation, unsaved workflow guards, optimistic publish/save requests, comments and revision empty states, and guarded publish workflow behavior.
 
-### 10.3 Acceptance
-- New post can be created from a template and saves as a valid page object.
-- Blog list and detail rendering consumes same public contract as regular pages.
-- Template changes do not break existing published posts without migration guard.
+### 10.3 Remaining work
+- Keep blog authoring aligned with the shared page/editor content contract as new CanvasEditor controls ship.
+- Continue improving relation-based publish ergonomics, team attribution depth, revision graph UX, and live Supabase/Postgres service-data certification.
+- Treat any future standalone blog-template entity as an enhancement only if it removes real duplication beyond the existing frontend-design template contract.
 
 ## 11) Bug ledger (hard blockers before phase-close)
 
