@@ -1670,7 +1670,6 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
   ]);
-
   const settingsHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     delivery: {
@@ -2274,6 +2273,7 @@ function SettingsPage() {
             runtimeNotifications={runtimeNotifications}
             runtimeCommerce={runtimeCommerce}
             runtimeInteractiveComponents={runtimeInteractiveComponents}
+            runtimePublicApi={runtimePublicApi}
             envContract={infrastructureEnvContract}
             disabled={infrastructureFormDisabled}
             mediaOnly={isMediaOnlyInfrastructureEditor}
@@ -5461,6 +5461,7 @@ function InfrastructureSettings({
   runtimeNotifications,
   runtimeCommerce,
   runtimeInteractiveComponents,
+  runtimePublicApi,
   envContract,
   disabled = false,
   mediaOnly = false,
@@ -5480,6 +5481,7 @@ function InfrastructureSettings({
   runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
+  runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
   envContract: InfrastructureEnvContract[];
   disabled?: boolean;
   mediaOnly?: boolean;
@@ -5610,6 +5612,125 @@ function InfrastructureSettings({
       setCopiedEnvProfile('');
     }
   };
+  const providerRuntimeEvidenceRows = useMemo(() => {
+    const commerceReady = Boolean(
+      runtimeCommerce?.webhookSecretConfigured ||
+      runtimeCommerce?.stripeSecretConfigured ||
+      runtimeCommerce?.paypalAccessTokenConfigured ||
+      runtimeCommerce?.paddleApiKeyConfigured ||
+      runtimeCommerce?.squareAccessTokenConfigured ||
+      runtimeCommerce?.adyenApiKeyConfigured ||
+      runtimeCommerce?.mollieApiKeyConfigured ||
+      (runtimeCommerce?.razorpayKeyIdConfigured && runtimeCommerce?.razorpayKeySecretConfigured) ||
+      runtimeCommerce?.easyPostApiKeyConfigured ||
+      runtimeCommerce?.shippoApiKeyConfigured ||
+      runtimeCommerce?.shopifyAdminAccessTokenConfigured ||
+      runtimeCommerce?.bigCommerceAccessTokenConfigured ||
+      runtimeCommerce?.wooCommerceConsumerKeyConfigured ||
+      runtimeCommerce?.etsyAccessTokenConfigured ||
+      runtimeCommerce?.magentoAccessTokenConfigured
+    );
+
+    return [
+      {
+        label: 'Database',
+        ready: Boolean(runtimeDatabase?.configured),
+        status: runtimeDatabase?.configured ? 'Configured' : 'Needs env',
+        detail: runtimeDatabase
+          ? `${runtimeDatabase.provider || runtimeDatabase.mode || 'database'}${runtimeDatabase.host ? ` on ${runtimeDatabase.host}` : ''}`
+          : 'Runtime database diagnostics have not loaded.',
+        missing: runtimeDatabase?.missing || [],
+      },
+      {
+        label: 'Storage',
+        ready: Boolean(runtimeStorage?.configured),
+        status: runtimeStorage?.configured ? 'Configured' : 'Needs env',
+        detail: runtimeStorage
+          ? `${runtimeStorage.provider} storage${runtimeStorage.bucket ? ` bucket ${runtimeStorage.bucket}` : ''}`
+          : 'Storage runtime diagnostics have not loaded.',
+        missing: runtimeStorage?.missing || [],
+      },
+      {
+        label: 'Supabase',
+        ready: Boolean(runtimeSupabase?.configured),
+        status: runtimeSupabase?.configured ? 'Configured' : 'Needs env',
+        detail: runtimeSupabase
+          ? `Project ${runtimeSupabase.projectRef || runtimeSupabase.projectUrl || 'metadata pending'}`
+          : 'Supabase runtime diagnostics have not loaded.',
+        missing: runtimeSupabase?.missing || [],
+      },
+      {
+        label: 'Vercel',
+        ready: Boolean(runtimeVercel?.configured),
+        status: runtimeVercel?.configured ? 'Configured' : 'Needs env',
+        detail: runtimeVercel
+          ? `Project ${runtimeVercel.projectId || runtimeVercel.url || 'metadata pending'}`
+          : 'Vercel runtime diagnostics have not loaded.',
+        missing: runtimeVercel?.missing || [],
+      },
+      {
+        label: 'Notifications',
+        ready: Boolean(runtimeNotifications?.productionReady || runtimeNotifications?.configured),
+        status: runtimeNotifications?.productionReady ? 'Production ready' : runtimeNotifications?.configured ? 'Local/dev ready' : 'Needs env',
+        detail: runtimeNotifications
+          ? `${runtimeNotifications.emailProvider || 'email'} delivery${runtimeNotifications.from ? ` from ${runtimeNotifications.from}` : ''}`
+          : 'Notification runtime diagnostics have not loaded.',
+        missing: runtimeNotifications?.missing || [],
+      },
+      {
+        label: 'Commerce',
+        ready: commerceReady,
+        status: commerceReady ? 'Provider env ready' : 'Needs env',
+        detail: runtimeCommerce
+          ? `Selected providers: ${[
+            runtimeCommerce.paymentProvider,
+            runtimeCommerce.taxProvider,
+            runtimeCommerce.shippingProvider,
+            runtimeCommerce.discountProvider,
+          ].filter(Boolean).join(', ') || 'metadata pending'}`
+          : 'Commerce runtime diagnostics have not loaded.',
+        missing: runtimeCommerce?.missing || [],
+      },
+      {
+        label: 'Media scanner',
+        ready: runtimeMediaScanner?.configured !== false,
+        status: runtimeMediaScanner?.configured === false ? 'Needs env' : 'Configured',
+        detail: runtimeMediaScanner
+          ? `${runtimeMediaScanner.provider} scanner${runtimeMediaScanner.enabled ? ' enabled' : ' disabled'}`
+          : 'Media scanner diagnostics have not loaded.',
+        missing: runtimeMediaScanner?.missing || [],
+      },
+      {
+        label: 'Interactive components',
+        ready: runtimeInteractiveComponents?.configured !== false,
+        status: runtimeInteractiveComponents?.configured === false ? 'Needs sandbox env' : 'Platform ready',
+        detail: runtimeInteractiveComponents
+          ? `${runtimeInteractiveComponents.registryProvider || 'registry'} runtime${runtimeInteractiveComponents.customCodeEnabled ? ' with custom code enabled' : ''}`
+          : 'Interactive component diagnostics have not loaded.',
+        missing: runtimeInteractiveComponents?.missing || [],
+      },
+      {
+        label: 'Public API/CORS',
+        ready: Boolean(runtimePublicApi?.corsAllowedOriginsConfigured && runtimePublicApi.exposedContractHeaders.length),
+        status: runtimePublicApi?.corsAllowedOriginsConfigured ? 'Configured' : 'Needs origins',
+        detail: runtimePublicApi
+          ? `${runtimePublicApi.corsAllowedOriginCount} allowed origin${runtimePublicApi.corsAllowedOriginCount === 1 ? '' : 's'} with ${runtimePublicApi.exposedContractHeaders.length} exposed contract headers`
+          : 'Public API runtime diagnostics have not loaded.',
+        missing: runtimePublicApi?.missing || [],
+      },
+    ];
+  }, [
+    runtimeCommerce,
+    runtimeDatabase,
+    runtimeInteractiveComponents,
+    runtimeMediaScanner,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+  ]);
+  const providerRuntimeEvidenceReadyCount = providerRuntimeEvidenceRows.filter((row) => row.ready).length;
 
   const runInfrastructureCheck = async () => {
     if (disabled || isCheckingInfrastructure) return;
@@ -5959,6 +6080,50 @@ function InfrastructureSettings({
                   <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
                 </div>
               ))}
+            </div>
+            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="settings-provider-runtime-evidence">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium text-foreground">Runtime provider evidence</div>
+                  <div className="mt-1 text-muted-foreground">
+                    {providerRuntimeEvidenceReadyCount}/{providerRuntimeEvidenceRows.length} ready for local runtime checks before live provider certification.
+                  </div>
+                </div>
+                <span className={cn(
+                  'rounded-md px-2 py-1 text-[11px] font-semibold',
+                  providerRuntimeEvidenceReadyCount === providerRuntimeEvidenceRows.length ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}
+                >
+                  {providerRuntimeEvidenceReadyCount === providerRuntimeEvidenceRows.length ? 'Ready to certify' : 'Needs runtime inputs'}
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {providerRuntimeEvidenceRows.map((row) => (
+                  <div key={row.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-foreground">{row.label}</div>
+                        <div className="mt-1 text-[11px] leading-4 text-muted-foreground">{row.detail}</div>
+                      </div>
+                      <span className={cn(
+                        'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        row.ready ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                      )}
+                      >
+                        {row.status}
+                      </span>
+                    </div>
+                    {row.missing.length > 0 && (
+                      <div className="mt-2 break-words font-mono text-[10px] leading-4 text-muted-foreground">
+                        Missing: {row.missing.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                Runtime evidence is non-secret and mirrors the Settings admin API providerCertification.runtimeEvidence block; credential values stay in server or CI environment variables.
+              </div>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => (

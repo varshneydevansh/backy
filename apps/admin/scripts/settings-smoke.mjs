@@ -97,10 +97,13 @@ const assertSettingsSourceContracts = () => {
     'ci:settings-provider-certification',
     'ci:commerce-provider-certification',
     'data-testid="settings-provider-certification"',
+    'data-testid="settings-provider-runtime-evidence"',
     'data-testid="settings-provider-certification-download-button"',
     'data-testid="settings-provider-certification-copy-button"',
     'providerCertification',
     'providerCertificationHandoff',
+    'providerRuntimeEvidenceRows',
+    'providerRuntimeEvidenceReadyCount',
     'runtimeEvidence',
     'metadataEvidence',
     'backy.settings-provider-certification-handoff.v1',
@@ -108,6 +111,9 @@ const assertSettingsSourceContracts = () => {
     'Provider certification handoff downloaded.',
     'npm run test:settings-provider-certification-preflight-contract',
     'external-live-provider-gate',
+    'Runtime provider evidence',
+    'Public API/CORS',
+    'Needs runtime inputs',
     'Required inputs',
     'Supabase/Postgres',
     'BACKY_DATABASE_URL or DATABASE_URL',
@@ -1744,6 +1750,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationSettingsGate: runbookText.includes('certify_settings_providers') && runbookText.includes('ci:settings-provider-certification'),
     hasReleaseCertificationCommerceGate: runbookText.includes('certify_commerce_providers') && runbookText.includes('ci:commerce-provider-certification'),
     hasProviderCertificationMatrix: Boolean(document.querySelector('[data-testid="settings-provider-certification"]')),
+    hasProviderRuntimeEvidence: Boolean(document.querySelector('[data-testid="settings-provider-runtime-evidence"]')),
+    hasProviderRuntimeEvidenceCopy: document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Runtime provider evidence') && document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Public API/CORS') || false,
     hasProviderCertificationDownloadButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-download-button"]')),
     hasProviderCertificationCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-copy-button"]')),
     hasProviderCertificationSettings: runbookText.includes('Provider certification matrix') && runbookText.includes('npm run ci:settings-provider-certification'),
@@ -1815,6 +1823,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasProviderCertificationSettings &&
       infrastructureState.hasProviderCertificationCommerce &&
       infrastructureState.hasProviderCertificationFamilies &&
+      infrastructureState.hasProviderRuntimeEvidence &&
+      infrastructureState.hasProviderRuntimeEvidenceCopy &&
       infrastructureState.hasProviderCertificationHandoffSummary &&
       infrastructureState.hasProviderCertificationRequiredInputs &&
       infrastructureState.hasReleaseCertificationStorageAliases &&
