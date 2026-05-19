@@ -72,28 +72,37 @@ assert(
   Array.isArray(normalJson.partialGateMap) && normalJson.partialGateMap.length === 4,
   'Doctor default mode should expose the current Partial-to-gate map.',
 );
-for (const { row, gate, workflow, requiredInputFamily } of [
+for (const { row, gate, preflight, workflow, requiredInputFamily, disposableGuard, mockGate, doctorRequiredEnv } of [
   {
     row: '/forms',
     gate: 'npm run ci:forms-postgres',
+    preflight: 'npm run test:forms-postgres-preflight-contract',
+    disposableGuard: 'npm run test:forms-postgres-disposable-guard',
     workflow: '.github/workflows/forms-postgres-contract.yml',
     requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL',
   },
   {
     row: 'Frontend manifest/OpenAPI/SDK APIs',
     gate: 'npm run ci:sdk-postgres-smoke',
+    preflight: 'npm run test:sdk-postgres-preflight-contract',
+    disposableGuard: 'npm run test:sdk-postgres-disposable-guard',
     workflow: '.github/workflows/sdk-postgres-smoke.yml',
     requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL',
   },
   {
     row: '/settings and Settings admin APIs',
     gate: 'npm run ci:settings-provider-certification',
+    preflight: 'npm run test:settings-provider-certification-preflight-contract',
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
     workflow: '.github/workflows/settings-provider-certification.yml',
     requiredInputFamily: 'storage, Vercel, notification',
   },
   {
     row: '/products and /orders',
     gate: 'npm run ci:commerce-provider-certification',
+    preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+    mockGate: 'npm run ci:commerce-provider-smoke',
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
     workflow: '.github/workflows/commerce-provider-certification.yml',
     requiredInputFamily: 'payment, tax, shipping',
   },
@@ -101,7 +110,17 @@ for (const { row, gate, workflow, requiredInputFamily } of [
   const entry = normalJson.partialGateMap.find((item) => item.row === row);
   assert(entry, `Doctor Partial-to-gate map missing ${row}.`);
   assert(entry.gate === gate, `Doctor Partial-to-gate map for ${row} should use ${gate}.`);
+  assert(entry.preflight === preflight, `Doctor Partial-to-gate map for ${row} should use ${preflight}.`);
   assert(entry.workflow === workflow, `Doctor Partial-to-gate map for ${row} should use ${workflow}.`);
+  if (disposableGuard) {
+    assert(entry.disposableGuard === disposableGuard, `Doctor Partial-to-gate map for ${row} should use ${disposableGuard}.`);
+  }
+  if (mockGate) {
+    assert(entry.mockGate === mockGate, `Doctor Partial-to-gate map for ${row} should use ${mockGate}.`);
+  }
+  if (doctorRequiredEnv) {
+    assert(entry.doctorRequiredEnv === doctorRequiredEnv, `Doctor Partial-to-gate map for ${row} should document ${doctorRequiredEnv}.`);
+  }
   assert(
     typeof entry.requiredInputFamily === 'string' && entry.requiredInputFamily.includes(requiredInputFamily),
     `Doctor Partial-to-gate map for ${row} should document ${requiredInputFamily} input requirements.`,
