@@ -69,6 +69,7 @@ function parseStatus(raw: unknown): CommentStatus | null {
 
 function parseBody(raw: unknown): {
   status?: CommentStatus;
+  statusProvided: boolean;
   parentId?: string | null;
   commentThreadId?: string | null;
   hasThreadUpdate: boolean;
@@ -83,6 +84,7 @@ function parseBody(raw: unknown): {
   }
 
   const status = parseStatus((raw as { status?: unknown }).status);
+  const statusProvided = Object.prototype.hasOwnProperty.call(raw, 'status');
   const hasParentId = Object.prototype.hasOwnProperty.call(raw, 'parentId');
   const hasCommentThreadId = Object.prototype.hasOwnProperty.call(raw, 'commentThreadId') || Object.prototype.hasOwnProperty.call(raw, 'threadId');
   const parentId = hasParentId
@@ -127,6 +129,7 @@ function parseBody(raw: unknown): {
 
   return {
     status: status || undefined,
+    statusProvided,
     parentId,
     commentThreadId,
     hasThreadUpdate: hasParentId || hasCommentThreadId,
@@ -137,6 +140,13 @@ function parseBody(raw: unknown): {
     requestId: requestId || undefined,
   };
 }
+
+const invalidSiteCommentStatusResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_SITE_COMMENT_STATUS',
+  'Invalid site comment status. Use pending, approved, rejected, spam, or blocked.',
+  requestId,
+);
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const requestId = _request.headers.get('x-request-id') || makeRequestId();
@@ -229,6 +239,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const payload = parseBody(await request.json().catch(() => null));
       if (!payload) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or parentId is required.', baseRequestId);
+      }
+      if (payload.statusProvided && !payload.status) {
+        return invalidSiteCommentStatusResponse(baseRequestId);
       }
       if (payload.status && payload.hasThreadUpdate) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Update status and reply parent in separate requests.', baseRequestId);
@@ -337,6 +350,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const payload = parseBody(await request.json().catch(() => null));
     if (!payload) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or parentId is required.', baseRequestId);
+    }
+    if (payload.statusProvided && !payload.status) {
+      return invalidSiteCommentStatusResponse(baseRequestId);
     }
     if (payload.status && payload.hasThreadUpdate) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Update status and reply parent in separate requests.', baseRequestId);

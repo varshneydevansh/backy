@@ -292,6 +292,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/comments/route.ts', import.meta.url),
     'utf8',
   );
+  const publicSiteCommentDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/comments/[commentId]/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -385,6 +389,8 @@ function assertAdminPageContentValidationSource() {
   assert(publicSiteCommentsRoute.includes('integerQueryFromInput'), 'site comments route must parse pagination filters strictly');
   assert(publicSiteCommentsRoute.includes('statusProvided'), 'site comments route must distinguish missing moderation status from invalid status values');
   assert(publicSiteCommentsRoute.includes('invalidSiteCommentStatusResponse'), 'site comments route must return stable invalid moderation status errors');
+  assert(publicSiteCommentDetailRoute.includes("'INVALID_SITE_COMMENT_STATUS'"), 'site comment detail route must reject invalid moderation status updates');
+  assert(publicSiteCommentDetailRoute.includes('statusProvided'), 'site comment detail route must distinguish missing status from invalid status values');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
