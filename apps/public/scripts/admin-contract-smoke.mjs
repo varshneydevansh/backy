@@ -276,6 +276,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/pages/[pageId]/route.ts', import.meta.url),
     'utf8',
   );
+  const publicPagesRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/pages/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -323,12 +327,17 @@ function assertAdminPageContentValidationSource() {
   assert(publicBlogRoute.includes("'INVALID_BLOG_ARCHIVE_YEAR'"), 'public blog list route must reject invalid archive year filters');
   assert(publicBlogRoute.includes("'INVALID_BLOG_ARCHIVE_MONTH'"), 'public blog list route must reject invalid archive month filters');
   assert(publicBlogRoute.includes('statusFilter.invalid'), 'public blog list route must reject invalid status filters');
+  assert(publicPagesRoute.includes("'INVALID_PAGE_LIMIT'"), 'public pages list route must reject invalid limit filters');
+  assert(publicPagesRoute.includes("'INVALID_PAGE_OFFSET'"), 'public pages list route must reject invalid offset filters');
+  assert(publicPagesRoute.includes('parseBoundedInteger'), 'public pages list route must parse pagination filters strictly');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
       apiContracts.includes('INVALID_PAGE_CONTENT_ELEMENTS') &&
       apiContracts.includes('INVALID_PAGE_CANVAS_SIZE') &&
       apiContracts.includes('INVALID_PAGE_STATUS') &&
+      apiContracts.includes('INVALID_PAGE_LIMIT') &&
+      apiContracts.includes('INVALID_PAGE_OFFSET') &&
       apiContracts.includes('INVALID_BLOG_CONTENT') &&
       apiContracts.includes('INVALID_BLOG_CONTENT_ELEMENTS') &&
       apiContracts.includes('INVALID_BLOG_CANVAS_SIZE') &&

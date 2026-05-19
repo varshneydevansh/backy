@@ -43,12 +43,26 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
-    const parsed = Number.parseInt(value || '', 10);
-    if (!Number.isFinite(parsed)) {
-        return fallback;
+const parseBoundedInteger = (
+    value: string | null,
+    fallback: number,
+    min: number,
+    max?: number,
+): { value: number; invalid?: string } => {
+    if (value === null || value.trim() === '') {
+        return { value: fallback };
     }
-    return Math.max(min, Math.min(max, parsed));
+
+    const parsed = Number(value);
+    if (
+        !Number.isInteger(parsed) ||
+        parsed < min ||
+        (max !== undefined && parsed > max)
+    ) {
+        return { value: fallback, invalid: value };
+    }
+
+    return { value: parsed };
 };
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
@@ -189,8 +203,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const { searchParams } = new URL(request.url);
         const slug = searchParams.get('slug') || searchParams.get('path');
         const previewToken = searchParams.get('previewToken');
-        const limit = parseBoundedInteger(searchParams.get('limit'), 50, 1, 100);
-        const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+        const limitFilter = parseBoundedInteger(searchParams.get('limit'), 50, 1, 100);
+        if (limitFilter.invalid) {
+            return errorResponse(400, 'INVALID_PAGE_LIMIT', 'Invalid page limit. Use an integer from 1 to 100.', requestId);
+        }
+        const offsetFilter = parseBoundedInteger(searchParams.get('offset'), 0, 0);
+        if (offsetFilter.invalid) {
+            return errorResponse(400, 'INVALID_PAGE_OFFSET', 'Invalid page offset. Use an integer greater than or equal to 0.', requestId);
+        }
+        const limit = limitFilter.value;
+        const offset = offsetFilter.value;
         const origin = new URL(request.url).origin;
 
         if (!shouldUseDemoStoreFallback()) {

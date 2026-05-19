@@ -136,6 +136,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Path-based page fetch for public rendering.
   - Response uses `{ success, requestId, data: { page } }` for detail and `{ success, requestId, data: { pages, pagination } }` for list; legacy top-level `page`, `pages`, and `pagination` remain for compatibility.
   - Pages created from a connected frontend design template expose raw `meta.frontendDesign*` provenance plus a normalized `frontendDesign` summary (`templateId`, `templateName`, `routePattern`, `source`, `chrome`, `tokens`, `customCss`, `bindingHints`) in public page list/detail responses and manifest page summaries.
+  - Invalid public page list pagination filters return explicit `400` errors instead of silently clamping the list: `INVALID_PAGE_LIMIT` or `INVALID_PAGE_OFFSET`.
   - Must return only published content.
   - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
   - Successful preview-token reads record a tokenless `previewToken.use` audit event with `actorId: "public-preview"`, target, surface, path/slug metadata, and `tokenStored: false`.
