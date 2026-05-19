@@ -65,22 +65,38 @@ function parseBody(raw: unknown) {
     return null;
   }
 
+  const body = raw as {
+    status?: unknown;
+    reviewedBy?: unknown;
+    rejectionReason?: unknown;
+    blockReason?: unknown;
+    requestId?: unknown;
+  };
+
   return {
-    status: parseStatus((raw as { status?: unknown }).status),
-    reviewedBy: typeof (raw as { reviewedBy?: unknown }).reviewedBy === 'string'
-      ? (raw as { reviewedBy: string }).reviewedBy
+    status: parseStatus(body.status),
+    statusProvided: Object.prototype.hasOwnProperty.call(body, 'status'),
+    reviewedBy: typeof body.reviewedBy === 'string'
+      ? body.reviewedBy
       : undefined,
-    rejectionReason: typeof (raw as { rejectionReason?: unknown }).rejectionReason === 'string'
-      ? (raw as { rejectionReason: string }).rejectionReason
+    rejectionReason: typeof body.rejectionReason === 'string'
+      ? body.rejectionReason
       : undefined,
-    blockReason: typeof (raw as { blockReason?: unknown }).blockReason === 'string'
-      ? (raw as { blockReason: string }).blockReason
+    blockReason: typeof body.blockReason === 'string'
+      ? body.blockReason
       : undefined,
-    requestId: typeof (raw as { requestId?: unknown }).requestId === 'string'
-      ? (raw as { requestId: string }).requestId.trim()
+    requestId: typeof body.requestId === 'string'
+      ? body.requestId.trim()
       : undefined,
   };
 }
+
+const invalidStatusResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_BLOG_COMMENT_STATUS',
+  'Invalid blog comment status. Use pending, approved, rejected, spam, or blocked.',
+  requestId,
+);
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const requestId = _request.headers.get('x-request-id') || makeRequestId();
@@ -187,7 +203,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = parseBody(await request.json().catch(() => null));
-      if (!body || !body.status) {
+      if (!body) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
+      }
+      if (body.statusProvided && !body.status) {
+        return invalidStatusResponse(baseRequestId);
+      }
+      if (!body.status) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
       }
       const requestId = body.requestId || baseRequestId;
@@ -227,7 +249,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = parseBody(await request.json().catch(() => null));
-    if (!body || !body.status) {
+    if (!body) {
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
+    }
+    if (body.statusProvided && !body.status) {
+      return invalidStatusResponse(baseRequestId);
+    }
+    if (!body.status) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
     }
     const requestId = body.requestId || baseRequestId;

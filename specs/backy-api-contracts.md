@@ -378,6 +378,7 @@ Public page payload should include:
   - Blog comment submit/list endpoints follow the same envelope and legacy compatibility behavior as page comments.
   - Blog comment validation and spam rejections return structured `422` envelopes with `error.code: "VALIDATION_ERROR"`, `details`, and `validation` field errors instead of legacy string errors.
   - Invalid blog comment list filters return explicit `400` errors instead of silently falling back or clamping: `INVALID_BLOG_COMMENT_STATUS`, `INVALID_BLOG_COMMENT_SORT`, `INVALID_BLOG_COMMENT_LIMIT`, or `INVALID_BLOG_COMMENT_OFFSET`.
+  - Blog comment moderation updates reject invalid status values with `400 INVALID_BLOG_COMMENT_STATUS` instead of collapsing them into generic payload errors.
 
 - `GET /api/sites/:siteId/comments`
 - `PATCH /api/sites/:siteId/comments`

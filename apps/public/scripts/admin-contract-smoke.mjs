@@ -308,6 +308,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/blog/[postId]/comments/route.ts', import.meta.url),
     'utf8',
   );
+  const publicBlogCommentDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/blog/[postId]/comments/[commentId]/route.ts', import.meta.url),
+    'utf8',
+  );
   const apiContracts = fs.readFileSync(
     new URL('../../../specs/backy-api-contracts.md', import.meta.url),
     'utf8',
@@ -356,6 +360,8 @@ function assertAdminPageContentValidationSource() {
   assert(publicBlogCommentsRoute.includes('blogCommentValidationResponse'), 'public blog comments route must use structured validation error envelopes');
   assert(publicBlogCommentsRoute.includes("code: 'VALIDATION_ERROR'"), 'public blog comments route must return stable validation error codes');
   assert(!publicBlogCommentsRoute.includes("error: 'Validation failed'"), 'public blog comments route must not return legacy string validation errors');
+  assert(publicBlogCommentDetailRoute.includes("'INVALID_BLOG_COMMENT_STATUS'"), 'public blog comment detail route must reject invalid moderation status updates');
+  assert(publicBlogCommentDetailRoute.includes('statusProvided'), 'public blog comment detail route must distinguish missing status from invalid status values');
   assert(publicPagesRoute.includes("'INVALID_PAGE_LIMIT'"), 'public pages list route must reject invalid limit filters');
   assert(publicPagesRoute.includes("'INVALID_PAGE_OFFSET'"), 'public pages list route must reject invalid offset filters');
   assert(publicPagesRoute.includes('parseBoundedInteger'), 'public pages list route must parse pagination filters strictly');
