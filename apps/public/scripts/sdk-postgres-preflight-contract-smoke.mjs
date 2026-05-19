@@ -58,9 +58,15 @@ assert(
 
 assert(
   settingsRoute.includes('data-testid="settings-frontend-database-certification"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-copy-button"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-download-button"') &&
     settingsRoute.includes('Frontend SDK database certification') &&
+    settingsRoute.includes('frontendDatabaseCertificationHandoff') &&
+    settingsRoute.includes('backy-frontend-database-certification-handoff.json') &&
+    settingsRoute.includes('Frontend database certification handoff downloaded.') &&
     settingsRoute.includes('npm run ci:sdk-postgres-smoke') &&
     settingsRoute.includes('npm run test:sdk-postgres-preflight-contract') &&
+    settingsRoute.includes('npm run test:frontend-contract-types') &&
     settingsRoute.includes('.github/workflows/sdk-postgres-smoke.yml') &&
     settingsRoute.includes('BACKY_DATABASE_URL or DATABASE_URL') &&
     settingsRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&

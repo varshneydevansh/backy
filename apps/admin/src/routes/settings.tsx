@@ -1670,6 +1670,36 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
   ]);
+  const frontendDatabaseCertificationHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 'backy.frontend-database-certification.v1',
+    status: 'external-database-gate',
+    gate: {
+      command: 'npm run ci:sdk-postgres-smoke',
+      workflow: '.github/workflows/sdk-postgres-smoke.yml',
+      localPreflight: 'npm run test:sdk-postgres-preflight-contract',
+      typeContract: 'npm run test:frontend-contract-types',
+    },
+    requiredEnvironment: {
+      databaseUrlAliases: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+      requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
+      targetGuards: ['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST', 'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'],
+    },
+    publicContracts: {
+      manifest: '/api/sites/{siteId}/manifest#data.contract.databaseCertification',
+      openApi: '/api/sites/{siteId}/openapi#x-backy-database-certification',
+      sdkType: 'BackyFrontendDatabaseCertification',
+    },
+    coverageFamilies: ['manifest', 'openapi', 'render', 'media', 'forms', 'interactive-components', 'collections', 'comments', 'events', 'commerce'],
+    runtimeEvidence: {
+      database: runtimeDatabase || null,
+      publicApi: runtimePublicApi || null,
+    },
+    secretHandling: 'Database URLs and service credentials stay in server/CI environment variables; this handoff only exports aliases, gate names, coverage, and non-secret runtime readiness.',
+  }), [
+    runtimeDatabase,
+    runtimePublicApi,
+  ]);
   const settingsHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     delivery: {
@@ -1765,6 +1795,7 @@ function SettingsPage() {
         ],
       },
       providerCertification: providerCertificationHandoff,
+      frontendDatabaseCertification: frontendDatabaseCertificationHandoff,
       publicApi: runtimePublicApi || null,
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
@@ -1827,6 +1858,7 @@ function SettingsPage() {
     integrations.supabase,
     integrations.vercel,
     infrastructureEnvContract,
+    frontendDatabaseCertificationHandoff,
     notificationSettings,
     platformReadiness,
     providerCertificationHandoff,
@@ -1848,6 +1880,7 @@ function SettingsPage() {
   ]);
   const settingsHandoffText = useMemo(() => JSON.stringify(settingsHandoff, null, 2), [settingsHandoff]);
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationHandoff, null, 2), [providerCertificationHandoff]);
+  const frontendDatabaseCertificationHandoffText = useMemo(() => JSON.stringify(frontendDatabaseCertificationHandoff, null, 2), [frontendDatabaseCertificationHandoff]);
 
   const copySettingsHandoffText = async (value: string, label: string) => {
     if (isSaving) return;
@@ -1900,6 +1933,25 @@ function SettingsPage() {
     anchor.remove();
     URL.revokeObjectURL(url);
     setNotice('Provider certification handoff downloaded.');
+  };
+
+  const downloadFrontendDatabaseCertificationHandoff = () => {
+    if (isSaving) return;
+    if (!canConfigureSettings) {
+      setNotice(configurePermissionTitle || 'Your account cannot export settings handoff manifests.');
+      return;
+    }
+
+    const blob = new Blob([frontendDatabaseCertificationHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'backy-frontend-database-certification-handoff.json';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Frontend database certification handoff downloaded.');
   };
 
   const updateNotificationSettings = (next: Partial<NotificationSettingsConfig>) => {
@@ -2260,6 +2312,10 @@ function SettingsPage() {
             runtimeDatabase={runtimeDatabase}
             runtimePublicApi={runtimePublicApi}
             runtimeStorage={runtimeStorage}
+            frontendDatabaseCertificationControlsDisabled={isSaving || !canConfigureSettings}
+            frontendDatabaseCertificationControlsTitle={configurePermissionTitle}
+            onCopyFrontendDatabaseCertificationHandoff={() => void copySettingsHandoffText(frontendDatabaseCertificationHandoffText, 'Frontend database certification handoff')}
+            onDownloadFrontendDatabaseCertificationHandoff={downloadFrontendDatabaseCertificationHandoff}
             onChange={setDeliveryMode}
           />
         )}
@@ -3429,12 +3485,20 @@ function DeliveryModeSettings({
   runtimeDatabase,
   runtimePublicApi,
   runtimeStorage,
+  frontendDatabaseCertificationControlsDisabled = false,
+  frontendDatabaseCertificationControlsTitle,
+  onCopyFrontendDatabaseCertificationHandoff,
+  onDownloadFrontendDatabaseCertificationHandoff,
   onChange,
 }: {
   value: DeliveryMode;
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
   runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
+  frontendDatabaseCertificationControlsDisabled?: boolean;
+  frontendDatabaseCertificationControlsTitle?: string;
+  onCopyFrontendDatabaseCertificationHandoff: () => void;
+  onDownloadFrontendDatabaseCertificationHandoff: () => void;
   onChange: (next: DeliveryMode) => void;
 }) {
   const [copiedEndpoint, setCopiedEndpoint] = useState('');
@@ -3615,6 +3679,30 @@ function DeliveryModeSettings({
             >
               {frontendDatabaseReadyCount}/{frontendDatabaseCertificationChecks.length} ready
             </span>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={frontendDatabaseCertificationControlsDisabled}
+              title={frontendDatabaseCertificationControlsTitle}
+              onClick={onCopyFrontendDatabaseCertificationHandoff}
+              iconStart={<Copy className="size-4" />}
+              data-testid="settings-frontend-database-certification-copy-button"
+            >
+              Copy DB handoff
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={frontendDatabaseCertificationControlsDisabled}
+              title={frontendDatabaseCertificationControlsTitle}
+              onClick={onDownloadFrontendDatabaseCertificationHandoff}
+              iconStart={<Download className="size-4" />}
+              data-testid="settings-frontend-database-certification-download-button"
+            >
+              Download DB JSON
+            </Button>
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             {frontendDatabaseCertificationChecks.map((check) => (
