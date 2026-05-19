@@ -2257,6 +2257,8 @@ function SettingsPage() {
         {activeTab === 'delivery' && (
           <DeliveryModeSettings
             value={deliveryMode}
+            runtimeDatabase={runtimeDatabase}
+            runtimePublicApi={runtimePublicApi}
             runtimeStorage={runtimeStorage}
             onChange={setDeliveryMode}
           />
@@ -3424,10 +3426,14 @@ function EndpointBlock({
 
 function DeliveryModeSettings({
   value,
+  runtimeDatabase,
+  runtimePublicApi,
   runtimeStorage,
   onChange,
 }: {
   value: DeliveryMode;
+  runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
+  runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   onChange: (next: DeliveryMode) => void;
 }) {
@@ -3436,6 +3442,30 @@ function DeliveryModeSettings({
   const adminApiBase = getApiBase('admin');
   const publicHostBase = publicApiBase.replace(/\/api$/, '');
   const publicSiteBase = `${publicHostBase}/sites`;
+  const frontendDatabaseCertificationChecks = [
+    {
+      label: 'Database runtime',
+      ready: Boolean(runtimeDatabase?.mode === 'database' && runtimeDatabase.configured),
+      detail: runtimeDatabase
+        ? runtimeDatabase.configured
+          ? `${runtimeDatabase.provider || runtimeDatabase.mode} runtime is configured.`
+          : runtimeDatabase.error || `Missing ${runtimeDatabase.missing?.join(', ') || 'database runtime env'}.`
+        : 'Runtime database diagnostics have not loaded.',
+    },
+    {
+      label: 'Disposable confirmation',
+      ready: false,
+      detail: 'Set BACKY_DATABASE_DISPOSABLE_CONFIRMED=true only for a disposable migrated Supabase/Postgres certification target.',
+    },
+    {
+      label: 'Public API CORS',
+      ready: Boolean(runtimePublicApi?.corsAllowedOriginsConfigured && runtimePublicApi.exposedContractHeaders.length),
+      detail: runtimePublicApi
+        ? `${runtimePublicApi.corsAllowedOriginCount} exact browser origin${runtimePublicApi.corsAllowedOriginCount === 1 ? '' : 's'} configured; ${runtimePublicApi.exposedContractHeaders.length} Backy contract headers exposed.`
+        : 'Public API/CORS runtime diagnostics have not loaded.',
+    },
+  ];
+  const frontendDatabaseReadyCount = frontendDatabaseCertificationChecks.filter((check) => check.ready).length;
 
   const copyEndpoint = async (url: string) => {
     try {
@@ -3569,6 +3599,53 @@ function DeliveryModeSettings({
           Your frontend can consume these contracts directly.
           Reference contract: <code>specs/backy-api-contracts.md</code>
         </p>
+
+        <div className="rounded-xl border border-border bg-background p-4" data-testid="settings-frontend-database-certification">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">Frontend SDK database certification</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Public manifest, OpenAPI, render payload, media, CMS, forms, comments, events, and SDK contracts stay Partial until this database-mode gate passes against a disposable migrated Supabase/Postgres target.
+              </p>
+            </div>
+            <span className={cn(
+              'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium',
+              frontendDatabaseReadyCount === frontendDatabaseCertificationChecks.length ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+            )}
+            >
+              {frontendDatabaseReadyCount}/{frontendDatabaseCertificationChecks.length} ready
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            {frontendDatabaseCertificationChecks.map((check) => (
+              <div key={check.label} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-xs font-semibold text-foreground">{check.label}</div>
+                  <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', check.ready ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+                    {check.ready ? 'Ready' : 'Needs input'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'Gate', value: 'npm run ci:sdk-postgres-smoke' },
+              { label: 'Preflight', value: 'npm run test:sdk-postgres-preflight-contract' },
+              { label: 'Workflow', value: '.github/workflows/sdk-postgres-smoke.yml' },
+              { label: 'Required env', value: 'BACKY_DATABASE_URL or DATABASE_URL' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            The public manifest exposes <span className="font-mono">backy.frontend-database-certification.v1</span> as <span className="font-mono">contract.databaseCertification</span>, and the SDK exposes <span className="font-mono">BackyFrontendDatabaseCertification</span>. Database URLs and service credentials stay in server/CI environment variables.
+          </p>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <EndpointBlock

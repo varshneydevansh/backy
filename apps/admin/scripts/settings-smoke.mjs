@@ -92,7 +92,13 @@ const assertSettingsSourceContracts = () => {
     "key: 'BACKY_CORS_ALLOWED_ORIGINS'",
     "label: 'Custom frontend CORS origins'",
     "{ label: 'public api', provider: 'publicApi' }",
+    'data-testid="settings-frontend-database-certification"',
+    'Frontend SDK database certification',
+    'backy.frontend-database-certification.v1',
     'BACKY_DATABASE_URL',
+    'DATABASE_URL',
+    'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
+    'npm run test:sdk-postgres-preflight-contract',
     'ci:sdk-postgres-smoke',
     'ci:settings-provider-certification',
     'ci:commerce-provider-certification',
@@ -2018,10 +2024,20 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       hasSiteSettingsRead: text.includes('GET') && text.includes('/sites/:siteId/settings'),
       hasSiteSettingsPatch: text.includes('PATCH') && text.includes('/sites/:siteId/settings'),
       hasScopedDescription: text.includes('site-scoped Settings envelope') || text.includes('site-owned Settings sections'),
+      hasFrontendDatabaseCertification: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification"]')),
+      hasFrontendDatabaseGate: text.includes('Frontend SDK database certification') && text.includes('npm run ci:sdk-postgres-smoke'),
+      hasFrontendDatabaseEnv: text.includes('BACKY_DATABASE_URL or DATABASE_URL') && text.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'),
+      hasFrontendDatabaseContract: text.includes('backy.frontend-database-certification.v1') && text.includes('BackyFrontendDatabaseCertification'),
     };
   })()`);
   assert(
-    deliveryApiState.hasSiteSettingsRead && deliveryApiState.hasSiteSettingsPatch && deliveryApiState.hasScopedDescription,
+    deliveryApiState.hasSiteSettingsRead &&
+      deliveryApiState.hasSiteSettingsPatch &&
+      deliveryApiState.hasScopedDescription &&
+      deliveryApiState.hasFrontendDatabaseCertification &&
+      deliveryApiState.hasFrontendDatabaseGate &&
+      deliveryApiState.hasFrontendDatabaseEnv &&
+      deliveryApiState.hasFrontendDatabaseContract,
     `Delivery API handoff did not expose site-scoped settings endpoints: ${JSON.stringify(deliveryApiState)}`,
   );
   const saved = await saveSettings(client);

@@ -23,6 +23,7 @@ const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const sdkIndex = read('../../../packages/sdk-js/src/index.ts');
+const settingsRoute = read('../../../apps/admin/src/routes/settings.tsx');
 const rootPackage = read('../../../package.json');
 const sdkPostgresWorkflow = read('../../../.github/workflows/sdk-postgres-smoke.yml');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
@@ -53,6 +54,21 @@ assert(
     manifestRoute.includes("'interactive-components'") &&
     manifestRoute.includes('Database URLs and service credentials stay in CI/runtime environment'),
   'Frontend manifest must expose a non-secret SDK Postgres database certification handoff.',
+);
+
+assert(
+  settingsRoute.includes('data-testid="settings-frontend-database-certification"') &&
+    settingsRoute.includes('Frontend SDK database certification') &&
+    settingsRoute.includes('npm run ci:sdk-postgres-smoke') &&
+    settingsRoute.includes('npm run test:sdk-postgres-preflight-contract') &&
+    settingsRoute.includes('.github/workflows/sdk-postgres-smoke.yml') &&
+    settingsRoute.includes('BACKY_DATABASE_URL or DATABASE_URL') &&
+    settingsRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
+    settingsRoute.includes('backy.frontend-database-certification.v1') &&
+    settingsRoute.includes('BackyFrontendDatabaseCertification') &&
+    settingsRoute.includes('runtimeDatabase') &&
+    settingsRoute.includes('runtimePublicApi'),
+  'Settings Delivery tab must expose the SDK Postgres database certification handoff for custom frontend operators.',
 );
 
 assert(
