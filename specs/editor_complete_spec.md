@@ -567,6 +567,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Newsletter starter pages now seed explicit tablet/mobile responsive overrides for publication hero content, proof cards, signup forms, consent fields, confirmation cards, and preference CTAs so opt-in flows remain readable and tappable across breakpoints.
   - Survey starter pages now seed explicit tablet/mobile responsive overrides for survey hero content, insight cards, rating/topic selectors, feedback textareas, consent fields, routing cards, and results CTAs so response flows remain readable and tappable across breakpoints.
   - Registration starter pages now seed explicit tablet/mobile responsive overrides for registration intro content, next-step notes, contact fields, member-type selectors, consent fields, and create-account CTAs so signup flows remain readable and tappable across breakpoints.
+  - Member-login starter pages now seed explicit tablet/mobile responsive overrides for access hero content, registration prompts, access-link forms, email/reason fields, and request CTAs so passwordless member flows remain readable and tappable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves

@@ -11023,42 +11023,70 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 610,
                 props: { backgroundColor: '#eef7ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 980 },
+                    mobile: { width: 375, height: 1140 },
+                },
                 children: [
                     createCanvasElement('text', 76, 76, {
                         id: 'member-login-kicker',
                         width: 260,
                         height: 28,
                         props: { content: 'Member access', fontSize: 13, fontWeight: '800', color: '#0369a1', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 64, width: 220, height: 28 },
+                            mobile: { x: 24, y: 52, width: 190, height: 28 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 116, {
                         id: 'member-login-heading',
                         width: 540,
                         height: 116,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                        responsive: {
+                            tablet: { x: 54, y: 104, width: 540, height: 120, props: { fontSize: 46 } },
+                            mobile: { x: 24, y: 92, width: 327, height: 156, props: { fontSize: 36 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 256, {
                         id: 'member-login-copy',
                         width: 510,
                         height: 112,
                         props: { content: description, fontSize: 18, lineHeight: 1.62, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 250, width: 510, height: 112, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 276, width: 323, height: 134, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 76, 410, {
                         id: 'member-login-register-card',
                         width: 480,
                         height: 104,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bae6fd', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 398, width: 660, height: 104 },
+                            mobile: { x: 24, y: 446, width: 327, height: 190 },
+                        },
                         children: [
                             createCanvasElement('paragraph', 20, 18, {
                                 id: 'member-login-register-copy',
                                 width: 290,
                                 height: 58,
                                 props: { content: 'New here? Send visitors to your registration page or membership checkout.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 430, height: 58 },
+                                    mobile: { width: 279, height: 72 },
+                                },
                             }),
                             createCanvasElement('button', 326, 27, {
                                 id: 'member-login-register-button',
                                 width: 126,
                                 height: 46,
                                 props: { label: 'Register', href: '/register', backgroundColor: '#e0f2fe', color: '#075985', borderRadius: 8, fontWeight: '700' },
+                                responsive: {
+                                    tablet: { x: 500, y: 29, width: 126, height: 46 },
+                                    mobile: { x: 20, y: 122, width: 126, height: 46 },
+                                },
                             }),
                         ],
                     }),
@@ -11087,22 +11115,60 @@ function buildTemplateElements(input: {
                             borderStyle: 'solid',
                             boxShadow: '0 20px 60px rgba(14, 116, 144, 0.12)',
                         },
+                        responsive: {
+                            tablet: { x: 54, y: 540, width: 660, height: 390 },
+                            mobile: { x: 24, y: 670, width: 327, height: 430 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 28, {
                                 id: 'member-login-form-heading',
                                 width: 330,
                                 height: 36,
                                 props: { content: 'Request your access link', level: 'h2', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                                responsive: {
+                                    tablet: { width: 560, height: 36 },
+                                    mobile: { width: 279, height: 58, props: { fontSize: 22 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 76, {
                                 id: 'member-login-form-copy',
                                 width: 330,
                                 height: 58,
                                 props: { content: 'This starter never asks visitors to submit a password into Backy Forms.', fontSize: 14, lineHeight: 1.45, color: '#64748b' },
+                                responsive: {
+                                    tablet: { width: 560, height: 58 },
+                                    mobile: { y: 98, width: 279, height: 72 },
+                                },
                             }),
-                            createCanvasElement('input', 24, 158, { id: 'member-login-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
-                            createCanvasElement('input', 24, 230, { id: 'member-login-access-reason', width: 360, height: 54, props: { label: 'Access reason', name: 'access_reason', placeholder: 'Customer portal, course, community...', required: false } }),
-                            createCanvasElement('button', 24, 316, { id: 'member-login-submit', width: 190, height: 50, props: { label: 'Send access link', backgroundColor: '#0369a1', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                            createCanvasElement('input', 24, 158, {
+                                id: 'member-login-email',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 194, width: 279 },
+                                },
+                            }),
+                            createCanvasElement('input', 24, 230, {
+                                id: 'member-login-access-reason',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Access reason', name: 'access_reason', placeholder: 'Customer portal, course, community...', required: false },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 266, width: 279 },
+                                },
+                            }),
+                            createCanvasElement('button', 24, 316, {
+                                id: 'member-login-submit',
+                                width: 190,
+                                height: 50,
+                                props: { label: 'Send access link', backgroundColor: '#0369a1', color: '#ffffff', borderRadius: 8, fontWeight: '700' },
+                                responsive: {
+                                    mobile: { y: 352, width: 190, height: 50 },
+                                },
+                            }),
                         ],
                     }),
                 ],
