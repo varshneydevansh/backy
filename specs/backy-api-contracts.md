@@ -467,6 +467,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `GET /api/admin/sites/:siteId/media`
   - filters: `scope`, `visibility`, `search`, `type`, `tag`, `page`, `perPage`
   - current implementation supports `scope`, `visibility`, `type`, `search`, `tag`, `folderId`, `pageId`, `postId`, `blogId`, `global=true`, `limit`, `offset`
+  - invalid admin media list filters return explicit `400` errors instead of silently widening or clamping the library query: `INVALID_MEDIA_TYPE`, `INVALID_MEDIA_VISIBILITY`, `INVALID_MEDIA_SCOPE`, `INVALID_MEDIA_GLOBAL_FILTER`, `INVALID_MEDIA_LIMIT`, or `INVALID_MEDIA_OFFSET`
 
 - `GET /api/admin/sites/:siteId/media/folders`
   - Current implementation lists local runtime media folders.

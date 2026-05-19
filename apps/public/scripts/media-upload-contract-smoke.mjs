@@ -52,9 +52,21 @@ assert(
   'Media upload route must store generic other files under the files storage folder.',
 );
 assert(
-  mediaRoute.includes('value === "other"') ||
-    mediaRoute.includes("value === 'other'"),
+  mediaRoute.includes('"other"') &&
+    mediaRoute.includes('mediaTypeValues.includes') &&
+    mediaRoute.includes('normalized === "file"'),
   'Media list filters must accept type=other for generic files.',
+);
+assert(
+  mediaRoute.includes('"INVALID_MEDIA_TYPE"') &&
+    mediaRoute.includes('"INVALID_MEDIA_VISIBILITY"') &&
+    mediaRoute.includes('"INVALID_MEDIA_SCOPE"') &&
+    mediaRoute.includes('"INVALID_MEDIA_GLOBAL_FILTER"') &&
+    mediaRoute.includes('"INVALID_MEDIA_LIMIT"') &&
+    mediaRoute.includes('"INVALID_MEDIA_OFFSET"') &&
+    mediaRoute.includes('integerQueryFromInput') &&
+    mediaRoute.includes('booleanFilterFromInput'),
+  'Admin media list route must reject invalid filter and pagination values instead of silently widening or clamping the media library query.',
 );
 assert(
   adminSignedMediaUrlRoute.includes("'INVALID_MEDIA_DISPOSITION'") &&

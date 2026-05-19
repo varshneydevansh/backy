@@ -161,24 +161,127 @@ const parseFontDisplay = (value: FormDataEntryValue | null) =>
     ? value
     : "swap";
 
+const mediaTypeValues = [
+  "image",
+  "video",
+  "audio",
+  "document",
+  "font",
+  "other",
+] as const satisfies readonly MediaItem["type"][];
+const mediaScopeValues = ["global", "page", "post"] as const;
+const DEFAULT_MEDIA_LIMIT = 50;
+const MAX_MEDIA_LIMIT = 100;
+
 const mediaTypeFromInput = (
   value: string | null,
-): MediaItem["type"] | undefined =>
-  value === "image" ||
-  value === "video" ||
-  value === "audio" ||
-  value === "document" ||
-  value === "font" ||
-  value === "other"
-    ? value
-    : undefined;
+): { type?: MediaItem["type"] | "all"; invalid?: string } => {
+  if (!value) {
+    return {};
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return {};
+  }
+
+  if (normalized === "all") {
+    return { type: "all" };
+  }
+
+  if (normalized === "file") {
+    return { type: "document" };
+  }
+
+  if (mediaTypeValues.includes(normalized as MediaItem["type"])) {
+    return { type: normalized as MediaItem["type"] };
+  }
+
+  return { invalid: value };
+};
 
 const visibilityFromInput = (
   value: string | null,
-): MediaItem["visibility"] | "all" | undefined =>
-  value === "public" || value === "private" || value === "all"
-    ? value
-    : undefined;
+): { visibility?: MediaItem["visibility"] | "all"; invalid?: string } => {
+  if (!value) {
+    return {};
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return {};
+  }
+
+  if (
+    normalized === "public" ||
+    normalized === "private" ||
+    normalized === "all"
+  ) {
+    return { visibility: normalized };
+  }
+
+  return { invalid: value };
+};
+
+const mediaScopeFromInput = (
+  value: string | null,
+): { scope?: "global" | "page" | "post" | "all"; invalid?: string } => {
+  if (!value) {
+    return {};
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return {};
+  }
+
+  if (normalized === "all") {
+    return { scope: "all" };
+  }
+
+  if (mediaScopeValues.includes(normalized as "global" | "page" | "post")) {
+    return { scope: normalized as "global" | "page" | "post" };
+  }
+
+  return { invalid: value };
+};
+
+const booleanFilterFromInput = (
+  value: string | null,
+): { value?: boolean; invalid?: string } => {
+  if (value === null) {
+    return {};
+  }
+
+  const parsed = booleanQueryFlag(value);
+  if (parsed === undefined && value.trim().length > 0) {
+    return { invalid: value };
+  }
+
+  return { value: parsed };
+};
+
+const integerQueryFromInput = (
+  value: string | null,
+  fallback: number,
+  min: number,
+  max?: number,
+): { value: number; invalid?: string } => {
+  if (value === null || value.trim() === "") {
+    return { value: fallback };
+  }
+
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < min ||
+    (max !== undefined && parsed > max)
+  ) {
+    return { value: fallback, invalid: value };
+  }
+
+  return { value: parsed };
+};
 
 const paginateMedia = (items: MediaItem[], limit: number, offset: number) => ({
   media: items.slice(offset, offset + limit),
@@ -365,6 +468,75 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    const mediaType = mediaTypeFromInput(searchParams.get("type"));
+    if (mediaType.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_TYPE",
+        "Invalid media type. Use one of: image, video, audio, document, file, font, other, all.",
+        requestId,
+      );
+    }
+    const type = mediaType.type === "all" ? undefined : mediaType.type;
+    const mediaVisibility = visibilityFromInput(searchParams.get("visibility"));
+    if (mediaVisibility.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_VISIBILITY",
+        "Invalid media visibility. Use one of: public, private, all.",
+        requestId,
+      );
+    }
+    const visibility =
+      mediaVisibility.visibility === "all"
+        ? undefined
+        : mediaVisibility.visibility;
+    const mediaScope = mediaScopeFromInput(searchParams.get("scope"));
+    if (mediaScope.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_SCOPE",
+        "Invalid media scope. Use one of: global, page, post, all.",
+        requestId,
+      );
+    }
+    const scope = mediaScope.scope === "all" ? undefined : mediaScope.scope;
+    const globalFilter = booleanFilterFromInput(searchParams.get("global"));
+    if (globalFilter.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_GLOBAL_FILTER",
+        "Invalid global media filter. Use true or false.",
+        requestId,
+      );
+    }
+    const globalOnly = globalFilter.value;
+    const mediaLimit = integerQueryFromInput(
+      searchParams.get("limit"),
+      DEFAULT_MEDIA_LIMIT,
+      1,
+      MAX_MEDIA_LIMIT,
+    );
+    if (mediaLimit.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_LIMIT",
+        "Invalid media limit. Use an integer from 1 to 100.",
+        requestId,
+      );
+    }
+    const limit = mediaLimit.value;
+    const mediaOffset = integerQueryFromInput(searchParams.get("offset"), 0, 0);
+    if (mediaOffset.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_OFFSET",
+        "Invalid media offset. Use an integer greater than or equal to 0.",
+        requestId,
+      );
+    }
+    const offset = mediaOffset.value;
+
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site =
@@ -380,21 +552,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const limit = Math.max(
-        1,
-        Math.min(100, Number(searchParams.get("limit") || 50)),
-      );
-      const offset = Math.max(0, Number(searchParams.get("offset") || 0));
-      const scope = searchParams.get("scope");
       const pageId = searchParams.get("pageId");
       const postId = searchParams.get("postId") || searchParams.get("blogId");
-      const globalOnly = booleanQueryFlag(searchParams.get("global"));
       const tag = searchParams.get("tag");
       const result = await repositories.media.list({
         siteId: site.id,
-        type: mediaTypeFromInput(searchParams.get("type")) || "all",
-        visibility:
-          visibilityFromInput(searchParams.get("visibility")) || "all",
+        type: type || "all",
+        visibility: visibility || "all",
         search: searchParams.get("search") || undefined,
         folderId: searchParams.has("folderId")
           ? searchParams.get("folderId")
@@ -440,15 +604,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const limit = Math.max(
-      1,
-      Math.min(100, Number(searchParams.get("limit") || 50)),
-    );
-    const offset = Math.max(0, Number(searchParams.get("offset") || 0));
     const payload = getMediaList(site.id, {
-      type: searchParams.get("type") || undefined,
-      scope: searchParams.get("scope") || undefined,
-      visibility: searchParams.get("visibility") || undefined,
+      type: type || undefined,
+      scope: scope || undefined,
+      visibility: visibility || undefined,
       search: searchParams.get("search") || undefined,
       tag: searchParams.get("tag") || undefined,
       folderId: searchParams.has("folderId")
@@ -457,7 +616,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       pageId: searchParams.get("pageId") || undefined,
       postId:
         searchParams.get("postId") || searchParams.get("blogId") || undefined,
-      global: booleanQueryFlag(searchParams.get("global")),
+      global: globalOnly,
       limit,
       offset,
     });
