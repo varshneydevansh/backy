@@ -1812,6 +1812,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { y: 342, width: 180, height: 48 }"),
     'Contact page starter must seed explicit tablet/mobile responsive overrides for contact copy and form fields.',
   );
+  assert(
+    source.includes("id: 'newsletter-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 1270 }") &&
+      source.includes("id: 'newsletter-heading'") &&
+      source.includes("mobile: { x: 24, y: 92, width: 327, height: 156, props: { fontSize: 36 } }") &&
+      source.includes("id: 'newsletter-proof-card'") &&
+      source.includes("tablet: { x: 54, y: 390, width: 660, height: 120 }") &&
+      source.includes("id: 'newsletter-signup-form'") &&
+      source.includes("mobile: { x: 24, y: 650, width: 327, height: 585 }") &&
+      source.includes("id: 'newsletter-email'") &&
+      source.includes("mobile: { y: 178, width: 279 }") &&
+      source.includes("id: 'newsletter-consent'") &&
+      source.includes("mobile: { y: 330, width: 279, height: 78 }") &&
+      source.includes("id: 'newsletter-confirmation-section'") &&
+      source.includes("mobile: { y: 1270, width: 375, height: 430 }") &&
+      source.includes("id: 'newsletter-manage-preferences-button'") &&
+      source.includes("mobile: { x: 24, y: 320, width: 210, height: 52 }"),
+    'Newsletter page starter must seed explicit tablet/mobile responsive overrides for signup forms and confirmation sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

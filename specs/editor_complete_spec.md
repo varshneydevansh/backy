@@ -564,6 +564,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Careers starter pages now seed explicit tablet/mobile responsive overrides for role filters, stacked job cards, apply buttons, benefits/process cards, and talent-pool application CTAs so recruiting pages remain readable and actionable across breakpoints.
   - About starter pages now seed explicit tablet/mobile responsive overrides for story headings, intro copy, stacked value cards, and value statements so brand story pages remain readable across breakpoints.
   - Contact starter pages now seed explicit tablet/mobile responsive overrides for intro copy, generated contact form cards, required fields, message textareas, and submit buttons so public lead-capture forms remain readable and tappable across breakpoints.
+  - Newsletter starter pages now seed explicit tablet/mobile responsive overrides for publication hero content, proof cards, signup forms, consent fields, confirmation cards, and preference CTAs so opt-in flows remain readable and tappable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves

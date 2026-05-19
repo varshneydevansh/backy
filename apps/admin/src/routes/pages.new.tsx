@@ -10392,42 +10392,70 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 640,
                 props: { backgroundColor: '#fffbeb', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 1120 },
+                    mobile: { width: 375, height: 1270 },
+                },
                 children: [
                     createCanvasElement('text', 76, 70, {
                         id: 'newsletter-kicker',
                         width: 240,
                         height: 28,
                         props: { content: 'Newsletter', fontSize: 13, fontWeight: '800', color: '#b45309', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 64, width: 220, height: 28 },
+                            mobile: { x: 24, y: 52, width: 180, height: 28 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 112, {
                         id: 'newsletter-heading',
                         width: 560,
                         height: 112,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 104, width: 540, height: 120, props: { fontSize: 46 } },
+                            mobile: { x: 24, y: 92, width: 327, height: 156, props: { fontSize: 36 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 250, {
                         id: 'newsletter-copy',
                         width: 520,
                         height: 106,
                         props: { content: description, fontSize: 18, lineHeight: 1.62, color: '#4b5563' },
+                        responsive: {
+                            tablet: { x: 56, y: 250, width: 510, height: 106, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 276, width: 323, height: 134, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 76, 400, {
                         id: 'newsletter-proof-card',
                         width: 470,
                         height: 120,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 390, width: 660, height: 120 },
+                            mobile: { x: 24, y: 448, width: 327, height: 170 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 20, {
                                 id: 'newsletter-proof-heading',
                                 width: 300,
                                 height: 32,
                                 props: { content: 'What subscribers receive', level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 520, height: 32 },
+                                    mobile: { width: 279, height: 54, props: { fontSize: 18 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 20, 60, {
                                 id: 'newsletter-proof-copy',
                                 width: 390,
                                 height: 48,
                                 props: { content: 'Backy records the opt-in, chosen topics, source page, and consent state for follow-up workflows.', fontSize: 14, lineHeight: 1.45, color: '#65503c' },
+                                responsive: {
+                                    tablet: { width: 600, height: 48 },
+                                    mobile: { y: 86, width: 279, height: 72 },
+                                },
                             }),
                         ],
                     }),
@@ -10457,38 +10485,79 @@ function buildTemplateElements(input: {
                             borderStyle: 'solid',
                             boxShadow: '0 20px 55px rgba(180, 83, 9, 0.12)',
                         },
+                        responsive: {
+                            tablet: { x: 54, y: 550, width: 660, height: 520 },
+                            mobile: { x: 24, y: 650, width: 327, height: 585 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 28, {
                                 id: 'newsletter-form-heading',
                                 width: 330,
                                 height: 36,
                                 props: { content: 'Subscribe for updates', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 560, height: 36 },
+                                    mobile: { width: 279, height: 58, props: { fontSize: 22 } },
+                                },
                             }),
-                            createCanvasElement('input', 24, 88, { id: 'newsletter-first-name', width: 360, height: 54, props: { label: 'First name', name: 'first_name', placeholder: 'Ada', required: false } }),
-                            createCanvasElement('input', 24, 160, { id: 'newsletter-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
+                            createCanvasElement('input', 24, 88, {
+                                id: 'newsletter-first-name',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'First name', name: 'first_name', placeholder: 'Ada', required: false },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 106, width: 279 },
+                                },
+                            }),
+                            createCanvasElement('input', 24, 160, {
+                                id: 'newsletter-email',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 178, width: 279 },
+                                },
+                            }),
                             createCanvasElement('select', 24, 232, {
                                 id: 'newsletter-topic',
                                 width: 360,
                                 height: 54,
                                 props: { label: 'Topic', name: 'topics', options: ['Product updates', 'Guides', 'Events', 'Offers'], placeholder: 'Choose a topic', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 250, width: 279 },
+                                },
                             }),
                             createCanvasElement('checkbox', 24, 312, {
                                 id: 'newsletter-consent',
                                 width: 360,
                                 height: 54,
                                 props: { label: 'I agree to receive email updates and can unsubscribe anytime.', name: 'email_consent', required: true },
+                                responsive: {
+                                    tablet: { width: 560, height: 54 },
+                                    mobile: { y: 330, width: 279, height: 78 },
+                                },
                             }),
                             createCanvasElement('input', 24, 382, {
                                 id: 'newsletter-source',
                                 width: 360,
                                 height: 44,
                                 props: { label: 'Signup source', name: 'signup_source', placeholder: 'Website newsletter page', required: false },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 432, width: 279, height: 44 },
+                                },
                             }),
                             createCanvasElement('button', 24, 448, {
                                 id: 'newsletter-submit',
                                 width: 170,
                                 height: 48,
                                 props: { label: 'Subscribe', backgroundColor: '#b45309', color: '#ffffff', borderRadius: 8, fontWeight: '800' },
+                                responsive: {
+                                    mobile: { y: 506, width: 180, height: 48 },
+                                },
                             }),
                         ],
                     }),
@@ -10499,24 +10568,40 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 280,
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1120, width: 768, height: 360 },
+                    mobile: { y: 1270, width: 375, height: 430 },
+                },
                 children: [
                     createCanvasElement('box', 74, 60, {
                         id: 'newsletter-confirmation-card',
                         width: 500,
                         height: 150,
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 60, width: 660, height: 150 },
+                            mobile: { x: 24, y: 50, width: 327, height: 230 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'newsletter-confirmation-heading',
                                 width: 360,
                                 height: 34,
                                 props: { content: 'Confirmation and consent', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 560, height: 34 },
+                                    mobile: { width: 279, height: 62, props: { fontSize: 22 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 74, {
                                 id: 'newsletter-confirmation-copy',
                                 width: 420,
                                 height: 54,
                                 props: { content: 'Use Backy Forms moderation, contact sharing, and export hooks to route subscribers into your email provider without exposing provider secrets in the page.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 600, height: 54 },
+                                    mobile: { y: 108, width: 279, height: 98 },
+                                },
                             }),
                         ],
                     }),
@@ -10525,6 +10610,10 @@ function buildTemplateElements(input: {
                         width: 196,
                         height: 52,
                         props: { label: 'Manage preferences', href: '/preferences', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'newsletter.preferences.open' },
+                        responsive: {
+                            tablet: { x: 54, y: 240, width: 196, height: 52 },
+                            mobile: { x: 24, y: 320, width: 210, height: 52 },
+                        },
                     }),
                 ],
             }),
