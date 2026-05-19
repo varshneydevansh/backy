@@ -48,6 +48,41 @@ const parseModerationMode = (value: unknown): FormDefinition['moderationMode'] |
   value === 'manual' || value === 'auto-approve' ? value : undefined
 );
 
+const invalidAudienceResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_ADMIN_FORM_AUDIENCE',
+  'Invalid admin form audience. Use public, authenticated, or adminOnly.',
+  requestId,
+);
+
+const invalidModerationModeResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_ADMIN_FORM_MODERATION_MODE',
+  'Invalid admin form moderation mode. Use manual or auto-approve.',
+  requestId,
+);
+
+const formConfigurationValidationError = (body: Record<string, unknown>, requestId: string) => {
+  if (
+    Object.prototype.hasOwnProperty.call(body, 'audience') &&
+    body.audience !== 'public' &&
+    body.audience !== 'authenticated' &&
+    body.audience !== 'adminOnly'
+  ) {
+    return invalidAudienceResponse(requestId);
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(body, 'moderationMode') &&
+    body.moderationMode !== 'manual' &&
+    body.moderationMode !== 'auto-approve'
+  ) {
+    return invalidModerationModeResponse(requestId);
+  }
+
+  return null;
+};
+
 const parseRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as TRecord
@@ -171,6 +206,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, formId } = await params;
     const body = await parseJsonBody(request);
+    const configurationError = formConfigurationValidationError(body, requestId);
+    if (configurationError) {
+      return configurationError;
+    }
     const input = normalizePatchInput(body);
 
     if ('name' in input && !input.name) {
