@@ -348,6 +348,18 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/analytics/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormsConsentRetentionRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/consent-retention/route.ts', import.meta.url),
+    'utf8',
+  );
+  const adminFormConsentRetentionRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/consent-retention/route.ts', import.meta.url),
+    'utf8',
+  );
+  const adminFormContactConsentRetentionRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/consent-retention/route.ts', import.meta.url),
+    'utf8',
+  );
   const adminFormContactPromotionRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/promote/route.ts', import.meta.url),
     'utf8',
@@ -485,6 +497,18 @@ function assertAdminPageContentValidationSource() {
   assert(adminContactListsRoute.includes('validateExplicitFilters'), 'admin contact lists route must validate explicit filters before normalizing');
   assert(adminFormsAnalyticsRoute.includes("'INVALID_ADMIN_FORM_ANALYTICS_DAYS'"), 'admin forms analytics route must reject invalid days filters');
   assert(adminFormsAnalyticsRoute.includes('daysFilter.invalid'), 'admin forms analytics route must branch on invalid days filters');
+  for (const [label, source] of [
+    ['admin forms consent retention', adminFormsConsentRetentionRoute],
+    ['admin form consent retention', adminFormConsentRetentionRoute],
+    ['admin form contact consent retention', adminFormContactConsentRetentionRoute],
+  ]) {
+    assert(source.includes("'INVALID_ADMIN_FORM_CONSENT_RETENTION_DRY_RUN'"), `${label} route must reject invalid dryRun values`);
+    assert(source.includes("'INVALID_ADMIN_FORM_CONSENT_RETENTION_NOW'"), `${label} route must reject invalid now values`);
+    assert(source.includes('dryRunFilter.invalid'), `${label} route must branch on invalid dryRun values`);
+    assert(source.includes('nowFilter.invalid'), `${label} route must branch on invalid now values`);
+  }
+  assert(adminFormContactConsentRetentionRoute.includes("'INVALID_ADMIN_FORM_CONSENT_RETENTION_DAYS'"), 'admin form contact consent retention route must reject invalid retentionDays overrides');
+  assert(adminFormContactConsentRetentionRoute.includes('retentionDaysFilter.invalid'), 'admin form contact consent retention route must branch on invalid retentionDays overrides');
   assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_ROLE'"), 'admin form contact promotion route must reject invalid role values');
   assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_STATUS'"), 'admin form contact promotion route must reject invalid status values');
   assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY'"), 'admin form contact promotion route must reject invalid invite expiry values');
@@ -537,6 +561,9 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_QUALITY') &&
       apiContracts.includes('INVALID_ADMIN_FORM_ANALYTICS_DAYS') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_CONSENT_RETENTION_DRY_RUN') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_CONSENT_RETENTION_NOW') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_CONSENT_RETENTION_DAYS') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_ROLE') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY') &&

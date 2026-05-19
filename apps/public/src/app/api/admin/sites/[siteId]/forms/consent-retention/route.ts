@@ -41,6 +41,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
 
+const hasOwn = (body: Record<string, unknown>, key: string): boolean => (
+  Object.prototype.hasOwnProperty.call(body, key)
+);
+
+const parseDryRun = (body: Record<string, unknown>, fallback: boolean): { value: boolean; invalid?: true } => {
+  if (!hasOwn(body, 'dryRun')) return { value: fallback };
+  return typeof body.dryRun === 'boolean'
+    ? { value: body.dryRun }
+    : { value: fallback, invalid: true };
+};
+
 const readNumberSetting = (value: unknown, fallback: number): number => {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -69,12 +80,15 @@ const addDays = (dateValue: string | null | undefined, days: number): number | n
   return date.getTime();
 };
 
-const parseNow = (body: Record<string, unknown>): number => {
-  if (typeof body.now === 'string') {
+const parseNow = (body: Record<string, unknown>): { value: number; invalid?: true } => {
+  if (!hasOwn(body, 'now')) return { value: Date.now() };
+  if (typeof body.now === 'string' && body.now.trim()) {
     const timestamp = Date.parse(body.now);
-    if (Number.isFinite(timestamp)) return timestamp;
+    return Number.isFinite(timestamp)
+      ? { value: timestamp }
+      : { value: Date.now(), invalid: true };
   }
-  return Date.now();
+  return { value: Date.now(), invalid: true };
 };
 
 const shouldAnonymize = (
@@ -162,9 +176,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const body = await parseJsonBody(request);
-    const dryRun = body.dryRun === true;
+    const dryRunFilter = parseDryRun(body, false);
+    if (dryRunFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONSENT_RETENTION_DRY_RUN', 'dryRun must be a boolean when provided.', requestId);
+    }
+    const dryRun = dryRunFilter.value;
     const actor = typeof body.actor === 'string' && body.actor.trim() ? body.actor.trim() : 'scheduled-retention';
-    const now = parseNow(body);
+    const nowFilter = parseNow(body);
+    if (nowFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONSENT_RETENTION_NOW', 'now must be a valid date/time string when provided.', requestId);
+    }
+    const now = nowFilter.value;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

@@ -636,6 +636,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
   - Form notification email events use the same interaction-event feed with `metadata.channel: "email"` and are displayed in the Forms delivery panel.
   - Form definitions persist `settings.spam` / `spamSettings` and `settings.consent` / `consentSettings` through create/update APIs. Consent exports include policy label, retention/delete due timestamps, request email, and respect `exportIncludesIp` for IP hash/user-agent provenance.
   - Consent retention applies `deleteAfterDays` across due submissions in both demo and repository modes, scrubbing consent field values plus IP/user-agent provenance while preserving non-consent submitted values. The site-wide endpoint returns aggregate `scannedForms`, `formsWithConsent`, `scannedSubmissions`, `due`, `anonymized`, and per-form results so scheduled jobs can record what happened.
+  - Consent retention rejects invalid explicit control values with `400 INVALID_ADMIN_FORM_CONSENT_RETENTION_DRY_RUN`, `INVALID_ADMIN_FORM_CONSENT_RETENTION_NOW`, or `INVALID_ADMIN_FORM_CONSENT_RETENTION_DAYS` instead of silently falling back; `retentionDays` applies only to the contact evidence endpoint and must be a non-negative integer when provided.
   - Form creation accepts `frontendDesignTemplateId` or `designTemplateId`; when it points to a captured `form` template, Backy seeds fields/settings and stores design provenance in `settings.frontendDesign*`.
 
 ### 3.6 Comments

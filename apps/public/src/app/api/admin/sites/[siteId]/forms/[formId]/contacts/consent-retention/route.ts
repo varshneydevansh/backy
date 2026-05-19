@@ -43,9 +43,32 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
 
+const hasOwn = (body: Record<string, unknown>, key: string): boolean => (
+  Object.prototype.hasOwnProperty.call(body, key)
+);
+
+const parseDryRun = (body: Record<string, unknown>, fallback: boolean): { value: boolean; invalid?: true } => {
+  if (!hasOwn(body, 'dryRun')) return { value: fallback };
+  return typeof body.dryRun === 'boolean'
+    ? { value: body.dryRun }
+    : { value: fallback, invalid: true };
+};
+
 const readNumberSetting = (value: unknown, fallback: number): number => {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const parseRetentionDaysOverride = (body: Record<string, unknown>): { value?: number; invalid?: true } => {
+  if (!hasOwn(body, 'retentionDays')) return {};
+  const raw = body.retentionDays;
+  if (typeof raw !== 'number' && (typeof raw !== 'string' || raw.trim() === '')) {
+    return { invalid: true };
+  }
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= 0
+    ? { value: parsed }
+    : { invalid: true };
 };
 
 const readDeleteAfterDays = (form: FormDefinition, override: unknown): number => {
@@ -67,12 +90,15 @@ const findConsentFields = (fields: FormFieldDefinition[]): FormFieldDefinition[]
   ))
 );
 
-const parseNow = (body: Record<string, unknown>): number => {
-  if (typeof body.now === 'string') {
+const parseNow = (body: Record<string, unknown>): { value: number; invalid?: true } => {
+  if (!hasOwn(body, 'now')) return { value: Date.now() };
+  if (typeof body.now === 'string' && body.now.trim()) {
     const timestamp = Date.parse(body.now);
-    if (Number.isFinite(timestamp)) return timestamp;
+    return Number.isFinite(timestamp)
+      ? { value: timestamp }
+      : { value: Date.now(), invalid: true };
   }
-  return Date.now();
+  return { value: Date.now(), invalid: true };
 };
 
 const addDays = (dateValue: string | null | undefined, days: number): number | null => {
@@ -164,10 +190,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, formId } = await params;
     const body = await parseJsonBody(request);
-    const dryRun = body.dryRun !== false;
+    const dryRunFilter = parseDryRun(body, true);
+    if (dryRunFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONSENT_RETENTION_DRY_RUN', 'dryRun must be a boolean when provided.', requestId);
+    }
+    const dryRun = dryRunFilter.value;
     const actor = typeof body.actor === 'string' && body.actor.trim() ? body.actor.trim() : 'admin';
     const contactIds = parseContactIds(body.contactIds);
-    const now = parseNow(body);
+    const nowFilter = parseNow(body);
+    if (nowFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONSENT_RETENTION_NOW', 'now must be a valid date/time string when provided.', requestId);
+    }
+    const now = nowFilter.value;
+    const retentionDaysFilter = parseRetentionDaysOverride(body);
+    if (retentionDaysFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONSENT_RETENTION_DAYS', 'retentionDays must be a non-negative integer when provided.', requestId);
+    }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -183,7 +221,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const consentFields = findConsentFields(form.fields || []);
       const consentFieldKeys = consentFields.map((field) => field.key);
-      const deleteAfterDays = readDeleteAfterDays(form, body.retentionDays);
+      const deleteAfterDays = readDeleteAfterDays(form, retentionDaysFilter.value);
       const contacts: Contact[] = [];
       if (contactIds.length > 0) {
         const found = await Promise.all(contactIds.map((contactId) => repositories.forms.getContactById(site.id, form.id, contactId)));
@@ -273,7 +311,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const consentFields = findConsentFields(form.fields || []);
     const consentFieldKeys = consentFields.map((field) => field.key);
-    const deleteAfterDays = readDeleteAfterDays(form, body.retentionDays);
+    const deleteAfterDays = readDeleteAfterDays(form, retentionDaysFilter.value);
     const allContacts = listAllDemoContacts(form.id);
     const contacts = contactIds.length > 0
       ? allContacts.filter((contact) => contactIds.includes(contact.id))
