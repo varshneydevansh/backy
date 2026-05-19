@@ -1751,6 +1751,7 @@ function SettingsPage() {
         ],
         secretFamilies: [
           'BACKY_DATABASE_URL/DATABASE_URL',
+          'BACKY_CORS_ALLOWED_ORIGINS for exact custom frontend browser origins',
           'BACKY_STORAGE_PROVIDER/BACKY_MEDIA_STORAGE_PROVIDER plus Supabase/S3 runtime aliases',
           'VERCEL_TOKEN/BACKY_VERCEL_TOKEN and project metadata',
           'notification aliases including RESEND_API_KEY, SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
@@ -3609,7 +3610,7 @@ type StorageSettings = NonNullable<IntegrationSettings['storage']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
 type CommerceSettingsConfig = NonNullable<IntegrationSettings['commerce']>;
 type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
-type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce' | 'interactiveComponents';
+type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce' | 'interactiveComponents' | 'publicApi';
 type InfrastructureEnvContract = {
   provider: InfrastructureEnvProvider;
   key: string;
@@ -5219,6 +5220,16 @@ const buildInfrastructureEnvContract = ({
     valueHint: runtimeVercel?.url || vercel?.productionDomain,
     example: 'https://backy.example.com',
   },
+  {
+    provider: 'publicApi',
+    key: 'BACKY_CORS_ALLOWED_ORIGINS',
+    label: 'Custom frontend CORS origins',
+    description: 'Comma-separated exact browser origins allowed to read Backy public/admin API responses and exposed contract headers.',
+    configured: Boolean(getEnvValue('VITE_BACKY_CORS_ALLOWED_ORIGINS')),
+    required: false,
+    valueHint: getEnvValue('VITE_BACKY_CORS_ALLOWED_ORIGINS') || undefined,
+    example: 'https://www.example.com,https://app.example.com',
+  },
 ];
 
 const formatEnvTemplate = (
@@ -5292,6 +5303,7 @@ function InfrastructureEnvContractPanel({
   const requiredOpenCount = contracts.filter((item) => item.required && !item.configured).length;
   const profiles: Array<{ label: string; provider?: InfrastructureEnvProvider }> = [
     { label: 'all env' },
+    { label: 'public api', provider: 'publicApi' },
     { label: 'supabase', provider: 'supabase' },
     { label: 'vercel', provider: 'vercel' },
     { label: 'media scanner', provider: 'mediaScanner' },
@@ -5911,7 +5923,7 @@ function InfrastructureSettings({
             ))}
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, storage aliases such as <span className="font-mono">BACKY_STORAGE_PROVIDER</span>/<span className="font-mono">BACKY_MEDIA_STORAGE_PROVIDER</span>, <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, and <span className="font-mono">AWS_ACCESS_KEY_ID</span>, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification aliases such as <span className="font-mono">RESEND_API_KEY</span>, <span className="font-mono">SMTP_HOST</span>, <span className="font-mono">SMTP_USER</span>, <span className="font-mono">SMTP_PASSWORD</span>, and <span className="font-mono">BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL</span>, commerce aliases such as <span className="font-mono">STRIPE_SECRET_KEY</span>, <span className="font-mono">TAXJAR_API_KEY</span>, <span className="font-mono">PAYPAL_ACCESS_TOKEN</span>, <span className="font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</span>, and <span className="font-mono">COMMERCE_WEBHOOK_SECRET</span> for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento, plus HTTP endpoint aliases such as <span className="font-mono">COMMERCE_TAX_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_SHIPPING_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_PRODUCT_SYNC_URL</span>, and <span className="font-mono">COMMERCE_SUBSCRIPTION_ACTION_URL</span>.
+            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, public API origin configuration through <span className="font-mono">BACKY_CORS_ALLOWED_ORIGINS</span>, storage aliases such as <span className="font-mono">BACKY_STORAGE_PROVIDER</span>/<span className="font-mono">BACKY_MEDIA_STORAGE_PROVIDER</span>, <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, and <span className="font-mono">AWS_ACCESS_KEY_ID</span>, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification aliases such as <span className="font-mono">RESEND_API_KEY</span>, <span className="font-mono">SMTP_HOST</span>, <span className="font-mono">SMTP_USER</span>, <span className="font-mono">SMTP_PASSWORD</span>, and <span className="font-mono">BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL</span>, commerce aliases such as <span className="font-mono">STRIPE_SECRET_KEY</span>, <span className="font-mono">TAXJAR_API_KEY</span>, <span className="font-mono">PAYPAL_ACCESS_TOKEN</span>, <span className="font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</span>, and <span className="font-mono">COMMERCE_WEBHOOK_SECRET</span> for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento, plus HTTP endpoint aliases such as <span className="font-mono">COMMERCE_TAX_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_SHIPPING_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_PRODUCT_SYNC_URL</span>, and <span className="font-mono">COMMERCE_SUBSCRIPTION_ACTION_URL</span>.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-background p-3" data-testid="settings-provider-certification">
             <div className="flex flex-wrap items-start justify-between gap-3">
