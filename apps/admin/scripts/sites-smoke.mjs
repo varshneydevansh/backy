@@ -37,6 +37,11 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('Create or select a site to prepare custom-domain DNS records and track verification status.'), 'Sites domain verification empty state must explain how to start DNS setup');
   assert(source.includes('title="No deployment workspace selected"'), 'Sites deployment workspace must keep the no-site selected empty title visible');
   assert(source.includes('Create or select a site to prepare Vercel handoff commands, target URLs, and deploy history.'), 'Sites deployment empty state must explain how to start deployment setup');
+  assert(source.includes('data-testid="sites-error-state"') && source.includes('Sites workspace needs attention'), 'Sites route must expose a labelled backend error state');
+  assert(source.includes('aria-label="Retry loading sites"') && source.includes('Retry load'), 'Sites backend error state must expose a retry action');
+  assert(source.includes('hasActiveFilters') && source.includes('Clear filters'), 'Sites backend error state must expose filter recovery when filters are active');
+  assert(source.includes('data-testid="sites-permission-state"') && source.includes('Site permissions could not be verified'), 'Sites route must expose a labelled permission error state');
+  assert(source.includes('aria-label="Retry loading site permissions"') && source.includes('Retry permissions'), 'Sites permission error state must expose a retry action');
   assert(
     createSource.includes('const starterPageControlsDisabled = creationFormDisabled || !canEditPages || (statusSeedsPublishedPages && !canPublishPages);'),
     'Site create blueprint controls must disable starter-page blueprints when published page seeding lacks pages.publish',
@@ -1395,6 +1400,10 @@ const cleanup = async ({ client, childProcess, userDataDir, siteId, ownerSession
 
 const main = async () => {
   assertSitesRouteSourceContract();
+  if (process.env.BACKY_SITES_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'sites-source' }));
+    return;
+  }
   let client;
   let childProcess;
   let userDataDir;

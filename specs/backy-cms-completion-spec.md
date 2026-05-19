@@ -440,6 +440,7 @@ Use this file as the persistent baseline before any implementation pass.
 ### 9.3 Settings/admin dashboard UX gaps
 - Consistent status vocabulary and badges across pages.
 - Empty-state / error-state placeholders for every admin list.
+  - `/sites` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and permission retry actions.
   - `/pages` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and a user-access handoff link.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and a user-access handoff link.
 - Better validation copy + inline field errors.
