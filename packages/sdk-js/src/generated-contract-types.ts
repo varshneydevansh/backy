@@ -2603,6 +2603,39 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         }>;
         [key: string]: unknown;
       };
+      theme: {
+        schemaVersion: "backy.theme-discovery.v1";
+        tokenSchemaVersion: "backy.theme.v1";
+        tokens: {
+          schemaVersion: "backy.theme.v1";
+          colors: Record<string, string>;
+          typography: Record<string, unknown>;
+          spacing: Record<string, string>;
+          radii: Record<string, string>;
+          shadows: Record<string, string>;
+          motion?: Record<string, unknown>;
+          breakpoints: Record<string, number>;
+          customCss?: string;
+          [key: string]: unknown;
+        };
+        cssVariables: Record<string, string>;
+        selectors: {
+          root: string;
+          scoped: string;
+          [key: string]: unknown;
+        };
+        editableFields: Array<string>;
+        capabilities: {
+          cssVariables: boolean;
+          customCss: boolean;
+          typographyFamilies: boolean;
+          spacingScale: boolean;
+          liveEditable: boolean;
+          frontendDesignOverrides: boolean;
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
       pages: {
         count: number;
         items: Array<{

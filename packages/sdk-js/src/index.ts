@@ -307,9 +307,26 @@ export interface BackyPagination {
 }
 
 export interface BackyThemeTokens {
+  schemaVersion?: "backy.theme.v1" | string;
   colors?: Record<string, string>;
   fonts?: Record<string, string>;
+  typography?: {
+    families?: Record<string, string>;
+    scale?: Record<string, string>;
+    lineHeights?: Record<string, number | string>;
+    weights?: Record<string, number | string>;
+    [key: string]: unknown;
+  };
   spacing?: Record<string, unknown>;
+  radii?: Record<string, string>;
+  shadows?: Record<string, string>;
+  motion?: {
+    duration?: Record<string, string>;
+    easing?: Record<string, string>;
+    [key: string]: unknown;
+  };
+  breakpoints?: Record<string, number>;
+  customCss?: string;
   [key: string]: unknown;
 }
 
@@ -1867,6 +1884,29 @@ export interface BackyManifestMediaModule {
   [key: string]: unknown;
 }
 
+export interface BackyManifestThemeModule {
+  schemaVersion: "backy.theme-discovery.v1";
+  tokenSchemaVersion: "backy.theme.v1";
+  tokens: BackyThemeTokens & { schemaVersion: "backy.theme.v1" };
+  cssVariables: Record<string, string>;
+  selectors: {
+    root: string;
+    scoped: string;
+    [key: string]: unknown;
+  };
+  editableFields: string[];
+  capabilities: {
+    cssVariables: boolean;
+    customCss: boolean;
+    typographyFamilies: boolean;
+    spacingScale: boolean;
+    liveEditable: boolean;
+    frontendDesignOverrides: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyManifestCommentsModule {
   schemaVersion: "backy.comments-discovery.v1";
   enabled: boolean;
@@ -1920,6 +1960,7 @@ export interface BackyFrontendManifest {
     reusableSections?: BackyManifestReusableSectionsModule;
     forms?: BackyManifestFormDefinition[];
     comments?: BackyManifestCommentsModule;
+    theme?: BackyManifestThemeModule;
     media?: BackyManifestMediaModule;
     commerce?: BackyCommerceStorefrontContract;
     interactiveComponents?: BackyInteractiveComponentsContract;

@@ -433,6 +433,61 @@
               },
               "required": ["supportedRouteTypes", "redirectRules"]
             },
+            "theme": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.theme-discovery.v1" },
+                "tokenSchemaVersion": { "const": "backy.theme.v1" },
+                "tokens": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.theme.v1" },
+                    "colors": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "typography": { "type": "object", "additionalProperties": true },
+                    "spacing": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "radii": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "shadows": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "motion": { "type": "object", "additionalProperties": true },
+                    "breakpoints": { "type": "object", "additionalProperties": { "type": "number" } },
+                    "customCss": { "type": "string" }
+                  },
+                  "required": ["schemaVersion", "colors", "typography", "spacing", "radii", "shadows", "breakpoints"]
+                },
+                "cssVariables": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                },
+                "selectors": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "root": { "type": "string", "minLength": 1 },
+                    "scoped": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["root", "scoped"]
+                },
+                "editableFields": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "cssVariables": { "type": "boolean" },
+                    "customCss": { "type": "boolean" },
+                    "typographyFamilies": { "type": "boolean" },
+                    "spacingScale": { "type": "boolean" },
+                    "liveEditable": { "type": "boolean" },
+                    "frontendDesignOverrides": { "type": "boolean" }
+                  },
+                  "required": ["cssVariables", "customCss", "typographyFamilies", "spacingScale", "liveEditable", "frontendDesignOverrides"]
+                }
+              },
+              "required": ["schemaVersion", "tokenSchemaVersion", "tokens", "cssVariables", "selectors", "editableFields", "capabilities"]
+            },
             "pages": {
               "type": "object",
               "properties": {
@@ -1069,7 +1124,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "pages", "blog", "collections", "forms", "comments", "reusableSections", "media"]
+          "required": ["routing", "theme", "pages", "blog", "collections", "forms", "comments", "reusableSections", "media"]
         },
         "admin": {
           "type": "object",

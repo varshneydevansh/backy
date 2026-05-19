@@ -22,6 +22,7 @@ import {
 import { buildCollectionItemPath, buildCollectionListPath } from './collectionRoutes';
 import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
 import { publicMediaFilePath } from './mediaResponsive';
+import { buildBackyThemeTokens } from './themeTokens';
 
 type JsonObject = Record<string, unknown>;
 const CURRENT_RECORD_ID_QUERY_VALUE = '$currentRecord.id';
@@ -1281,49 +1282,6 @@ const collectDataBindingManifest = (
   };
 };
 
-const buildThemeTokens = (site: StoreSite) => ({
-  schemaVersion: 'backy.theme.v1',
-  colors: site.theme.colors,
-  typography: {
-    families: site.theme.fonts,
-    scale: {
-      h1: '44px',
-      h2: '32px',
-      body: '16px',
-    },
-    lineHeights: {
-      tight: 1.15,
-      body: 1.6,
-    },
-    weights: {
-      regular: 400,
-      medium: 500,
-      bold: 700,
-    },
-  },
-  spacing: {
-    xs: `${site.theme.spacing?.unit ?? 4}px`,
-    sm: `${(site.theme.spacing?.unit ?? 4) * 2}px`,
-    md: `${(site.theme.spacing?.unit ?? 4) * 4}px`,
-    lg: `${(site.theme.spacing?.unit ?? 4) * 8}px`,
-  },
-  radii: {
-    sm: '4px',
-    md: '8px',
-    lg: '12px',
-  },
-  shadows: {
-    page: '0 18px 55px rgba(15,23,42,0.16)',
-  },
-  breakpoints: {
-    mobile: 390,
-    tablet: 768,
-    desktop: pageDefaultWidth,
-    wide: 1440,
-  },
-  customCss: site.theme.customCSS,
-});
-
 const pageDefaultWidth = 1200;
 
 const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject> => {
@@ -2320,7 +2278,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         locale: 'en',
         status: site.status,
         assetsBaseUrl: '',
-        themeTokens: buildThemeTokens(site),
+        themeTokens: buildBackyThemeTokens(site.theme),
       },
       navigation,
       frontendDesign: buildRenderFrontendDesign(site, page.meta),
@@ -2426,7 +2384,7 @@ export function buildPublicCollectionListRenderPayload(
         locale: 'en',
         status: site.status,
         assetsBaseUrl: '',
-        themeTokens: buildThemeTokens(site),
+        themeTokens: buildBackyThemeTokens(site.theme),
       },
       navigation,
       frontendDesign: buildRenderFrontendDesign(site, collection.metadata),
@@ -2535,7 +2493,7 @@ export function buildPublicCollectionItemRenderPayload(
         locale: 'en',
         status: site.status,
         assetsBaseUrl: '',
-        themeTokens: buildThemeTokens(site),
+        themeTokens: buildBackyThemeTokens(site.theme),
       },
       navigation,
       frontendDesign: buildRenderFrontendDesign(site, frontendDesignMetadata),
@@ -2638,7 +2596,7 @@ export function buildPublicBlogPostRenderPayload(
         locale: 'en',
         status: site.status,
         assetsBaseUrl: '',
-        themeTokens: buildThemeTokens(site),
+        themeTokens: buildBackyThemeTokens(site.theme),
       },
       navigation,
       frontendDesign: buildRenderFrontendDesign(site, post.meta),

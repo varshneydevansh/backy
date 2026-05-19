@@ -20,6 +20,7 @@ import type {
   BackyManifestDeliveryDiscovery,
   BackyManifestFormDefinition,
   BackyManifestMediaModule,
+  BackyManifestThemeModule,
   GeneratedBackyContentStatus,
   GeneratedBackyContentElement,
   GeneratedBackyDataBinding,
@@ -770,6 +771,29 @@ const manifest = {
         items: [],
       },
     },
+    theme: {
+      schemaVersion: "backy.theme-discovery.v1",
+      tokenSchemaVersion: "backy.theme.v1",
+      tokens: theme,
+      cssVariables: {
+        "--backy-color-primary": "#111111",
+        "--backy-font-heading": "Inter",
+        "--backy-spacing-md": "16px",
+      },
+      selectors: {
+        root: ":root",
+        scoped: "[data-backy-theme]",
+      },
+      editableFields: ["colors.primary", "fonts.heading", "spacing.unit", "customCSS"],
+      capabilities: {
+        cssVariables: true,
+        customCss: true,
+        typographyFamilies: true,
+        spacingScale: true,
+        liveEditable: true,
+        frontendDesignOverrides: true,
+      },
+    },
     pages: {
       count: 1,
       items: [],
@@ -1360,6 +1384,29 @@ const sdkManifestMedia = {
     queryParams: ["type", "q", "folder", "pageId", "postId", "global", "limit", "offset"],
   },
 } satisfies BackyManifestMediaModule;
+
+const sdkManifestTheme = {
+  schemaVersion: "backy.theme-discovery.v1",
+  tokenSchemaVersion: "backy.theme.v1",
+  tokens: theme,
+  cssVariables: {
+    "--backy-color-primary": "#111111",
+    "--backy-font-heading": "Inter",
+  },
+  selectors: {
+    root: ":root",
+    scoped: "[data-backy-theme]",
+  },
+  editableFields: ["colors.primary", "fonts.heading", "spacing.unit", "customCSS"],
+  capabilities: {
+    cssVariables: true,
+    customCss: true,
+    typographyFamilies: true,
+    spacingScale: true,
+    liveEditable: true,
+    frontendDesignOverrides: true,
+  },
+} satisfies BackyManifestThemeModule;
 
 const sdkManifestCollection = {
   id: "collection_products",
@@ -3373,6 +3420,9 @@ const invalidGeneratedManifestMediaTypes = { ...manifest.modules.media, types: [
 // @ts-expect-error generated manifest media discovery uses a versioned schema marker.
 const invalidGeneratedManifestMediaDiscovery = { ...manifest.modules.media, schemaVersion: "backy.media-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["media"];
 
+// @ts-expect-error generated manifest theme discovery uses a versioned schema marker.
+const invalidGeneratedManifestThemeDiscovery = { ...manifest.modules.theme, schemaVersion: "backy.theme-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["theme"];
+
 // @ts-expect-error generated manifest commerce modes are limited to documented storefront modes.
 const invalidGeneratedManifestCommerceMode = { ...manifest.modules.commerce, mode: "marketplace", } satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
 
@@ -3448,6 +3498,9 @@ const invalidSdkManifestForm = { ...sdkManifestForm, submitUrl: undefined, } sat
 
 // @ts-expect-error manifest media modules require a media list URL for asset discovery.
 const invalidSdkManifestMedia = { ...sdkManifestMedia, listUrl: undefined, } satisfies BackyManifestMediaModule;
+
+// @ts-expect-error manifest theme modules require compiled CSS variable output.
+const invalidSdkManifestTheme = { ...sdkManifestTheme, cssVariables: undefined, } satisfies BackyManifestThemeModule;
 
 // @ts-expect-error manifest collection entries require record URLs for custom frontend data loading.
 const invalidSdkManifestCollection = { ...sdkManifestCollection, recordsUrl: undefined, } satisfies BackyManifestCollectionSchema;
@@ -3798,6 +3851,7 @@ void sdkManifestReusableSection;
 void sdkManifestReusableSections;
 void sdkManifestForm;
 void sdkManifestMedia;
+void sdkManifestTheme;
 void sdkManifestCollection;
 void sdkLocalizedRoutePatternGroup;
 void sdkRedirectRule;
@@ -3837,6 +3891,7 @@ void invalidGeneratedReusableSectionCategory;
 void invalidGeneratedReusableSectionItem;
 void invalidGeneratedManifestMediaTypes;
 void invalidGeneratedManifestMediaDiscovery;
+void invalidGeneratedManifestThemeDiscovery;
 void invalidGeneratedManifestCommerceMode;
 void invalidGeneratedManifestCommerceCapabilities;
 void invalidGeneratedInteractiveRegistry;
@@ -3849,6 +3904,7 @@ void invalidGeneratedManifestFormField;
 void invalidGeneratedManifestFormDetailUrl;
 void invalidSdkManifestForm;
 void invalidSdkManifestMedia;
+void invalidSdkManifestTheme;
 void invalidSdkManifestCollection;
 void invalidSdkLocalizedRoutePatternGroup;
 void invalidSdkRedirectRule;

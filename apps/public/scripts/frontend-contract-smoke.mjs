@@ -79,6 +79,21 @@ assert(
 );
 
 assert(
+  manifestRoute.includes("buildBackyThemeDiscovery") &&
+    manifestRoute.includes("theme: buildBackyThemeDiscovery(input.site.theme)") &&
+    manifestRoute.includes("theme: buildBackyThemeDiscovery(site.theme)") &&
+    manifestRoute.includes("themeTokens: buildBackyThemeTokens(input.site.theme)") &&
+    manifestRoute.includes("themeTokens: buildBackyThemeTokens(site.theme)") &&
+    frontendManifestSchema.includes('"backy.theme-discovery.v1"') &&
+    frontendManifestSchema.includes('"cssVariables"') &&
+    frontendManifestSchema.includes('"editableFields"') &&
+    sdkSource.includes('BackyManifestThemeModule') &&
+    sdkSmoke.includes('manifest() missing theme discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestThemeDiscovery'),
+  'Frontend manifest and SDK must expose structured theme discovery and compiled CSS variables for custom frontends.',
+);
+
+assert(
   publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
     publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
     publicSiteDiscoveryRoute.includes('cacheRevision') &&

@@ -598,6 +598,16 @@ assert(manifestMedia.capabilities?.responsiveImages === true, 'manifest() media 
 assert(manifestMedia.capabilities?.editableMetadata === true, 'manifest() media discovery missing editable metadata capability');
 assert(manifestMedia.filters?.queryParams?.includes?.('folder'), 'manifest() media discovery missing folder filter');
 assert(manifestMedia.filters?.scopes?.includes?.('page') && manifestMedia.filters?.scopes?.includes?.('post'), 'manifest() media discovery missing page/post scope filters');
+const manifestTheme = manifest.data.modules?.theme;
+assert(manifestTheme?.schemaVersion === 'backy.theme-discovery.v1', 'manifest() missing theme discovery module');
+assert(manifestTheme.tokenSchemaVersion === 'backy.theme.v1', 'manifest() theme discovery missing token schema marker');
+assert(manifestTheme.tokens?.schemaVersion === 'backy.theme.v1', 'manifest() theme discovery missing compiled token contract');
+assert(manifestTheme.cssVariables?.['--backy-color-primary'], 'manifest() theme discovery missing primary color CSS variable');
+assert(manifestTheme.cssVariables?.['--backy-font-heading'], 'manifest() theme discovery missing heading font CSS variable');
+assert(manifestTheme.selectors?.root === ':root', 'manifest() theme discovery missing root selector');
+assert(manifestTheme.editableFields?.includes?.('colors.primary'), 'manifest() theme discovery missing editable color field');
+assert(manifestTheme.capabilities?.cssVariables === true, 'manifest() theme discovery missing CSS variable capability');
+assert(manifestTheme.capabilities?.liveEditable === true, 'manifest() theme discovery missing live editable capability');
 assert(manifest.data.contract?.databaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', 'manifest() missing database certification schema');
 assert(manifest.data.contract?.databaseCertification?.status === 'external-database-gate', 'manifest() missing external database certification status');
 assert(manifest.data.contract?.databaseCertification?.gate?.command === 'npm run ci:sdk-postgres-smoke', 'manifest() missing SDK Postgres certification command');

@@ -34,6 +34,7 @@ import { buildUserPermissionMatrix, isOwnerOnlyAdminPermission, type AdminUserPe
 import { getHostedRouteUrl, getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
 import { buildInteractiveComponentManifestContract } from '@/lib/interactiveComponentRegistry';
 import { localizedRoutePatternVariants, normalizeSiteLocalization, type PublicRoutePattern } from '@/lib/siteLocalization';
+import { buildBackyThemeDiscovery, buildBackyThemeTokens } from '@/lib/themeTokens';
 
 interface RouteParams {
   params: Promise<{
@@ -651,7 +652,7 @@ const buildRepositoryManifest = (
         description: input.site.description || '',
         customDomain: input.site.customDomain,
         status: input.site.isPublished ? 'published' : 'draft',
-        themeTokens: input.site.theme,
+        themeTokens: buildBackyThemeTokens(input.site.theme),
         frontendDesign: input.site.settings?.frontendDesign || null,
         commentPolicy: normalizeSiteCommentPolicy(input.site.settings?.commentPolicy),
       },
@@ -752,6 +753,7 @@ const buildRepositoryManifest = (
             items: redirectRules,
           },
         },
+        theme: buildBackyThemeDiscovery(input.site.theme),
         pages: {
           count: input.pages.length,
           items: input.pages.map((page) => ({
@@ -977,7 +979,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           description: site.description,
           customDomain: site.customDomain,
           status: site.status,
-          themeTokens: site.theme,
+          themeTokens: buildBackyThemeTokens(site.theme),
           frontendDesign: site.settings?.frontendDesign || null,
           commentPolicy: normalizeSiteCommentPolicy(site.settings?.commentPolicy),
         },
@@ -1078,6 +1080,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               items: redirectRules,
             },
           },
+          theme: buildBackyThemeDiscovery(site.theme),
           pages: {
             count: pages.length,
             items: pages.map((page) => ({
