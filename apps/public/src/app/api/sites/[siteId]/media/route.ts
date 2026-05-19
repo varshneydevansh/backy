@@ -39,6 +39,9 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 );
 
 const mediaTypeValues = ['image', 'video', 'audio', 'document', 'font', 'other'] as const satisfies readonly MediaItem['type'][];
+const mediaScopeValues = ['global', 'page', 'post'] as const;
+
+type PublicMediaScopeFilter = typeof mediaScopeValues[number];
 
 const mediaTypeFromInput = (value: string | null): { type?: MediaItem['type']; invalid?: string } => {
     if (!value) {
@@ -56,6 +59,23 @@ const mediaTypeFromInput = (value: string | null): { type?: MediaItem['type']; i
 
     if (mediaTypeValues.includes(normalized as MediaItem['type'])) {
         return { type: normalized as MediaItem['type'] };
+    }
+
+    return { invalid: value };
+};
+
+const mediaScopeFromInput = (value: string | null): { scope?: PublicMediaScopeFilter; invalid?: string } => {
+    if (!value) {
+        return {};
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+        return {};
+    }
+
+    if (mediaScopeValues.includes(normalized as PublicMediaScopeFilter)) {
+        return { scope: normalized as PublicMediaScopeFilter };
     }
 
     return { invalid: value };
@@ -102,7 +122,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const type = mediaType.type;
         const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '50', 10) || 50));
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
-        const scope = searchParams.get('scope');
+        const mediaScope = mediaScopeFromInput(searchParams.get('scope'));
+        if (mediaScope.invalid) {
+            return errorResponse(
+                400,
+                'INVALID_MEDIA_SCOPE',
+                'Invalid media scope. Use one of: global, page, post.',
+                requestId,
+            );
+        }
+        const scope = mediaScope.scope;
         const pageId = searchParams.get('pageId');
         const postId = searchParams.get('postId') || searchParams.get('blogId');
         const globalOnly = booleanQueryFlag(searchParams.get('global'));
