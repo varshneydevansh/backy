@@ -15,6 +15,7 @@ const assert = (condition, message) => {
 };
 
 const mediaRoute = read('../src/app/api/admin/sites/[siteId]/media/route.ts');
+const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
 const coreTypes = read('../../../packages/core/src/types/index.ts');
@@ -50,6 +51,12 @@ assert(
   mediaRoute.includes('value === "other"') ||
     mediaRoute.includes("value === 'other'"),
   'Media list filters must accept type=other for generic files.',
+);
+assert(
+  publicMediaRoute.includes("'INVALID_MEDIA_TYPE'") &&
+    publicMediaRoute.includes('mediaType.invalid') &&
+    publicMediaRoute.includes('document, file, font, other'),
+  'Public media list route must reject invalid media type filters instead of silently returning all assets.',
 );
 assert(
   mediaRoute.includes('const mimeType = file.type || "application/octet-stream"') ||
@@ -95,6 +102,12 @@ assert(
   'Public OpenAPI media list filters and MediaAsset.type schema must advertise type other for custom frontends.',
 );
 assert(
+  openApiRoute.includes('"400"') &&
+    openApiRoute.includes('Invalid media type filter') &&
+    openApiRoute.includes('#/components/schemas/ErrorEnvelope'),
+  'Public OpenAPI media list route must document invalid type filter error envelopes.',
+);
+assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"') ||
     sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
@@ -114,6 +127,10 @@ assert(
   apiContracts.includes('image/video/audio/document/font/other') &&
     apiContracts.includes('unknown safe files as `other`'),
   'API contract docs must describe generic other file uploads.',
+);
+assert(
+  apiContracts.includes('Invalid public media type filters return `400 INVALID_MEDIA_TYPE`'),
+  'API contract docs must describe invalid public media type filter errors.',
 );
 
 console.log(JSON.stringify({

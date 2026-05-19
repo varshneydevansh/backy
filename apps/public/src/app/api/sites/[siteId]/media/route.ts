@@ -38,19 +38,27 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     )
 );
 
-const mediaTypeFromInput = (value: string | null): MediaItem['type'] | undefined => {
-    if (value === 'file') {
-        return 'document';
+const mediaTypeValues = ['image', 'video', 'audio', 'document', 'font', 'other'] as const satisfies readonly MediaItem['type'][];
+
+const mediaTypeFromInput = (value: string | null): { type?: MediaItem['type']; invalid?: string } => {
+    if (!value) {
+        return {};
     }
 
-    return value === 'image' ||
-        value === 'video' ||
-        value === 'audio' ||
-        value === 'document' ||
-        value === 'font' ||
-        value === 'other'
-        ? value
-        : undefined;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+        return {};
+    }
+
+    if (normalized === 'file') {
+        return { type: 'document' };
+    }
+
+    if (mediaTypeValues.includes(normalized as MediaItem['type'])) {
+        return { type: normalized as MediaItem['type'] };
+    }
+
+    return { invalid: value };
 };
 
 const mediaTagMatches = (tags: string[], tag: string | null) => {
@@ -82,7 +90,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
-        const type = mediaTypeFromInput(searchParams.get('type')); // image, video, audio, document/file, font
+        const mediaType = mediaTypeFromInput(searchParams.get('type')); // image, video, audio, document/file, font, other
+        if (mediaType.invalid) {
+            return errorResponse(
+                400,
+                'INVALID_MEDIA_TYPE',
+                'Invalid media type. Use one of: image, video, audio, document, file, font, other.',
+                requestId,
+            );
+        }
+        const type = mediaType.type;
         const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '50', 10) || 50));
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
         const scope = searchParams.get('scope');
