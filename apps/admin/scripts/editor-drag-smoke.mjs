@@ -224,6 +224,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
   assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');
+  assert(layersPanelSource.includes('const handleKeyboardNavigate') && layersPanelSource.includes("key === 'ArrowUp'") && layersPanelSource.includes("key === 'Home'"), 'Editor layers panel must support keyboard navigation through rendered layer rows');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10109,6 +10110,37 @@ const testLayersPanelControls = async (client, pageId) => {
       keyboardRowSelection.selected.includes('smoke-link'),
     `Keyboard layer row selection did not select smoke-link with tree semantics: ${JSON.stringify(keyboardRowSelection)}`,
   );
+  const keyboardRowNavigation = await evaluate(client, `(async () => {
+    const rows = Array.from(document.querySelectorAll('[role="treeitem"][data-layer-id]'));
+    const current = document.querySelector('[data-layer-id="smoke-link"]');
+    if (!(current instanceof HTMLElement) || rows.length < 2) {
+      return { ok: false, reason: 'missing-current-or-rows', rowCount: rows.length };
+    }
+    const currentIndex = rows.indexOf(current);
+    const key = currentIndex < rows.length - 1 ? 'ArrowDown' : 'ArrowUp';
+    const expected = rows[key === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1];
+    if (!(expected instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-expected-row', currentIndex, key };
+    }
+    current.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const selected = Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean);
+    return {
+      ok: true,
+      key,
+      expectedId: expected.getAttribute('data-layer-id'),
+      activeId: document.activeElement?.getAttribute('data-layer-id') || '',
+      selected,
+    };
+  })()`);
+  assert(
+    keyboardRowNavigation?.ok &&
+      keyboardRowNavigation.expectedId &&
+      keyboardRowNavigation.activeId === keyboardRowNavigation.expectedId &&
+      keyboardRowNavigation.selected.length === 1 &&
+      keyboardRowNavigation.selected.includes(keyboardRowNavigation.expectedId),
+    `Keyboard layer row Arrow navigation did not move focus and selection: ${JSON.stringify(keyboardRowNavigation)}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10223,6 +10255,7 @@ const testLayersPanelControls = async (client, pageId) => {
     selectedRowActions,
     unselectedRowActions,
     keyboardRowSelection,
+    keyboardRowNavigation,
     reorder,
     hiddenState,
     toolbarVisibleState,

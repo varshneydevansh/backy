@@ -46,6 +46,7 @@ interface LayerItemProps {
     canAcceptChildren: boolean;
     selectedIds: string[];
     onSelect: (id: string, multiSelect: boolean, rangeSelect: boolean) => void;
+    onKeyboardNavigate: (id: string, key: string, multiSelect: boolean, rangeSelect: boolean) => void;
     onDragStart: (id: string) => void;
     onDragOver: (id: string) => void;
     onDrop: (id: string) => void;
@@ -162,6 +163,7 @@ function LayerItem({
     canAcceptChildren,
     selectedIds,
     onSelect,
+    onKeyboardNavigate,
     onDragStart,
     onDragOver,
     onDrop,
@@ -195,12 +197,16 @@ function LayerItem({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key !== 'Enter' && e.key !== ' ') {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect(element.id, e.metaKey || e.ctrlKey, e.shiftKey);
             return;
         }
 
-        e.preventDefault();
-        onSelect(element.id, e.metaKey || e.ctrlKey, e.shiftKey);
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End') {
+            e.preventDefault();
+            onKeyboardNavigate(element.id, e.key, e.metaKey || e.ctrlKey, e.shiftKey);
+        }
     };
 
     const handleDragStart = (e: React.DragEvent) => {
@@ -532,6 +538,53 @@ export function LayersPanel({
         [lastSelectedId, renderedLayerIds, selectedIds, onSelect]
     );
 
+    const focusLayerRow = useCallback((id: string) => {
+        const row = Array.from(document.querySelectorAll<HTMLElement>('[data-layer-id]'))
+            .find((candidate) => candidate.getAttribute('data-layer-id') === id);
+        row?.focus();
+    }, []);
+
+    const handleKeyboardNavigate = useCallback(
+        (id: string, key: string, multiSelect: boolean, rangeSelect: boolean) => {
+            const currentIndex = renderedLayerIds.indexOf(id);
+            if (currentIndex < 0 || renderedLayerIds.length === 0) {
+                return;
+            }
+
+            const nextIndex = key === 'Home'
+                ? 0
+                : key === 'End'
+                    ? renderedLayerIds.length - 1
+                    : key === 'ArrowUp'
+                        ? Math.max(0, currentIndex - 1)
+                        : Math.min(renderedLayerIds.length - 1, currentIndex + 1);
+            const nextId = renderedLayerIds[nextIndex];
+            if (!nextId) {
+                return;
+            }
+
+            if (rangeSelect) {
+                const anchorId = lastSelectedId && renderedLayerIds.includes(lastSelectedId)
+                    ? lastSelectedId
+                    : id;
+                const anchorIndex = renderedLayerIds.indexOf(anchorId);
+                const start = Math.min(anchorIndex, nextIndex);
+                const end = Math.max(anchorIndex, nextIndex);
+                const rangeIds = renderedLayerIds.slice(start, end + 1);
+                onSelect(multiSelect ? Array.from(new Set([...selectedIds, ...rangeIds])) : rangeIds);
+            } else if (multiSelect) {
+                setLastSelectedId(nextId);
+                onSelect(selectedIds.includes(nextId) ? selectedIds : [...selectedIds, nextId]);
+            } else {
+                setLastSelectedId(nextId);
+                onSelect([nextId]);
+            }
+
+            focusLayerRow(nextId);
+        },
+        [focusLayerRow, lastSelectedId, renderedLayerIds, selectedIds, onSelect]
+    );
+
     const handleDragStart = useCallback((id: string) => {
         setDragFromId(id);
         setDragTargetId(null);
@@ -589,6 +642,7 @@ export function LayersPanel({
                         selectedIds={selectedIds}
                         disabled={disabled}
                         onSelect={handleSelect}
+                        onKeyboardNavigate={handleKeyboardNavigate}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop}
