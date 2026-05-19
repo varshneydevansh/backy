@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'refund-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -412,6 +412,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create terms and conditions sections for service rules, commerce policies, acceptable use, and contact actions.',
     badge: 'Legal',
     icon: Archive,
+  },
+  {
+    key: 'refund-policy',
+    title: 'Refund policy',
+    detail: 'Create return windows, refund rules, exchange options, ineligible items, and support actions.',
+    badge: 'Commerce',
+    icon: ShoppingBag,
   },
   {
     key: 'cart',
@@ -1925,6 +1932,7 @@ function PagesListView() {
       eventsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
       privacyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
       termsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,
+      refundPolicyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=refund-policy`,
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
@@ -1960,6 +1968,7 @@ function PagesListView() {
         events: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
         privacy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
         terms: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,
+        refundPolicy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=refund-policy`,
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,

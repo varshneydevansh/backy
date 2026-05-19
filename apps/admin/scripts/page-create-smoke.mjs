@@ -387,6 +387,46 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'refund-policy',
+    title: 'Smoke Refund Policy Template',
+    slugBase: 'smoke-refund-policy-template',
+    expectedNavigationPlacement: 'footer',
+    chromePrefix: 'refund-policy',
+    navigationItem: 'Refunds',
+    headingId: 'refund-policy-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'refund-policy-site-header',
+      'refund-policy-site-navigation',
+      'refund-policy-site-footer',
+      'refund-policy-hero-section',
+      'refund-policy-window-card',
+      'refund-policy-window-value',
+      'refund-policy-rules-section',
+      'refund-policy-rule-card-0',
+      'refund-policy-rule-card-title-0',
+      'refund-policy-rule-card-copy-0',
+      'refund-policy-actions-section',
+      'refund-policy-eligibility-card',
+      'refund-policy-contact-card',
+      'refund-policy-contact-button',
+    ],
+    dataBindingElementIds: [
+      'refund-policy-hero-section',
+      'refund-policy-window-card',
+      'refund-policy-window-value',
+      'refund-policy-rules-section',
+      'refund-policy-rule-card-0',
+      'refund-policy-rule-card-title-0',
+      'refund-policy-rule-card-copy-0',
+      'refund-policy-actions-section',
+      'refund-policy-eligibility-card',
+      'refund-policy-contact-card',
+    ],
+  },
+  {
     template: 'cart',
     title: 'Smoke Cart Template',
     slugBase: 'smoke-cart-template',
@@ -807,6 +847,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('terms-policy-card-${index}') &&
       source.includes('terms-acceptance-card') &&
       source.includes('terms.contact.open') &&
+      source.includes("'refund-policy'") &&
+      source.includes('refund-policy-rule-card-${index}') &&
+      source.includes('refund-policy-eligibility-card') &&
+      source.includes('refund.request.open') &&
       source.includes("'cart'") &&
       source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
@@ -823,7 +867,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, refund policy, help-center, and blog-post starters',
   );
 };
 
@@ -1436,6 +1480,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Terms page',
       forms: 'none',
       dynamicData: 'Backy legal terms placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'refund-policy',
+      navPlacement: 'footer',
+      selectedTemplateName: 'Refund policy',
+      forms: 'none',
+      dynamicData: 'Backy refund policy placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

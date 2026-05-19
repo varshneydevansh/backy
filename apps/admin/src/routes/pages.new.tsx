@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'refund-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -197,6 +197,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Terms hero', 'Policy sections', 'Contact action'],
     },
     {
+        id: 'refund-policy',
+        name: 'Refund policy',
+        desc: 'Return windows, refund rules, exchange options, ineligible items, and support CTA.',
+        detail: 'Creates a public refund policy page ready to bind commerce settings, fulfillment rules, return workflows, and support actions.',
+        sections: ['Refund hero', 'Policy rules', 'Return action'],
+    },
+    {
         id: 'cart',
         name: 'Cart page',
         desc: 'Cart items, quantity controls, totals, and checkout handoff.',
@@ -322,6 +329,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'terms',
         description: 'A public terms page ready to explain service rules, account responsibilities, commerce conditions, acceptable use, and dispute handling.',
     },
+    'refund-policy': {
+        title: 'Refund policy',
+        slug: 'refund-policy',
+        description: 'A public refund policy page ready to explain return windows, refund eligibility, exchange options, ineligible items, and support steps.',
+    },
     cart: {
         title: 'Cart',
         slug: 'cart',
@@ -390,6 +402,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     events: 'primary',
     privacy: 'footer',
     terms: 'footer',
+    'refund-policy': 'footer',
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
@@ -624,6 +637,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     events: ['Home', 'Events', 'Blog', 'Contact'],
     privacy: ['Home', 'Privacy', 'Terms', 'Contact'],
     terms: ['Home', 'Terms', 'Privacy', 'Contact'],
+    'refund-policy': ['Home', 'Refunds', 'Terms', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
@@ -722,6 +736,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Sales', x: 38, y: 48, w: 26, h: 28, className: 'border-zinc-200 bg-white' },
         { label: 'Support', x: 68, y: 48, w: 24, h: 28, className: 'border-zinc-200 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-zinc-200 bg-white' },
+    ],
+    'refund-policy': [
+        { label: 'Refunds', x: 8, y: 14, w: 84, h: 24, className: 'border-emerald-200 bg-emerald-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-emerald-800' },
+        { label: 'Window', x: 64, y: 24, w: 20, h: 6, className: 'border-emerald-100 bg-white' },
+        { label: 'Returns', x: 8, y: 48, w: 26, h: 28, className: 'border-emerald-100 bg-white' },
+        { label: 'Exchanges', x: 38, y: 48, w: 26, h: 28, className: 'border-emerald-100 bg-white' },
+        { label: 'Support', x: 68, y: 48, w: 24, h: 28, className: 'border-emerald-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     cart: [
         { label: 'Cart', x: 8, y: 14, w: 52, h: 20, className: 'border-teal-200 bg-teal-50' },
@@ -1798,6 +1821,8 @@ function NewPageRoute() {
                     ? 'Backy legal policy placeholders'
                 : formData.template === 'terms'
                     ? 'Backy legal terms placeholders'
+                : formData.template === 'refund-policy'
+                    ? 'Backy refund policy placeholders'
                 : formData.template === 'cart'
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
@@ -1917,7 +1942,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'refund-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1967,7 +1992,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal content, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, refund policy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4009,6 +4034,8 @@ function buildTemplateElements(input: {
                 ? 'Contact'
             : input.template === 'terms'
                 ? 'Terms'
+            : input.template === 'refund-policy'
+                ? 'Start return'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'help-center'
@@ -5317,6 +5344,171 @@ function buildTemplateElements(input: {
                                 width: 146,
                                 height: 40,
                                 props: { label: 'Contact terms', backgroundColor: '#e4e4e7', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'terms.contact.open' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'refund-policy') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'refund-policy-hero-section',
+                width: 1200,
+                height: 320,
+                dataBindings: [{ source: 'commerce', mode: 'refund-policy', fields: ['returnWindowDays', 'refundMethods', 'exchangeAllowed', 'supportEmail'] }],
+                props: { backgroundColor: '#ecfdf5', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'refund-policy-kicker',
+                        width: 240,
+                        height: 28,
+                        props: { content: 'Refunds and returns', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'refund-policy-heading',
+                        width: 660,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#064e3b' },
+                    }),
+                    createCanvasElement('paragraph', 76, 210, {
+                        id: 'refund-policy-copy',
+                        width: 610,
+                        height: 64,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#065f46' },
+                    }),
+                    createCanvasElement('box', 790, 86, {
+                        id: 'refund-policy-window-card',
+                        width: 300,
+                        height: 150,
+                        dataBindings: [{ source: 'commerce', mode: 'refund-window', fields: ['returnWindowDays', 'refundMethod', 'exchangeAllowed'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a7f3d0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'refund-policy-window-label',
+                                width: 180,
+                                height: 22,
+                                props: { content: 'Return window', fontSize: 12, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 60, {
+                                id: 'refund-policy-window-value',
+                                width: 210,
+                                height: 34,
+                                props: { content: '30 days', level: 'h3', fontSize: 26, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'commerce', mode: 'refund-window', field: 'returnWindowDays', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 104, {
+                                id: 'refund-policy-window-copy',
+                                width: 230,
+                                height: 32,
+                                props: { content: 'Bind this from commerce policy settings or order support workflows.', fontSize: 13, lineHeight: 1.35, color: '#047857' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 320, {
+                id: 'refund-policy-rules-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'commerce', mode: 'refund-rules', fields: ['eligibility', 'refundMethods', 'exchangeRules', 'ineligibleItems'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'refund-policy-rules-heading',
+                        width: 470,
+                        height: 42,
+                        props: { content: 'Policy rules', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Return eligibility', body: 'Explain the condition, receipt, order number, and timeline requirements customers must meet before starting a return.' },
+                        { title: 'Refunds and exchanges', body: 'Document store credit, original-payment refunds, exchange options, restocking fees, and processing timelines.' },
+                        { title: 'Items not eligible', body: 'List final-sale, digital, customized, opened, damaged, or hygiene-sensitive products that need special handling.' },
+                    ].map((rule, index) => createCanvasElement('box', 74 + index * 350, 132, {
+                        id: `refund-policy-rule-card-${index}`,
+                        width: 310,
+                        height: 290,
+                        dataBindings: [{ source: 'commerce', mode: 'refund-rule', index }],
+                        props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#d1fae5', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: `refund-policy-rule-card-title-${index}`,
+                                width: 230,
+                                height: 34,
+                                props: { content: rule.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#064e3b' },
+                                dataBindings: [{ source: 'commerce', mode: 'refund-rule', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: `refund-policy-rule-card-copy-${index}`,
+                                width: 236,
+                                height: 124,
+                                props: { content: rule.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
+                                dataBindings: [{ source: 'commerce', mode: 'refund-rule', index, field: 'body', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 232, {
+                                id: `refund-policy-rule-card-note-${index}`,
+                                width: 220,
+                                height: 24,
+                                props: { content: 'Editable commerce policy', fontSize: 13, fontWeight: '800', color: '#047857' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 880, {
+                id: 'refund-policy-actions-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'commerce', mode: 'refund-actions', fields: ['returnUrl', 'supportEmail', 'orderLookupRequired', 'refundMethod'] }],
+                props: { backgroundColor: '#f0fdf4', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 62, {
+                        id: 'refund-policy-eligibility-card',
+                        width: 600,
+                        height: 190,
+                        dataBindings: [{ source: 'commerce', mode: 'refund-eligibility', fields: ['orderNumber', 'productCondition', 'photosRequired', 'labelProvider'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 26, {
+                                id: 'refund-policy-eligibility-heading',
+                                width: 360,
+                                height: 34,
+                                props: { content: 'Before customers start', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Order number', 'Product condition', 'Photos if needed', 'Return label steps'].map((step, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
+                                id: `refund-policy-eligibility-item-${index}`,
+                                width: 220,
+                                height: 24,
+                                props: { content: step, fontSize: 15, fontWeight: '800', color: '#065f46' },
+                            })),
+                        ],
+                    }),
+                    createCanvasElement('box', 748, 62, {
+                        id: 'refund-policy-contact-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'commerce', mode: 'refund-contact', fields: ['returnUrl', 'supportEmail', 'orderLookupUrl'] }],
+                        props: { backgroundColor: '#064e3b', borderRadius: 8 },
+                        children: [
+                            createCanvasElement('heading', 26, 26, {
+                                id: 'refund-policy-contact-heading',
+                                width: 230,
+                                height: 32,
+                                props: { content: 'Need to return an order?', level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 26, 76, {
+                                id: 'refund-policy-contact-copy',
+                                width: 250,
+                                height: 46,
+                                props: { content: 'Bind this action to a return portal, order lookup, form, or support workflow.', fontSize: 14, lineHeight: 1.45, color: '#d1fae5' },
+                            }),
+                            createCanvasElement('button', 26, 138, {
+                                id: 'refund-policy-contact-button',
+                                width: 144,
+                                height: 40,
+                                props: { label: 'Start return', backgroundColor: '#d1fae5', color: '#064e3b', borderRadius: 8, fontWeight: '800', action: 'refund.request.open' },
                             }),
                         ],
                     }),
