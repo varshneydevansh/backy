@@ -454,6 +454,11 @@ includesAll(
     'Actual Supabase/Vercel/payment-provider connection execution, live billing/provider certification, and external provider-managed webhook certification.',
     'GITHUB_STEP_SUMMARY',
     'Real-provider certification for Supabase, Vercel, storage, notification, and commerce providers.',
+    'Settings provider certification gate wording update',
+    'npm run ci:settings-provider-certification',
+    'test:settings-provider-certification-preflight-contract',
+    'explicitly selected storage, Vercel, notification, and optional nested Commerce provider families',
+    'provider-family selection, external admin-key requirements, secret-boundary checks, and requested-provider diagnostics',
   ],
   'Settings provider certification audit evidence',
 );

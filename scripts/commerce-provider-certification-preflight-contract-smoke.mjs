@@ -706,6 +706,12 @@ includesAll(
     'Commerce certification summary update',
     'GITHUB_STEP_SUMMARY',
     'real-provider certification remains Partial',
+    'Commerce provider certification gate wording update',
+    'npm run ci:commerce-provider-certification',
+    'test:commerce-provider-certification-preflight-contract',
+    'explicitly selected payment, tax, shipping, catalog, subscription, and webhook provider families',
+    'repeatable mock coverage remains `npm run ci:commerce-provider-smoke`',
+    'real provider-family execution and selected credential/input readiness',
   ],
   'Commerce provider certification audit evidence',
 );
