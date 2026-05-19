@@ -34,9 +34,11 @@ const INLINE_IMAGE_ELEMENT_TYPES = new Set(['image']);
 const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-down'] as const;
 const BORDER_STYLE_OPTIONS = ['', 'solid', 'dashed', 'dotted', 'double', 'none'] as const;
 const TEXT_ALIGN_OPTIONS = ['', 'left', 'center', 'right', 'justify'] as const;
+const TEXT_TRANSFORM_OPTIONS = ['', 'none', 'uppercase', 'lowercase', 'capitalize'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
 type BorderStyleOption = typeof BORDER_STYLE_OPTIONS[number];
 type TextAlignOption = typeof TEXT_ALIGN_OPTIONS[number];
+type TextTransformOption = typeof TEXT_TRANSFORM_OPTIONS[number];
 type InlineAppearanceFields = {
   color: string;
   backgroundColor: string;
@@ -46,8 +48,11 @@ type InlineAppearanceFields = {
   borderRadius: string;
   padding: string;
   fontSize: string;
+  fontFamily: string;
   fontWeight: string;
+  lineHeight: string;
   textAlign: TextAlignOption;
+  textTransform: TextTransformOption;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -204,6 +209,7 @@ const appearanceFieldsFromElement = (element: Record<string, unknown> | null): I
   const props = elementProps(element);
   const borderStyle = stringProp(props, 'borderStyle');
   const textAlign = stringProp(props, 'textAlign');
+  const textTransform = stringProp(props, 'textTransform');
   return {
     color: stringProp(props, 'color'),
     backgroundColor: stringProp(props, 'backgroundColor'),
@@ -215,9 +221,14 @@ const appearanceFieldsFromElement = (element: Record<string, unknown> | null): I
     borderRadius: lengthProp(props, 'borderRadius'),
     padding: lengthProp(props, 'padding'),
     fontSize: lengthProp(props, 'fontSize'),
+    fontFamily: stringProp(props, 'fontFamily'),
     fontWeight: stringProp(props, 'fontWeight'),
+    lineHeight: lengthProp(props, 'lineHeight'),
     textAlign: TEXT_ALIGN_OPTIONS.includes(textAlign as TextAlignOption)
       ? textAlign as TextAlignOption
+      : '',
+    textTransform: TEXT_TRANSFORM_OPTIONS.includes(textTransform as TextTransformOption)
+      ? textTransform as TextTransformOption
       : '',
   };
 };
@@ -306,8 +317,11 @@ const updateElementAppearance = (
   borderRadius: input.borderRadius.trim(),
   padding: input.padding.trim(),
   fontSize: input.fontSize.trim(),
+  fontFamily: input.fontFamily.trim(),
   fontWeight: input.fontWeight.trim(),
+  lineHeight: input.lineHeight.trim(),
   textAlign: input.textAlign,
+  textTransform: input.textTransform,
 });
 
 export function LivePageManagementOverlay({
@@ -346,8 +360,11 @@ export function LivePageManagementOverlay({
   const [inlineAppearanceBorderRadius, setInlineAppearanceBorderRadius] = useState('');
   const [inlineAppearancePadding, setInlineAppearancePadding] = useState('');
   const [inlineAppearanceFontSize, setInlineAppearanceFontSize] = useState('');
+  const [inlineAppearanceFontFamily, setInlineAppearanceFontFamily] = useState('');
   const [inlineAppearanceFontWeight, setInlineAppearanceFontWeight] = useState('');
+  const [inlineAppearanceLineHeight, setInlineAppearanceLineHeight] = useState('');
   const [inlineAppearanceTextAlign, setInlineAppearanceTextAlign] = useState<TextAlignOption>('');
+  const [inlineAppearanceTextTransform, setInlineAppearanceTextTransform] = useState<TextTransformOption>('');
   const [inlineAppearanceSaving, setInlineAppearanceSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
@@ -455,8 +472,11 @@ export function LivePageManagementOverlay({
       setInlineAppearanceBorderRadius('');
       setInlineAppearancePadding('');
       setInlineAppearanceFontSize('');
+      setInlineAppearanceFontFamily('');
       setInlineAppearanceFontWeight('');
+      setInlineAppearanceLineHeight('');
       setInlineAppearanceTextAlign('');
+      setInlineAppearanceTextTransform('');
       return;
     }
 
@@ -501,8 +521,11 @@ export function LivePageManagementOverlay({
     setInlineAppearanceBorderRadius(appearanceFields.borderRadius);
     setInlineAppearancePadding(appearanceFields.padding);
     setInlineAppearanceFontSize(appearanceFields.fontSize);
+    setInlineAppearanceFontFamily(appearanceFields.fontFamily);
     setInlineAppearanceFontWeight(appearanceFields.fontWeight);
+    setInlineAppearanceLineHeight(appearanceFields.lineHeight);
     setInlineAppearanceTextAlign(appearanceFields.textAlign);
+    setInlineAppearanceTextTransform(appearanceFields.textTransform);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -706,8 +729,11 @@ export function LivePageManagementOverlay({
       borderRadius: inlineAppearanceBorderRadius,
       padding: inlineAppearancePadding,
       fontSize: inlineAppearanceFontSize,
+      fontFamily: inlineAppearanceFontFamily,
       fontWeight: inlineAppearanceFontWeight,
+      lineHeight: inlineAppearanceLineHeight,
       textAlign: inlineAppearanceTextAlign,
+      textTransform: inlineAppearanceTextTransform,
     });
     if (!nextContent) {
       setError('Unable to update this appearance from the live overlay. Open the full editor instead.');
@@ -1181,6 +1207,26 @@ export function LivePageManagementOverlay({
                       />
                     </label>
                     <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Line height
+                      <input
+                        value={inlineAppearanceLineHeight}
+                        onChange={(event) => setInlineAppearanceLineHeight(event.target.value)}
+                        placeholder="1.4, 24px"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Font family
+                    <input
+                      value={inlineAppearanceFontFamily}
+                      onChange={(event) => setInlineAppearanceFontFamily(event.target.value)}
+                      placeholder="Inter, var(--font-heading)"
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                    />
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
                       Font weight
                       <input
                         value={inlineAppearanceFontWeight}
@@ -1188,6 +1234,18 @@ export function LivePageManagementOverlay({
                         placeholder="400, 600, bold"
                         style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
                       />
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Transform
+                      <select
+                        value={inlineAppearanceTextTransform}
+                        onChange={(event) => setInlineAppearanceTextTransform(event.target.value as TextTransformOption)}
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                      >
+                        {TEXT_TRANSFORM_OPTIONS.map((option) => (
+                          <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                        ))}
+                      </select>
                     </label>
                   </div>
                   <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
