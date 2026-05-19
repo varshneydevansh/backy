@@ -4,6 +4,8 @@
 **Date:** 2026-02-27
 **Goal:** Build `backy-admin` as a production-class editor + `backy-public` as a headless API layer that powers a first-party UI and any third-party/custom frontend.
 
+> Historical snapshot: this v1 roadmap is superseded by `backy-phase-a-j-completion-spec.md` and `../page-completion-audit/backy-page-surface-audit.md`. The current audit baseline is **39 Ready / 6 Partial / 0 Prototype / 0 Missing**; remaining Partial work is external Forms/SDK Supabase/Postgres certification plus live Settings/Commerce provider certification.
+
 ## 0) Product direction and success model
 
 `backy` is an app-core platform, not a locked interface. The platform should:

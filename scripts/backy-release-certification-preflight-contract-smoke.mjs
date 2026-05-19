@@ -47,6 +47,8 @@ const platformGapAnalysis = read('../specs/backy-platform-gap-analysis-and-ai-fr
 const aiFrontendContractReadme = read('../specs/ai-frontend-contract/README.md');
 const completionSpec = read('../specs/backy-cms-completion-spec.md');
 const fullParityRoadmap = read('../specs/backy-full-parity-roadmap-spec.md');
+const phaseRoadmapV1 = read('../specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md');
+const phaseRoadmapV2 = read('../specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md');
 const phaseCompletionSpec = read('../specs/phase-docs/backy-phase-a-j-completion-spec.md');
 
 includesAll(
@@ -678,6 +680,23 @@ includesAll(
   ],
   'Backy phase completion current-state documentation',
 );
+
+for (const [label, source] of [
+  ['Backy phase roadmap v1 historical banner', phaseRoadmapV1],
+  ['Backy phase roadmap v2 historical banner', phaseRoadmapV2],
+]) {
+  includesAll(
+    source,
+    [
+      'Historical snapshot:',
+      'superseded by `backy-phase-a-j-completion-spec.md`',
+      'page-completion-audit/backy-page-surface-audit.md',
+      '39 Ready / 6 Partial / 0 Prototype / 0 Missing',
+      'external Forms/SDK Supabase/Postgres certification plus live Settings/Commerce provider certification',
+    ],
+    label,
+  );
+}
 
 excludesAll(
   phaseCompletionSpec,
