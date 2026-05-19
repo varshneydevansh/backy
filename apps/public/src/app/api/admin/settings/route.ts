@@ -108,7 +108,71 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
   },
 ] as const;
 
-const providerCertificationContract = () => ({
+const uniqueStrings = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
+
+const missingInputsFromRuntime = (summary: unknown): string[] => {
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+    return [];
+  }
+
+  const missing = (summary as { missing?: unknown }).missing;
+  return Array.isArray(missing)
+    ? missing.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+};
+
+const buildProviderCertificationRuntimeEvidence = ({
+  database,
+  storage,
+  supabase,
+  vercel,
+  mediaScanner,
+  notifications,
+  commerce,
+  interactiveComponents,
+  publicApi,
+}: {
+  database: unknown;
+  storage: unknown;
+  supabase: unknown;
+  vercel: unknown;
+  mediaScanner: unknown;
+  notifications: unknown;
+  commerce: unknown;
+  interactiveComponents: unknown;
+  publicApi: unknown;
+}) => {
+  const missingInputAliases = uniqueStrings([
+    ...missingInputsFromRuntime(database),
+    ...missingInputsFromRuntime(storage),
+    ...missingInputsFromRuntime(supabase),
+    ...missingInputsFromRuntime(vercel),
+    ...missingInputsFromRuntime(mediaScanner),
+    ...missingInputsFromRuntime(notifications),
+    ...missingInputsFromRuntime(commerce),
+    ...missingInputsFromRuntime(interactiveComponents),
+    ...missingInputsFromRuntime(publicApi),
+  ]);
+
+  return {
+    database,
+    storage,
+    supabase,
+    vercel,
+    mediaScanner,
+    notifications,
+    commerce,
+    interactiveComponents,
+    publicApi,
+    missingInputAliases,
+    localRuntimeInputsConfigured: missingInputAliases.length === 0,
+    liveProviderGateRequired: true,
+    secretHandling: 'Provider secret values are never returned; runtime evidence reports booleans, aliases, provider families, and non-secret URLs only.',
+  };
+};
+
+const providerCertificationContract = (runtimeEvidence: ReturnType<typeof buildProviderCertificationRuntimeEvidence>) => ({
+  generatedAt: new Date().toISOString(),
   schemaVersion: 'backy.settings-provider-certification-handoff.v1',
   status: 'external-live-provider-gate',
   settingsGate: 'npm run ci:settings-provider-certification',
@@ -116,6 +180,7 @@ const providerCertificationContract = () => ({
   localPreflight: 'npm run test:settings-provider-certification-preflight-contract',
   releasePreflight: 'npm run test:release-certification-preflight-contract',
   secretHandling: 'Provider credentials stay in deployment or CI environment variables; admin settings responses only expose non-secret provider families, gate names, and readiness evidence.',
+  runtimeEvidence,
   groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
     family: group.family,
     providers: [...group.providers],
@@ -869,6 +934,26 @@ const buildRevocationHistoryEntries = ({
 
 const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminApiKey?: boolean } = {}) => {
   const apiKeys = settingsApiKeys(settings);
+  const runtimeStorage = getMediaStorageConfigSummary();
+  const runtimeDatabase = getDatabaseRuntimeSummary();
+  const runtimeSupabase = getSupabaseRuntimeSummary();
+  const runtimeMediaScanner = getMediaScannerRuntimeSummary();
+  const runtimeVercel = getVercelRuntimeSummary();
+  const runtimeNotifications = getNotificationRuntimeSummary();
+  const runtimeCommerce = getCommerceRuntimeSummary(settings);
+  const runtimeInteractiveComponents = getInteractiveComponentRuntimeSummary();
+  const runtimePublicApi = getPublicApiRuntimeSummary();
+  const providerCertificationRuntimeEvidence = buildProviderCertificationRuntimeEvidence({
+    database: runtimeDatabase,
+    storage: runtimeStorage,
+    supabase: runtimeSupabase,
+    vercel: runtimeVercel,
+    mediaScanner: runtimeMediaScanner,
+    notifications: runtimeNotifications,
+    commerce: runtimeCommerce,
+    interactiveComponents: runtimeInteractiveComponents,
+    publicApi: runtimePublicApi,
+  });
 
   return {
     schemaVersion: ADMIN_SETTINGS_SCHEMA,
@@ -887,18 +972,18 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
       adminApiKey: options.includeAdminApiKey ? apiKeys.adminApiKey : '',
     },
     storage: 'storage' in settings ? settings.storage || {} : {},
-    runtimeStorage: getMediaStorageConfigSummary(),
+    runtimeStorage,
     auth: sanitizeAuthForResponse(settings.auth) || {},
     integrations: settings.integrations || {},
-    runtimeDatabase: getDatabaseRuntimeSummary(),
-    runtimeSupabase: getSupabaseRuntimeSummary(),
-    runtimeMediaScanner: getMediaScannerRuntimeSummary(),
-    runtimeVercel: getVercelRuntimeSummary(),
-    runtimeNotifications: getNotificationRuntimeSummary(),
-    runtimeCommerce: getCommerceRuntimeSummary(settings),
-    runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary(),
-    runtimePublicApi: getPublicApiRuntimeSummary(),
-    providerCertification: providerCertificationContract(),
+    runtimeDatabase,
+    runtimeSupabase,
+    runtimeMediaScanner,
+    runtimeVercel,
+    runtimeNotifications,
+    runtimeCommerce,
+    runtimeInteractiveComponents,
+    runtimePublicApi,
+    providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence),
     updatedAt: settings.updatedAt,
   };
 };

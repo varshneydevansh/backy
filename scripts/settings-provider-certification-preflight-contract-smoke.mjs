@@ -362,6 +362,7 @@ includesAll(
     'hasProviderCertificationHandoffSummary',
     'backy.settings-provider-certification-handoff.v1',
     'Provider credentials stay in deployment or CI environment variables',
+    'runtimeEvidence',
   ],
   'Settings UI smoke provider operation coverage',
 );
@@ -377,6 +378,10 @@ includesAll(
     'settings.notification_webhook.test',
     'executable provider-operation actions for storage provisioning',
     'providerCertificationRequiredInputs',
+    'providerCertification.runtimeEvidence',
+    'missingInputAliases',
+    'liveProviderGateRequired',
+    'Provider secret values are never returned',
     'missing provider certification required input',
     'BACKY_DATABASE_URL or DATABASE_URL',
     'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER',
@@ -389,6 +394,8 @@ includesAll(
   apiContracts,
   [
     'data.settings.providerCertification',
+    'runtimeEvidence',
+    'missingInputAliases',
     'backy.settings-provider-certification-handoff.v1',
     'external-live-provider-gate',
     'BACKY_DATABASE_URL`/`DATABASE_URL',

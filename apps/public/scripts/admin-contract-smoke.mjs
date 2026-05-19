@@ -7737,6 +7737,24 @@ try {
         providerCertification.secretHandling.includes('Provider credentials stay in deployment or CI environment variables'),
       `${url} missing provider certification secret-handling guidance`,
     );
+    assert(providerCertification?.runtimeEvidence, `${url} missing provider certification runtime evidence`);
+    assert(providerCertification.runtimeEvidence.database?.mode, `${url} missing provider certification database runtime evidence`);
+    assert(typeof providerCertification.runtimeEvidence.storage?.configured === 'boolean', `${url} missing provider certification storage runtime evidence`);
+    assert(typeof providerCertification.runtimeEvidence.supabase?.configured === 'boolean', `${url} missing provider certification Supabase runtime evidence`);
+    assert(typeof providerCertification.runtimeEvidence.vercel?.configured === 'boolean', `${url} missing provider certification Vercel runtime evidence`);
+    assert(typeof providerCertification.runtimeEvidence.notifications?.configured === 'boolean', `${url} missing provider certification notification runtime evidence`);
+    assert(typeof providerCertification.runtimeEvidence.commerce?.webhookSecretConfigured === 'boolean', `${url} missing provider certification commerce runtime evidence`);
+    assert(typeof providerCertification.runtimeEvidence.interactiveComponents?.configured === 'boolean', `${url} missing provider certification interactive runtime evidence`);
+    assert(Array.isArray(providerCertification.runtimeEvidence.publicApi?.missing), `${url} missing provider certification public API runtime evidence`);
+    assert(Array.isArray(providerCertification.runtimeEvidence.missingInputAliases), `${url} missing provider certification runtime missing input aliases`);
+    assert(providerCertification.runtimeEvidence.liveProviderGateRequired === true, `${url} missing provider certification live-provider gate flag`);
+    assert(
+      typeof providerCertification.runtimeEvidence.secretHandling === 'string' &&
+        providerCertification.runtimeEvidence.secretHandling.includes('Provider secret values are never returned'),
+      `${url} missing provider certification runtime secret-handling guidance`,
+    );
+    assert(!JSON.stringify(providerCertification.runtimeEvidence).includes('SERVICE_ROLE'), `${url} exposed provider certification Supabase secret aliases`);
+    assert(!JSON.stringify(providerCertification.runtimeEvidence).includes('SECRET_ACCESS_KEY'), `${url} exposed provider certification storage secret aliases`);
     assert(Array.isArray(providerCertification?.groups), `${url} missing provider certification groups`);
     assert(
       providerCertification.groups.some((group) => group.family === 'Database and Supabase') &&
