@@ -32,6 +32,13 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   assert(source.includes('Create tags to expose lightweight topic filters'), 'Blog tags empty state must explain frontend topic/filter value');
   assert(source.includes('No saved snapshots yet'), 'Blog revision column must keep an explicit empty revision title visible');
   assert(source.includes('Save this post in the editor to capture a rollback-ready revision.'), 'Blog revision empty state must explain how snapshots are captured');
+  assert(
+    source.includes('getPostScheduleSummary') &&
+      source.includes('scheduled_state') &&
+      source.includes('blog-post-schedule-state-') &&
+      source.includes('Schedule integrity'),
+    'Blog list must surface scheduled post health in the table, export, handoff, and readiness checklist',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

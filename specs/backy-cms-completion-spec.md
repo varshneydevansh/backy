@@ -121,9 +121,8 @@ Legend:
 - ⚠️ Continue hardening nested block confidence, shared renderer parity, and new-control smoke coverage as editor controls are added.
 
 #### `/blog` (`blog.tsx`)
-- ✅ blog index/editor entry point
-- ⚠️ list UI partial
-- ❌ slug generation policy, status/state machine, SEO fields, author metadata incomplete
+- ✅ blog index/editor entry point with backend list, taxonomy, author filters, SEO/comment controls, revisions, bulk workflow, CSV/handoff exports, and scheduled-post health state.
+- ⚠️ continue hardening filter ergonomics, audit-event UI polish, and live DB service smoke.
 
 #### `/blog.new` (`blog.new.tsx`)
 - ✅ rich form/editor scaffold with backend create, category/tag/author assignment, SEO, frontend-template seeding, autosave, and future-date scheduled publish validation.

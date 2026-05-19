@@ -182,6 +182,7 @@ const BLOG_EXPORT_COLUMNS = [
   'path',
   'status',
   'scheduled_at',
+  'scheduled_state',
   'published_at',
   'author_id',
   'author_name',
@@ -921,16 +922,29 @@ function BlogListView() {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (post) => (
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={post.status} />
-          {post.scheduledAt && (
-            <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
-              {formatDate(post.scheduledAt)}
-            </span>
-          )}
-        </div>
-      )
+      render: (post) => {
+        const schedule = getPostScheduleSummary(post);
+
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={post.status} />
+            {post.scheduledAt && (
+              <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+                {formatDate(post.scheduledAt)}
+              </span>
+            )}
+            {post.status === 'scheduled' && (
+              <span
+                data-testid={`blog-post-schedule-state-${post.id}`}
+                title={schedule.detail}
+                className={cn('rounded-full border px-2.5 py-0.5 text-xs font-medium', getPostScheduleToneClass(schedule.state))}
+              >
+                {schedule.label}
+              </span>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'author',
@@ -1154,6 +1168,16 @@ function BlogListView() {
   const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPosts.length, pendingBulkDelete);
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
   const hasPosts = siteScopedPosts.length > 0;
+  const scheduleMetrics = useMemo(() => {
+    const summaries = siteScopedPosts.map((post) => getPostScheduleSummary(post));
+
+    return {
+      future: summaries.filter((summary) => summary.state === 'future').length,
+      due: summaries.filter((summary) => summary.state === 'due').length,
+      missingDate: summaries.filter((summary) => summary.state === 'missing-date').length,
+      invalidDate: summaries.filter((summary) => summary.state === 'invalid-date').length,
+    };
+  }, [siteScopedPosts]);
   const editorialReadiness = useMemo(() => {
     const hasSite = Boolean(activeSite || activeSiteId);
     const hasPublished = postMetrics.published > 0;
@@ -1161,6 +1185,7 @@ function BlogListView() {
     const hasTaxonomy = categories.length > 0 || tags.length > 0 || siteScopedPosts.some((post) => (post.categoryIds?.length || 0) > 0 || (post.tagIds?.length || 0) > 0);
     const hasAuthors = authors.length > 0 || siteScopedPosts.some((post) => Boolean(post.author));
     const hasBulkSelection = selectedPostIds.size > 0;
+    const scheduleIssueCount = scheduleMetrics.missingDate + scheduleMetrics.invalidDate;
     const checks = [
       {
         label: 'Site scope',
@@ -1181,6 +1206,15 @@ function BlogListView() {
         label: 'Draft pipeline',
         detail: hasDraftPipeline ? `${postMetrics.draft} draft, ${postMetrics.scheduled} scheduled.` : 'Create drafts or scheduled posts for upcoming publishing work.',
         ready: hasDraftPipeline || hasPublished,
+      },
+      {
+        label: 'Schedule integrity',
+        detail: scheduleIssueCount > 0
+          ? `${scheduleIssueCount} scheduled post${scheduleIssueCount === 1 ? '' : 's'} need valid future publish dates.`
+          : postMetrics.scheduled > 0
+            ? `${scheduleMetrics.future} upcoming, ${scheduleMetrics.due} due now.`
+            : 'No scheduled posts need attention.',
+        ready: scheduleIssueCount === 0,
       },
       {
         label: 'Taxonomy',
@@ -1225,6 +1259,10 @@ function BlogListView() {
     postMetrics.published,
     postMetrics.scheduled,
     postMetrics.total,
+    scheduleMetrics.due,
+    scheduleMetrics.future,
+    scheduleMetrics.invalidDate,
+    scheduleMetrics.missingDate,
     selectedPostIds.size,
     siteScopedPosts,
     siteSlug,
@@ -1267,6 +1305,7 @@ function BlogListView() {
       checks: editorialReadiness.checks,
     },
     metrics: postMetrics,
+    schedule: scheduleMetrics,
     filters: {
       search: searchQuery,
       status: statusFilter,
@@ -1301,6 +1340,7 @@ function BlogListView() {
       path: `/blog/${post.slug}`,
       status: post.status,
       scheduledAt: post.scheduledAt || null,
+      schedule: getPostScheduleSummary(post),
       author: post.author,
       categoryIds: post.categoryIds || [],
       tagIds: post.tagIds || [],
@@ -1315,6 +1355,7 @@ function BlogListView() {
           slug: handoffPost.slug,
           path: `/blog/${handoffPost.slug}`,
           status: handoffPost.status,
+          schedule: getPostScheduleSummary(handoffPost),
         }
       : null,
     workflows: editorialReadiness.workflow,
@@ -1348,6 +1389,7 @@ function BlogListView() {
     publicPostResolveUrl,
     publicPostRenderUrl,
     revisionSummaryMap,
+    scheduleMetrics,
     searchQuery,
     selectedAuthorId,
     selectedCategoryId,
@@ -1416,6 +1458,7 @@ function BlogListView() {
 
     const rows = data.map((post) => {
       const postPath = `/blog/${post.slug}`;
+      const schedule = getPostScheduleSummary(post);
       const postBySlugUrl = `${publicBlogUrl}?slug=${encodeURIComponent(post.slug)}`;
       const renderUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(postPath)}`;
       const resolveUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(postPath)}`;
@@ -1439,6 +1482,7 @@ function BlogListView() {
         postPath,
         post.status,
         post.scheduledAt || '',
+        schedule.state,
         post.publishedAt || '',
         post.author,
         authorById.get(post.author)?.name || post.author,
@@ -2459,6 +2503,65 @@ const getPostSeoSummary = (post: BlogPost) => {
     noIndex: meta.noIndex === true,
     noFollow: meta.noFollow === true,
   };
+};
+
+type BlogPostScheduleState = 'not-scheduled' | 'future' | 'due' | 'missing-date' | 'invalid-date';
+
+const getPostScheduleSummary = (post: BlogPost, now = Date.now()): { state: BlogPostScheduleState; label: string; detail: string } => {
+  if (post.status !== 'scheduled') {
+    return {
+      state: 'not-scheduled',
+      label: 'Not scheduled',
+      detail: `${post.status} posts do not require a scheduled publish date.`,
+    };
+  }
+
+  if (!post.scheduledAt) {
+    return {
+      state: 'missing-date',
+      label: 'Missing date',
+      detail: 'Scheduled posts need a publish date before public delivery is predictable.',
+    };
+  }
+
+  const scheduledAtMs = Date.parse(post.scheduledAt);
+  if (!Number.isFinite(scheduledAtMs)) {
+    return {
+      state: 'invalid-date',
+      label: 'Invalid date',
+      detail: 'Scheduled publish date is not a valid date-time string.',
+    };
+  }
+
+  if (scheduledAtMs <= now) {
+    return {
+      state: 'due',
+      label: 'Due now',
+      detail: 'The scheduled time has passed; public feeds can expose this post.',
+    };
+  }
+
+  return {
+    state: 'future',
+    label: 'Scheduled',
+    detail: `Public delivery starts ${formatDate(post.scheduledAt)}.`,
+  };
+};
+
+const getPostScheduleToneClass = (state: BlogPostScheduleState) => {
+  if (state === 'missing-date' || state === 'invalid-date') {
+    return 'border-red-200 bg-red-50 text-red-700';
+  }
+
+  if (state === 'due') {
+    return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
+
+  if (state === 'future') {
+    return 'border-sky-200 bg-sky-50 text-sky-700';
+  }
+
+  return 'border-border bg-muted text-muted-foreground';
 };
 
 const getPostArchiveParts = (post: BlogPost | null): { year: string; month: string } => {
