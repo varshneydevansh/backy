@@ -280,6 +280,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/pages/route.ts', import.meta.url),
     'utf8',
   );
+  const publicPageCommentsRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -333,6 +337,9 @@ function assertAdminPageContentValidationSource() {
   assert(publicPagesRoute.includes("'INVALID_PAGE_LIMIT'"), 'public pages list route must reject invalid limit filters');
   assert(publicPagesRoute.includes("'INVALID_PAGE_OFFSET'"), 'public pages list route must reject invalid offset filters');
   assert(publicPagesRoute.includes('parseBoundedInteger'), 'public pages list route must parse pagination filters strictly');
+  assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_LIMIT'"), 'public page comments route must reject invalid limit filters');
+  assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_OFFSET'"), 'public page comments route must reject invalid offset filters');
+  assert(publicPageCommentsRoute.includes('integerQueryFromInput'), 'public page comments route must parse pagination filters strictly');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -341,6 +348,8 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_PAGE_STATUS') &&
       apiContracts.includes('INVALID_PAGE_LIMIT') &&
       apiContracts.includes('INVALID_PAGE_OFFSET') &&
+      apiContracts.includes('INVALID_PAGE_COMMENT_LIMIT') &&
+      apiContracts.includes('INVALID_PAGE_COMMENT_OFFSET') &&
       apiContracts.includes('INVALID_BLOG_CONTENT') &&
       apiContracts.includes('INVALID_BLOG_CONTENT_ELEMENTS') &&
       apiContracts.includes('INVALID_BLOG_CANVAS_SIZE') &&

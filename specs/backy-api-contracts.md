@@ -369,6 +369,7 @@ Public page payload should include:
 - `GET /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
   - Returns approved comments and count metadata.
   - Response uses `{ success, requestId, data: { comments, count, pagination } }`; legacy top-level `comments/count/pagination` remain for compatibility.
+  - Invalid page comment pagination filters return explicit `400` errors instead of silently clamping the thread: `INVALID_PAGE_COMMENT_LIMIT` or `INVALID_PAGE_COMMENT_OFFSET`.
 
 - `POST /api/sites/:siteId/blog/:postId/comments`
 - `GET /api/sites/:siteId/blog/:postId/comments?status=approved&limit=&offset=`

@@ -45,10 +45,22 @@ function parseSort(raw: string | null) {
   return raw === 'oldest' ? 'oldest' : 'newest';
 }
 
-function parseBoundedInteger(raw: string | null, fallback: number, min: number, max: number) {
-  const parsed = Number.parseInt(raw || '', 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(Math.max(parsed, min), max);
+function integerQueryFromInput(
+  raw: string | null,
+  fallback: number,
+  min: number,
+  max?: number,
+): { value: number; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: fallback };
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < min || (max !== undefined && parsed > max)) {
+    return { value: fallback, invalid: raw };
+  }
+
+  return { value: parsed };
 }
 
 function parseTextInput(raw: unknown) {
@@ -133,8 +145,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const parentOnly = searchParams.get('parentOnly') === 'true' || Boolean(parentId);
     const sort = parseSort(searchParams.get('sort'));
     const commentThreadId = parseTextInput(searchParams.get('commentThreadId'));
-    const limit = parseBoundedInteger(searchParams.get('limit'), 20, 1, 100);
-    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+    const limitFilter = integerQueryFromInput(searchParams.get('limit'), 20, 1, 100);
+    if (limitFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_PAGE_COMMENT_LIMIT',
+        'Invalid page comment limit. Use an integer from 1 to 100.',
+        requestId,
+      );
+    }
+    const offsetFilter = integerQueryFromInput(searchParams.get('offset'), 0, 0);
+    if (offsetFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_PAGE_COMMENT_OFFSET',
+        'Invalid page comment offset. Use an integer greater than or equal to 0.',
+        requestId,
+      );
+    }
+    const limit = limitFilter.value;
+    const offset = offsetFilter.value;
 
     if (status !== 'approved') {
       const access = await requireAdminAccess(request, requestId, { permission: 'comments.view' });
