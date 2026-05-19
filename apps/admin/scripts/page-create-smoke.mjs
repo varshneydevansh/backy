@@ -1831,6 +1831,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { x: 24, y: 320, width: 210, height: 52 }"),
     'Newsletter page starter must seed explicit tablet/mobile responsive overrides for signup forms and confirmation sections.',
   );
+  assert(
+    source.includes("id: 'survey-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 1370 }") &&
+      source.includes("id: 'survey-heading'") &&
+      source.includes("mobile: { x: 24, y: 92, width: 327, height: 156, props: { fontSize: 36 } }") &&
+      source.includes("id: 'survey-insight-card'") &&
+      source.includes("tablet: { x: 54, y: 400, width: 660, height: 130 }") &&
+      source.includes("id: 'survey-response-form'") &&
+      source.includes("mobile: { x: 24, y: 670, width: 327, height: 650 }") &&
+      source.includes("id: 'survey-feedback'") &&
+      source.includes("mobile: { y: 250, width: 279, height: 120 }") &&
+      source.includes("id: 'survey-consent'") &&
+      source.includes("mobile: { y: 470, width: 279, height: 96 }") &&
+      source.includes("id: 'survey-summary-section'") &&
+      source.includes("mobile: { y: 1370, width: 375, height: 430 }") &&
+      source.includes("id: 'survey-results-button'") &&
+      source.includes("mobile: { x: 24, y: 330, width: 178, height: 52 }"),
+    'Survey page starter must seed explicit tablet/mobile responsive overrides for response forms and result-routing sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
