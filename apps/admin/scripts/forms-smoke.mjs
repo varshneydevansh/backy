@@ -176,8 +176,13 @@ const assertFormsPersistenceCertificationSource = () => {
       embedBlockRouteSource.includes('enableCaptcha: form.enableCaptcha === true') &&
       embedBlockRouteSource.includes('fields: cloneJson(form.fields) as unknown as BackyJsonValue') &&
       embedBlockRouteSource.includes('notificationEmail: form.notificationEmail || null') &&
-      embedBlockRouteSource.includes('contactShare: form.contactShare?.enabled') &&
-      embedBlockRouteSource.includes('collectionTarget: form.collectionTarget?.enabled'),
+      embedBlockRouteSource.includes('normalizeEmbedContactShare') &&
+      embedBlockRouteSource.includes('normalizeEmbedCollectionTarget') &&
+      embedBlockRouteSource.includes('normalizeEmbedCollectionFieldMap') &&
+      embedBlockRouteSource.includes('const contactShare = normalizeEmbedContactShare(form)') &&
+      embedBlockRouteSource.includes('const collectionTarget = normalizeEmbedCollectionTarget(form)') &&
+      embedBlockRouteSource.includes('contactShare: contactShare?.enabled') &&
+      embedBlockRouteSource.includes('collectionTarget: collectionTarget?.enabled'),
     'Forms template and embed-block handoffs must emit flattened canvas props for contact and collection routing',
   );
   assert(

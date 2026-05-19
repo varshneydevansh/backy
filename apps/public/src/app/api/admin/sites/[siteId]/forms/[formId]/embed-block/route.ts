@@ -167,6 +167,67 @@ const fieldProps = (field: FormFieldDefinition): JsonRecord => {
 const formTitle = (form: FormDefinition): string =>
   form.title?.trim() || form.name.trim() || form.id;
 
+const formFieldKeySet = (fields: FormFieldDefinition[]): Set<string> =>
+  new Set(fields.map((field) => textValue(field.key)).filter(Boolean));
+
+const normalizeFormFieldReference = (
+  value: string | undefined,
+  fields: FormFieldDefinition[],
+): string | undefined => {
+  const key = textValue(value);
+  return key && formFieldKeySet(fields).has(key) ? key : undefined;
+};
+
+const normalizeEmbedContactShare = (
+  form: FormDefinition,
+): FormDefinition["contactShare"] => {
+  const contactShare = form.contactShare;
+  if (!contactShare?.enabled) return undefined;
+
+  const nameField = normalizeFormFieldReference(contactShare.nameField, form.fields);
+  const emailField = normalizeFormFieldReference(contactShare.emailField, form.fields);
+  const phoneField = normalizeFormFieldReference(contactShare.phoneField, form.fields);
+  const notesField = normalizeFormFieldReference(contactShare.notesField, form.fields);
+
+  return {
+    enabled: true,
+    ...(nameField ? { nameField } : {}),
+    ...(emailField ? { emailField } : {}),
+    ...(phoneField ? { phoneField } : {}),
+    ...(notesField ? { notesField } : {}),
+    dedupeByEmail: Boolean(emailField) && contactShare.dedupeByEmail !== false,
+  };
+};
+
+const normalizeEmbedCollectionFieldMap = (
+  fieldMap: Record<string, string> | undefined,
+  fields: FormFieldDefinition[],
+): Record<string, string> => {
+  const allowedFieldKeys = formFieldKeySet(fields);
+  return Object.fromEntries(Object.entries(fieldMap || {}).flatMap(([sourceField, targetField]) => {
+    const sourceKey = textValue(sourceField);
+    const targetKey = textValue(targetField);
+    if (!sourceKey || !targetKey || !allowedFieldKeys.has(sourceKey)) return [];
+    return [[sourceKey, targetKey]];
+  }));
+};
+
+const normalizeEmbedCollectionTarget = (
+  form: FormDefinition,
+): FormDefinition["collectionTarget"] => {
+  const collectionTarget = form.collectionTarget;
+  if (!collectionTarget?.enabled) return undefined;
+
+  const slugField = normalizeFormFieldReference(collectionTarget.slugField, form.fields);
+
+  return {
+    ...collectionTarget,
+    collectionId: textValue(collectionTarget.collectionId),
+    ...(slugField ? { slugField } : { slugField: undefined }),
+    fieldMap: normalizeEmbedCollectionFieldMap(collectionTarget.fieldMap, form.fields),
+  };
+};
+
 const siteFrontendDesign = (
   settings: SiteSettings | undefined,
 ): NonNullable<SiteSettings["frontendDesign"]> | undefined =>
@@ -219,6 +280,8 @@ const buildEmbedMetadata = (
         binding: `submission.${field.key}`,
         label: field.label,
       }));
+  const contactShare = normalizeEmbedContactShare(form);
+  const collectionTarget = normalizeEmbedCollectionTarget(form);
 
   return {
     frontendDesignTemplateId: templateId,
@@ -252,11 +315,11 @@ const buildEmbedMetadata = (
       enableCaptcha: form.enableCaptcha === true,
       successMessage: form.successMessage || null,
       successRedirectUrl: form.successRedirectUrl || null,
-      contactShare: form.contactShare?.enabled
-        ? (cloneJson(form.contactShare) as BackyJsonValue)
+      contactShare: contactShare?.enabled
+        ? (cloneJson(contactShare) as BackyJsonValue)
         : null,
-      collectionTarget: form.collectionTarget?.enabled
-        ? (cloneJson(form.collectionTarget) as BackyJsonValue)
+      collectionTarget: collectionTarget?.enabled
+        ? (cloneJson(collectionTarget) as BackyJsonValue)
         : null,
     },
   };
@@ -273,10 +336,8 @@ const buildFormEmbedContent = (
   const frontendDesign = siteFrontendDesign(siteSettings);
   const colors = frontendDesign?.tokens?.colors || {};
   const fonts = frontendDesign?.tokens?.fonts || {};
-  const contactShare = form.contactShare?.enabled ? form.contactShare : undefined;
-  const collectionTarget = form.collectionTarget?.enabled
-    ? form.collectionTarget
-    : undefined;
+  const contactShare = normalizeEmbedContactShare(form);
+  const collectionTarget = normalizeEmbedCollectionTarget(form);
   const primaryColor = textValue(colors.primary) || "#0f766e";
   const textColor = textValue(colors.text) || "#111827";
   const surfaceColor = textValue(colors.surface) || "#ffffff";
