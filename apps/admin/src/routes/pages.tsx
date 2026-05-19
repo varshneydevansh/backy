@@ -1939,6 +1939,7 @@ function PagesListView() {
     sites,
   ]);
   const hasPages = activeSitePages.length > 0;
+  const hasPageFilters = searchQuery.trim().length > 0 || statusFilter !== 'all' || healthFilter !== 'all';
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
   const visiblePageIdSet = useMemo(() => new Set(data.map((page) => page.id)), [data]);
   const hiddenSelectedCount = Math.max(0, selectedPages.length - selectedTablePages.length);
@@ -2255,8 +2256,28 @@ function PagesListView() {
         title="Pages unavailable"
         description={viewPermissionTitle || 'Your account cannot view pages.'}
       >
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant pages.view access.'}
+        <div
+          role="alert"
+          data-testid="pages-permission-state"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Page permissions could not be verified</p>
+                <p className="mt-1 leading-6">
+                  {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant pages.view access.'}
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/users"
+              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+            >
+              Review users
+            </Link>
+          </div>
         </div>
       </PageShell>
     );
@@ -2286,8 +2307,42 @@ function PagesListView() {
       className="w-full"
     >
       {error && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {error}
+        <div
+          role="alert"
+          data-testid="pages-error-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Pages workspace needs attention</p>
+                <p className="mt-1 leading-6">{error}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {hasPageFilters && (
+                <button
+                  type="button"
+                  onClick={clearPageFilters}
+                  disabled={isPageLibraryBusy}
+                  className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Clear filters
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void refreshPages(activeSiteId)}
+                disabled={isPageLibraryBusy || !canViewPages}
+                title={!canViewPages ? viewPermissionTitle : undefined}
+                aria-label="Retry loading pages"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry load
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2919,7 +2974,7 @@ function PagesListView() {
         >
           Refresh
         </button>
-        {(searchQuery || statusFilter !== 'all' || healthFilter !== 'all') && (
+        {hasPageFilters && (
           <button
             type="button"
             onClick={clearPageFilters}

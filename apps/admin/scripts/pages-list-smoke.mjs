@@ -34,6 +34,11 @@ const assertPagesListSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Pages list route must use the shared EmptyState component');
   assert(source.includes('No saved snapshots yet'), 'Pages revision column must keep an explicit empty revision title visible');
   assert(source.includes('Save this page in the editor to capture a rollback-ready revision.'), 'Pages revision empty state must explain how snapshots are captured');
+  assert(source.includes('data-testid="pages-error-state"') && source.includes('Pages workspace needs attention'), 'Pages list must expose a labelled backend error state');
+  assert(source.includes('aria-label="Retry loading pages"') && source.includes('Retry load'), 'Pages list backend error state must expose a retry action');
+  assert(source.includes('hasPageFilters') && source.includes('Clear filters'), 'Pages list backend error state must expose filter recovery when filters are active');
+  assert(source.includes('data-testid="pages-permission-state"') && source.includes('Page permissions could not be verified'), 'Pages list must expose a labelled permission error state');
+  assert(source.includes('to="/users"') && source.includes('Review users'), 'Pages permission error state must link to user access management');
   assert(source.includes('function PageTemplateCell') && source.includes('data-testid={`pages-template-${page.id}`}'), 'Pages list must render page template provenance per row');
   assert(source.includes("'template_source'") && source.includes("'frontend_design_template_id'") && source.includes("'collection_dataset_slug'"), 'Pages CSV export must include template provenance columns');
   assert(source.includes('const templateInfo = pageTemplateInfo(page)') && source.includes('template: templateInfo') && source.includes("pageMetaString(page, 'frontendDesignTemplateId')") && source.includes("pageMetaRecord(page, 'collectionDataset')"), 'Pages handoff must expose starter, frontend-design, and dataset page provenance');
