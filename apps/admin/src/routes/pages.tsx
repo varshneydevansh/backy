@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'newsletter' | 'survey' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'newsletter' | 'survey' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -524,6 +524,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create open roles, job filters, benefits, hiring process notes, and application actions.',
     badge: 'Hiring',
     icon: UserPlus,
+  },
+  {
+    key: 'about',
+    title: 'About',
+    detail: 'Create a story, values, trust proof, and team handoff page with editable site chrome.',
+    badge: 'Brand',
+    icon: Sparkles,
   },
   {
     key: 'contact',
@@ -2027,6 +2034,7 @@ function PagesListView() {
       blogPostPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
       teamPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,
       careersPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=careers`,
+      aboutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=about`,
     },
     export: {
       format: 'csv',
@@ -2074,6 +2082,7 @@ function PagesListView() {
         blogPost: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
         team: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,
         careers: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=careers`,
+        about: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=about`,
       },
     },
     readiness: {

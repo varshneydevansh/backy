@@ -90,8 +90,10 @@ const assertPagesListSourceContract = () => {
       source.includes("key: 'team'") &&
       source.includes('teamPageTemplate') &&
       source.includes("key: 'careers'") &&
-      source.includes('careersPageTemplate'),
-    'Pages list must expose the member, newsletter, survey, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
+      source.includes('careersPageTemplate') &&
+      source.includes("key: 'about'") &&
+      source.includes('aboutPageTemplate'),
+    'Pages list must expose the member, newsletter, survey, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, careers, and about starters and handoff routes',
   );
 };
 
@@ -1546,6 +1548,12 @@ const main = async () => {
       { template: 'blank', homepage: false, allowDisabled: true },
     );
     await waitForPagesEmptyState(client);
+    const aboutShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-about',
+      ['template=about'],
+      { title: 'About', slug: 'about', template: 'about', homepage: false },
+    );
     const registrationShortcut = await clickEmptyCreate(
       client,
       'pages-create-registration',
@@ -1791,6 +1799,7 @@ const main = async () => {
         postPublish: postPublishVisual,
       },
       emptyCreate,
+      aboutShortcut,
       newsletterShortcut,
       surveyShortcut,
       registrationShortcut,
