@@ -542,6 +542,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Product-detail starter pages now seed explicit tablet/mobile responsive overrides for the commerce hero, media block, purchase controls, stock label, and related-product cards instead of relying only on scaled desktop geometry; `BACKY_PAGE_CREATE_SOURCE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin` guards the authored breakpoint data.
   - Pricing starter pages now seed explicit tablet/mobile responsive overrides for the pricing hero, billing toggle, stacked plan cards, comparison table, and FAQ card so commerce pricing layouts carry authored breakpoint behavior into generated pages.
   - Services starter pages now seed explicit tablet/mobile responsive overrides for service filters, stacked service cards, process steps, and the inquiry CTA so booking/service layouts are authored for narrower canvases instead of scaled from desktop.
+  - Booking starter pages now seed explicit tablet/mobile responsive overrides for availability summaries, appointment cards, location filters, intake form fields, and provider handoff cards so booking flows remain editable and usable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves

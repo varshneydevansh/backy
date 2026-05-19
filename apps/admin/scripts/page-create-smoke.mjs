@@ -1427,6 +1427,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 430, width: 660, height: 130 }"),
     'Services page starter must seed explicit tablet/mobile responsive overrides for composed service sections.',
   );
+  assert(
+    source.includes("id: 'booking-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 620 }") &&
+      source.includes("id: 'booking-availability-card'") &&
+      source.includes("mobile: { x: 24, y: 382, width: 327, height: 166 }") &&
+      source.includes("id: 'booking-appointment-section'") &&
+      source.includes("tablet: { y: 500, width: 768, height: 1120 }") &&
+      source.includes("id: `booking-appointment-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 182 + index * 300, width: 327, height: 276 }") &&
+      source.includes("id: 'booking-intake-section'") &&
+      source.includes("mobile: { y: 1740, width: 375, height: 820 }") &&
+      source.includes("id: 'booking-intake-form'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 392 }") &&
+      source.includes("id: 'booking-confirmation-card'") &&
+      source.includes("tablet: { x: 54, y: 390, width: 660, height: 210 }"),
+    'Booking page starter must seed explicit tablet/mobile responsive overrides for appointment and intake sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

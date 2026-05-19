@@ -5180,24 +5180,40 @@ function buildTemplateElements(input: {
                 height: 360,
                 dataBindings: [{ source: 'booking', mode: 'overview', fields: ['appointmentTypes', 'staff', 'locations', 'availability', 'bookingUrl'] }],
                 props: { backgroundColor: '#f0fdfa', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 500 },
+                    mobile: { width: 375, height: 620 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'booking-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Booking', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 200 },
+                            mobile: { x: 24, y: 44, width: 180 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 98, {
                         id: 'booking-heading',
                         width: 650,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 80, width: 327, height: 124, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 212, {
                         id: 'booking-intro-copy',
                         width: 620,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 86, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 222, width: 323, height: 112, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 92, {
                         id: 'booking-availability-card',
@@ -5205,6 +5221,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'booking', mode: 'availability-summary', fields: ['nextAvailable', 'timezone', 'locations'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 318, width: 330, height: 150 },
+                            mobile: { x: 24, y: 382, width: 327, height: 166 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'booking-availability-label',
@@ -5218,6 +5238,9 @@ function buildTemplateElements(input: {
                                 height: 36,
                                 props: { content: 'This week', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'booking', mode: 'availability-summary', field: 'nextAvailable', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { width: 250 },
+                                },
                             }),
                             createCanvasElement('text', 24, 108, {
                                 id: 'booking-timezone-note',
@@ -5225,6 +5248,9 @@ function buildTemplateElements(input: {
                                 height: 24,
                                 props: { content: 'Local timezone shown at checkout', fontSize: 13, color: '#475569' },
                                 dataBindings: [{ source: 'booking', mode: 'availability-summary', field: 'timezone', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -5236,12 +5262,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'booking', mode: 'appointment-types', fields: ['appointmentTypes', 'staff', 'prices', 'durations'], limit: 6 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 500, width: 768, height: 1120 },
+                    mobile: { y: 620, width: 375, height: 1120 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 58, {
                         id: 'booking-appointment-heading',
                         width: 420,
                         height: 42,
                         props: { content: 'Choose a session', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     createCanvasElement('box', 760, 54, {
                         id: 'booking-location-filter',
@@ -5249,12 +5283,19 @@ function buildTemplateElements(input: {
                         height: 56,
                         dataBindings: [{ source: 'booking', mode: 'filters', fields: ['staff', 'locations', 'formats'] }],
                         props: { backgroundColor: '#f0fdfa', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 112, width: 320 },
+                            mobile: { x: 24, y: 100, width: 327 },
+                        },
                         children: [
                             createCanvasElement('text', 20, 17, {
                                 id: 'booking-location-filter-label',
                                 width: 250,
                                 height: 24,
                                 props: { content: 'Filter by staff, format, or location', fontSize: 13, fontWeight: '800', color: '#0f766e' },
+                                responsive: {
+                                    mobile: { width: 270 },
+                                },
                             }),
                         ],
                     }),
@@ -5264,6 +5305,10 @@ function buildTemplateElements(input: {
                         height: 300,
                         dataBindings: [{ source: 'booking', mode: 'appointment-type', index }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 204 + index * 304, width: 660, height: 276 },
+                            mobile: { x: 24, y: 182 + index * 300, width: 327, height: 276 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 26, {
                                 id: `booking-appointment-title-${index}`,
@@ -5271,6 +5316,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: item.name, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'name', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 300 },
+                                    mobile: { width: 238 },
+                                },
                             }),
                             createCanvasElement('text', 24, 78, {
                                 id: `booking-appointment-duration-${index}`,
@@ -5285,6 +5334,10 @@ function buildTemplateElements(input: {
                                 height: 24,
                                 props: { content: item.price, fontSize: 14, fontWeight: '800', color: '#111827', textAlign: 'right' },
                                 dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'price', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { x: 520, width: 90 },
+                                    mobile: { x: 198, width: 80 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 126, {
                                 id: `booking-appointment-summary-${index}`,
@@ -5292,6 +5345,10 @@ function buildTemplateElements(input: {
                                 height: 70,
                                 props: { content: item.summary, fontSize: 14, lineHeight: 1.45, color: '#475569' },
                                 dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'summary', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 430, height: 62 },
+                                    mobile: { width: 268, height: 70 },
+                                },
                             }),
                             createCanvasElement('button', 24, 234, {
                                 id: `booking-appointment-button-${index}`,
@@ -5299,6 +5356,10 @@ function buildTemplateElements(input: {
                                 height: 42,
                                 props: { label: 'Select time', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'booking.appointment.select' },
                                 dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'bookingUrl', targetPath: 'props.href' }],
+                                responsive: {
+                                    tablet: { x: 480, y: 210, width: 134 },
+                                    mobile: { x: 24, y: 214, width: 134 },
+                                },
                             }),
                         ],
                     })),
@@ -5310,6 +5371,10 @@ function buildTemplateElements(input: {
                 height: 360,
                 dataBindings: [{ source: 'booking', mode: 'intake', fields: ['intakeQuestions', 'calendarProvider', 'confirmationEmail', 'bookingUrl'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1620, width: 768, height: 720 },
+                    mobile: { y: 1740, width: 375, height: 820 },
+                },
                 children: [
                     createCanvasElement('form', 74, 58, {
                         id: 'booking-intake-form',
@@ -5324,11 +5389,51 @@ function buildTemplateElements(input: {
                             formActive: true,
                             formAudience: 'public',
                         },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 286 },
+                            mobile: { x: 24, y: 46, width: 327, height: 392 },
+                        },
                         children: [
-                            createCanvasElement('input', 24, 26, { id: 'booking-intake-name', width: 198, height: 52, props: { label: 'Name', name: 'name', placeholder: 'Your name', required: true } }),
-                            createCanvasElement('input', 244, 26, { id: 'booking-intake-email', width: 198, height: 52, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
-                            createCanvasElement('select', 24, 102, { id: 'booking-intake-topic', width: 418, height: 52, props: { label: 'Topic', name: 'topic', options: ['Strategy', 'Implementation', 'Support'], placeholder: 'Choose a topic', required: true } }),
-                            createCanvasElement('textarea', 24, 176, { id: 'booking-intake-notes', width: 418, height: 58, props: { label: 'Notes', name: 'notes', placeholder: 'Share context before the session', required: false } }),
+                            createCanvasElement('input', 24, 26, {
+                                id: 'booking-intake-name',
+                                width: 198,
+                                height: 52,
+                                props: { label: 'Name', name: 'name', placeholder: 'Your name', required: true },
+                                responsive: {
+                                    tablet: { width: 292 },
+                                    mobile: { x: 20, y: 24, width: 287 },
+                                },
+                            }),
+                            createCanvasElement('input', 244, 26, {
+                                id: 'booking-intake-email',
+                                width: 198,
+                                height: 52,
+                                props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                                responsive: {
+                                    tablet: { x: 340, width: 292 },
+                                    mobile: { x: 20, y: 94, width: 287 },
+                                },
+                            }),
+                            createCanvasElement('select', 24, 102, {
+                                id: 'booking-intake-topic',
+                                width: 418,
+                                height: 52,
+                                props: { label: 'Topic', name: 'topic', options: ['Strategy', 'Implementation', 'Support'], placeholder: 'Choose a topic', required: true },
+                                responsive: {
+                                    tablet: { width: 608 },
+                                    mobile: { x: 20, y: 164, width: 287 },
+                                },
+                            }),
+                            createCanvasElement('textarea', 24, 176, {
+                                id: 'booking-intake-notes',
+                                width: 418,
+                                height: 58,
+                                props: { label: 'Notes', name: 'notes', placeholder: 'Share context before the session', required: false },
+                                responsive: {
+                                    tablet: { width: 608, height: 66 },
+                                    mobile: { x: 20, y: 234, width: 287, height: 112 },
+                                },
+                            }),
                         ],
                     }),
                     createCanvasElement('box', 650, 58, {
@@ -5337,18 +5442,30 @@ function buildTemplateElements(input: {
                         height: 240,
                         dataBindings: [{ source: 'booking', mode: 'confirmation', fields: ['bookingUrl', 'calendarProvider', 'confirmationEmail'] }],
                         props: { backgroundColor: '#134e4a', borderRadius: 8, borderColor: '#134e4a', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 390, width: 660, height: 210 },
+                            mobile: { x: 24, y: 490, width: 327, height: 238 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 28, {
                                 id: 'booking-confirmation-heading',
                                 width: 260,
                                 height: 34,
                                 props: { content: 'Confirm the slot', level: 'h2', fontSize: 26, fontWeight: '800', color: '#ffffff' },
+                                responsive: {
+                                    tablet: { width: 300 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 28, 82, {
                                 id: 'booking-confirmation-copy',
                                 width: 300,
                                 height: 64,
                                 props: { content: 'Hand off to Calendly, Cal.com, Google Calendar, or a custom scheduling API without collecting payment secrets on this page.', fontSize: 14, lineHeight: 1.5, color: '#ccfbf1' },
+                                responsive: {
+                                    tablet: { width: 420, height: 58 },
+                                    mobile: { width: 258, height: 92 },
+                                },
                             }),
                             createCanvasElement('button', 28, 166, {
                                 id: 'booking-confirmation-button',
@@ -5356,6 +5473,10 @@ function buildTemplateElements(input: {
                                 height: 44,
                                 props: { label: 'Continue booking', backgroundColor: '#ffffff', color: '#134e4a', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'booking.provider.open' },
                                 dataBindings: [{ source: 'booking', mode: 'confirmation', field: 'bookingUrl', targetPath: 'props.href' }],
+                                responsive: {
+                                    tablet: { x: 468, y: 118 },
+                                    mobile: { x: 28, y: 166 },
+                                },
                             }),
                         ],
                     }),
