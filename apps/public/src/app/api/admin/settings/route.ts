@@ -227,6 +227,46 @@ const inferSupabaseProjectRef = (url: string): string => {
   }
 };
 
+const normalizeCorsOrigin = (origin: string) => {
+  const trimmed = origin.trim();
+  if (!trimmed || trimmed === '*') {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+};
+
+const getPublicApiRuntimeSummary = () => {
+  const rawAllowedOrigins = envValue(['BACKY_CORS_ALLOWED_ORIGINS']);
+  const allowedOrigins = rawAllowedOrigins
+    .split(',')
+    .map(normalizeCorsOrigin)
+    .filter((origin): origin is string => Boolean(origin));
+
+  return {
+    corsAllowedOriginsConfigured: allowedOrigins.length > 0,
+    corsAllowedOriginCount: allowedOrigins.length,
+    allowedOrigins,
+    exactOriginPolicy: true,
+    wildcardAllowed: false,
+    exposedContractHeaders: [
+      'ETag',
+      'x-backy-request-id',
+      'x-backy-contract-version',
+      'x-backy-schema-version',
+      'x-backy-supported-schema-versions',
+      'x-backy-cache-scope',
+      'x-backy-cache-revision',
+      'x-backy-site-id',
+    ],
+    missing: allowedOrigins.length > 0 ? [] : ['BACKY_CORS_ALLOWED_ORIGINS'],
+  };
+};
+
 const getDatabaseRuntimeSummary = () => {
   if (shouldUseDemoStoreFallback()) {
     return {
@@ -857,6 +897,7 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
     runtimeNotifications: getNotificationRuntimeSummary(),
     runtimeCommerce: getCommerceRuntimeSummary(settings),
     runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary(),
+    runtimePublicApi: getPublicApiRuntimeSummary(),
     providerCertification: providerCertificationContract(),
     updatedAt: settings.updatedAt,
   };
@@ -1513,6 +1554,7 @@ interface InfrastructureCheckInput {
   runtimeNotifications: ReturnType<typeof getNotificationRuntimeSummary>;
   runtimeCommerce: ReturnType<typeof getCommerceRuntimeSummary>;
   runtimeInteractiveComponents: ReturnType<typeof getInteractiveComponentRuntimeSummary>;
+  runtimePublicApi: ReturnType<typeof getPublicApiRuntimeSummary>;
 }
 
 type StorageProvisioningStatus = 'ready' | 'blocked';
@@ -3936,6 +3978,7 @@ export async function POST(request: NextRequest) {
         runtimeNotifications: currentSettings.runtimeNotifications,
         runtimeCommerce: currentSettings.runtimeCommerce,
         runtimeInteractiveComponents: currentSettings.runtimeInteractiveComponents,
+        runtimePublicApi: currentSettings.runtimePublicApi,
       });
       const historyEntry = body.recordHistory === true && !mediaStorageCheck
         ? buildDeploymentHistoryEntry({

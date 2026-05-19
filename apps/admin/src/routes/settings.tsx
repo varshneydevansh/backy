@@ -899,6 +899,7 @@ function SettingsPage() {
   const [runtimeNotifications, setRuntimeNotifications] = useState<SiteSettingsInput['runtimeNotifications']>();
   const [runtimeCommerce, setRuntimeCommerce] = useState<SiteSettingsInput['runtimeCommerce']>();
   const [runtimeInteractiveComponents, setRuntimeInteractiveComponents] = useState<SiteSettingsInput['runtimeInteractiveComponents']>();
+  const [runtimePublicApi, setRuntimePublicApi] = useState<SiteSettingsInput['runtimePublicApi']>();
   const [settingsAuditLogs, setSettingsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditNotice, setAuditNotice] = useState<string | null>(null);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
@@ -966,6 +967,7 @@ function SettingsPage() {
     setRuntimeNotifications(backendSettings.runtimeNotifications);
     setRuntimeCommerce(backendSettings.runtimeCommerce);
     setRuntimeInteractiveComponents(backendSettings.runtimeInteractiveComponents);
+    setRuntimePublicApi(backendSettings.runtimePublicApi);
     setLastSavedSnapshot(cloneSettingsDraftSnapshot(snapshot));
   }, [updateSettings]);
 
@@ -1596,6 +1598,7 @@ function SettingsPage() {
     runtimeNotifications,
     runtimeCommerce,
     runtimeInteractiveComponents,
+    runtimePublicApi,
     storage: integrations.storage,
     supabase: integrations.supabase,
     vercel: integrations.vercel,
@@ -1610,6 +1613,7 @@ function SettingsPage() {
     runtimeDatabase,
     runtimeCommerce,
     runtimeInteractiveComponents,
+    runtimePublicApi,
     runtimeMediaScanner,
     runtimeNotifications,
     runtimeStorage,
@@ -1634,6 +1638,7 @@ function SettingsPage() {
       notifications: runtimeNotifications || null,
       commerce: runtimeCommerce || null,
       interactiveComponents: runtimeInteractiveComponents || null,
+      publicApi: runtimePublicApi || null,
     },
     metadataEvidence: {
       storage: integrations.storage || null,
@@ -1658,6 +1663,7 @@ function SettingsPage() {
     runtimeCommerce,
     runtimeDatabase,
     runtimeInteractiveComponents,
+    runtimePublicApi,
     runtimeMediaScanner,
     runtimeNotifications,
     runtimeStorage,
@@ -1760,6 +1766,7 @@ function SettingsPage() {
         ],
       },
       providerCertification: providerCertificationHandoff,
+      publicApi: runtimePublicApi || null,
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
     frontendApiCapabilities: FRONTEND_API_CAPABILITIES,
@@ -1829,6 +1836,7 @@ function SettingsPage() {
     runtimeDatabase,
     runtimeCommerce,
     runtimeInteractiveComponents,
+    runtimePublicApi,
     runtimeMediaScanner,
     runtimeNotifications,
     runtimeStorage,
@@ -4420,6 +4428,7 @@ const buildInfrastructureEnvContract = ({
   runtimeNotifications,
   runtimeCommerce,
   runtimeInteractiveComponents,
+  runtimePublicApi,
   storage,
   supabase,
   vercel,
@@ -4434,6 +4443,7 @@ const buildInfrastructureEnvContract = ({
   runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
+  runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
   storage?: StorageSettings;
   supabase?: SupabaseSettings;
   vercel?: VercelSettings;
@@ -5225,9 +5235,9 @@ const buildInfrastructureEnvContract = ({
     key: 'BACKY_CORS_ALLOWED_ORIGINS',
     label: 'Custom frontend CORS origins',
     description: 'Comma-separated exact browser origins allowed to read Backy public/admin API responses and exposed contract headers.',
-    configured: Boolean(getEnvValue('VITE_BACKY_CORS_ALLOWED_ORIGINS')),
+    configured: Boolean(runtimePublicApi?.corsAllowedOriginsConfigured),
     required: false,
-    valueHint: getEnvValue('VITE_BACKY_CORS_ALLOWED_ORIGINS') || undefined,
+    valueHint: runtimePublicApi?.allowedOrigins?.join(', '),
     example: 'https://www.example.com,https://app.example.com',
   },
 ];

@@ -86,6 +86,8 @@ const assertSettingsSourceContracts = () => {
     'certify_settings_providers',
     'certify_commerce_providers',
     'BACKY_CORS_ALLOWED_ORIGINS',
+    'runtimePublicApi',
+    'corsAllowedOriginsConfigured',
     "provider: 'publicApi'",
     "key: 'BACKY_CORS_ALLOWED_ORIGINS'",
     "label: 'Custom frontend CORS origins'",

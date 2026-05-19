@@ -1217,6 +1217,7 @@ interface ApiSettings {
   runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
+  runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
   updatedAt?: string;
 }
 
@@ -2407,6 +2408,15 @@ export interface SiteSettingsInput {
     iframeSandbox?: string;
     allowedConnectSrc?: string;
     configured: boolean;
+    missing: string[];
+  };
+  runtimePublicApi?: {
+    corsAllowedOriginsConfigured: boolean;
+    corsAllowedOriginCount: number;
+    allowedOrigins: string[];
+    exactOriginPolicy: boolean;
+    wildcardAllowed: boolean;
+    exposedContractHeaders: string[];
     missing: string[];
   };
   runtimeVercel?: {
@@ -4833,6 +4843,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
+    runtimePublicApi: payload.data.settings.runtimePublicApi,
   };
 }
 
@@ -4863,6 +4874,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
+    runtimePublicApi: payload.data.settings.runtimePublicApi,
   };
 }
 
@@ -4893,6 +4905,7 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
+    runtimePublicApi: payload.data.settings.runtimePublicApi,
   };
 }
 
@@ -4927,6 +4940,7 @@ export async function issueSettingsAdminApiKey(label: string): Promise<{
       runtimeNotifications: payload.data.settings.runtimeNotifications,
       runtimeCommerce: payload.data.settings.runtimeCommerce,
       runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
+      runtimePublicApi: payload.data.settings.runtimePublicApi,
     },
     issuedKey: payload.data.issuedKey,
   };
@@ -4959,6 +4973,7 @@ export async function revokeSettingsAdminApiKey(keyId: string): Promise<SiteSett
     runtimeNotifications: payload.data.settings.runtimeNotifications,
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
+    runtimePublicApi: payload.data.settings.runtimePublicApi,
   };
 }
 
