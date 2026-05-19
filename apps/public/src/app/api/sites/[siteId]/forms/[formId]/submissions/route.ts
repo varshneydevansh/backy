@@ -15,7 +15,10 @@ import {
   validateCollectionRecordValues,
   type StoreCollection,
 } from '@/lib/backyStore';
-import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
+import {
+  frontendDesignProvenanceFromMetadata,
+  frontendFormFieldKeyMapFromMetadata,
+} from '@/lib/frontendDesignContract';
 import { recordRepositoryInteractionEvent } from '@/lib/commentRepositorySupport';
 import {
   buildFormNotificationEmail,
@@ -217,7 +220,30 @@ function parseRequestBody(raw: unknown) {
 const withFormFrontendDesign = <TForm extends { settings?: unknown }>(form: TForm) => ({
   ...form,
   frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
+  frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings),
 });
+
+const normalizeFrontendSubmissionValueKeys = (
+  form: Pick<FormDefinition, 'fields' | 'settings'>,
+  values: Record<string, unknown>,
+): Record<string, unknown> => {
+  const fieldKeys = new Set((form.fields || []).map((field) => field.key).filter(Boolean));
+  const frontendFieldKeyMap = frontendFormFieldKeyMapFromMetadata(form.settings) || {};
+
+  return Object.entries(values).reduce<Record<string, unknown>>((acc, [rawKey, value]) => {
+    if (fieldKeys.has(rawKey)) {
+      acc[rawKey] = value;
+      return acc;
+    }
+
+    const mappedKey = frontendFieldKeyMap[rawKey];
+    if (mappedKey && fieldKeys.has(mappedKey) && !Object.prototype.hasOwnProperty.call(acc, mappedKey)) {
+      acc[mappedKey] = value;
+    }
+
+    return acc;
+  }, {});
+};
 
 function normalizeRequestId(value?: string): string {
   const trimmed = (value || '').trim();
@@ -1024,7 +1050,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return captchaResponse;
       }
 
-      const submissionValues = normalizeFormSubmissionValues(form, parsed.values);
+      const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values);
+      const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues);
       const classification = validateAndClassifyFormSubmission(
         form,
         submissionValues,
@@ -1174,7 +1201,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return captchaResponse;
     }
 
-    const submissionValues = normalizeFormSubmissionValues(form, parsed.values);
+    const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values);
+    const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues);
     const classification = validateAndClassifyFormSubmission(
       form,
       submissionValues,

@@ -35,6 +35,7 @@ const assertFormsPersistenceCertificationSource = () => {
   const publicStoreSource = fs.readFileSync(new URL('../../public/src/lib/backyStore.ts', import.meta.url), 'utf8');
   const publicFormDefinitionRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/definition/route.ts', import.meta.url), 'utf8');
   const publicFormDetailRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/route.ts', import.meta.url), 'utf8');
+  const publicFormSubmissionsRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts', import.meta.url), 'utf8');
   const publicManifestRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/manifest/route.ts', import.meta.url), 'utf8');
   const publicOpenApiRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url), 'utf8');
   const frontendDesignContractSource = fs.readFileSync(new URL('../../public/src/lib/frontendDesignContract.ts', import.meta.url), 'utf8');
@@ -279,6 +280,15 @@ const assertFormsPersistenceCertificationSource = () => {
       publicOpenApiRouteSource.includes('frontendFieldKeyMap:') &&
       publicOpenApiRouteSource.includes('fieldKeyMap:'),
     'Public form definition, detail, manifest, and OpenAPI contracts must expose frontend field key maps for custom frontend bindings',
+  );
+  assert(
+    publicFormSubmissionsRouteSource.includes('normalizeFrontendSubmissionValueKeys') &&
+      publicFormSubmissionsRouteSource.includes('frontendFormFieldKeyMapFromMetadata(form.settings)') &&
+      publicFormSubmissionsRouteSource.includes('const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values)') &&
+      publicFormSubmissionsRouteSource.includes('const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues)') &&
+      publicOpenApiRouteSource.includes('canonical field keys or frontendFieldKeyMap aliases') &&
+      publicOpenApiRouteSource.includes('Accepts canonical field keys or frontendFieldKeyMap aliases.'),
+    'Public form submissions must accept frontend field key map aliases before validation and storage',
   );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
@@ -1212,6 +1222,24 @@ const assertFrontendTemplateForm = async (formId) => {
       definition.data.form.frontendDesign?.fieldKeyMap?.project_budget === 'project_budget',
     `Frontend public definition did not expose field key map: ${JSON.stringify(definition).slice(0, 1000)}`,
   );
+  const aliasSubmission = await requestApi(`/api/sites/${SITE_ID}/forms/${form.id}/submissions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      requestId: `forms-frontend-alias-${Date.now().toString(36)}`,
+      startedAt: Date.now() - 3000,
+      honeypot: '',
+      values: {
+        'Full name': 'Frontend Alias User',
+        Email: 'forms-frontend-alias@example.com',
+        'Project budget': '$25k+',
+        Message: 'Submitted with frontend aliases.',
+      },
+    }),
+  });
+  const aliasSubmissionRecord = aliasSubmission.data?.submission || aliasSubmission.submission;
+  assert(aliasSubmissionRecord?.values?.full_name === 'Frontend Alias User', `Frontend alias full name did not normalize: ${JSON.stringify(aliasSubmission).slice(0, 1000)}`);
+  assert(aliasSubmissionRecord?.values?.email === 'forms-frontend-alias@example.com', `Frontend alias email did not normalize: ${JSON.stringify(aliasSubmission).slice(0, 1000)}`);
+  assert(aliasSubmissionRecord?.values?.project_budget === '$25k+', `Frontend alias select value did not normalize: ${JSON.stringify(aliasSubmission).slice(0, 1000)}`);
   assert(
     form?.contactShare?.enabled === true &&
     form.contactShare.nameField === 'full_name' &&

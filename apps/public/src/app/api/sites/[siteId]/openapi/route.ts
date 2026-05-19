@@ -1958,7 +1958,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
             post: {
               tags: ["Interactions"],
-              summary: "Submit a Backy form",
+              summary:
+                "Submit a Backy form using canonical field keys or frontendFieldKeyMap aliases",
               operationId: "submitBackyForm",
               parameters: [pathParameter("formId", "Form id", formIds)],
               requestBody: {
@@ -5166,12 +5167,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               type: "object",
               additionalProperties: true,
               description:
-                "Submit form field values under values, fields, data, or submission. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, and captcha token fields are reserved transport metadata keys.",
+                "Submit form field values under values, fields, data, or submission. Keys may be canonical Backy field keys or aliases from form.frontendFieldKeyMap. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, and captcha token fields are reserved transport metadata keys.",
               properties: {
                 values: {
                   type: "object",
                   additionalProperties: true,
-                  description: "Preferred field value map.",
+                  description:
+                    "Preferred field value map. Accepts canonical field keys or frontendFieldKeyMap aliases.",
                 },
                 fields: {
                   type: "object",
