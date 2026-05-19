@@ -94,6 +94,24 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestLiveManagementDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.live-management.v1'") &&
+    manifestRoute.includes("requiredPermissions:") &&
+    manifestRoute.includes("read: 'pages.view'") &&
+    manifestRoute.includes("update: 'pages.edit'") &&
+    manifestRoute.includes("conflict: 'PAGE_VERSION_CONFLICT'") &&
+    manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(input.site.id)') &&
+    manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(site.id)') &&
+    frontendManifestSchema.includes('"backy.live-management.v1"') &&
+    frontendManifestSchema.includes('"optimisticConcurrency"') &&
+    frontendManifestSchema.includes('"PAGE_VERSION_CONFLICT"') &&
+    sdkSource.includes('BackyManifestLiveManagementModule') &&
+    sdkSmoke.includes('manifest() missing live-management discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestLiveManagementDiscovery'),
+  'Frontend manifest and SDK must expose structured live-management discovery for inline custom frontend editing.',
+);
+
+assert(
   publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
     publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
     publicSiteDiscoveryRoute.includes('cacheRevision') &&

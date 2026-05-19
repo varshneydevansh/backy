@@ -608,6 +608,18 @@ assert(manifestTheme.selectors?.root === ':root', 'manifest() theme discovery mi
 assert(manifestTheme.editableFields?.includes?.('colors.primary'), 'manifest() theme discovery missing editable color field');
 assert(manifestTheme.capabilities?.cssVariables === true, 'manifest() theme discovery missing CSS variable capability');
 assert(manifestTheme.capabilities?.liveEditable === true, 'manifest() theme discovery missing live editable capability');
+const manifestLiveManagement = manifest.data.modules?.liveManagement;
+assert(manifestLiveManagement?.schemaVersion === 'backy.live-management.v1', 'manifest() missing live-management discovery module');
+assert(manifestLiveManagement.endpoints?.page === manifest.data.endpoints.liveManagePage, 'manifest() live-management page endpoint drifted');
+assert(manifestLiveManagement.methods?.read === 'GET' && manifestLiveManagement.methods?.update === 'PATCH', 'manifest() live-management methods drifted');
+assert(manifestLiveManagement.auth?.requiredPermissions?.read === 'pages.view', 'manifest() live-management missing read permission');
+assert(manifestLiveManagement.auth?.requiredPermissions?.update === 'pages.edit', 'manifest() live-management missing update permission');
+assert(manifestLiveManagement.auth?.siteScope === true, 'manifest() live-management missing site scope requirement');
+assert(manifestLiveManagement.capabilities?.editableMap === true, 'manifest() live-management missing editable map capability');
+assert(manifestLiveManagement.capabilities?.optimisticConcurrency === true, 'manifest() live-management missing optimistic concurrency capability');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.content'), 'manifest() live-management missing content editable target');
+assert(manifestLiveManagement.updateBody?.expectedUpdatedAt, 'manifest() live-management missing expectedUpdatedAt update guidance');
+assert(manifestLiveManagement.errors?.conflict === 'PAGE_VERSION_CONFLICT', 'manifest() live-management conflict code drifted');
 assert(manifest.data.contract?.databaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', 'manifest() missing database certification schema');
 assert(manifest.data.contract?.databaseCertification?.status === 'external-database-gate', 'manifest() missing external database certification status');
 assert(manifest.data.contract?.databaseCertification?.gate?.command === 'npm run ci:sdk-postgres-smoke', 'manifest() missing SDK Postgres certification command');

@@ -19,6 +19,7 @@ import type {
   BackyManifestRoutePattern,
   BackyManifestDeliveryDiscovery,
   BackyManifestFormDefinition,
+  BackyManifestLiveManagementModule,
   BackyManifestMediaModule,
   BackyManifestThemeModule,
   GeneratedBackyContentStatus,
@@ -794,6 +795,49 @@ const manifest = {
         frontendDesignOverrides: true,
       },
     },
+    liveManagement: {
+      schemaVersion: "backy.live-management.v1",
+      enabled: true,
+      endpoints: {
+        page: "/api/sites/site_demo/manage/pages/{pageId}",
+        render: "/api/sites/site_demo/render?path={path}",
+        editableMapSchema:
+          "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
+      },
+      methods: {
+        read: "GET",
+        update: "PATCH",
+      },
+      auth: {
+        modes: ["session", "api-key"],
+        headers: ["Authorization", "x-backy-admin-session", "x-backy-admin-key", "x-api-key"],
+        requiredPermissions: {
+          read: "pages.view",
+          update: "pages.edit",
+        },
+        siteScope: true,
+      },
+      capabilities: {
+        pageMetadata: true,
+        contentDocument: true,
+        canvasElements: true,
+        editableMap: true,
+        optimisticConcurrency: true,
+        cacheInvalidation: true,
+        auditTrail: true,
+        webhookDelivery: true,
+      },
+      editableTargets: ["props.content", "props.href", "styles.color"],
+      updateBody: {
+        expectedUpdatedAt: "Use the current page updatedAt value.",
+        content: "Send the full Backy content document or canvas content object.",
+      },
+      errors: {
+        conflict: "PAGE_VERSION_CONFLICT",
+        forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE",
+        validation: "VALIDATION_ERROR",
+      },
+    },
     pages: {
       count: 1,
       items: [],
@@ -1407,6 +1451,50 @@ const sdkManifestTheme = {
     frontendDesignOverrides: true,
   },
 } satisfies BackyManifestThemeModule;
+
+const sdkManifestLiveManagement = {
+  schemaVersion: "backy.live-management.v1",
+  enabled: true,
+  endpoints: {
+    page: "/api/sites/site_demo/manage/pages/{pageId}",
+    render: "/api/sites/site_demo/render?path={path}",
+    editableMapSchema:
+      "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
+  },
+  methods: {
+    read: "GET",
+    update: "PATCH",
+  },
+  auth: {
+    modes: ["session", "api-key"],
+    headers: ["Authorization", "x-backy-admin-session", "x-backy-admin-key", "x-api-key"],
+    requiredPermissions: {
+      read: "pages.view",
+      update: "pages.edit",
+    },
+    siteScope: true,
+  },
+  capabilities: {
+    pageMetadata: true,
+    contentDocument: true,
+    canvasElements: true,
+    editableMap: true,
+    optimisticConcurrency: true,
+    cacheInvalidation: true,
+    auditTrail: true,
+    webhookDelivery: true,
+  },
+  editableTargets: ["props.content", "props.href", "styles.color"],
+  updateBody: {
+    expectedUpdatedAt: "Use the current page updatedAt value.",
+    content: "Send the full Backy content document or canvas content object.",
+  },
+  errors: {
+    conflict: "PAGE_VERSION_CONFLICT",
+    forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE",
+    validation: "VALIDATION_ERROR",
+  },
+} satisfies BackyManifestLiveManagementModule;
 
 const sdkManifestCollection = {
   id: "collection_products",
@@ -3423,6 +3511,9 @@ const invalidGeneratedManifestMediaDiscovery = { ...manifest.modules.media, sche
 // @ts-expect-error generated manifest theme discovery uses a versioned schema marker.
 const invalidGeneratedManifestThemeDiscovery = { ...manifest.modules.theme, schemaVersion: "backy.theme-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["theme"];
 
+// @ts-expect-error generated manifest live-management discovery uses a versioned schema marker.
+const invalidGeneratedManifestLiveManagementDiscovery = { ...manifest.modules.liveManagement, schemaVersion: "backy.live-management.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["liveManagement"];
+
 // @ts-expect-error generated manifest commerce modes are limited to documented storefront modes.
 const invalidGeneratedManifestCommerceMode = { ...manifest.modules.commerce, mode: "marketplace", } satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
 
@@ -3501,6 +3592,9 @@ const invalidSdkManifestMedia = { ...sdkManifestMedia, listUrl: undefined, } sat
 
 // @ts-expect-error manifest theme modules require compiled CSS variable output.
 const invalidSdkManifestTheme = { ...sdkManifestTheme, cssVariables: undefined, } satisfies BackyManifestThemeModule;
+
+// @ts-expect-error manifest live-management modules require optimistic conflict guidance.
+const invalidSdkManifestLiveManagement = { ...sdkManifestLiveManagement, updateBody: undefined, } satisfies BackyManifestLiveManagementModule;
 
 // @ts-expect-error manifest collection entries require record URLs for custom frontend data loading.
 const invalidSdkManifestCollection = { ...sdkManifestCollection, recordsUrl: undefined, } satisfies BackyManifestCollectionSchema;
@@ -3852,6 +3946,7 @@ void sdkManifestReusableSections;
 void sdkManifestForm;
 void sdkManifestMedia;
 void sdkManifestTheme;
+void sdkManifestLiveManagement;
 void sdkManifestCollection;
 void sdkLocalizedRoutePatternGroup;
 void sdkRedirectRule;
@@ -3892,6 +3987,7 @@ void invalidGeneratedReusableSectionItem;
 void invalidGeneratedManifestMediaTypes;
 void invalidGeneratedManifestMediaDiscovery;
 void invalidGeneratedManifestThemeDiscovery;
+void invalidGeneratedManifestLiveManagementDiscovery;
 void invalidGeneratedManifestCommerceMode;
 void invalidGeneratedManifestCommerceCapabilities;
 void invalidGeneratedInteractiveRegistry;
@@ -3905,6 +4001,7 @@ void invalidGeneratedManifestFormDetailUrl;
 void invalidSdkManifestForm;
 void invalidSdkManifestMedia;
 void invalidSdkManifestTheme;
+void invalidSdkManifestLiveManagement;
 void invalidSdkManifestCollection;
 void invalidSdkLocalizedRoutePatternGroup;
 void invalidSdkRedirectRule;

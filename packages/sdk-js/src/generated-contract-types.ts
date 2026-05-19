@@ -2636,6 +2636,56 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         };
         [key: string]: unknown;
       };
+      liveManagement: {
+        schemaVersion: "backy.live-management.v1";
+        enabled: boolean;
+        endpoints: {
+          page: string;
+          render: string;
+          editableMapSchema: string;
+          [key: string]: unknown;
+        };
+        methods: {
+          read: "GET";
+          update: "PATCH";
+          [key: string]: unknown;
+        };
+        auth: {
+          modes: Array<"session" | "api-key">;
+          headers: Array<string>;
+          requiredPermissions: {
+            read: "pages.view";
+            update: "pages.edit";
+            [key: string]: unknown;
+          };
+          siteScope: boolean;
+          [key: string]: unknown;
+        };
+        capabilities: {
+          pageMetadata: boolean;
+          contentDocument: boolean;
+          canvasElements: boolean;
+          editableMap: boolean;
+          optimisticConcurrency: boolean;
+          cacheInvalidation: boolean;
+          auditTrail: boolean;
+          webhookDelivery: boolean;
+          [key: string]: unknown;
+        };
+        editableTargets: Array<string>;
+        updateBody: {
+          expectedUpdatedAt: string;
+          content: string;
+          [key: string]: unknown;
+        };
+        errors: {
+          conflict: "PAGE_VERSION_CONFLICT";
+          forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE";
+          validation: "VALIDATION_ERROR";
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
       pages: {
         count: number;
         items: Array<{

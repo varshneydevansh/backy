@@ -1907,6 +1907,57 @@ export interface BackyManifestThemeModule {
   [key: string]: unknown;
 }
 
+export interface BackyManifestLiveManagementModule {
+  schemaVersion: "backy.live-management.v1";
+  enabled: boolean;
+  endpoints: {
+    page: string;
+    render: string;
+    editableMapSchema: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    read: "GET";
+    update: "PATCH";
+    [key: string]: unknown;
+  };
+  auth: {
+    modes: Array<"session" | "api-key">;
+    headers: string[];
+    requiredPermissions: {
+      read: "pages.view";
+      update: "pages.edit";
+      [key: string]: unknown;
+    };
+    siteScope: boolean;
+    [key: string]: unknown;
+  };
+  capabilities: {
+    pageMetadata: boolean;
+    contentDocument: boolean;
+    canvasElements: boolean;
+    editableMap: boolean;
+    optimisticConcurrency: boolean;
+    cacheInvalidation: boolean;
+    auditTrail: boolean;
+    webhookDelivery: boolean;
+    [key: string]: unknown;
+  };
+  editableTargets: string[];
+  updateBody: {
+    expectedUpdatedAt: string;
+    content: string;
+    [key: string]: unknown;
+  };
+  errors: {
+    conflict: "PAGE_VERSION_CONFLICT";
+    forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE";
+    validation: "VALIDATION_ERROR";
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyManifestCommentsModule {
   schemaVersion: "backy.comments-discovery.v1";
   enabled: boolean;
@@ -1961,6 +2012,7 @@ export interface BackyFrontendManifest {
     forms?: BackyManifestFormDefinition[];
     comments?: BackyManifestCommentsModule;
     theme?: BackyManifestThemeModule;
+    liveManagement?: BackyManifestLiveManagementModule;
     media?: BackyManifestMediaModule;
     commerce?: BackyCommerceStorefrontContract;
     interactiveComponents?: BackyInteractiveComponentsContract;

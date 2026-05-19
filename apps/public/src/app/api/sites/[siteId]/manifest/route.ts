@@ -602,6 +602,68 @@ const buildManifestMediaDiscovery = (
   };
 };
 
+const buildManifestLiveManagementDiscovery = (siteId: string) => ({
+  schemaVersion: 'backy.live-management.v1',
+  enabled: true,
+  endpoints: {
+    page: `/api/sites/${siteId}/manage/pages/{pageId}`,
+    render: `/api/sites/${siteId}/render?path={path}`,
+    editableMapSchema: 'https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json',
+  },
+  methods: {
+    read: 'GET',
+    update: 'PATCH',
+  },
+  auth: {
+    modes: ['session', 'api-key'],
+    headers: ['Authorization', 'x-backy-admin-session', 'x-backy-admin-key', 'x-api-key'],
+    requiredPermissions: {
+      read: 'pages.view',
+      update: 'pages.edit',
+    },
+    siteScope: true,
+  },
+  capabilities: {
+    pageMetadata: true,
+    contentDocument: true,
+    canvasElements: true,
+    editableMap: true,
+    optimisticConcurrency: true,
+    cacheInvalidation: true,
+    auditTrail: true,
+    webhookDelivery: true,
+  },
+  editableTargets: [
+    'props.content',
+    'props.href',
+    'props.src',
+    'props.alt',
+    'props.title',
+    'styles.color',
+    'styles.backgroundColor',
+    'styles.borderColor',
+    'styles.borderRadius',
+    'styles.padding',
+    'styles.margin',
+    'styles.opacity',
+    'layout.x',
+    'layout.y',
+    'layout.width',
+    'layout.height',
+    'visibility.hidden',
+    'visibility.locked',
+  ],
+  updateBody: {
+    expectedUpdatedAt: 'Use the current page updatedAt value for optimistic conflict protection.',
+    content: 'Send the full Backy content document or canvas content object after applying editable-map changes.',
+  },
+  errors: {
+    conflict: 'PAGE_VERSION_CONFLICT',
+    forbidden: 'FORBIDDEN_LIVE_MANAGE_SITE_SCOPE',
+    validation: 'VALIDATION_ERROR',
+  },
+});
+
 const buildRepositoryManifest = (
   input: {
     requestId: string;
@@ -754,6 +816,7 @@ const buildRepositoryManifest = (
           },
         },
         theme: buildBackyThemeDiscovery(input.site.theme),
+        liveManagement: buildManifestLiveManagementDiscovery(input.site.id),
         pages: {
           count: input.pages.length,
           items: input.pages.map((page) => ({
@@ -1081,6 +1144,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
           theme: buildBackyThemeDiscovery(site.theme),
+          liveManagement: buildManifestLiveManagementDiscovery(site.id),
           pages: {
             count: pages.length,
             items: pages.map((page) => ({

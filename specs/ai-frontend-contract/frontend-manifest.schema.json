@@ -488,6 +488,97 @@
               },
               "required": ["schemaVersion", "tokenSchemaVersion", "tokens", "cssVariables", "selectors", "editableFields", "capabilities"]
             },
+            "liveManagement": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.live-management.v1" },
+                "enabled": { "type": "boolean" },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "page": { "type": "string", "minLength": 1 },
+                    "render": { "type": "string", "minLength": 1 },
+                    "editableMapSchema": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["page", "render", "editableMapSchema"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "read": { "const": "GET" },
+                    "update": { "const": "PATCH" }
+                  },
+                  "required": ["read", "update"]
+                },
+                "auth": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "modes": {
+                      "type": "array",
+                      "items": { "enum": ["session", "api-key"] }
+                    },
+                    "headers": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 }
+                    },
+                    "requiredPermissions": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "read": { "const": "pages.view" },
+                        "update": { "const": "pages.edit" }
+                      },
+                      "required": ["read", "update"]
+                    },
+                    "siteScope": { "type": "boolean" }
+                  },
+                  "required": ["modes", "headers", "requiredPermissions", "siteScope"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "pageMetadata": { "type": "boolean" },
+                    "contentDocument": { "type": "boolean" },
+                    "canvasElements": { "type": "boolean" },
+                    "editableMap": { "type": "boolean" },
+                    "optimisticConcurrency": { "type": "boolean" },
+                    "cacheInvalidation": { "type": "boolean" },
+                    "auditTrail": { "type": "boolean" },
+                    "webhookDelivery": { "type": "boolean" }
+                  },
+                  "required": ["pageMetadata", "contentDocument", "canvasElements", "editableMap", "optimisticConcurrency", "cacheInvalidation", "auditTrail", "webhookDelivery"]
+                },
+                "editableTargets": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "updateBody": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" },
+                  "properties": {
+                    "expectedUpdatedAt": { "type": "string" },
+                    "content": { "type": "string" }
+                  },
+                  "required": ["expectedUpdatedAt", "content"]
+                },
+                "errors": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "conflict": { "const": "PAGE_VERSION_CONFLICT" },
+                    "forbidden": { "const": "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE" },
+                    "validation": { "const": "VALIDATION_ERROR" }
+                  },
+                  "required": ["conflict", "forbidden", "validation"]
+                }
+              },
+              "required": ["schemaVersion", "enabled", "endpoints", "methods", "auth", "capabilities", "editableTargets", "updateBody", "errors"]
+            },
             "pages": {
               "type": "object",
               "properties": {
@@ -1124,7 +1215,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "theme", "pages", "blog", "collections", "forms", "comments", "reusableSections", "media"]
+          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "forms", "comments", "reusableSections", "media"]
         },
         "admin": {
           "type": "object",
