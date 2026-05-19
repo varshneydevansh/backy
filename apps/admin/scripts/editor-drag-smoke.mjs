@@ -278,12 +278,16 @@ const assertCanvasNestedDropTargetSource = () => {
 
 const assertCanvasSelectionInfoSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
+  const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   assert(source.includes('<SelectionInfo elements={elements} selectedId={selectedId} selectedIds={selectedIds} />'), 'Editor canvas selection HUD must receive the full selected id set');
   assert(source.includes('collectSelectionInfoMetrics') && source.includes('const selectionSet = new Set(selectedIds.length ? selectedIds : [selectedId]);'), 'Editor canvas selection HUD must collect metrics for every selected layer');
   assert(source.includes('data-testid="editor-selection-info"') && source.includes("data-selection-mode={selectedMetrics.length > 1 ? 'multi' : 'single'}") && source.includes('data-selection-count={selectedMetrics.length}'), 'Editor canvas selection HUD must expose testable single/multi selection metadata');
   assert(source.includes('`${selectedMetrics.length} layers`') && source.includes('Math.round(maxX - minX)') && source.includes('Math.round(maxY - minY)'), 'Editor canvas selection HUD must show multi-selection bounds instead of only the primary layer size');
   assert(source.includes('const multiSelectionBounds = useMemo(() =>') && source.includes('data-testid="editor-multi-selection-bounds"') && source.includes('data-testid="editor-multi-selection-bounds-label"'), 'Editor canvas must render a visible multi-selection bounding frame');
   assert(source.includes('data-selection-count={multiSelectionBounds.count}') && source.includes('left: multiSelectionBounds.x') && source.includes('width: multiSelectionBounds.width'), 'Editor multi-selection bounding frame must expose count and use absolute selection geometry');
+  assert(source.includes('type MarqueeSelection = {') && source.includes('const [marqueeSelection, setMarqueeSelection]') && source.includes('data-testid="editor-marquee-selection"'), 'Editor canvas must expose drag-marquee selection state and overlay');
+  assert(source.includes('collectRootMarqueeCandidates') && source.includes('elementIntersectsRect(candidate, bounds)') && source.includes('onSelectMany?.(nextSelectedIds)'), 'Editor canvas marquee selection must select intersecting unlocked root elements in bulk');
+  assert(editorSource.includes('const handleCanvasSelectMany') && editorSource.includes('onSelectMany={handleCanvasSelectMany}'), 'Editor shell must wire canvas marquee bulk selection into selectedIds state');
 };
 
 const assertInteractiveRegistryVersionPinningSource = () => {

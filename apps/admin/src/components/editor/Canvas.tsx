@@ -715,6 +715,43 @@ const getDragBounds = (snapshots: DragSnapshot[]): DragBounds => {
   };
 };
 
+const getMarqueeBounds = (selection: MarqueeSelection) => {
+  const minX = Math.min(selection.startX, selection.currentX);
+  const minY = Math.min(selection.startY, selection.currentY);
+  const maxX = Math.max(selection.startX, selection.currentX);
+  const maxY = Math.max(selection.startY, selection.currentY);
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+};
+
+const elementIntersectsRect = (
+  element: Pick<SelectionInfoMetric, 'x' | 'y' | 'width' | 'height'>,
+  rect: { x: number; y: number; width: number; height: number },
+) => (
+  element.x < rect.x + rect.width &&
+  element.x + element.width > rect.x &&
+  element.y < rect.y + rect.height &&
+  element.y + element.height > rect.y
+);
+
+const collectRootMarqueeCandidates = (elements: CanvasElement[]): SelectionInfoMetric[] => (
+  elements
+    .filter((element) => element.visible !== false && element.locked !== true)
+    .map((element) => ({
+      id: element.id,
+      type: element.type,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+    }))
+);
+
 const updateElementById = (
   elements: CanvasElement[],
   targetId: string,
@@ -1384,6 +1421,8 @@ interface CanvasProps {
   selectedIds?: string[];
   /** Callback when element is selected */
   onSelect: (id: string | null) => void;
+  /** Callback when a marquee or bulk canvas action selects multiple elements */
+  onSelectMany?: (ids: string[]) => void;
   /** Callback when an element is toggled into or out of multi-selection */
   onToggleSelect?: (id: string) => void;
   /** Canvas size configuration */
@@ -1431,6 +1470,15 @@ type ResizeInteraction = {
   initialY: number;
   initialWidth: number;
   initialHeight: number;
+};
+
+type MarqueeSelection = {
+  inputType: 'pointer' | 'mouse';
+  pointerId?: number;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
 };
 
 const getPointerDetails = (event: React.PointerEvent | React.MouseEvent) => {
@@ -1490,6 +1538,7 @@ export function Canvas({
   selectedId,
   selectedIds = selectedId ? [selectedId] : [],
   onSelect,
+  onSelectMany,
   onToggleSelect,
   size,
   onSizeChange,
@@ -1507,6 +1556,8 @@ export function Canvas({
   const elementsRef = useRef(elements);
   const dragStateRef = useRef<DragInteraction | null>(null);
   const resizeStateRef = useRef<ResizeInteraction | null>(null);
+  const marqueeSelectionRef = useRef<MarqueeSelection | null>(null);
+  const suppressCanvasClickRef = useRef(false);
   const debugTextInteraction = useCallback((..._args: unknown[]) => {
   }, []);
   const safeViewportScale = Number.isFinite(viewportScale) && viewportScale > 0
@@ -1670,12 +1721,58 @@ export function Canvas({
   // Resize state for resizing elements
   const [resizeState, setResizeState] = useState<ResizeInteraction | null>(null);
   const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
+  const [marqueeSelection, setMarqueeSelection] = useState<MarqueeSelection | null>(null);
 
   // Resize state for canvas itself
   const [canvasResizeState, setCanvasResizeState] = useState<{
     startY: number;
     initialHeight: number;
   } | null>(null);
+
+  const getCanvasPoint = useCallback((clientX: number, clientY: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return null;
+    }
+
+    return {
+      x: Math.max(0, Math.min(size.width, toCanvasDelta(clientX - rect.left))),
+      y: Math.max(0, Math.min(size.height, toCanvasDelta(clientY - rect.top))),
+    };
+  }, [size.height, size.width, toCanvasDelta]);
+
+  const handleCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (isPreview || disabled || event.button !== 0) {
+      return;
+    }
+
+    if (event.target !== event.currentTarget || dragStateRef.current || resizeStateRef.current) {
+      return;
+    }
+
+    const start = getCanvasPoint(event.clientX, event.clientY);
+    if (!start) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setEditingId(null);
+    clearActiveEditor();
+
+    const nextSelection: MarqueeSelection = {
+      inputType: 'pointer',
+      pointerId: event.pointerId,
+      startX: start.x,
+      startY: start.y,
+      currentX: start.x,
+      currentY: start.y,
+    };
+
+    marqueeSelectionRef.current = nextSelection;
+    setMarqueeSelection(nextSelection);
+  }, [clearActiveEditor, disabled, getCanvasPoint, isPreview]);
 
   /**
    * Start moving an element from pointer or mouse input.
@@ -1851,6 +1948,27 @@ export function Canvas({
 
     const activeResizeState = resizeStateRef.current;
     const activeDragState = dragStateRef.current;
+    const activeMarqueeSelection = marqueeSelectionRef.current;
+
+    if (activeMarqueeSelection) {
+      if (!matchesInteractionInput(event, activeMarqueeSelection)) {
+        return;
+      }
+
+      const nextPoint = getCanvasPoint(event.clientX, event.clientY);
+      if (!nextPoint) {
+        return;
+      }
+
+      const nextSelection = {
+        ...activeMarqueeSelection,
+        currentX: nextPoint.x,
+        currentY: nextPoint.y,
+      };
+      marqueeSelectionRef.current = nextSelection;
+      setMarqueeSelection(nextSelection);
+      return;
+    }
 
     if (activeResizeState) {
       if (!matchesInteractionInput(event, activeResizeState)) {
@@ -1997,9 +2115,39 @@ export function Canvas({
     setAlignmentGuides(nextGuides);
     elementsRef.current = nextElements;
     onElementsChange(nextElements, { transient: true, selectedId: activeDragState.elementId });
-  }, [disabled, isPreview, onElementsChange, safeGridSize, size.height, size.width, snapEnabled, toCanvasDelta]);
+  }, [disabled, getCanvasPoint, isPreview, onElementsChange, safeGridSize, size.height, size.width, snapEnabled, toCanvasDelta]);
 
   const handleGlobalElementUp = useCallback((event?: MouseEvent | PointerEvent) => {
+    const activeMarqueeSelection = marqueeSelectionRef.current;
+    if (activeMarqueeSelection) {
+      if (event && !matchesInteractionInput(event, activeMarqueeSelection)) {
+        return;
+      }
+
+      marqueeSelectionRef.current = null;
+      setMarqueeSelection(null);
+      const bounds = getMarqueeBounds(activeMarqueeSelection);
+      const isIntentionalMarquee = bounds.width >= 4 || bounds.height >= 4;
+
+      if (isIntentionalMarquee) {
+        suppressCanvasClickRef.current = true;
+        window.setTimeout(() => {
+          suppressCanvasClickRef.current = false;
+        }, 0);
+
+        const nextSelectedIds = collectRootMarqueeCandidates(elementsRef.current)
+          .filter((candidate) => elementIntersectsRect(candidate, bounds))
+          .map((candidate) => candidate.id);
+
+        if (nextSelectedIds.length > 1) {
+          onSelectMany?.(nextSelectedIds);
+        } else {
+          onSelect(nextSelectedIds[0] ?? null);
+        }
+      }
+      return;
+    }
+
     const activeDragState = dragStateRef.current;
     const activeResizeState = resizeStateRef.current;
     const activeInteraction = activeDragState || activeResizeState;
@@ -2019,7 +2167,7 @@ export function Canvas({
       exitTextEditingForTransform();
       onElementsChange(elementsRef.current, { commit: true, selectedId: activeElementId });
     }
-  }, [exitTextEditingForTransform, onElementsChange, selectedId]);
+  }, [exitTextEditingForTransform, onElementsChange, onSelect, onSelectMany, selectedId]);
 
   useEffect(() => {
     if (isPreview || disabled) {
@@ -2248,6 +2396,11 @@ export function Canvas({
    * Handle canvas click to deselect
    */
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
+    if (suppressCanvasClickRef.current) {
+      suppressCanvasClickRef.current = false;
+      return;
+    }
+
     const eventTarget = getTargetElement(event.target);
     const clickedElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
     if (clickedElementId) {
@@ -2356,6 +2509,7 @@ export function Canvas({
         minHeight: size.height,
       }}
       onMouseUp={handleMouseUp}
+      onPointerDown={handleCanvasPointerDown}
       onPointerMove={(event) => handleGlobalElementMove(event.nativeEvent)}
       onPointerUp={(event) => handleGlobalElementUp(event.nativeEvent)}
       onPointerCancel={(event) => handleGlobalElementUp(event.nativeEvent)}
@@ -2429,6 +2583,14 @@ export function Canvas({
               }}
         />
       ))}
+
+      {marqueeSelection && (
+        <div
+          className="pointer-events-none absolute z-[75] rounded-sm border border-sky-600 bg-sky-500/10 shadow-[0_0_0_1px_rgba(14,165,233,0.12)]"
+          data-testid="editor-marquee-selection"
+          style={getMarqueeBounds(marqueeSelection)}
+        />
+      )}
 
       {/* Canvas Elements */}
       {elements.map((element) => (

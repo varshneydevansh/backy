@@ -3219,6 +3219,20 @@ export function CanvasEditor({
     });
   }, [elements, findElementById]);
 
+  const handleCanvasSelectMany = useCallback((ids: string[]) => {
+    const nextIds = Array.from(new Set(ids))
+      .filter((id) => !!findElementById(elements, id));
+
+    setSelectedId(nextIds[0] ?? null);
+    setSelectedIds(nextIds);
+
+    if (nextIds.length === 1) {
+      setRightPanel('properties');
+    } else if (nextIds.length > 1) {
+      setRightPanel('layers');
+    }
+  }, [elements, findElementById]);
+
   const handleRefreshSelectedReusableSection = useCallback(() => {
     if (
       isCanvasMutationDisabled ||
@@ -5421,6 +5435,7 @@ export function CanvasEditor({
                       selectedId={selectedId}
                       selectedIds={selectedIds}
                       onSelect={handleSelect}
+                      onSelectMany={handleCanvasSelectMany}
                       onToggleSelect={handleCanvasToggleSelect}
                       size={size}
                       onSizeChange={(newSize) => {
@@ -5510,6 +5525,7 @@ export function CanvasEditor({
                           selectedId={selectedId}
                           selectedIds={selectedIds}
                           onSelect={handleSelect}
+                          onSelectMany={handleCanvasSelectMany}
                           onToggleSelect={handleCanvasToggleSelect}
                           size={size}
                           onSizeChange={(newSize) => {
