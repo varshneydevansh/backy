@@ -35,21 +35,38 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
-const parseLimit = (value: string | null) => {
-  const parsed = Number.parseInt(value || '20', 10);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 100) : 20;
+const parseLimit = (value: string | null): { value: number; invalid?: string } => {
+  if (!value) {
+    return { value: 20 };
+  }
+  if (!/^\d+$/.test(value)) {
+    return { value: 20, invalid: value };
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 100
+    ? { value: parsed }
+    : { value: 20, invalid: value };
 };
 
-const parseOffset = (value: string | null) => {
-  const parsed = Number.parseInt(value || '0', 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+const parseOffset = (value: string | null): { value: number; invalid?: string } => {
+  if (!value) {
+    return { value: 0 };
+  }
+  if (!/^\d+$/.test(value)) {
+    return { value: 0, invalid: value };
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? { value: parsed } : { value: 0, invalid: value };
 };
 
-const parseStatus = (value: string | null) => (
-  CONTACT_STATUSES.includes(value as (typeof CONTACT_STATUSES)[number])
-    ? value as (typeof CONTACT_STATUSES)[number]
-    : undefined
-);
+const parseStatus = (value: string | null): { value?: (typeof CONTACT_STATUSES)[number]; invalid?: string } => {
+  if (!value) {
+    return {};
+  }
+  return CONTACT_STATUSES.includes(value as (typeof CONTACT_STATUSES)[number])
+    ? { value: value as (typeof CONTACT_STATUSES)[number] }
+    : { invalid: value };
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -61,10 +78,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, formId } = await params;
     const { searchParams } = new URL(request.url);
-    const status = parseStatus(searchParams.get('status'));
+    const statusFilter = parseStatus(searchParams.get('status'));
+    if (statusFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_FORM_CONTACT_STATUS',
+        'Invalid form contact status filter. Use new, contacted, qualified, or archived.',
+        requestId,
+      );
+    }
     const filterRequestId = searchParams.get('requestId')?.trim() || undefined;
-    const limit = parseLimit(searchParams.get('limit'));
-    const offset = parseOffset(searchParams.get('offset'));
+    const limitFilter = parseLimit(searchParams.get('limit'));
+    if (limitFilter.invalid) {
+      return errorResponse(400, 'INVALID_FORM_CONTACT_LIMIT', 'Invalid form contact limit filter. Use an integer from 1 to 100.', requestId);
+    }
+    const offsetFilter = parseOffset(searchParams.get('offset'));
+    if (offsetFilter.invalid) {
+      return errorResponse(400, 'INVALID_FORM_CONTACT_OFFSET', 'Invalid form contact offset filter. Use a non-negative integer.', requestId);
+    }
+    const status = statusFilter.value;
+    const limit = limitFilter.value;
+    const offset = offsetFilter.value;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

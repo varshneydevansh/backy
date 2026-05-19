@@ -296,6 +296,14 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/comments/[commentId]/route.ts', import.meta.url),
     'utf8',
   );
+  const publicFormSubmissionsRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts', import.meta.url),
+    'utf8',
+  );
+  const publicFormContactsRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/forms/[formId]/contacts/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -391,6 +399,14 @@ function assertAdminPageContentValidationSource() {
   assert(publicSiteCommentsRoute.includes('invalidSiteCommentStatusResponse'), 'site comments route must return stable invalid moderation status errors');
   assert(publicSiteCommentDetailRoute.includes("'INVALID_SITE_COMMENT_STATUS'"), 'site comment detail route must reject invalid moderation status updates');
   assert(publicSiteCommentDetailRoute.includes('statusProvided'), 'site comment detail route must distinguish missing status from invalid status values');
+  assert(publicFormSubmissionsRoute.includes("'INVALID_FORM_SUBMISSION_STATUS'"), 'form submissions route must reject invalid status filters');
+  assert(publicFormSubmissionsRoute.includes("'INVALID_FORM_SUBMISSION_LIMIT'"), 'form submissions route must reject invalid limit filters');
+  assert(publicFormSubmissionsRoute.includes("'INVALID_FORM_SUBMISSION_OFFSET'"), 'form submissions route must reject invalid offset filters');
+  assert(publicFormSubmissionsRoute.includes('statusFilter.invalid'), 'form submissions route must branch on invalid status filters');
+  assert(publicFormContactsRoute.includes("'INVALID_FORM_CONTACT_STATUS'"), 'form contacts route must reject invalid status filters');
+  assert(publicFormContactsRoute.includes("'INVALID_FORM_CONTACT_LIMIT'"), 'form contacts route must reject invalid limit filters');
+  assert(publicFormContactsRoute.includes("'INVALID_FORM_CONTACT_OFFSET'"), 'form contacts route must reject invalid offset filters');
+  assert(publicFormContactsRoute.includes('statusFilter.invalid'), 'form contacts route must branch on invalid status filters');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -420,8 +436,14 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_BLOG_COMMENT_SORT') &&
       apiContracts.includes('INVALID_BLOG_COMMENT_LIMIT') &&
       apiContracts.includes('INVALID_BLOG_COMMENT_OFFSET') &&
+      apiContracts.includes('INVALID_FORM_SUBMISSION_STATUS') &&
+      apiContracts.includes('INVALID_FORM_SUBMISSION_LIMIT') &&
+      apiContracts.includes('INVALID_FORM_SUBMISSION_OFFSET') &&
+      apiContracts.includes('INVALID_FORM_CONTACT_STATUS') &&
+      apiContracts.includes('INVALID_FORM_CONTACT_LIMIT') &&
+      apiContracts.includes('INVALID_FORM_CONTACT_OFFSET') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
-    'API contracts must document invalid admin page/blog editor content and status errors',
+    'API contracts must document invalid page, blog, comment, and form filter/content errors',
   );
 }
 
