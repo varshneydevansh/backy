@@ -4922,24 +4922,40 @@ function buildTemplateElements(input: {
                 height: 340,
                 dataBindings: [{ source: 'services', mode: 'overview', fields: ['packages', 'formats', 'bookingUrl', 'availability'] }],
                 props: { backgroundColor: '#fff1f2', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 450 },
+                    mobile: { width: 375, height: 570 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'services-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Services', fontSize: 13, fontWeight: '800', color: '#be123c', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 200 },
+                            mobile: { x: 24, y: 44, width: 180 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'services-heading',
                         width: 640,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 80, width: 327, height: 124, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 214, {
                         id: 'services-copy',
                         width: 580,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4b5563' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 86, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 222, width: 323, height: 112, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 754, 96, {
                         id: 'services-format-filter',
@@ -4947,6 +4963,10 @@ function buildTemplateElements(input: {
                         height: 86,
                         dataBindings: [{ source: 'services', mode: 'format-filter', fields: ['all', 'online', 'inPerson'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fecdd3', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 318, width: 340, height: 86 },
+                            mobile: { x: 24, y: 376, width: 327, height: 146 },
+                        },
                         children: [
                             createCanvasElement('button', 16, 20, {
                                 id: 'services-filter-all',
@@ -4965,6 +4985,9 @@ function buildTemplateElements(input: {
                                 width: 102,
                                 height: 46,
                                 props: { label: 'In person', backgroundColor: '#fff1f2', color: '#9f1239', borderRadius: 8, fontWeight: '800', action: 'services.filter.in_person' },
+                                responsive: {
+                                    mobile: { x: 16, y: 80, width: 130 },
+                                },
                             }),
                         ],
                     }),
@@ -4976,12 +4999,20 @@ function buildTemplateElements(input: {
                 height: 470,
                 dataBindings: [{ source: 'services', mode: 'list', limit: 6 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 450, width: 768, height: 1120 },
+                    mobile: { y: 570, width: 375, height: 1110 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 54, {
                         id: 'services-list-heading',
                         width: 400,
                         height: 42,
                         props: { content: 'Choose a service', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { name: 'Strategy session', duration: '60 minutes', price: '$120' },
@@ -4993,6 +5024,10 @@ function buildTemplateElements(input: {
                         height: 260,
                         dataBindings: [{ source: 'services', mode: 'service', index }],
                         props: { backgroundColor: index === 1 ? '#111827' : '#f9fafb', borderRadius: 8, borderColor: index === 1 ? '#111827' : '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 330, width: 660, height: 276 },
+                            mobile: { x: 24, y: 118 + index * 322, width: 327, height: 276 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `services-card-title-${index}`,
@@ -5000,6 +5035,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: service.name, level: 'h3', fontSize: 22, fontWeight: '800', color: index === 1 ? '#ffffff' : '#111827' },
                                 dataBindings: [{ source: 'services', mode: 'service', index, field: 'name', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 260 },
+                                    mobile: { width: 238 },
+                                },
                             }),
                             createCanvasElement('text', 24, 78, {
                                 id: `services-card-duration-${index}`,
@@ -5020,12 +5059,20 @@ function buildTemplateElements(input: {
                                 width: 230,
                                 height: 42,
                                 props: { content: 'Bind service descriptions, availability, and delivery format from Backy collections or service settings.', fontSize: 13, lineHeight: 1.45, color: index === 1 ? '#d1d5db' : '#4b5563' },
+                                responsive: {
+                                    tablet: { width: 430 },
+                                    mobile: { width: 268, height: 48 },
+                                },
                             }),
                             createCanvasElement('button', 24, 218, {
                                 id: `services-booking-button-${index}`,
                                 width: 150,
                                 height: 42,
                                 props: { label: 'Book service', backgroundColor: index === 1 ? '#f43f5e' : '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'services.booking.request' },
+                                responsive: {
+                                    tablet: { x: 460, y: 210, width: 154 },
+                                    mobile: { x: 24, y: 216, width: 150 },
+                                },
                             }),
                         ],
                     })),
@@ -5037,12 +5084,20 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'services', mode: 'process', fields: ['steps', 'faq', 'contactUrl'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1570, width: 768, height: 620 },
+                    mobile: { y: 1680, width: 375, height: 640 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'services-process-heading',
                         width: 460,
                         height: 42,
                         props: { content: 'How booking works', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 430 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...['Pick a package', 'Share context', 'Confirm the slot'].map((step, index) => createCanvasElement('box', 74 + index * 270, 132, {
                         id: `services-process-step-${index}`,
@@ -5050,6 +5105,10 @@ function buildTemplateElements(input: {
                         height: 118,
                         dataBindings: [{ source: 'services', mode: 'process-step', index }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54 + (index % 2) * 330, y: 130 + Math.floor(index / 2) * 150, width: 300, height: 118 },
+                            mobile: { x: 24, y: 118 + index * 132, width: 327, height: 110 },
+                        },
                         children: [
                             createCanvasElement('text', 22, 18, {
                                 id: `services-process-number-${index}`,
@@ -5063,6 +5122,10 @@ function buildTemplateElements(input: {
                                 height: 28,
                                 props: { content: step, level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'services', mode: 'process-step', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 210 },
+                                    mobile: { width: 240 },
+                                },
                             }),
                         ],
                     })),
@@ -5071,18 +5134,30 @@ function buildTemplateElements(input: {
                         width: 220,
                         height: 118,
                         props: { backgroundColor: '#111827', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 430, width: 660, height: 130 },
+                            mobile: { x: 24, y: 520, width: 327, height: 120 },
+                        },
                         children: [
                             createCanvasElement('paragraph', 22, 20, {
                                 id: 'services-inquiry-copy',
                                 width: 160,
                                 height: 38,
                                 props: { content: 'Need a custom scope?', fontSize: 15, fontWeight: '800', lineHeight: 1.35, color: '#ffffff' },
+                                responsive: {
+                                    tablet: { width: 240 },
+                                    mobile: { width: 210 },
+                                },
                             }),
                             createCanvasElement('button', 22, 70, {
                                 id: 'services-inquiry-button',
                                 width: 132,
                                 height: 36,
                                 props: { label: 'Send inquiry', backgroundColor: '#f43f5e', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'services.inquiry.open' },
+                                responsive: {
+                                    tablet: { x: 460, y: 48, width: 148 },
+                                    mobile: { x: 22, y: 68, width: 140 },
+                                },
                             }),
                         ],
                     }),

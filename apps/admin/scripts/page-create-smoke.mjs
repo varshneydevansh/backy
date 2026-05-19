@@ -1412,6 +1412,21 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 340, width: 660, height: 180 }"),
     'Pricing page starter must seed explicit tablet/mobile responsive overrides for composed commerce sections.',
   );
+  assert(
+    source.includes("id: 'services-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 570 }") &&
+      source.includes("id: 'services-format-filter'") &&
+      source.includes("mobile: { x: 24, y: 376, width: 327, height: 146 }") &&
+      source.includes("id: 'services-list-section'") &&
+      source.includes("tablet: { y: 450, width: 768, height: 1120 }") &&
+      source.includes("id: `services-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 118 + index * 322, width: 327, height: 276 }") &&
+      source.includes("id: 'services-process-section'") &&
+      source.includes("mobile: { y: 1680, width: 375, height: 640 }") &&
+      source.includes("id: 'services-inquiry-card'") &&
+      source.includes("tablet: { x: 54, y: 430, width: 660, height: 130 }"),
+    'Services page starter must seed explicit tablet/mobile responsive overrides for composed service sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
