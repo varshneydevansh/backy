@@ -43,7 +43,8 @@ const parseLimit = (value: string | null): { value: number; invalid?: string } =
     return { value: 20, invalid: value };
   }
   const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 && parsed <= 100
+  const capped = Math.min(parsed, 100);
+  return Number.isFinite(parsed) && parsed > 0 && parsed === capped
     ? { value: parsed }
     : { value: 20, invalid: value };
 };

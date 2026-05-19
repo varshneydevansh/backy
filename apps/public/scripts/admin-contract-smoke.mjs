@@ -451,7 +451,7 @@ function assertAdminPageContentValidationSource() {
   assert(publicBlogCommentsRoute.includes("'INVALID_BLOG_COMMENT_SORT'"), 'public blog comments route must reject invalid sort filters');
   assert(publicBlogCommentsRoute.includes("'INVALID_BLOG_COMMENT_LIMIT'"), 'public blog comments route must reject invalid limit filters');
   assert(publicBlogCommentsRoute.includes("'INVALID_BLOG_COMMENT_OFFSET'"), 'public blog comments route must reject invalid offset filters');
-  assert(publicBlogCommentsRoute.includes('integerQueryFromInput'), 'public blog comments route must parse pagination filters strictly');
+  assert(publicBlogCommentsRoute.includes('parseBoundedInteger'), 'public blog comments route must parse pagination filters strictly');
   assert(publicBlogCommentsRoute.includes('statusFilter.invalid'), 'public blog comments route must branch on invalid status filters');
   assert(publicBlogCommentsRoute.includes('sortFilter.invalid'), 'public blog comments route must branch on invalid sort filters');
   assert(publicBlogCommentsRoute.includes('blogCommentValidationResponse'), 'public blog comments route must use structured validation error envelopes');
@@ -464,7 +464,7 @@ function assertAdminPageContentValidationSource() {
   assert(publicPagesRoute.includes('parseBoundedInteger'), 'public pages list route must parse pagination filters strictly');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_LIMIT'"), 'public page comments route must reject invalid limit filters');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_OFFSET'"), 'public page comments route must reject invalid offset filters');
-  assert(publicPageCommentsRoute.includes('integerQueryFromInput'), 'public page comments route must parse pagination filters strictly');
+  assert(publicPageCommentsRoute.includes('parseBoundedInteger'), 'public page comments route must parse pagination filters strictly');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_STATUS'"), 'public page comments route must reject invalid status filters');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_SORT'"), 'public page comments route must reject invalid sort filters');
   assert(publicPageCommentsRoute.includes('statusFilter.invalid'), 'public page comments route must branch on invalid status filters');
@@ -479,7 +479,7 @@ function assertAdminPageContentValidationSource() {
   assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_SORT'"), 'site comments route must reject invalid sort filters');
   assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_LIMIT'"), 'site comments route must reject invalid limit filters');
   assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_OFFSET'"), 'site comments route must reject invalid offset filters');
-  assert(publicSiteCommentsRoute.includes('integerQueryFromInput'), 'site comments route must parse pagination filters strictly');
+  assert(publicSiteCommentsRoute.includes('parseBoundedInteger'), 'site comments route must parse pagination filters strictly');
   assert(publicSiteCommentsRoute.includes('statusProvided'), 'site comments route must distinguish missing moderation status from invalid status values');
   assert(publicSiteCommentsRoute.includes('invalidSiteCommentStatusResponse'), 'site comments route must return stable invalid moderation status errors');
   assert(publicSiteCommentDetailRoute.includes("'INVALID_SITE_COMMENT_STATUS'"), 'site comment detail route must reject invalid moderation status updates');

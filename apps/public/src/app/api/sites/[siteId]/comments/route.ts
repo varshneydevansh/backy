@@ -90,18 +90,18 @@ function parseSearchQuery(raw: string | null): string | undefined {
   return value.length ? value : undefined;
 }
 
-function integerQueryFromInput(
+function parseBoundedInteger(
   raw: string | null,
   fallback: number,
   min: number,
-  max?: number,
+  max: number = Number.MAX_SAFE_INTEGER,
 ): { value: number; invalid?: string } {
   if (raw === null || raw.trim() === '') {
     return { value: fallback };
   }
 
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < min || (max !== undefined && parsed > max)) {
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
     return { value: fallback, invalid: raw };
   }
 
@@ -246,7 +246,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
     const sort = sortFilter.value;
-    const limitFilter = integerQueryFromInput(searchParams.get('limit'), 20, 1, 100);
+    const limitFilter = parseBoundedInteger(searchParams.get('limit'), 20, 1, 100);
     if (limitFilter.invalid) {
       return errorResponse(
         400,
@@ -255,7 +255,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         responseRequestId,
       );
     }
-    const offsetFilter = integerQueryFromInput(searchParams.get('offset'), 0, 0);
+    const offsetFilter = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
     if (offsetFilter.invalid) {
       return errorResponse(
         400,
