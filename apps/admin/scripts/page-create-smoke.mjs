@@ -1850,6 +1850,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { x: 24, y: 330, width: 178, height: 52 }"),
     'Survey page starter must seed explicit tablet/mobile responsive overrides for response forms and result-routing sections.',
   );
+  assert(
+    source.includes("id: 'registration-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 1260 }") &&
+      source.includes("id: 'registration-heading'") &&
+      source.includes("mobile: { x: 24, y: 64, width: 327, height: 156, props: { fontSize: 36 } }") &&
+      source.includes("id: 'registration-note'") &&
+      source.includes("tablet: { x: 54, y: 370, width: 660, height: 112 }") &&
+      source.includes("id: 'registration-form-card'") &&
+      source.includes("mobile: { x: 24, y: 632, width: 327, height: 550 }") &&
+      source.includes("id: 'registration-member-type'") &&
+      source.includes("mobile: { width: 279 }") &&
+      source.includes("id: 'registration-consent'") &&
+      source.includes("mobile: { width: 279, height: 78 }") &&
+      source.includes("id: 'registration-submit'") &&
+      source.includes("mobile: { y: 438, width: 190, height: 50 }"),
+    'Registration page starter must seed explicit tablet/mobile responsive overrides for registration copy, notes, and form controls.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

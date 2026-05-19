@@ -10862,36 +10862,60 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 680,
                 props: { backgroundColor: '#f7f8f4', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 1120 },
+                    mobile: { width: 375, height: 1260 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 96, {
                         id: 'registration-heading',
                         width: 540,
                         height: 120,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 72, width: 540, height: 120, props: { fontSize: 46 } },
+                            mobile: { x: 24, y: 64, width: 327, height: 156, props: { fontSize: 36 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 78, 238, {
                         id: 'registration-copy',
                         width: 500,
                         height: 110,
                         props: { content: description, fontSize: 18, lineHeight: 1.65, color: '#4b5563' },
+                        responsive: {
+                            tablet: { x: 56, y: 220, width: 510, height: 110, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 244, width: 323, height: 134, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 78, 392, {
                         id: 'registration-note',
                         width: 470,
                         height: 112,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#d8ded2', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 370, width: 660, height: 112 },
+                            mobile: { x: 24, y: 418, width: 327, height: 180 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 18, {
                                 id: 'registration-note-heading',
                                 width: 380,
                                 height: 32,
                                 props: { content: 'What happens next', level: 'h3', fontSize: 18, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 520, height: 32 },
+                                    mobile: { width: 279, height: 54 },
+                                },
                             }),
                             createCanvasElement('paragraph', 20, 56, {
                                 id: 'registration-note-copy',
                                 width: 390,
                                 height: 42,
                                 props: { content: 'Submissions land in Backy Forms and Contacts, ready for approval, export, or collection routing.', fontSize: 14, lineHeight: 1.45, color: '#556052' },
+                                responsive: {
+                                    tablet: { width: 600, height: 42 },
+                                    mobile: { y: 86, width: 279, height: 72 },
+                                },
                             }),
                         ],
                     }),
@@ -10921,13 +10945,70 @@ function buildTemplateElements(input: {
                             borderWidth: 1,
                             borderStyle: 'solid',
                         },
+                        responsive: {
+                            tablet: { x: 54, y: 520, width: 660, height: 560 },
+                            mobile: { x: 24, y: 632, width: 327, height: 550 },
+                        },
                         children: [
-                            createCanvasElement('input', 24, 34, { id: 'registration-name', width: 360, height: 54, props: { label: 'Full name', name: 'full_name', placeholder: 'Ada Lovelace', required: true } }),
-                            createCanvasElement('input', 24, 106, { id: 'registration-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
-                            createCanvasElement('input', 24, 178, { id: 'registration-phone', width: 360, height: 54, props: { label: 'Phone', name: 'phone', inputType: 'tel', placeholder: '+1 555 0100', required: false } }),
-                            createCanvasElement('select', 24, 250, { id: 'registration-member-type', width: 360, height: 54, props: { label: 'Member type', name: 'member_type', options: ['Customer', 'Creator', 'Partner'], placeholder: 'Choose a type', required: true } }),
-                            createCanvasElement('checkbox', 24, 330, { id: 'registration-consent', width: 360, height: 42, props: { label: 'I agree to be contacted about this registration.', name: 'consent', required: true } }),
-                            createCanvasElement('button', 24, 414, { id: 'registration-submit', width: 190, height: 50, props: { label: 'Create account', backgroundColor: '#14532d', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                            createCanvasElement('input', 24, 34, {
+                                id: 'registration-name',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Full name', name: 'full_name', placeholder: 'Ada Lovelace', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { width: 279 },
+                                },
+                            }),
+                            createCanvasElement('input', 24, 106, {
+                                id: 'registration-email',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { width: 279 },
+                                },
+                            }),
+                            createCanvasElement('input', 24, 178, {
+                                id: 'registration-phone',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Phone', name: 'phone', inputType: 'tel', placeholder: '+1 555 0100', required: false },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { width: 279 },
+                                },
+                            }),
+                            createCanvasElement('select', 24, 250, {
+                                id: 'registration-member-type',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Member type', name: 'member_type', options: ['Customer', 'Creator', 'Partner'], placeholder: 'Choose a type', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { width: 279 },
+                                },
+                            }),
+                            createCanvasElement('checkbox', 24, 330, {
+                                id: 'registration-consent',
+                                width: 360,
+                                height: 42,
+                                props: { label: 'I agree to be contacted about this registration.', name: 'consent', required: true },
+                                responsive: {
+                                    tablet: { width: 560, height: 42 },
+                                    mobile: { width: 279, height: 78 },
+                                },
+                            }),
+                            createCanvasElement('button', 24, 414, {
+                                id: 'registration-submit',
+                                width: 190,
+                                height: 50,
+                                props: { label: 'Create account', backgroundColor: '#14532d', color: '#ffffff', borderRadius: 8, fontWeight: '700' },
+                                responsive: {
+                                    mobile: { y: 438, width: 190, height: 50 },
+                                },
+                            }),
                         ],
                     }),
                 ],
