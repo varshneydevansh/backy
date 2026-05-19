@@ -1776,9 +1776,20 @@ function FormsRoute() {
     if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current || current.fields.length <= 1) return current;
+      const removedField = current.fields[fieldIndex];
+      if (!removedField) return current;
+      const removedKey = normalizeFieldKey(removedField.key);
+      const nextContactShare = removedKey
+        ? removeFormContactShareFieldKey(current.contactShare, removedKey)
+        : current.contactShare;
+      const nextCollectionTarget = removedKey
+        ? removeFormCollectionTargetFieldKey(current.collectionTarget, removedKey)
+        : current.collectionTarget;
       return {
         ...current,
         fields: current.fields.filter((_, index) => index !== fieldIndex),
+        ...(nextContactShare ? { contactShare: nextContactShare } : {}),
+        ...(nextCollectionTarget ? { collectionTarget: nextCollectionTarget } : {}),
       };
     });
   };
@@ -5269,6 +5280,10 @@ const remapFieldKeyReference = (value: string | undefined, oldKey: string, nextK
   value === oldKey ? nextKey : value
 );
 
+const clearFieldKeyReference = (value: string | undefined, removedKey: string): string | undefined => (
+  value === removedKey ? undefined : value
+);
+
 const remapFormContactShareFieldKey = (
   contactShare: FormDefinition['contactShare'],
   oldKey: string,
@@ -5301,6 +5316,37 @@ const remapFormCollectionTargetFieldKey = (
   return {
     ...collectionTarget,
     slugField: remapFieldKeyReference(collectionTarget.slugField, oldKey, nextKey),
+    fieldMap,
+  };
+};
+
+const removeFormContactShareFieldKey = (
+  contactShare: FormDefinition['contactShare'],
+  removedKey: string,
+): FormDefinition['contactShare'] => (
+  contactShare
+    ? {
+        ...contactShare,
+        nameField: clearFieldKeyReference(contactShare.nameField, removedKey),
+        emailField: clearFieldKeyReference(contactShare.emailField, removedKey),
+        phoneField: clearFieldKeyReference(contactShare.phoneField, removedKey),
+        notesField: clearFieldKeyReference(contactShare.notesField, removedKey),
+      }
+    : contactShare
+);
+
+const removeFormCollectionTargetFieldKey = (
+  collectionTarget: FormDefinition['collectionTarget'],
+  removedKey: string,
+): FormDefinition['collectionTarget'] => {
+  if (!collectionTarget) return collectionTarget;
+
+  const fieldMap = { ...(collectionTarget.fieldMap || {}) };
+  delete fieldMap[removedKey];
+
+  return {
+    ...collectionTarget,
+    slugField: clearFieldKeyReference(collectionTarget.slugField, removedKey),
     fieldMap,
   };
 };

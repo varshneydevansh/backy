@@ -92,6 +92,15 @@ const assertFormsPersistenceCertificationSource = () => {
     'Forms builder must preserve contact-share and collection-write mappings when a form field key is renamed',
   );
   assert(
+    source.includes('removeFormContactShareFieldKey') &&
+      source.includes('removeFormCollectionTargetFieldKey') &&
+      source.includes('clearFieldKeyReference') &&
+      source.includes('const removedKey = normalizeFieldKey(removedField.key)') &&
+      source.includes('delete fieldMap[removedKey]') &&
+      source.includes('slugField: clearFieldKeyReference(collectionTarget.slugField, removedKey)'),
+    'Forms builder must clear contact-share and collection-write mappings when a mapped field is removed',
+  );
+  assert(
     source.includes('patchFormDraftFieldType') &&
       source.includes('applyFormFieldTypeDefaults') &&
       source.includes("type === 'select' || type === 'radio'") &&
