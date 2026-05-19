@@ -104,10 +104,24 @@ const FORM_DESTINATION_FILTERS: FormDestinationFilter[] = ['all', 'contacts', 'c
 const FORM_READINESS_FILTERS: FormReadinessFilter[] = ['all', 'ready', 'needs-work'];
 const SUBMISSION_STATUS_FILTERS: SubmissionStatusFilter[] = ['all', 'pending', 'approved', 'rejected', 'spam'];
 const FORM_FIELD_TYPES = ['text', 'email', 'number', 'textarea', 'select', 'checkbox', 'radio', 'date', 'tel', 'url', 'file'] as const;
+type FormFieldType = typeof FORM_FIELD_TYPES[number];
 type FormValidationRule = NonNullable<FormFieldDefinition['validation']>[number];
 type FormValidationRuleType = 'minLength' | 'maxLength' | 'pattern' | 'min' | 'max';
 type FormSpamSettings = NonNullable<FormDefinition['spamSettings']>;
 type FormConsentSettings = NonNullable<FormDefinition['consentSettings']>;
+const FORM_FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
+  text: 'Text',
+  email: 'Email',
+  number: 'Number',
+  textarea: 'Long text',
+  select: 'Select',
+  checkbox: 'Checkbox',
+  radio: 'Radio',
+  date: 'Date',
+  tel: 'Phone',
+  url: 'URL',
+  file: 'File',
+};
 const FORM_VALIDATION_RULES: Array<{
   type: FormValidationRuleType;
   label: string;
@@ -521,6 +535,7 @@ function FormsRoute() {
   const [formsAuditLogs, setFormsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
   const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
+  const [newFormFieldType, setNewFormFieldType] = useState<FormFieldType>('text');
   const [formSearchQuery, setFormSearchQuery] = useState(routeSearch.q || '');
   const [formSourceFilter, setFormSourceFilter] = useState<FormSourceFilter>(routeSearch.source || 'all');
   const [formStateFilter, setFormStateFilter] = useState<FormStateFilter>(routeSearch.state || 'all');
@@ -1669,22 +1684,16 @@ function FormsRoute() {
     });
   };
 
-  const addFormDraftField = () => {
+  const addFormDraftField = (fieldType: FormFieldType = newFormFieldType) => {
     if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
       const nextNumber = current.fields.length + 1;
-      const nextKey = getUniqueFormDraftFieldKey(current.fields, `field_${nextNumber}`);
       return {
         ...current,
         fields: [
           ...current.fields,
-          {
-            key: nextKey,
-            label: `Field ${nextNumber}`,
-            type: 'text',
-            required: false,
-          },
+          buildFormDraftFieldPreset(current.fields, fieldType, nextNumber),
         ],
       };
     });
@@ -3983,9 +3992,25 @@ function FormsRoute() {
                               <h3 className="text-sm font-semibold">Fields</h3>
                               <p className="mt-1 text-xs text-muted-foreground">Keys drive API payloads, contact mapping, and collection writes. Keep them stable after launch.</p>
                             </div>
-                            <Button size="sm" variant="outline" onClick={addFormDraftField} disabled={!canEditForms} title={!canEditForms ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
-                              Add field
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className="sr-only" htmlFor="form-new-field-type">Field type</label>
+                              <select
+                                id="form-new-field-type"
+                                value={newFormFieldType}
+                                onChange={(event) => setNewFormFieldType(event.target.value as FormFieldType)}
+                                disabled={!canEditForms}
+                                className="min-h-9 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                aria-label="New form field type"
+                                data-testid="form-new-field-type-select"
+                              >
+                                {FORM_FIELD_TYPES.map((type) => (
+                                  <option key={type} value={type}>{FORM_FIELD_TYPE_LABELS[type]}</option>
+                                ))}
+                              </select>
+                              <Button size="sm" variant="outline" onClick={() => addFormDraftField()} disabled={!canEditForms} title={!canEditForms ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
+                                Add field
+                              </Button>
+                            </div>
                           </div>
                           <div className="mt-3 grid gap-3">
                             {formDraft.fields.map((field, fieldIndex) => (
@@ -5104,6 +5129,56 @@ const getUniqueFormDraftFieldKey = (fields: FormFieldDefinition[], baseKey: stri
   }
 
   return candidate;
+};
+
+const buildFormDraftFieldPreset = (
+  fields: FormFieldDefinition[],
+  type: FormFieldType,
+  nextNumber: number,
+): FormFieldDefinition => {
+  const baseField = (baseKey: string, label: string, patch: Partial<FormFieldDefinition> = {}): FormFieldDefinition => ({
+    key: getUniqueFormDraftFieldKey(fields, baseKey),
+    label,
+    type,
+    required: false,
+    ...patch,
+  });
+
+  if (type === 'text') {
+    return baseField(`field_${nextNumber}`, `Field ${nextNumber}`);
+  }
+  if (type === 'email') {
+    return baseField('email', 'Email', { required: true, placeholder: 'you@example.com' });
+  }
+  if (type === 'tel') {
+    return baseField('phone', 'Phone', { placeholder: '+1 555 0100' });
+  }
+  if (type === 'url') {
+    return baseField('website', 'Website', { placeholder: 'https://example.com' });
+  }
+  if (type === 'textarea') {
+    return baseField('message', 'Message', { placeholder: 'Tell us what you need' });
+  }
+  if (type === 'number') {
+    return baseField('quantity', 'Quantity', { placeholder: '1', validation: [{ type: 'min', value: 0, message: 'Quantity must be at least 0.' }] });
+  }
+  if (type === 'select') {
+    return baseField('choice', 'Choice', { options: ['Option one', 'Option two'] });
+  }
+  if (type === 'radio') {
+    return baseField('preference', 'Preference', { options: ['Option one', 'Option two'] });
+  }
+  if (type === 'checkbox') {
+    return baseField('consent', 'Consent', { helpText: 'Use for opt-in, agreement, or confirmation fields.' });
+  }
+  if (type === 'date') {
+    return baseField('date', 'Date');
+  }
+  if (type === 'file') {
+    return baseField('attachment', 'Attachment', { helpText: 'Accepts uploaded files submitted with this form.' });
+  }
+
+  return baseField(`field_${nextNumber}`, `Field ${nextNumber}`, { type: 'text' });
 };
 
 const parseOptionsText = (value: string): string[] | undefined => {

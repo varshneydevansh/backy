@@ -74,6 +74,14 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('validation: field.validation ? field.validation.map((rule) => ({ ...rule })) : undefined'),
     'Forms builder must expose duplicate field controls that preserve field configuration with a unique key',
   );
+  assert(
+    source.includes('buildFormDraftFieldPreset') &&
+      source.includes('data-testid="form-new-field-type-select"') &&
+      source.includes('const FORM_FIELD_TYPE_LABELS') &&
+      source.includes("return baseField('email', 'Email', { required: true") &&
+      source.includes("return baseField('attachment', 'Attachment'"),
+    'Forms builder must expose typed add-field presets for common form controls',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',
