@@ -288,9 +288,11 @@ This document defines how custom frontends, admin UI, and public renderer intera
 
 - `GET /api/sites/:siteId/navigation`
   - Public navigation contract for external frontends.
-  - Returns `{ success, requestId, data: { site, navigation: { primary } } }`.
-  - Navigation items include page id, label/title, slug, canonical path, status, homepage flag, and child arrays.
-  - Current implementation derives primary navigation from publishable pages in the runtime content adapter. Production completion still needs editable menus, nested page hierarchy, redirects, locale-aware paths, and custom/external links.
+  - Returns `{ success, requestId, data: { site, navigation: { primary, footer, layout } } }`.
+  - Navigation items support `type: "page" | "route" | "url"`, page id, label/title, slug, canonical path, href/path, target, status, homepage flag, visibility filtering, and nested child arrays.
+  - Public responses use the persisted site navigation settings when configured and fall back to publishable pages when no primary menu has been authored. Draft and future-scheduled page items are filtered from the public contract.
+  - `PATCH /api/admin/sites/:siteId/navigation` is the editable menu API. It requires `sites.configure`, normalizes primary/footer/layout input, validates referenced page ids across nested menu items, persists configured route/page/custom URL links, records `site.navigation.updated` audit/webhook/cache invalidation evidence, and returns both raw settings and resolved public navigation.
+  - Redirect and 410/gone route management is handled by the adjacent redirects API below. Locale-aware route variants are exposed through manifest/OpenAPI delivery metadata and site-scoped localization settings.
 
 - `GET /api/admin/sites/:siteId/redirects`
 - `POST /api/admin/sites/:siteId/redirects`

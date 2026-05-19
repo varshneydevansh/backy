@@ -183,6 +183,41 @@ function assertSiteSettingsLocalizationSource() {
   assert(apiContracts.includes('`localization`'), 'API contracts must document localization as a site-scoped settings section');
 }
 
+function assertNavigationContractSource() {
+  const adminNavigationRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/navigation/route.ts', import.meta.url),
+    'utf8',
+  );
+  const publicNavigationRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/navigation/route.ts', import.meta.url),
+    'utf8',
+  );
+  const navigationLib = fs.readFileSync(
+    new URL('../src/lib/navigation.ts', import.meta.url),
+    'utf8',
+  );
+  const apiContracts = fs.readFileSync(
+    new URL('../../../specs/backy-api-contracts.md', import.meta.url),
+    'utf8',
+  );
+
+  assert(adminNavigationRoute.includes('PATCH /api/admin/sites/[siteId]/navigation'), 'Admin navigation route must expose editable menu updates');
+  assert(adminNavigationRoute.includes('permission: "sites.configure"'), 'Admin navigation updates must require sites.configure');
+  assert(adminNavigationRoute.includes('normalizeNavigationConfig'), 'Admin navigation route must normalize submitted menus');
+  assert(adminNavigationRoute.includes('missingPageIds') && adminNavigationRoute.includes('incompletePageItems'), 'Admin navigation route must validate nested page references');
+  assert(adminNavigationRoute.includes('site.navigation.updated'), 'Admin navigation route must audit navigation updates');
+  assert(adminNavigationRoute.includes('deliverSiteWebhooks'), 'Admin navigation route must dispatch site webhooks');
+  assert(adminNavigationRoute.includes('recordSiteCacheInvalidation'), 'Admin navigation route must invalidate public navigation caches');
+  assert(publicNavigationRoute.includes('buildSiteNavigation'), 'Public navigation route must resolve configured site navigation');
+  assert(publicNavigationRoute.includes("cache: 'discovery'"), 'Public navigation route must use discovery cache contract headers');
+  assert(navigationLib.includes("type: 'page' | 'route' | 'url'"), 'Navigation contract must support page, route, and URL items');
+  assert(navigationLib.includes('configuredPrimary.length > 0 ? configuredPrimary : fallbackNavigationFromPages'), 'Public navigation must use configured menus before page fallback');
+  assert(navigationLib.includes('footer: configuredFooter') && navigationLib.includes('layout: normalizeNavigationLayout'), 'Public navigation must expose footer and layout metadata');
+  assert(apiContracts.includes('navigation: { primary, footer, layout }'), 'API contracts must document primary/footer/layout navigation output');
+  assert(apiContracts.includes('PATCH /api/admin/sites/:siteId/navigation'), 'API contracts must document editable admin navigation API');
+  assert(!apiContracts.includes('Production completion still needs editable menus'), 'API contracts must not contain stale editable-navigation gap text');
+}
+
 function assertAdminSettingsContractSource() {
   const source = fs.readFileSync(
     new URL('../src/app/api/admin/settings/route.ts', import.meta.url),
@@ -203,9 +238,9 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('runtimeDatabase: getDatabaseRuntimeSummary()'), 'Admin settings response must include database runtime diagnostics');
   assert(source.includes('runtimeSupabase: getSupabaseRuntimeSummary()'), 'Admin settings response must include Supabase runtime diagnostics');
   assert(source.includes('runtimeVercel: getVercelRuntimeSummary()'), 'Admin settings response must include Vercel runtime diagnostics');
-  assert(source.includes('runtimeCommerce: getCommerceRuntimeSummary(settings)'), 'Admin settings response must include commerce runtime diagnostics');
-  assert(source.includes('runtimeInteractiveComponents: getInteractiveComponentRuntimeSummary()'), 'Admin settings response must include interactive runtime diagnostics');
-  assert(source.includes('providerCertification: providerCertificationContract()'), 'Admin settings response must include provider certification metadata');
+  assert(source.includes('const runtimeCommerce = getCommerceRuntimeSummary(settings)') && source.includes('runtimeCommerce,'), 'Admin settings response must include commerce runtime diagnostics');
+  assert(source.includes('const runtimeInteractiveComponents = getInteractiveComponentRuntimeSummary()') && source.includes('runtimeInteractiveComponents,'), 'Admin settings response must include interactive runtime diagnostics');
+  assert(source.includes('providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence)'), 'Admin settings response must include provider certification metadata');
   assert(source.includes('backy.settings-provider-certification-handoff.v1'), 'Admin settings provider certification must expose a stable handoff schema');
   assert(source.includes('external-live-provider-gate'), 'Admin settings provider certification must expose external live-provider status');
   assert(source.includes('npm run ci:settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider gate');
@@ -1049,6 +1084,7 @@ if (process.env.BACKY_ADMIN_CONTRACT_SOURCE_GUARD === '1') {
   assertInteractiveContractSource();
   assertHostedFeedErrorContractSource();
   assertSiteSettingsLocalizationSource();
+  assertNavigationContractSource();
   assertAdminSettingsContractSource();
   assertAdminPageContentValidationSource();
   console.log(JSON.stringify({ ok: true, guard: 'admin-contract-source' }));
@@ -1059,6 +1095,7 @@ try {
   assertInteractiveSandboxRouteSource();
   assertHostedFeedErrorContractSource();
   assertSiteSettingsLocalizationSource();
+  assertNavigationContractSource();
   assertAdminPageContentValidationSource();
   await loginAdminApi();
   const initialSettings = await request('/api/admin/settings');
