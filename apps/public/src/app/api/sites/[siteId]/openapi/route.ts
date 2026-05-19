@@ -1220,6 +1220,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   description: "Media not found or private",
                   headers: mediaTransformErrorResponseHeaders,
                 },
+                "423": {
+                  description:
+                    "Media asset is quarantined and cannot be transformed",
+                  headers: mediaTransformErrorResponseHeaders,
+                },
               },
             },
           },

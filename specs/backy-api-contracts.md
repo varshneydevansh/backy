@@ -229,6 +229,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Query: `width`/`w` from `16..3840`, optional `quality`/`q` from `1..100`.
   - Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`; invalid quality values return `400 INVALID_TRANSFORM_QUALITY`.
   - Only public image media is accepted.
+  - Quarantined media transform requests return `423 MEDIA_QUARANTINED` and do not redirect to the optimizer.
   - Successful requests return a `307` redirect to Backy's image optimizer with `x-backy-transform-width` and `x-backy-transform-quality` headers.
   - Successful transform redirects increment Backy-served transform delivery analytics under `media.metadata.mediaDelivery`.
   - Non-image or private assets return contract error envelopes.

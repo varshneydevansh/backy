@@ -89,8 +89,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ? await repositories.media.getById(site.id, mediaId)
       : getMediaById(site.id, mediaId);
 
-    if (!media || media.visibility !== 'public' || isMediaQuarantined(media)) {
+    if (!media || media.visibility !== 'public') {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
+    }
+
+    if (isMediaQuarantined(media)) {
+      return errorResponse(423, 'MEDIA_QUARANTINED', 'This media asset is quarantined and cannot be transformed.', requestId);
     }
 
     if (media.type !== 'image' || !media.mimeType.startsWith('image/')) {

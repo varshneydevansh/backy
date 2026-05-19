@@ -155,6 +155,11 @@ assert(
   'Public media transform route must reject invalid width/quality instead of clamping or defaulting invalid query values.',
 );
 assert(
+  publicMediaTransformRoute.includes("errorResponse(423, 'MEDIA_QUARANTINED'") &&
+    publicMediaTransformRoute.includes('cannot be transformed'),
+  'Public media transform route must expose a distinct quarantined transform error.',
+);
+assert(
   mediaRoute.includes('const mimeType = file.type || "application/octet-stream"') ||
     mediaRoute.includes("const mimeType = file.type || 'application/octet-stream'"),
   'Media upload route must preserve a safe default MIME type for generic file uploads.',
@@ -215,6 +220,10 @@ assert(
 assert(
   openApiRoute.includes('Invalid transform width/quality or unsupported media type'),
   'Public OpenAPI media transform route must document invalid width/quality errors.',
+);
+assert(
+  openApiRoute.includes('Media asset is quarantined and cannot be transformed'),
+  'Public OpenAPI media transform route must document quarantined transform errors.',
 );
 assert(
   openApiRoute.includes('"w"') &&
@@ -294,6 +303,10 @@ assert(
   apiContracts.includes('Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`') &&
     apiContracts.includes('invalid quality values return `400 INVALID_TRANSFORM_QUALITY`'),
   'API contract docs must describe invalid public media transform query errors.',
+);
+assert(
+  apiContracts.includes('Quarantined media transform requests return `423 MEDIA_QUARANTINED`'),
+  'API contract docs must describe quarantined public media transform errors.',
 );
 
 console.log(JSON.stringify({
