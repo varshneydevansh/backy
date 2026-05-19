@@ -268,6 +268,14 @@ const assertEditorInteractiveSandboxPreviewSource = () => {
   assert(!source.includes("INTERACTIVE_IFRAME_SANDBOX_TOKENS = new Set([\n  'allow-same-origin'"), 'Editor sandbox preview must not allow same-origin sandbox tokens by default');
 };
 
+const assertCanvasNestedDropTargetSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
+  assert(source.includes('const [isNestedDropActive, setIsNestedDropActive]'), 'Editor canvas elements must track nested drop-target hover state');
+  assert(source.includes('data-nested-drop-target={canReceiveNestedDrop ?') && source.includes('data-nested-drop-active={isNestedDropActive ?'), 'Editor canvas elements must expose nested drop-target data attributes');
+  assert(source.includes('data-testid="editor-nested-drop-target"') && source.includes('Drop inside {element.name || normalizeCanvasElementType(element.type)}'), 'Editor canvas must show nested drop-target feedback while dragging components into containers');
+  assert(source.includes("event.dataTransfer.dropEffect = 'copy';") && source.includes('setIsNestedDropActive(false);'), 'Editor nested drop targets must set copy drop effect and clear hover state on leave/drop');
+};
+
 const assertInteractiveRegistryVersionPinningSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
   assert(source.includes('interactiveComponentOptionValue'), 'Interactive registry selector must use a unique option value helper');
@@ -14665,6 +14673,7 @@ const main = async () => {
   assertCanvasEditorShortcutSource();
   assertPropertyPanelColorControlsSource();
   assertEditorInteractiveSandboxPreviewSource();
+  assertCanvasNestedDropTargetSource();
   assertInteractiveRegistryVersionPinningSource();
   assertComponentLibraryEmptyStateSource();
   assertMediaLibraryModalEmptyStateSource();

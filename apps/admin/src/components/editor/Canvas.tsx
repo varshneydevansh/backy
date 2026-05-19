@@ -2660,6 +2660,7 @@ function CanvasElementComponent({
   const isLocked = element.locked === true;
   const isEditingEnabled = isEditing && !isPreview && !disabled;
   const canReceiveNestedDrop = !disabled && !isLocked && canAcceptNestedDrop(element.type);
+  const [isNestedDropActive, setIsNestedDropActive] = useState(false);
   const [formPreviewSubmitState, setFormPreviewSubmitState] = useState<FormPreviewSubmitState>({
     status: 'idle',
     message: '',
@@ -2703,13 +2704,30 @@ function CanvasElementComponent({
   const containerDropHandlers = isPreview || disabled
     ? {}
     : {
+        onDragEnter: (event: React.DragEvent) => {
+          if (canReceiveNestedDrop) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = 'copy';
+            setIsNestedDropActive(true);
+          }
+        },
         onDragOver: (event: React.DragEvent) => {
           if (canReceiveNestedDrop) {
             event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = 'copy';
+            setIsNestedDropActive(true);
+          }
+        },
+        onDragLeave: (event: React.DragEvent) => {
+          if (canReceiveNestedDrop && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setIsNestedDropActive(false);
           }
         },
         onDrop: (event: React.DragEvent) => {
           if (onDrop && canReceiveNestedDrop) {
+            setIsNestedDropActive(false);
             onDrop(event, element.id);
           }
         },
@@ -4013,16 +4031,7 @@ function CanvasElementComponent({
 
         return (
           <div
-            onDragOver={(e) => {
-              if (!isPreview && onDrop && canReceiveNestedDrop) {
-                e.preventDefault();
-              }
-            }}
-            onDrop={(e) => {
-              if (!isPreview && onDrop && canReceiveNestedDrop) {
-                onDrop(e, element.id);
-              }
-            }}
+            {...containerDropHandlers}
             style={{
               ...sharedStyle,
               width: '100%',
@@ -4662,11 +4671,14 @@ function CanvasElementComponent({
         !isPreview && !disabled && !isEditing && 'cursor-move select-none',
         !isPreview && !disabled && !isSelected && 'hover:ring-1 hover:ring-sky-300 hover:ring-offset-1 hover:ring-offset-white',
         isSelected && !isPreview && !disabled && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white',
+        isNestedDropActive && !isPreview && !disabled && 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-white shadow-[0_18px_45px_rgba(16,185,129,0.22)]',
         isBeingMoved && !isPreview && 'opacity-95 shadow-[0_16px_40px_rgba(14,165,233,0.22)]',
         isHidden && !isPreview && 'opacity-25',
         (isLocked || disabled) && !isPreview && 'cursor-default'
       )}
       data-element-id={element.id}
+      data-nested-drop-target={canReceiveNestedDrop ? 'true' : undefined}
+      data-nested-drop-active={isNestedDropActive ? 'true' : 'false'}
       data-selected-ids={isSelected ? selectedIds.join(',') : undefined}
       data-backy-text-editor={isTextElement ? 'true' : undefined}
       data-backy-text-editor-editable={String(isTextElement && isEditingEnabled)}
@@ -4700,6 +4712,19 @@ function CanvasElementComponent({
       onDoubleClick={() => onDoubleClick()}
     >
       {renderContent()}
+
+      {isNestedDropActive && !isPreview && !disabled && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[70] flex items-start justify-center rounded-[inherit] border border-emerald-500/60 bg-emerald-500/10 p-2"
+          data-testid="editor-nested-drop-target"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="rounded-full bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm">
+            Drop inside {element.name || normalizeCanvasElementType(element.type)}
+          </span>
+        </div>
+      )}
 
       {/* Resize Handles (only when selected and not in preview) */}
       {shouldShowTransformControls && !isPreview && !disabled && (
