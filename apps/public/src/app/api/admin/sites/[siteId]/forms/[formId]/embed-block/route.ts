@@ -260,6 +260,10 @@ const buildFormEmbedContent = (
   const frontendDesign = siteFrontendDesign(siteSettings);
   const colors = frontendDesign?.tokens?.colors || {};
   const fonts = frontendDesign?.tokens?.fonts || {};
+  const contactShare = form.contactShare?.enabled ? form.contactShare : undefined;
+  const collectionTarget = form.collectionTarget?.enabled
+    ? form.collectionTarget
+    : undefined;
   const primaryColor = textValue(colors.primary) || "#0f766e";
   const textColor = textValue(colors.text) || "#111827";
   const surfaceColor = textValue(colors.surface) || "#ffffff";
@@ -337,11 +341,24 @@ const buildFormEmbedContent = (
       moderationMode: form.moderationMode || "manual",
       frontendDesignTemplateId:
         settingText(form, "frontendDesignTemplateId") || "",
-      contactShare: form.contactShare
-        ? (cloneJson(form.contactShare) as BackyJsonValue)
+      contactShareEnabled: Boolean(contactShare?.enabled),
+      contactShareNameField: contactShare?.nameField || "",
+      contactShareEmailField: contactShare?.emailField || "",
+      contactSharePhoneField: contactShare?.phoneField || "",
+      contactShareNotesField: contactShare?.notesField || "",
+      contactShareDedupeByEmail:
+        Boolean(contactShare?.emailField) && contactShare?.dedupeByEmail !== false,
+      collectionWriteEnabled: Boolean(collectionTarget?.enabled),
+      collectionWriteCollectionId: collectionTarget?.collectionId || "",
+      collectionWriteSlugField: collectionTarget?.slugField || "",
+      collectionWriteFieldMap: collectionTarget?.fieldMap
+        ? (cloneJson(collectionTarget.fieldMap) as BackyJsonValue)
         : null,
-      collectionTarget: form.collectionTarget
-        ? (cloneJson(form.collectionTarget) as BackyJsonValue)
+      contactShare: contactShare
+        ? (cloneJson(contactShare) as BackyJsonValue)
+        : null,
+      collectionTarget: collectionTarget
+        ? (cloneJson(collectionTarget) as BackyJsonValue)
         : null,
     },
     styles: {

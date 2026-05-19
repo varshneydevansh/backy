@@ -31,6 +31,7 @@ const assert = (condition, message) => {
 const assertFormsPersistenceCertificationSource = () => {
   const source = fs.readFileSync(new URL('../src/routes/forms.tsx', import.meta.url), 'utf8');
   const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
+  const embedBlockRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/forms/[formId]/embed-block/route.ts', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   assert(
@@ -150,10 +151,22 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(
     source.includes('buildSampleContactShareOverride') &&
       source.includes('const contactShareOverride = buildSampleContactShareOverride(form)') &&
-      source.includes('const contactShareOverride = buildSampleContactShareOverride(template)') &&
+      source.includes('const contactShareOverride = buildSampleContactShareOverride({ ...template, contactShare })') &&
       source.includes('const hasIdentityMapping = Boolean(contactShare?.nameField || contactShare?.emailField || contactShare?.phoneField)') &&
       source.includes('dedupeByEmail: contactShare.dedupeByEmail'),
     'Forms handoff sample payloads must use normalized contact-share overrides with usable identity mappings',
+  );
+  assert(
+    source.includes('contactShareDedupeByEmail: contactShare?.dedupeByEmail') &&
+      source.includes('collectionWriteEnabled: Boolean(collectionTarget?.enabled)') &&
+      source.includes('collectionWriteCollectionId: collectionTarget?.collectionId') &&
+      source.includes('collectionWriteFieldMap: collectionTarget?.fieldMap') &&
+      embedBlockRouteSource.includes('contactShareEnabled: Boolean(contactShare?.enabled)') &&
+      embedBlockRouteSource.includes('contactShareDedupeByEmail:') &&
+      embedBlockRouteSource.includes('collectionWriteEnabled: Boolean(collectionTarget?.enabled)') &&
+      embedBlockRouteSource.includes('collectionWriteCollectionId: collectionTarget?.collectionId || ""') &&
+      embedBlockRouteSource.includes('collectionWriteFieldMap: collectionTarget?.fieldMap'),
+    'Forms template and embed-block handoffs must emit flattened canvas props for contact and collection routing',
   );
   assert(
     source.includes('data-testid="form-field-default-value-input"') &&
@@ -2044,6 +2057,16 @@ const createEmbedBlockInUi = async (client, formId) => {
     if (created && state.result) {
       assert(created.content?.elements?.[0]?.type === 'form', `Embed section does not contain a form element: ${JSON.stringify(created.content)}`);
       assert(created.content.elements[0].props?.formId === formId, `Embed formId not preserved: ${JSON.stringify(created.content.elements[0].props)}`);
+      const embedProps = created.content.elements[0].props || {};
+      if (embedProps.contactShare?.enabled) {
+        assert(embedProps.contactShareEnabled === true, `Embed contact-share flattened props missing: ${JSON.stringify(embedProps)}`);
+        assert(embedProps.contactShareEmailField || embedProps.contactSharePhoneField, `Embed contact-share identity props missing: ${JSON.stringify(embedProps)}`);
+      }
+      if (embedProps.collectionTarget?.enabled) {
+        assert(embedProps.collectionWriteEnabled === true, `Embed collection-write flattened props missing: ${JSON.stringify(embedProps)}`);
+        assert(embedProps.collectionWriteCollectionId === embedProps.collectionTarget.collectionId, `Embed collection-write collection id mismatch: ${JSON.stringify(embedProps)}`);
+        assert(embedProps.collectionWriteFieldMap, `Embed collection-write field map missing: ${JSON.stringify(embedProps)}`);
+      }
       assert(created.metadata?.frontendDesignTemplateId, `Embed frontend design metadata missing: ${JSON.stringify(created.metadata)}`);
       assert(created.metadata?.formEmbedBlock?.definitionUrl?.includes(`/forms/${formId}/definition`), `Definition URL missing from embed metadata: ${JSON.stringify(created.metadata)}`);
       return created;

@@ -6083,7 +6083,9 @@ const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown 
 };
 
 function buildTemplateManifest(template: FormTemplateBlueprint) {
-  const contactShareOverride = buildSampleContactShareOverride(template);
+  const contactShare = normalizeFormContactShare(template.contactShare, template.fields);
+  const collectionTarget = normalizeFormCollectionTarget(template.collectionTarget, template.fields);
+  const contactShareOverride = buildSampleContactShareOverride({ ...template, contactShare });
   const samplePayload = {
     values: Object.fromEntries(template.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
     requestId: `web-${template.id}-request`,
@@ -6104,8 +6106,8 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
       honeypot: true,
       captcha: false,
     },
-    contactShare: template.contactShare,
-    collectionTarget: template.collectionTarget,
+    contactShare: contactShare?.enabled ? contactShare : undefined,
+    collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined,
     fields: template.fields,
     editorFormBlockProps: {
       formId: `form-{pageSlug}-${template.id}`,
@@ -6118,11 +6120,16 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
       enableHoneypot: true,
       enableCaptcha: false,
       moderationMode: template.moderationMode,
-      contactShareEnabled: Boolean(template.contactShare?.enabled),
-      contactShareNameField: template.contactShare?.nameField,
-      contactShareEmailField: template.contactShare?.emailField,
-      contactSharePhoneField: template.contactShare?.phoneField,
-      contactShareNotesField: template.contactShare?.notesField,
+      contactShareEnabled: Boolean(contactShare?.enabled),
+      contactShareNameField: contactShare?.nameField,
+      contactShareEmailField: contactShare?.emailField,
+      contactSharePhoneField: contactShare?.phoneField,
+      contactShareNotesField: contactShare?.notesField,
+      contactShareDedupeByEmail: contactShare?.dedupeByEmail,
+      collectionWriteEnabled: Boolean(collectionTarget?.enabled),
+      collectionWriteCollectionId: collectionTarget?.collectionId,
+      collectionWriteSlugField: collectionTarget?.slugField,
+      collectionWriteFieldMap: collectionTarget?.fieldMap,
     },
     pageTemplateHandoff: {
       route: '/pages/new',
