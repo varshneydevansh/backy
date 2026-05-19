@@ -1746,6 +1746,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 126 + index * 140, width: 660, height: 112 }"),
     'Blog post page starter must seed explicit tablet/mobile responsive overrides for article, sidebar, taxonomy, and related sections.',
   );
+  assert(
+    source.includes("id: 'team-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 590 }") &&
+      source.includes("id: 'team-role-filter'") &&
+      source.includes("mobile: { x: 24, y: 388, width: 327, height: 130 }") &&
+      source.includes("id: 'team-roster-section'") &&
+      source.includes("tablet: { y: 460, width: 768, height: 1120 }") &&
+      source.includes("id: `team-profile-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 116 + index * 334, width: 327, height: 310 }") &&
+      source.includes("id: `team-profile-social-${index}`") &&
+      source.includes("tablet: { x: 132, y: 206, width: 126, height: 40 }") &&
+      source.includes("id: 'team-culture-section'") &&
+      source.includes("mobile: { y: 1780, width: 375, height: 600 }") &&
+      source.includes("id: 'team-values-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 226 }") &&
+      source.includes("id: 'team-hiring-card'") &&
+      source.includes("tablet: { x: 54, y: 292, width: 660, height: 190 }"),
+    'Team page starter must seed explicit tablet/mobile responsive overrides for role filters, people cards, and culture sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

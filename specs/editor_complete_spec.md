@@ -560,6 +560,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Testimonials starter pages now seed explicit tablet/mobile responsive overrides for rating metadata, review source filters, stacked review cards, logo-wall proof, and inquiry CTAs so social-proof sections remain readable and actionable across breakpoints.
   - Blog-index starter pages now seed explicit tablet/mobile responsive overrides for publication hero content, featured post cards, latest article rows, and reading-time metadata so blog listing pages remain readable across breakpoints.
   - Blog-post starter pages now seed explicit tablet/mobile responsive overrides for article hero metadata, featured media, rich body/callout blocks, author/taxonomy sidebars, tags, and related post cards so long-form posts remain readable across breakpoints.
+  - Team starter pages now seed explicit tablet/mobile responsive overrides for role filters, stacked profile cards, profile links, culture/value cards, and hiring CTAs so people pages remain readable and actionable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves

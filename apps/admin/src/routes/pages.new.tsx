@@ -9689,24 +9689,40 @@ function buildTemplateElements(input: {
                 height: 320,
                 dataBindings: [{ source: 'team', mode: 'overview', fields: ['people', 'roles', 'departments', 'hiringUrl'] }],
                 props: { backgroundColor: '#fdf2f8', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 590 },
+                },
                 children: [
                     createCanvasElement('text', 74, 56, {
                         id: 'team-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'People', fontSize: 13, fontWeight: '800', color: '#be185d', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 92, {
                         id: 'team-heading',
                         width: 620,
                         height: 84,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 520, height: 92, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 194, {
                         id: 'team-intro-copy',
                         width: 620,
                         height: 76,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                        responsive: {
+                            tablet: { x: 56, y: 204, width: 520, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 800, 88, {
                         id: 'team-role-filter',
@@ -9714,18 +9730,28 @@ function buildTemplateElements(input: {
                         height: 120,
                         dataBindings: [{ source: 'team', mode: 'filters', fields: ['roles', 'departments'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fbcfe8', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 320, width: 360, height: 110 },
+                            mobile: { x: 24, y: 388, width: 327, height: 130 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'team-role-filter-heading',
                                 width: 190,
                                 height: 28,
                                 props: { content: 'Browse by role', level: 'h3', fontSize: 20, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 250 },
+                                },
                             }),
                             createCanvasElement('text', 24, 68, {
                                 id: 'team-role-filter-copy',
                                 width: 210,
                                 height: 24,
                                 props: { content: 'Leadership / Design / Ops', fontSize: 14, color: '#be185d' },
+                                responsive: {
+                                    mobile: { width: 250 },
+                                },
                             }),
                         ],
                     }),
@@ -9737,12 +9763,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'team', mode: 'roster', fields: ['people', 'roles', 'departments', 'profileImages', 'socialLinks'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 590, width: 375, height: 1190 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 58, {
                         id: 'team-roster-heading',
                         width: 380,
                         height: 42,
                         props: { content: 'Team roster', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 380 },
+                            mobile: { x: 24, y: 46, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...profiles.map((profile, index) => createCanvasElement('box', 74 + index * 350, 136, {
                         id: `team-profile-card-${index}`,
@@ -9750,6 +9784,10 @@ function buildTemplateElements(input: {
                         height: 330,
                         dataBindings: [{ source: 'team', mode: 'profile', index }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#f9a8d4', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 126 + index * 310, width: 660, height: 270 },
+                            mobile: { x: 24, y: 116 + index * 334, width: 327, height: 310 },
+                        },
                         children: [
                             createCanvasElement('box', 24, 24, {
                                 id: `team-profile-media-${index}`,
@@ -9757,6 +9795,10 @@ function buildTemplateElements(input: {
                                 height: 88,
                                 dataBindings: [{ source: 'team', mode: 'profile', index, field: 'image', targetPath: 'props.media' }],
                                 props: { backgroundColor: '#fce7f3', borderRadius: 8, borderColor: '#fbcfe8', borderWidth: 1, borderStyle: 'solid' },
+                                responsive: {
+                                    tablet: { width: 84, height: 84 },
+                                    mobile: { width: 84, height: 84 },
+                                },
                             }),
                             createCanvasElement('heading', 24, 134, {
                                 id: `team-profile-name-${index}`,
@@ -9764,6 +9806,10 @@ function buildTemplateElements(input: {
                                 height: 32,
                                 props: { content: profile.name, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'team', mode: 'profile', index, field: 'name', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { x: 132, y: 30, width: 300 },
+                                    mobile: { y: 128, width: 260 },
+                                },
                             }),
                             createCanvasElement('text', 24, 176, {
                                 id: `team-profile-role-${index}`,
@@ -9771,6 +9817,10 @@ function buildTemplateElements(input: {
                                 height: 24,
                                 props: { content: profile.role, fontSize: 14, fontWeight: '800', color: '#be185d' },
                                 dataBindings: [{ source: 'team', mode: 'profile', index, field: 'role', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { x: 132, y: 72, width: 300 },
+                                    mobile: { y: 168, width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 218, {
                                 id: `team-profile-bio-${index}`,
@@ -9778,6 +9828,10 @@ function buildTemplateElements(input: {
                                 height: 66,
                                 props: { content: profile.bio, fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
                                 dataBindings: [{ source: 'team', mode: 'profile', index, field: 'bio', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { x: 132, y: 112, width: 420, height: 66 },
+                                    mobile: { y: 208, width: 270, height: 58 },
+                                },
                             }),
                             createCanvasElement('button', 24, 292, {
                                 id: `team-profile-social-${index}`,
@@ -9785,6 +9839,10 @@ function buildTemplateElements(input: {
                                 height: 38,
                                 props: { label: 'Profile link', backgroundColor: '#fdf2f8', color: '#9d174d', borderRadius: 8, fontSize: 13, fontWeight: '800', action: 'team.profile.open' },
                                 dataBindings: [{ source: 'team', mode: 'profile', index, field: 'socialLinks.primary', targetPath: 'props.href' }],
+                                responsive: {
+                                    tablet: { x: 132, y: 206, width: 126, height: 40 },
+                                    mobile: { y: 270, width: 126, height: 40 },
+                                },
                             }),
                         ],
                     })),
@@ -9796,6 +9854,10 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'team', mode: 'culture', fields: ['values', 'hiringUrl', 'contactEmail'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 520 },
+                    mobile: { y: 1780, width: 375, height: 600 },
+                },
                 children: [
                     createCanvasElement('box', 74, 64, {
                         id: 'team-values-card',
@@ -9803,18 +9865,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'team', mode: 'team-values', fields: ['values', 'operatingPrinciples', 'location'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 190 },
+                            mobile: { x: 24, y: 46, width: 327, height: 226 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 28, {
                                 id: 'team-values-heading',
                                 width: 300,
                                 height: 34,
                                 props: { content: 'How we work', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 40, props: { fontSize: 24 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 28, 82, {
                                 id: 'team-values-copy',
                                 width: 400,
                                 height: 70,
                                 props: { content: 'Use this card for operating principles, locations, advisory notes, or the trust markers that help visitors understand the team.', fontSize: 15, lineHeight: 1.55, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 520 },
+                                    mobile: { y: 92, width: 270, height: 104 },
+                                },
                             }),
                         ],
                     }),
@@ -9824,18 +9897,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'team', mode: 'hiring', fields: ['hiringUrl', 'openRoles', 'contactEmail'] }],
                         props: { backgroundColor: '#831843', borderRadius: 8, borderColor: '#831843', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 292, width: 660, height: 190 },
+                            mobile: { x: 24, y: 316, width: 327, height: 220 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 26, {
                                 id: 'team-hiring-heading',
                                 width: 260,
                                 height: 34,
                                 props: { content: 'Building with us?', level: 'h2', fontSize: 26, fontWeight: '800', color: '#ffffff' },
+                                responsive: {
+                                    mobile: { width: 260, height: 40, props: { fontSize: 24 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 28, 78, {
                                 id: 'team-hiring-copy',
                                 width: 310,
                                 height: 54,
                                 props: { content: 'Bind open roles, partner inquiries, or a recruiting form from your people data.', fontSize: 15, lineHeight: 1.45, color: '#fce7f3' },
+                                responsive: {
+                                    tablet: { width: 500 },
+                                    mobile: { y: 88, width: 270, height: 76 },
+                                },
                             }),
                             createCanvasElement('button', 28, 140, {
                                 id: 'team-hiring-button',
@@ -9843,6 +9927,9 @@ function buildTemplateElements(input: {
                                 height: 40,
                                 props: { label: 'Open roles', backgroundColor: '#ffffff', color: '#831843', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'team.hiring.open' },
                                 dataBindings: [{ source: 'team', mode: 'hiring', field: 'hiringUrl', targetPath: 'props.href' }],
+                                responsive: {
+                                    mobile: { y: 164, width: 140, height: 44 },
+                                },
                             }),
                         ],
                     }),
