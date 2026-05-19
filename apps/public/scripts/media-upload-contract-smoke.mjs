@@ -62,6 +62,16 @@ assert(
   'Media list filters must accept type=other for generic files.',
 );
 assert(
+  mediaRoute.includes('uploadVisibilityFromInput') &&
+    mediaRoute.includes('uploadMediaScopeFromInput') &&
+    mediaRoute.includes('mediaUploadTextFieldError') &&
+    mediaRoute.includes('"INVALID_MEDIA_SCOPE"') &&
+    mediaRoute.includes('"INVALID_MEDIA_VISIBILITY"') &&
+    mediaRoute.includes('"INVALID_MEDIA_SCOPE_TARGET"') &&
+    mediaRoute.includes('"INVALID_MEDIA_FOLDER"'),
+  'Media upload route must reject invalid explicit scope, visibility, scopeTargetId, and folderId multipart fields instead of silently defaulting policy metadata.',
+);
+assert(
   mediaRoute.includes('"INVALID_MEDIA_TYPE"') &&
     mediaRoute.includes('"INVALID_MEDIA_VISIBILITY"') &&
     mediaRoute.includes('"INVALID_MEDIA_SCOPE"') &&

@@ -148,9 +148,77 @@ const parseMetadata = (
   }
 };
 
-const parseVisibility = (
+const uploadVisibilityFromInput = (
   value: FormDataEntryValue | null,
-): MediaItem["visibility"] => (value === "private" ? "private" : "public");
+): { visibility: MediaItem["visibility"]; invalid?: boolean } => {
+  if (value === null) {
+    return { visibility: "public" };
+  }
+
+  if (typeof value !== "string") {
+    return { visibility: "public", invalid: true };
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return { visibility: "public" };
+  }
+
+  if (normalized === "public" || normalized === "private") {
+    return { visibility: normalized };
+  }
+
+  return { visibility: "public", invalid: true };
+};
+
+const uploadMediaScopeFromInput = (
+  value: FormDataEntryValue | null,
+): { scope: "global" | "page" | "post"; invalid?: boolean } => {
+  if (value === null) {
+    return { scope: "global" };
+  }
+
+  if (typeof value !== "string") {
+    return { scope: "global", invalid: true };
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return { scope: "global" };
+  }
+
+  if (mediaScopeValues.includes(normalized as "global" | "page" | "post")) {
+    return { scope: normalized as "global" | "page" | "post" };
+  }
+
+  return { scope: "global", invalid: true };
+};
+
+const mediaUploadTextFieldError = (
+  value: FormDataEntryValue | null,
+  field: string,
+  requestId: string,
+) => {
+  if (value === null || typeof value === "string") {
+    return null;
+  }
+
+  if (field === "scopeTargetId") {
+    return errorResponse(
+      400,
+      "INVALID_MEDIA_SCOPE_TARGET",
+      "Invalid media scope target. Use a string id.",
+      requestId,
+    );
+  }
+
+  return errorResponse(
+    400,
+    "INVALID_MEDIA_FOLDER",
+    "Invalid media folder. Use a folder id string.",
+    requestId,
+  );
+};
 
 const parseFontDisplay = (value: FormDataEntryValue | null) =>
   value === "auto" ||
@@ -772,9 +840,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const scope = normalizeMediaScope(formData.get("scope"), "global");
-    const visibility = parseVisibility(formData.get("visibility"));
-    const scopeTargetId = normalizeScopeTargetId(formData.get("scopeTargetId"));
+    const uploadScope = uploadMediaScopeFromInput(formData.get("scope"));
+    if (uploadScope.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_SCOPE",
+        "Invalid media scope. Use global, page, or post.",
+        requestId,
+      );
+    }
+    const uploadVisibility = uploadVisibilityFromInput(
+      formData.get("visibility"),
+    );
+    if (uploadVisibility.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_VISIBILITY",
+        "Invalid media visibility. Use public or private.",
+        requestId,
+      );
+    }
+    const scope = normalizeMediaScope(uploadScope.scope, "global");
+    const visibility = uploadVisibility.visibility;
+    const scopeTargetValue = formData.get("scopeTargetId");
+    const scopeTargetError = mediaUploadTextFieldError(
+      scopeTargetValue,
+      "scopeTargetId",
+      requestId,
+    );
+    if (scopeTargetError) {
+      return scopeTargetError;
+    }
+    const scopeTargetId = normalizeScopeTargetId(scopeTargetValue);
     if (mediaScopeRequiresTarget(scope) && !scopeTargetId) {
       return errorResponse(
         400,
@@ -788,7 +885,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       scope,
       scopeTargetId,
     });
-    const folderId = toStringValue(formData.get("folderId"));
+    const folderValue = formData.get("folderId");
+    const folderError = mediaUploadTextFieldError(
+      folderValue,
+      "folderId",
+      requestId,
+    );
+    if (folderError) {
+      return folderError;
+    }
+    const folderId = toStringValue(folderValue);
     if (folderId) {
       const folder = repositories
         ? await repositories.media.getFolderById(site.id, folderId)
