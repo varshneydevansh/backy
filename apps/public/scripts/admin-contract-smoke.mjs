@@ -286,14 +286,19 @@ function assertAdminPageContentValidationSource() {
     assert(source.includes('"INVALID_PAGE_CONTENT"'), `${label} route must reject non-object/non-array content payloads`);
     assert(source.includes('"INVALID_PAGE_CONTENT_ELEMENTS"'), `${label} route must reject non-array content.elements payloads`);
     assert(source.includes('"INVALID_PAGE_CANVAS_SIZE"'), `${label} route must reject malformed canvasSize payloads`);
+    assert(source.includes('"INVALID_PAGE_STATUS"'), `${label} route must reject invalid explicit status payloads`);
+    assert(source.includes('"SCHEDULED_AT_INVALID"'), `${label} route must reject malformed explicit scheduledAt payloads`);
+    assert(source.includes('pageStatusValidationError'), `${label} route must validate status and schedule payloads before mutation`);
     assert(source.includes('Number.isFinite(width)') && source.includes('Number.isFinite(height)'), `${label} route must require finite canvas dimensions`);
   }
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
       apiContracts.includes('INVALID_PAGE_CONTENT_ELEMENTS') &&
-      apiContracts.includes('INVALID_PAGE_CANVAS_SIZE'),
-    'API contracts must document invalid admin page editor content errors',
+      apiContracts.includes('INVALID_PAGE_CANVAS_SIZE') &&
+      apiContracts.includes('INVALID_PAGE_STATUS') &&
+      apiContracts.includes('SCHEDULED_AT_INVALID'),
+    'API contracts must document invalid admin page editor content and status errors',
   );
 }
 

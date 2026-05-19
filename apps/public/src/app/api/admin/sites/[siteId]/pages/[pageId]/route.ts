@@ -113,6 +113,45 @@ const statusFromInput = (
     ? value
     : undefined;
 
+const hasBodyKey = (body: Record<string, unknown>, key: string) =>
+  Object.prototype.hasOwnProperty.call(body, key);
+
+const pageStatusValidationError = (
+  body: Record<string, unknown>,
+  requestId: string,
+) => {
+  if (
+    hasBodyKey(body, "status") &&
+    body.status !== undefined &&
+    !statusFromInput(body.status)
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_PAGE_STATUS",
+      "Invalid page status. Use draft, published, scheduled, or archived.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "scheduledAt") &&
+    body.scheduledAt !== undefined &&
+    body.scheduledAt !== null &&
+    (typeof body.scheduledAt !== "string" ||
+      (body.scheduledAt.trim().length > 0 &&
+        Number.isNaN(Date.parse(body.scheduledAt))))
+  ) {
+    return errorResponse(
+      400,
+      "SCHEDULED_AT_INVALID",
+      "scheduledAt must be a valid date-time string.",
+      requestId,
+    );
+  }
+
+  return null;
+};
+
 const pageStatusMutationRequiresPublishPermission = (
   currentStatus: "draft" | "published" | "scheduled" | "archived",
   nextStatus: "draft" | "published" | "scheduled" | "archived",
@@ -474,6 +513,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const statusValidationError = pageStatusValidationError(body, requestId);
+      if (statusValidationError) {
+        return statusValidationError;
+      }
       const contentValidationError = pageContentValidationError(
         body.content,
         requestId,
@@ -708,6 +751,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const statusValidationError = pageStatusValidationError(body, requestId);
+    if (statusValidationError) {
+      return statusValidationError;
+    }
     const contentValidationError = pageContentValidationError(
       body.content,
       requestId,

@@ -109,6 +109,17 @@ const statusFromInput = (
     ? value
     : "draft";
 
+const hasBodyKey = (body: Record<string, unknown>, key: string) =>
+  Object.prototype.hasOwnProperty.call(body, key);
+
+const isPageStatusInput = (
+  value: unknown,
+): value is "draft" | "published" | "scheduled" | "archived" =>
+  value === "draft" ||
+  value === "published" ||
+  value === "scheduled" ||
+  value === "archived";
+
 const contentElementsFromInput = (rawContent: unknown): unknown[] => {
   if (isRecord(rawContent) && Array.isArray(rawContent.elements)) {
     return rawContent.elements;
@@ -233,6 +244,42 @@ const pageContentValidationError = (
         requestId,
       );
     }
+  }
+
+  return null;
+};
+
+const pageStatusValidationError = (
+  body: Record<string, unknown>,
+  requestId: string,
+) => {
+  if (
+    hasBodyKey(body, "status") &&
+    body.status !== undefined &&
+    !isPageStatusInput(body.status)
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_PAGE_STATUS",
+      "Invalid page status. Use draft, published, scheduled, or archived.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "scheduledAt") &&
+    body.scheduledAt !== undefined &&
+    body.scheduledAt !== null &&
+    (typeof body.scheduledAt !== "string" ||
+      (body.scheduledAt.trim().length > 0 &&
+        Number.isNaN(Date.parse(body.scheduledAt))))
+  ) {
+    return errorResponse(
+      400,
+      "SCHEDULED_AT_INVALID",
+      "scheduledAt must be a valid date-time string.",
+      requestId,
+    );
   }
 
   return null;
@@ -519,6 +566,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const statusValidationError = pageStatusValidationError(body, requestId);
+      if (statusValidationError) {
+        return statusValidationError;
+      }
       const title = typeof body.title === "string" ? body.title.trim() : "";
       const isHomepage = body.isHomepage === true;
       const slug = isHomepage ? "index" : normalizeSlug(body.slug || title);
@@ -748,6 +799,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const statusValidationError = pageStatusValidationError(body, requestId);
+    if (statusValidationError) {
+      return statusValidationError;
+    }
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const isHomepage = body.isHomepage === true;
     const slug = isHomepage ? "index" : normalizeSlug(body.slug || title);
