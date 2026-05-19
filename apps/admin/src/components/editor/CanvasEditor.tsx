@@ -4139,10 +4139,17 @@ export function CanvasEditor({
         return;
       }
 
+      const isLayerOrderShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
+        e.code === 'BracketLeft' ||
+        e.code === 'BracketRight' ||
+        key === '[' ||
+        key === ']'
+      );
       const isMutationShortcut =
         e.key.startsWith('Arrow') ||
         e.key === 'Delete' ||
         e.key === 'Backspace' ||
+        isLayerOrderShortcut ||
         ((e.ctrlKey || e.metaKey) && ['x', 'v', 'd', 'g', 'y', 'z'].includes(key));
       if (!canEdit && isMutationShortcut) {
         e.preventDefault();
@@ -4222,6 +4229,16 @@ export function CanvasEditor({
         return;
       }
 
+      // Cmd/Ctrl+[ and Cmd/Ctrl+] (Layer order), Shift sends to back/front.
+      if (isLayerOrderShortcut) {
+        e.preventDefault();
+        const isBackward = e.code === 'BracketLeft' || key === '[';
+        handleZOrderChange(isBackward
+          ? e.shiftKey ? 'back' : 'backward'
+          : e.shiftKey ? 'front' : 'forward');
+        return;
+      }
+
       // Ctrl+Y / Cmd+Y or Shift+Ctrl+Z / Shift+Cmd+Z (Redo)
       if ((e.ctrlKey || e.metaKey) && (key === 'y' || (key === 'z' && e.shiftKey))) {
         e.preventDefault();
@@ -4287,6 +4304,7 @@ export function CanvasEditor({
     handleCut,
     handlePaste,
     handleDuplicate,
+    handleZOrderChange,
     handleGroupSelected,
     handleUngroupSelected,
     handleSelectFirstChildLayer,
@@ -4793,7 +4811,7 @@ export function CanvasEditor({
                 onClick={() => handleZOrderChange('back')}
                 disabled={isCanvasMutationDisabled || !canZOrderSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Send to back"
+                title="Send to back (Shift+Cmd/Ctrl+[)"
                 aria-label="Send to back"
                 data-testid="editor-send-to-back"
               >
@@ -4804,7 +4822,7 @@ export function CanvasEditor({
                 onClick={() => handleZOrderChange('backward')}
                 disabled={isCanvasMutationDisabled || !canZOrderSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Send backward"
+                title="Send backward (Cmd/Ctrl+[)"
                 aria-label="Send backward"
                 data-testid="editor-send-backward"
               >
@@ -4815,7 +4833,7 @@ export function CanvasEditor({
                 onClick={() => handleZOrderChange('forward')}
                 disabled={isCanvasMutationDisabled || !canZOrderSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Bring forward"
+                title="Bring forward (Cmd/Ctrl+])"
                 aria-label="Bring forward"
                 data-testid="editor-bring-forward"
               >
@@ -4826,7 +4844,7 @@ export function CanvasEditor({
                 onClick={() => handleZOrderChange('front')}
                 disabled={isCanvasMutationDisabled || !canZOrderSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Bring to front"
+                title="Bring to front (Shift+Cmd/Ctrl+])"
                 aria-label="Bring to front"
                 data-testid="editor-bring-to-front"
               >

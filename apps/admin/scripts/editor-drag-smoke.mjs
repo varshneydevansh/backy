@@ -217,6 +217,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('handleSelectParentLayer') && source.includes('data-testid="editor-select-parent-layer"'), 'Editor inspector must expose a nested-layer parent selection action');
   assert(source.includes('handleSelectFirstChildLayer') && source.includes('data-testid="editor-select-child-layer"'), 'Editor inspector must expose a nested-layer child selection action');
   assert(source.includes("e.key === 'Enter'") && source.includes('handleSelectFirstChildLayer();') && source.includes('handleSelectParentLayer();'), 'Editor keyboard handler must support Enter child selection and Shift+Enter parent selection');
+  assert(source.includes('isLayerOrderShortcut') && source.includes("handleZOrderChange(isBackward") && source.includes('Cmd/Ctrl+]'), 'Editor keyboard handler must support Cmd/Ctrl bracket layer ordering shortcuts');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -2136,6 +2137,8 @@ const pressKey = async (client, key, options = {}) => {
     Backspace: 'Backspace',
     Escape: 'Escape',
     Tab: 'Tab',
+    '[': 'BracketLeft',
+    ']': 'BracketRight',
     a: 'KeyA',
     c: 'KeyC',
     d: 'KeyD',
@@ -2155,6 +2158,8 @@ const pressKey = async (client, key, options = {}) => {
     Backspace: 8,
     Escape: 27,
     Tab: 9,
+    '[': 219,
+    ']': 221,
     a: 65,
     c: 67,
     d: 68,
@@ -8549,6 +8554,26 @@ const testZOrderQuickControls = async (client, elementId) => {
   const redone = await readSelectedZIndexControl(client, elementId);
   assert(redone.value === backward.value, `Z-order redo did not restore lowered layer: ${JSON.stringify({ backward, undone, redone })}`);
 
+  await blurActiveElement(client);
+  await pressKey(client, ']', { ctrlKey: true });
+  const shortcutForward = await readSelectedZIndexControl(client, elementId);
+  assert(shortcutForward.value === redone.value + 1, `Cmd/Ctrl+] did not bring ${elementId} forward one layer: ${JSON.stringify({ redone, shortcutForward })}`);
+
+  await blurActiveElement(client);
+  await pressKey(client, '[', { ctrlKey: true });
+  const shortcutBackward = await readSelectedZIndexControl(client, elementId);
+  assert(shortcutBackward.value === redone.value, `Cmd/Ctrl+[ did not send ${elementId} backward one layer: ${JSON.stringify({ shortcutForward, shortcutBackward })}`);
+
+  await blurActiveElement(client);
+  await pressKey(client, ']', { ctrlKey: true, shiftKey: true });
+  const shortcutFront = await readSelectedZIndexControl(client, elementId);
+  assert(shortcutFront.value > shortcutForward.value, `Shift+Cmd/Ctrl+] did not bring ${elementId} to front: ${JSON.stringify({ shortcutForward, shortcutFront })}`);
+
+  await blurActiveElement(client);
+  await pressKey(client, '[', { ctrlKey: true, shiftKey: true });
+  const shortcutBack = await readSelectedZIndexControl(client, elementId);
+  assert(shortcutBack.value === 1, `Shift+Cmd/Ctrl+[ did not send ${elementId} to back: ${JSON.stringify({ shortcutFront, shortcutBack })}`);
+
   return {
     elementId,
     before,
@@ -8558,6 +8583,10 @@ const testZOrderQuickControls = async (client, elementId) => {
     backward,
     undone,
     redone,
+    shortcutForward,
+    shortcutBackward,
+    shortcutFront,
+    shortcutBack,
   };
 };
 

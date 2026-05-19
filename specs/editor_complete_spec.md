@@ -225,8 +225,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ✅ Working
 - Z-Index number input exists in the Layout section.
 - Toolbar quick controls support Send to back, Send backward, Bring forward, and Bring to front.
+- Keyboard shortcuts support Ctrl/Cmd+[ and Ctrl/Cmd+] for one-step layer ordering, with Shift sending to back/front.
 - Z-order changes operate within the selected sibling scope, preserve multi-selection ordering, skip locked selections, update normalized sibling `zIndex` values, and flow through editor history.
-- `BACKY_EDITOR_Z_ORDER_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers the quick controls plus undo/redo as a focused regression.
+- `BACKY_EDITOR_Z_ORDER_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers the quick controls, keyboard shortcuts, plus undo/redo as a focused regression.
 
 ### 13. Delete Element
 **Current State:** ✅ Working
@@ -356,6 +357,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | Ctrl/Cmd+A | Select all unlocked siblings in the active canvas scope |
 | Ctrl/Cmd+G | Group selected sibling elements |
 | Ctrl/Cmd+Shift+G | Ungroup selected group |
+| Ctrl/Cmd+[ / Ctrl/Cmd+] | Send backward / bring forward |
+| Shift+Ctrl/Cmd+[ / Shift+Ctrl/Cmd+] | Send to back / bring to front |
 
 - Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, selection cycling, or save actions.
 - Grouping shortcut coverage now verifies Ctrl/Cmd+G preserves child geometry, Ctrl/Cmd+Z restores the sibling multi-selection, Ctrl/Cmd+Shift+Z restores the grouped selection, and Ctrl/Cmd+Shift+G expands children back into the original sibling geometry.
