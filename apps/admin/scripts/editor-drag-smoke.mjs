@@ -222,6 +222,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1') && source.includes('const duplicatedIds: string[] = [];'), 'Editor layer row duplicate/delete actions must support selected multi-layer actions');
   assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
   assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
+  assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10055,6 +10056,30 @@ const testLayersPanelControls = async (client, pageId) => {
     selectedRowActions.length >= 2 && selectedRowActions.every((row) => row.actionsVisible === 'true'),
     `Selected layer rows did not keep row actions visible: ${JSON.stringify(selectedRowActions)}`,
   );
+  const unselectedRowActions = await evaluate(client, `(() => {
+    const unselected = Array.from(document.querySelectorAll('[data-layer-selected="false"]')).find((row) => row.querySelector('[data-layer-actions-visible]'));
+    if (!(unselected instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-unselected-row' };
+    }
+    const actionHost = unselected.querySelector('[data-layer-actions-visible]');
+    const firstButton = actionHost?.querySelector('button');
+    return {
+      ok: true,
+      id: unselected.getAttribute('data-layer-id'),
+      actionsVisible: actionHost?.getAttribute('data-layer-actions-visible') || '',
+      pointerEvents: actionHost instanceof HTMLElement ? getComputedStyle(actionHost).pointerEvents : '',
+      ariaHidden: actionHost?.getAttribute('aria-hidden') || '',
+      tabIndex: firstButton instanceof HTMLButtonElement ? firstButton.tabIndex : null,
+    };
+  })()`);
+  assert(
+    unselectedRowActions?.ok &&
+      unselectedRowActions.actionsVisible === 'false' &&
+      unselectedRowActions.pointerEvents === 'none' &&
+      unselectedRowActions.ariaHidden === 'true' &&
+      unselectedRowActions.tabIndex === -1,
+    `Hidden unselected layer row actions remained interactive: ${JSON.stringify(unselectedRowActions)}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10167,6 +10192,7 @@ const testLayersPanelControls = async (client, pageId) => {
     multiSelected,
     rangeSelected,
     selectedRowActions,
+    unselectedRowActions,
     reorder,
     hiddenState,
     toolbarVisibleState,

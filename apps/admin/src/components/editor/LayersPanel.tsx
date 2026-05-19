@@ -180,6 +180,7 @@ function LayerItem({
     const hasExternalSelection = selectedIds.some((id) => id !== element.id);
     const canNestSelectedHere = !disabled && !isLocked && canAcceptChildren && hasExternalSelection;
     const showRowActions = showActions || isSelected;
+    const actionButtonTabIndex = showRowActions ? 0 : -1;
 
     const iconButtonStyle = (active = true, danger = false): React.CSSProperties => ({
         padding: '4px',
@@ -282,12 +283,15 @@ function LayerItem({
                     display: 'flex',
                     gap: '4px',
                     opacity: showRowActions ? 1 : 0,
+                    pointerEvents: showRowActions ? 'auto' : 'none',
                     transition: 'opacity 0.15s',
                 }}
                 data-layer-actions-visible={showRowActions ? 'true' : 'false'}
+                aria-hidden={showRowActions ? undefined : true}
             >
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled || isLocked) {
@@ -307,6 +311,7 @@ function LayerItem({
 
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled || isLocked) {
@@ -326,6 +331,7 @@ function LayerItem({
 
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled || isLocked) {
@@ -345,6 +351,7 @@ function LayerItem({
 
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (!canNestSelectedHere) {
@@ -364,6 +371,7 @@ function LayerItem({
 
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled) {
@@ -383,6 +391,7 @@ function LayerItem({
 
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled) {
@@ -402,6 +411,7 @@ function LayerItem({
 
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled || isLocked) {
@@ -421,6 +431,7 @@ function LayerItem({
 
                 <button
                     type="button"
+                    tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled || isLocked) {
