@@ -891,6 +891,7 @@ export interface CanvasEditorProps {
   saveOwnerLabel?: string;
   saveOwnerVersion?: string | number | null;
   initialSize?: CanvasSize;
+  initialSelectedElementId?: string;
   mediaContext?: MediaContext;
   onChange?: (
     elements: CanvasElement[],
@@ -1023,6 +1024,7 @@ export function CanvasEditor({
   saveOwnerLabel,
   saveOwnerVersion,
   initialSize,
+  initialSelectedElementId,
   mediaContext,
   onChange,
   validateSettings,
@@ -1525,6 +1527,20 @@ export function CanvasEditor({
 
     return null;
   }, []);
+
+  useEffect(() => {
+    if (!initialSelectedElementId) {
+      return;
+    }
+
+    if (!findElementById(elementsRef.current, initialSelectedElementId)) {
+      return;
+    }
+
+    setSelectedId(initialSelectedElementId);
+    setSelectedIds([initialSelectedElementId]);
+    setRightPanel('properties');
+  }, [findElementById, initialSelectedElementId]);
 
   const collectCyclableElementIds = useCallback((items: CanvasElement[]): string[] => {
     const ids: string[] = [];

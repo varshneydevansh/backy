@@ -301,6 +301,18 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/components/LivePageManagementOverlay.tsx', import.meta.url),
     'utf8',
   );
+  const publicPageRenderer = fs.readFileSync(
+    new URL('../src/components/PageRenderer.tsx', import.meta.url),
+    'utf8',
+  );
+  const adminPageEditorRoute = fs.readFileSync(
+    new URL('../../../apps/admin/src/routes/pages.$pageId.edit.tsx', import.meta.url),
+    'utf8',
+  );
+  const adminCanvasEditor = fs.readFileSync(
+    new URL('../../../apps/admin/src/components/editor/CanvasEditor.tsx', import.meta.url),
+    'utf8',
+  );
   const publicManifestRoute = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/manifest/route.ts', import.meta.url),
     'utf8',
@@ -487,6 +499,9 @@ function assertAdminPageContentValidationSource() {
   assert(liveManageOverlay.includes("credentials: 'include'"), 'live management overlay must rely on admin session credentials');
   assert(liveManageOverlay.includes('expectedUpdatedAt'), 'live management overlay must preserve optimistic conflict checks');
   assert(liveManageOverlay.includes('data-backy-live-management-overlay="page"'), 'live management overlay must expose a stable test hook');
+  assert(liveManageOverlay.includes('data-backy-live-element-list="page"'), 'live management overlay must expose rendered element inspection');
+  assert(publicPageRenderer.includes('data-backy-element-id'), 'public renderer must expose stable element ids for live inspection');
+  assert(adminPageEditorRoute.includes('elementId') && adminCanvasEditor.includes('initialSelectedElementId'), 'admin page editor must accept live inspector element handoff');
   const publicOpenApiRouteSource = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url),
     'utf8',

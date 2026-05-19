@@ -4583,6 +4583,8 @@ export function ElementRenderer({ element, isPreview, siteId, pageId, postId }: 
   return (
     <div
       style={positionStyles}
+      data-backy-element-id={element.id}
+      data-backy-element-type={element.type}
       data-element-id={element.id}
       data-element-type={element.type}
       {...animationAttrs}

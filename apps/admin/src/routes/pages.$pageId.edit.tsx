@@ -48,6 +48,7 @@ import {
 interface PageEditorSearch {
   siteId?: string;
   focus?: 'canvas';
+  elementId?: string;
   navWarning?: string;
 }
 
@@ -61,6 +62,7 @@ export const Route = createFileRoute('/pages/$pageId/edit')({
   validateSearch: (search: Record<string, unknown>): PageEditorSearch => ({
     siteId: normalizedSearchString(search.siteId),
     focus: search.focus === 'canvas' ? 'canvas' : undefined,
+    elementId: normalizedSearchString(search.elementId),
     navWarning: normalizedSearchString(search.navWarning),
   }),
   component: PageEditorRoute,
@@ -1479,6 +1481,7 @@ function PageEditorRoute() {
               mode="page"
               initialElements={editorElements}
               initialSize={initialCanvasSize}
+              initialSelectedElementId={routeSearch.elementId}
               initialSettings={initialSettings}
               onSave={handleSave}
               onBack={handleBack}

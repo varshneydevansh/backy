@@ -13,6 +13,12 @@ interface ManagedPage {
   updatedAt?: string;
 }
 
+interface ManagedElementTarget {
+  id: string;
+  type: string;
+  label: string;
+}
+
 interface LivePageManagementOverlayProps {
   enabled: boolean;
   siteId?: string;
@@ -57,6 +63,19 @@ const joinedAdminUrl = (adminAppUrl: string | undefined, path: string) => {
   return base ? `${base}${path}` : path;
 };
 
+const elementLabel = (element: HTMLElement): string => {
+  const id = element.dataset.backyElementId || element.dataset.elementId || '';
+  const type = element.dataset.backyElementType || element.dataset.elementType || 'element';
+  const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+  const textPreview = text.length > 0 ? ` - ${text.slice(0, 32)}${text.length > 32 ? '...' : ''}` : '';
+  return `${type}${textPreview || ` - ${id.slice(0, 10)}`}`;
+};
+
+const findRenderedElement = (elementId: string): HTMLElement | null => (
+  Array.from(document.querySelectorAll<HTMLElement>('[data-backy-element-id], [data-element-id]'))
+    .find((element) => (element.dataset.backyElementId || element.dataset.elementId || '') === elementId) || null
+);
+
 export function LivePageManagementOverlay({
   enabled,
   siteId,
@@ -72,6 +91,9 @@ export function LivePageManagementOverlay({
   const [expanded, setExpanded] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [elementTargets, setElementTargets] = useState<ManagedElementTarget[]>([]);
+  const [selectedElementId, setSelectedElementId] = useState('');
+  const [selectedElementRect, setSelectedElementRect] = useState<DOMRect | null>(null);
 
   const manageEndpoint = useMemo(() => {
     if (!siteId || !pageId) return '';
@@ -80,11 +102,12 @@ export function LivePageManagementOverlay({
 
   const editorHref = useMemo(() => {
     if (!siteId || !pageId) return '';
+    const selectedElementQuery = selectedElementId ? `&elementId=${encodeURIComponent(selectedElementId)}` : '';
     return joinedAdminUrl(
       adminAppUrl,
-      `/pages/${encodeURIComponent(pageId)}/edit?siteId=${encodeURIComponent(siteId)}&focus=canvas`,
+      `/pages/${encodeURIComponent(pageId)}/edit?siteId=${encodeURIComponent(siteId)}&focus=canvas${selectedElementQuery}`,
     );
-  }, [adminAppUrl, pageId, siteId]);
+  }, [adminAppUrl, pageId, selectedElementId, siteId]);
 
   useEffect(() => {
     if (!enabled || !manageEndpoint) {
@@ -131,6 +154,62 @@ export function LivePageManagementOverlay({
 
     return () => controller.abort();
   }, [enabled, manageEndpoint]);
+
+  useEffect(() => {
+    if (!enabled || !page) {
+      return;
+    }
+
+    const collectTargets = () => {
+      const seen = new Set<string>();
+      const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-backy-element-id], [data-element-id]'))
+        .map((element) => {
+          const id = element.dataset.backyElementId || element.dataset.elementId || '';
+          const type = element.dataset.backyElementType || element.dataset.elementType || 'element';
+          const rect = element.getBoundingClientRect();
+          if (!id || seen.has(id) || rect.width <= 0 || rect.height <= 0) {
+            return null;
+          }
+          seen.add(id);
+          return { id, type, label: elementLabel(element) };
+        })
+        .filter((target): target is ManagedElementTarget => Boolean(target));
+
+      setElementTargets(targets);
+    };
+
+    collectTargets();
+    window.setTimeout(collectTargets, 250);
+  }, [enabled, page]);
+
+  useEffect(() => {
+    if (!selectedElementId) {
+      setSelectedElementRect(null);
+      return;
+    }
+
+    const updateRect = () => {
+      const element = findRenderedElement(selectedElementId);
+      setSelectedElementRect(element ? element.getBoundingClientRect() : null);
+    };
+
+    updateRect();
+    window.addEventListener('scroll', updateRect, true);
+    window.addEventListener('resize', updateRect);
+    return () => {
+      window.removeEventListener('scroll', updateRect, true);
+      window.removeEventListener('resize', updateRect);
+    };
+  }, [selectedElementId]);
+
+  const focusElement = (elementId: string) => {
+    const element = findRenderedElement(elementId);
+    setSelectedElementId(elementId);
+    if (element) {
+      element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+      setSelectedElementRect(element.getBoundingClientRect());
+    }
+  };
 
   const savePage = async () => {
     if (!manageEndpoint || !page) return;
@@ -180,24 +259,42 @@ export function LivePageManagementOverlay({
   }
 
   return (
-    <section
-      aria-label="Backy live page management"
-      data-backy-live-management-overlay="page"
-      style={{
-        position: 'fixed',
-        right: 16,
-        bottom: 16,
-        zIndex: 2147483000,
-        width: expanded ? 340 : 250,
-        maxWidth: 'calc(100vw - 32px)',
-        border: '1px solid rgba(15, 23, 42, 0.16)',
-        borderRadius: 8,
-        background: '#ffffff',
-        color: '#0f172a',
-        boxShadow: '0 18px 48px rgba(15, 23, 42, 0.22)',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
-    >
+    <>
+      {selectedElementRect ? (
+        <div
+          aria-hidden="true"
+          data-backy-live-element-highlight={selectedElementId}
+          style={{
+            position: 'fixed',
+            left: Math.max(0, selectedElementRect.left - 3),
+            top: Math.max(0, selectedElementRect.top - 3),
+            width: selectedElementRect.width + 6,
+            height: selectedElementRect.height + 6,
+            zIndex: 2147482999,
+            border: '2px solid #2563eb',
+            boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.08)',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
+      <section
+        aria-label="Backy live page management"
+        data-backy-live-management-overlay="page"
+        style={{
+          position: 'fixed',
+          right: 16,
+          bottom: 16,
+          zIndex: 2147483000,
+          width: expanded ? 360 : 250,
+          maxWidth: 'calc(100vw - 32px)',
+          border: '1px solid rgba(15, 23, 42, 0.16)',
+          borderRadius: 8,
+          background: '#ffffff',
+          color: '#0f172a',
+          boxShadow: '0 18px 48px rgba(15, 23, 42, 0.22)',
+          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        }}
+      >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: expanded ? '1px solid #e2e8f0' : 'none' }}>
         <button
           type="button"
@@ -265,6 +362,53 @@ export function LivePageManagementOverlay({
                 />
                 Set as homepage
               </label>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Canvas elements</span>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>{elementTargets.length}</span>
+                </div>
+                <div
+                  data-backy-live-element-list="page"
+                  style={{
+                    display: 'grid',
+                    gap: 4,
+                    maxHeight: 150,
+                    overflow: 'auto',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 6,
+                    padding: 4,
+                  }}
+                >
+                  {elementTargets.length > 0 ? elementTargets.slice(0, 30).map((target) => (
+                    <button
+                      key={target.id}
+                      type="button"
+                      onClick={() => focusElement(target.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        border: '1px solid transparent',
+                        borderColor: selectedElementId === target.id ? '#2563eb' : 'transparent',
+                        borderRadius: 5,
+                        background: selectedElementId === target.id ? '#eff6ff' : '#fff',
+                        color: '#0f172a',
+                        cursor: 'pointer',
+                        padding: '6px 7px',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
+                        {target.label}
+                      </span>
+                      <span style={{ flex: '0 0 auto', fontSize: 11, color: '#64748b' }}>{target.type}</span>
+                    </button>
+                  )) : (
+                    <span style={{ color: '#64748b', fontSize: 12, padding: '5px 6px' }}>No editable rendered elements found.</span>
+                  )}
+                </div>
+              </div>
               {error ? <p role="alert" style={{ margin: 0, color: '#b91c1c', fontSize: 12, lineHeight: 1.4 }}>{error}</p> : null}
               {message ? <p style={{ margin: 0, color: '#166534', fontSize: 12, lineHeight: 1.4 }}>{message}</p> : null}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -317,7 +461,8 @@ export function LivePageManagementOverlay({
           ) : null}
         </div>
       ) : null}
-    </section>
+      </section>
+    </>
   );
 }
 
