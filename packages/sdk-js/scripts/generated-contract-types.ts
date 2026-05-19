@@ -8,6 +8,7 @@ import type {
   BackyManifestBlogModule,
   BackyManifestBlogTag,
   BackyManifestCollectionSchema,
+  BackyManifestCollectionsRuntimeModule,
   BackyManifestLocalizedRoutePatternGroup,
   BackyManifestPageResource,
   BackyManifestPostResource,
@@ -899,6 +900,73 @@ const manifest = {
         dynamicRoutePattern: "/articles/:slug",
       },
     ],
+    collectionsRuntime: {
+      schemaVersion: "backy.collections-discovery.v1",
+      count: 1,
+      publishedCount: 1,
+      publicReadCount: 1,
+      publicCreateCount: 0,
+      publicUpdateCount: 0,
+      publicDeleteCount: 0,
+      fieldTypes: ["text"],
+      endpoints: {
+        list: "/api/sites/site_demo/collections",
+        detail: "/api/sites/site_demo/collections/{collectionId}",
+        records: "/api/sites/site_demo/collections/{collectionId}/records",
+        record: "/api/sites/site_demo/collections/{collectionId}/records/{recordId}",
+        resolveList: "/api/sites/site_demo/resolve?path={listPath}",
+        renderList: "/api/sites/site_demo/render?path={listPath}",
+        resolveItem: "/api/sites/site_demo/resolve?path={itemPath}",
+        renderItem: "/api/sites/site_demo/render?path={itemPath}",
+      },
+      methods: {
+        list: "GET",
+        detail: "GET",
+        records: "GET",
+        createRecord: "POST",
+        updateRecord: "PATCH",
+        deleteRecord: "DELETE",
+      },
+      capabilities: {
+        publicSchemas: true,
+        publicRecords: true,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+        dynamicListRoutes: true,
+        dynamicItemRoutes: true,
+        fieldValidation: true,
+        relationshipFields: false,
+        frontendDesignTemplates: false,
+        conditionalRequests: true,
+        cacheableRecords: true,
+      },
+      cache: {
+        list: "public-discovery",
+        detail: "public-discovery",
+        records: "public-discovery",
+        mutations: "private-no-store",
+      },
+      privacy: {
+        publicRecordListsOnlyIncludePublishedRecords: true,
+        visitorWritesRequirePublicPermission: true,
+        publicUpdateAndDeleteMayRequireWriteToken: true,
+      },
+      writePolicy: {
+        createStatus: "draft",
+        createRequiresPublicCreate: true,
+        updateRequiresPublicUpdate: true,
+        deleteRequiresPublicDelete: true,
+        updateDeleteToken: "publicWriteToken",
+        fieldPolicyMetadata: "metadata.visitorWritePolicy",
+      },
+      schemas: {
+        collection: "backy.collection.v1",
+        record: "backy.collection-record.v1",
+        validationError: "VALIDATION_ERROR",
+        slugConflict: "SLUG_CONFLICT",
+      },
+    },
     forms: [
       {
         id: "form_contact",
@@ -1620,6 +1688,74 @@ const sdkManifestCollection = {
     "/api/sites/site_demo/render?path=%2Fproducts%2F%3ArecordSlug",
   frontendDesign: sdkRouteFrontendDesign,
 } satisfies BackyManifestCollectionSchema;
+
+const sdkManifestCollectionsRuntime = {
+  schemaVersion: "backy.collections-discovery.v1",
+  count: 1,
+  publishedCount: 1,
+  publicReadCount: 1,
+  publicCreateCount: 1,
+  publicUpdateCount: 0,
+  publicDeleteCount: 0,
+  fieldTypes: ["text"],
+  endpoints: {
+    list: "/api/sites/site_demo/collections",
+    detail: "/api/sites/site_demo/collections/{collectionId}",
+    records: "/api/sites/site_demo/collections/{collectionId}/records",
+    record: "/api/sites/site_demo/collections/{collectionId}/records/{recordId}",
+    resolveList: "/api/sites/site_demo/resolve?path={listPath}",
+    renderList: "/api/sites/site_demo/render?path={listPath}",
+    resolveItem: "/api/sites/site_demo/resolve?path={itemPath}",
+    renderItem: "/api/sites/site_demo/render?path={itemPath}",
+  },
+  methods: {
+    list: "GET",
+    detail: "GET",
+    records: "GET",
+    createRecord: "POST",
+    updateRecord: "PATCH",
+    deleteRecord: "DELETE",
+  },
+  capabilities: {
+    publicSchemas: true,
+    publicRecords: true,
+    publicCreate: true,
+    publicUpdate: false,
+    publicDelete: false,
+    dynamicListRoutes: true,
+    dynamicItemRoutes: true,
+    fieldValidation: true,
+    relationshipFields: false,
+    frontendDesignTemplates: true,
+    conditionalRequests: true,
+    cacheableRecords: true,
+  },
+  cache: {
+    list: "public-discovery",
+    detail: "public-discovery",
+    records: "public-discovery",
+    mutations: "private-no-store",
+  },
+  privacy: {
+    publicRecordListsOnlyIncludePublishedRecords: true,
+    visitorWritesRequirePublicPermission: true,
+    publicUpdateAndDeleteMayRequireWriteToken: true,
+  },
+  writePolicy: {
+    createStatus: "draft",
+    createRequiresPublicCreate: true,
+    updateRequiresPublicUpdate: true,
+    deleteRequiresPublicDelete: true,
+    updateDeleteToken: "publicWriteToken",
+    fieldPolicyMetadata: "metadata.visitorWritePolicy",
+  },
+  schemas: {
+    collection: "backy.collection.v1",
+    record: "backy.collection-record.v1",
+    validationError: "VALIDATION_ERROR",
+    slugConflict: "SLUG_CONFLICT",
+  },
+} satisfies BackyManifestCollectionsRuntimeModule;
 
 const sdkLocalizedRoutePatternGroup = {
   locale: "fr",
@@ -3682,6 +3818,12 @@ const invalidGeneratedManifestCollectionPermissions = {
   },
 } satisfies GeneratedBackyFrontendManifest["modules"]["collections"][number];
 
+const invalidGeneratedManifestCollectionsRuntimeDiscovery = {
+  ...manifest.modules.collectionsRuntime,
+  // @ts-expect-error generated manifest collections discovery uses a versioned schema marker.
+  schemaVersion: "backy.collections-discovery.v0",
+} satisfies GeneratedBackyFrontendManifest["modules"]["collectionsRuntime"];
+
 const invalidGeneratedManifestFormField = {
   ...manifest.modules.forms[0],
   // @ts-expect-error generated manifest form fields require stable field keys.
@@ -3708,6 +3850,9 @@ const invalidSdkManifestLiveManagement = { ...sdkManifestLiveManagement, updateB
 
 // @ts-expect-error manifest collection entries require record URLs for custom frontend data loading.
 const invalidSdkManifestCollection = { ...sdkManifestCollection, recordsUrl: undefined, } satisfies BackyManifestCollectionSchema;
+
+// @ts-expect-error manifest collections runtime modules require public write-policy metadata.
+const invalidSdkManifestCollectionsRuntime = { ...sdkManifestCollectionsRuntime, writePolicy: undefined, } satisfies BackyManifestCollectionsRuntimeModule;
 
 const invalidSdkLocalizedRoutePatternGroup = {
   ...sdkLocalizedRoutePatternGroup,
@@ -4055,6 +4200,7 @@ void sdkManifestReusableSection;
 void sdkManifestReusableSections;
 void sdkManifestForm;
 void sdkManifestFormsRuntime;
+void sdkManifestCollectionsRuntime;
 void sdkManifestMedia;
 void sdkManifestTheme;
 void sdkManifestLiveManagement;
@@ -4108,6 +4254,7 @@ void sdkInteractiveComponentsContract;
 void invalidSdkInteractiveSandboxHeaders;
 void invalidGeneratedManifestCollectionField;
 void invalidGeneratedManifestCollectionPermissions;
+void invalidGeneratedManifestCollectionsRuntimeDiscovery;
 void invalidGeneratedManifestFormField;
 void invalidGeneratedManifestFormDetailUrl;
 void invalidSdkManifestForm;
@@ -4116,6 +4263,7 @@ void invalidSdkManifestMedia;
 void invalidSdkManifestTheme;
 void invalidSdkManifestLiveManagement;
 void invalidSdkManifestCollection;
+void invalidSdkManifestCollectionsRuntime;
 void invalidSdkLocalizedRoutePatternGroup;
 void invalidSdkRedirectRule;
 void invalidSdkRoutingModule;

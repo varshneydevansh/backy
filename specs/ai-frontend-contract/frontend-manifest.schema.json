@@ -818,6 +818,113 @@
                 "required": ["id", "slug", "name", "fields", "recordsUrl", "dynamicListRoutePattern", "dynamicRoutePattern"]
               }
             },
+            "collectionsRuntime": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.collections-discovery.v1" },
+                "count": { "type": "number", "minimum": 0 },
+                "publishedCount": { "type": "number", "minimum": 0 },
+                "publicReadCount": { "type": "number", "minimum": 0 },
+                "publicCreateCount": { "type": "number", "minimum": 0 },
+                "publicUpdateCount": { "type": "number", "minimum": 0 },
+                "publicDeleteCount": { "type": "number", "minimum": 0 },
+                "fieldTypes": { "type": "array", "items": { "type": "string" } },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string", "minLength": 1 },
+                    "detail": { "type": "string", "minLength": 1 },
+                    "records": { "type": "string", "minLength": 1 },
+                    "record": { "type": "string", "minLength": 1 },
+                    "resolveList": { "type": "string", "minLength": 1 },
+                    "renderList": { "type": "string", "minLength": 1 },
+                    "resolveItem": { "type": "string", "minLength": 1 },
+                    "renderItem": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["list", "detail", "records", "record", "resolveList", "renderList", "resolveItem", "renderItem"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "const": "GET" },
+                    "detail": { "const": "GET" },
+                    "records": { "const": "GET" },
+                    "createRecord": { "const": "POST" },
+                    "updateRecord": { "const": "PATCH" },
+                    "deleteRecord": { "const": "DELETE" }
+                  },
+                  "required": ["list", "detail", "records", "createRecord", "updateRecord", "deleteRecord"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicSchemas": { "type": "boolean" },
+                    "publicRecords": { "type": "boolean" },
+                    "publicCreate": { "type": "boolean" },
+                    "publicUpdate": { "type": "boolean" },
+                    "publicDelete": { "type": "boolean" },
+                    "dynamicListRoutes": { "type": "boolean" },
+                    "dynamicItemRoutes": { "type": "boolean" },
+                    "fieldValidation": { "type": "boolean" },
+                    "relationshipFields": { "type": "boolean" },
+                    "frontendDesignTemplates": { "type": "boolean" },
+                    "conditionalRequests": { "type": "boolean" },
+                    "cacheableRecords": { "type": "boolean" }
+                  },
+                  "required": ["publicSchemas", "publicRecords", "publicCreate", "publicUpdate", "publicDelete", "dynamicListRoutes", "dynamicItemRoutes", "fieldValidation", "relationshipFields", "frontendDesignTemplates", "conditionalRequests", "cacheableRecords"]
+                },
+                "cache": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string" },
+                    "detail": { "type": "string" },
+                    "records": { "type": "string" },
+                    "mutations": { "type": "string" }
+                  },
+                  "required": ["list", "detail", "records", "mutations"]
+                },
+                "privacy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicRecordListsOnlyIncludePublishedRecords": { "type": "boolean" },
+                    "visitorWritesRequirePublicPermission": { "type": "boolean" },
+                    "publicUpdateAndDeleteMayRequireWriteToken": { "type": "boolean" }
+                  },
+                  "required": ["publicRecordListsOnlyIncludePublishedRecords", "visitorWritesRequirePublicPermission", "publicUpdateAndDeleteMayRequireWriteToken"]
+                },
+                "writePolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "createStatus": { "const": "draft" },
+                    "createRequiresPublicCreate": { "type": "boolean" },
+                    "updateRequiresPublicUpdate": { "type": "boolean" },
+                    "deleteRequiresPublicDelete": { "type": "boolean" },
+                    "updateDeleteToken": { "const": "publicWriteToken" },
+                    "fieldPolicyMetadata": { "const": "metadata.visitorWritePolicy" }
+                  },
+                  "required": ["createStatus", "createRequiresPublicCreate", "updateRequiresPublicUpdate", "deleteRequiresPublicDelete", "updateDeleteToken", "fieldPolicyMetadata"]
+                },
+                "schemas": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "collection": { "const": "backy.collection.v1" },
+                    "record": { "const": "backy.collection-record.v1" },
+                    "validationError": { "const": "VALIDATION_ERROR" },
+                    "slugConflict": { "const": "SLUG_CONFLICT" }
+                  },
+                  "required": ["collection", "record", "validationError", "slugConflict"]
+                }
+              },
+              "required": ["schemaVersion", "count", "publishedCount", "publicReadCount", "publicCreateCount", "publicUpdateCount", "publicDeleteCount", "fieldTypes", "endpoints", "methods", "capabilities", "cache", "privacy", "writePolicy", "schemas"]
+            },
             "forms": {
               "type": "array",
               "items": {
@@ -1301,7 +1408,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "forms", "formsRuntime", "comments", "reusableSections", "media"]
+          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "media"]
         },
         "admin": {
           "type": "object",

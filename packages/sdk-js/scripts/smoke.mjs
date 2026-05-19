@@ -862,6 +862,20 @@ assert(revalidatedMediaFonts.notModified === true, 'mediaFontsCached() did not r
 
 const collections = await client.collections();
 assert(Array.isArray(collections.data.collections), 'collections() missing collections array');
+const manifestCollectionsRuntime = manifest.data.modules?.collectionsRuntime;
+assert(manifestCollectionsRuntime?.schemaVersion === 'backy.collections-discovery.v1', 'manifest() missing collections runtime discovery module');
+assert(manifestCollectionsRuntime.endpoints?.list === manifest.data.endpoints.collections, 'manifest() collections runtime list endpoint drifted');
+assert(manifestCollectionsRuntime.endpoints?.records === '/api/sites/' + client.getSiteId() + '/collections/{collectionId}/records', 'manifest() collections runtime records endpoint drifted');
+assert(manifestCollectionsRuntime.methods?.createRecord === 'POST', 'manifest() collections runtime create method drifted');
+assert(manifestCollectionsRuntime.methods?.updateRecord === 'PATCH', 'manifest() collections runtime update method drifted');
+assert(manifestCollectionsRuntime.capabilities?.fieldValidation === true, 'manifest() collections runtime missing field validation capability');
+assert(manifestCollectionsRuntime.capabilities?.cacheableRecords === true, 'manifest() collections runtime missing cacheable records capability');
+assert(manifestCollectionsRuntime.cache?.records === 'public-discovery', 'manifest() collections runtime records cache policy drifted');
+assert(manifestCollectionsRuntime.cache?.mutations === 'private-no-store', 'manifest() collections runtime mutation cache policy drifted');
+assert(manifestCollectionsRuntime.privacy?.visitorWritesRequirePublicPermission === true, 'manifest() collections runtime missing visitor write privacy boundary');
+assert(manifestCollectionsRuntime.writePolicy?.createStatus === 'draft', 'manifest() collections runtime create status drifted');
+assert(manifestCollectionsRuntime.writePolicy?.fieldPolicyMetadata === 'metadata.visitorWritePolicy', 'manifest() collections runtime field policy metadata drifted');
+assert(manifestCollectionsRuntime.schemas?.validationError === 'VALIDATION_ERROR', 'manifest() collections runtime validation schema drifted');
 const cachedCollections = await client.collectionsCached();
 assert(cachedCollections.notModified === false, 'collectionsCached() first request should return a body');
 assert(Array.isArray(cachedCollections.body.data.collections), 'collectionsCached() missing collections array');

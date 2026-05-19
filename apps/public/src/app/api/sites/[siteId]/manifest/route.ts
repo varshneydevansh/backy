@@ -51,6 +51,21 @@ type ManifestCollectionRoute = {
   metadata?: unknown;
 };
 
+type ManifestCollectionDiscoverySource = {
+  status?: string;
+  permissions: {
+    publicRead?: boolean;
+    publicCreate?: boolean;
+    publicUpdate?: boolean;
+    publicDelete?: boolean;
+  };
+  fields: Array<{
+    type: string;
+    referenceCollectionId?: string | null;
+  }>;
+  metadata?: unknown;
+};
+
 type ManifestAdminDiscovery = {
   auth: {
     authenticated: boolean;
@@ -723,6 +738,86 @@ const buildManifestFormsDiscovery = (
   };
 };
 
+const buildManifestCollectionsDiscovery = (
+  siteId: string,
+  collections: ManifestCollectionDiscoverySource[],
+) => {
+  const fieldTypes = Array.from(new Set(collections.flatMap((collection) => (
+    collection.fields.map((field) => field.type)
+  )))).sort();
+  const hasRelationshipFields = collections.some((collection) => (
+    collection.fields.some((field) => Boolean(field.referenceCollectionId))
+  ));
+
+  return {
+    schemaVersion: 'backy.collections-discovery.v1',
+    count: collections.length,
+    publishedCount: collections.filter((collection) => collection.status === 'published').length,
+    publicReadCount: collections.filter((collection) => collection.permissions.publicRead).length,
+    publicCreateCount: collections.filter((collection) => collection.permissions.publicCreate).length,
+    publicUpdateCount: collections.filter((collection) => collection.permissions.publicUpdate).length,
+    publicDeleteCount: collections.filter((collection) => collection.permissions.publicDelete).length,
+    fieldTypes,
+    endpoints: {
+      list: `/api/sites/${siteId}/collections`,
+      detail: `/api/sites/${siteId}/collections/{collectionId}`,
+      records: `/api/sites/${siteId}/collections/{collectionId}/records`,
+      record: `/api/sites/${siteId}/collections/{collectionId}/records/{recordId}`,
+      resolveList: `/api/sites/${siteId}/resolve?path={listPath}`,
+      renderList: `/api/sites/${siteId}/render?path={listPath}`,
+      resolveItem: `/api/sites/${siteId}/resolve?path={itemPath}`,
+      renderItem: `/api/sites/${siteId}/render?path={itemPath}`,
+    },
+    methods: {
+      list: 'GET',
+      detail: 'GET',
+      records: 'GET',
+      createRecord: 'POST',
+      updateRecord: 'PATCH',
+      deleteRecord: 'DELETE',
+    },
+    capabilities: {
+      publicSchemas: true,
+      publicRecords: true,
+      publicCreate: collections.some((collection) => collection.permissions.publicCreate),
+      publicUpdate: collections.some((collection) => collection.permissions.publicUpdate),
+      publicDelete: collections.some((collection) => collection.permissions.publicDelete),
+      dynamicListRoutes: collections.length > 0,
+      dynamicItemRoutes: collections.length > 0,
+      fieldValidation: true,
+      relationshipFields: hasRelationshipFields,
+      frontendDesignTemplates: collections.some((collection) => Boolean(collectionFrontendDesign(collection))),
+      conditionalRequests: true,
+      cacheableRecords: true,
+    },
+    cache: {
+      list: 'public-discovery',
+      detail: 'public-discovery',
+      records: 'public-discovery',
+      mutations: 'private-no-store',
+    },
+    privacy: {
+      publicRecordListsOnlyIncludePublishedRecords: true,
+      visitorWritesRequirePublicPermission: true,
+      publicUpdateAndDeleteMayRequireWriteToken: true,
+    },
+    writePolicy: {
+      createStatus: 'draft',
+      createRequiresPublicCreate: true,
+      updateRequiresPublicUpdate: true,
+      deleteRequiresPublicDelete: true,
+      updateDeleteToken: 'publicWriteToken',
+      fieldPolicyMetadata: 'metadata.visitorWritePolicy',
+    },
+    schemas: {
+      collection: 'backy.collection.v1',
+      record: 'backy.collection-record.v1',
+      validationError: 'VALIDATION_ERROR',
+      slugConflict: 'SLUG_CONFLICT',
+    },
+  };
+};
+
 const buildRepositoryManifest = (
   input: {
     requestId: string;
@@ -941,6 +1036,7 @@ const buildRepositoryManifest = (
           dynamicRouteRenderUrl: `/api/sites/${input.site.id}/render?path=${collectionRoutePattern(collection)}`,
           frontendDesign: collectionFrontendDesign(collection),
         })),
+        collectionsRuntime: buildManifestCollectionsDiscovery(input.site.id, publicCollections),
         reusableSections: {
           count: input.reusableSections.length,
           listUrl: `/api/sites/${input.site.id}/reusable-sections`,
@@ -1276,6 +1372,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             dynamicRouteRenderUrl: `/api/sites/${site.id}/render?path=${collectionRoutePattern(collection)}`,
             frontendDesign: collectionFrontendDesign(collection),
           })),
+          collectionsRuntime: buildManifestCollectionsDiscovery(site.id, collections),
           reusableSections: {
             count: reusableSections.length,
             listUrl: `/api/sites/${site.id}/reusable-sections`,

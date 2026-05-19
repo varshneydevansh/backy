@@ -129,6 +129,22 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestCollectionsDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.collections-discovery.v1'") &&
+    manifestRoute.includes("fieldPolicyMetadata: 'metadata.visitorWritePolicy'") &&
+    manifestRoute.includes("publicRecordListsOnlyIncludePublishedRecords: true") &&
+    manifestRoute.includes('collectionsRuntime: buildManifestCollectionsDiscovery(input.site.id, publicCollections)') &&
+    manifestRoute.includes('collectionsRuntime: buildManifestCollectionsDiscovery(site.id, collections)') &&
+    frontendManifestSchema.includes('"backy.collections-discovery.v1"') &&
+    frontendManifestSchema.includes('"publicUpdateAndDeleteMayRequireWriteToken"') &&
+    frontendManifestSchema.includes('"SLUG_CONFLICT"') &&
+    sdkSource.includes('BackyManifestCollectionsRuntimeModule') &&
+    sdkSmoke.includes('manifest() missing collections runtime discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestCollectionsRuntimeDiscovery'),
+  'Frontend manifest and SDK must expose structured collections runtime discovery for custom frontend collection UIs.',
+);
+
+assert(
   publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
     publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
     publicSiteDiscoveryRoute.includes('cacheRevision') &&

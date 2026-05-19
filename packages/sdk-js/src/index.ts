@@ -725,6 +725,82 @@ export interface BackyManifestCollectionSchema extends BackyCollectionSchema {
   frontendDesign?: BackyManifestRouteFrontendDesign;
 }
 
+export interface BackyManifestCollectionsRuntimeModule {
+  schemaVersion: "backy.collections-discovery.v1";
+  count: number;
+  publishedCount: number;
+  publicReadCount: number;
+  publicCreateCount: number;
+  publicUpdateCount: number;
+  publicDeleteCount: number;
+  fieldTypes: string[];
+  endpoints: {
+    list: string;
+    detail: string;
+    records: string;
+    record: string;
+    resolveList: string;
+    renderList: string;
+    resolveItem: string;
+    renderItem: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    detail: "GET";
+    records: "GET";
+    createRecord: "POST";
+    updateRecord: "PATCH";
+    deleteRecord: "DELETE";
+    [key: string]: unknown;
+  };
+  capabilities: {
+    publicSchemas: boolean;
+    publicRecords: boolean;
+    publicCreate: boolean;
+    publicUpdate: boolean;
+    publicDelete: boolean;
+    dynamicListRoutes: boolean;
+    dynamicItemRoutes: boolean;
+    fieldValidation: boolean;
+    relationshipFields: boolean;
+    frontendDesignTemplates: boolean;
+    conditionalRequests: boolean;
+    cacheableRecords: boolean;
+    [key: string]: unknown;
+  };
+  cache: {
+    list: string;
+    detail: string;
+    records: string;
+    mutations: string;
+    [key: string]: unknown;
+  };
+  privacy: {
+    publicRecordListsOnlyIncludePublishedRecords: boolean;
+    visitorWritesRequirePublicPermission: boolean;
+    publicUpdateAndDeleteMayRequireWriteToken: boolean;
+    [key: string]: unknown;
+  };
+  writePolicy: {
+    createStatus: "draft";
+    createRequiresPublicCreate: boolean;
+    updateRequiresPublicUpdate: boolean;
+    deleteRequiresPublicDelete: boolean;
+    updateDeleteToken: "publicWriteToken";
+    fieldPolicyMetadata: "metadata.visitorWritePolicy";
+    [key: string]: unknown;
+  };
+  schemas: {
+    collection: "backy.collection.v1";
+    record: "backy.collection-record.v1";
+    validationError: "VALIDATION_ERROR";
+    slugConflict: "SLUG_CONFLICT";
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyCommerceProduct {
   id: string;
   slug: string;
@@ -2067,6 +2143,7 @@ export interface BackyFrontendManifest {
     pages?: { count: number; items: BackyManifestPageResource[] };
     blog?: BackyManifestBlogModule;
     collections?: BackyManifestCollectionSchema[];
+    collectionsRuntime?: BackyManifestCollectionsRuntimeModule;
     reusableSections?: BackyManifestReusableSectionsModule;
     forms?: BackyManifestFormDefinition[];
     formsRuntime?: BackyManifestFormsRuntimeModule;
