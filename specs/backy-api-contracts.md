@@ -151,6 +151,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Simple text-like rendered elements (`text`, `heading`, `paragraph`, `quote`, `button`, `link`) can be edited inline from the overlay; the overlay patches the selected element content through the live page bridge so the admin route still enforces content validation and optimistic conflicts.
   - `button` and `link` elements also expose inline destination controls for `href`, target, and safe `_blank` rel metadata.
   - `image` elements expose inline source, alt text, title, and object-fit controls for quick delivery/accessibility fixes without opening the full canvas editor.
+  - Selected rendered elements expose quick appearance controls for text color, background color, border color, and border radius; these patch the same page element props consumed by the public renderer.
   - Selecting an inspected element highlights it on the hosted page and carries `elementId` into the admin canvas editor handoff so the full editor can open with that element selected in the inspector.
 
 - `POST /api/admin/sites/:siteId/pages`

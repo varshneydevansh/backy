@@ -503,9 +503,11 @@ function assertAdminPageContentValidationSource() {
   assert(liveManageOverlay.includes('data-backy-live-inline-editor="page"'), 'live management overlay must expose inline element text editing');
   assert(liveManageOverlay.includes('data-backy-live-link-editor="page"'), 'live management overlay must expose inline link/button destination editing');
   assert(liveManageOverlay.includes('data-backy-live-image-editor="page"'), 'live management overlay must expose inline image metadata editing');
+  assert(liveManageOverlay.includes('data-backy-live-appearance-editor="page"'), 'live management overlay must expose inline appearance editing');
   assert(liveManageOverlay.includes('updateElementText'), 'live management overlay must patch selected element content');
   assert(liveManageOverlay.includes('updateElementLink'), 'live management overlay must patch selected link/button destinations');
   assert(liveManageOverlay.includes('updateElementImage'), 'live management overlay must patch selected image metadata');
+  assert(liveManageOverlay.includes('updateElementAppearance'), 'live management overlay must patch selected element appearance props');
   assert(publicPageRenderer.includes('data-backy-element-id'), 'public renderer must expose stable element ids for live inspection');
   assert(adminPageEditorRoute.includes('elementId') && adminCanvasEditor.includes('initialSelectedElementId'), 'admin page editor must accept live inspector element handoff');
   const publicOpenApiRouteSource = fs.readFileSync(

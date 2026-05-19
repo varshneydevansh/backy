@@ -33,6 +33,12 @@ const INLINE_LINK_ELEMENT_TYPES = new Set(['button', 'link']);
 const INLINE_IMAGE_ELEMENT_TYPES = new Set(['image']);
 const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-down'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
+type InlineAppearanceFields = {
+  color: string;
+  backgroundColor: string;
+  borderColor: string;
+  borderRadius: string;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -159,6 +165,18 @@ const stringProp = (props: Record<string, unknown>, key: string): string => (
   typeof props[key] === 'string' ? props[key] : ''
 );
 
+const lengthProp = (props: Record<string, unknown>, key: string): string => {
+  const value = props[key];
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}`;
+  }
+  return typeof value === 'string' ? value : '';
+};
+
+const hexColorInputValue = (value: string): string => (
+  /^#[0-9a-fA-F]{6}$/.test(value.trim()) ? value.trim() : '#000000'
+);
+
 const imageFieldsFromElement = (element: Record<string, unknown> | null) => {
   const props = elementProps(element);
   const objectFit = stringProp(props, 'objectFit');
@@ -169,6 +187,16 @@ const imageFieldsFromElement = (element: Record<string, unknown> | null) => {
     objectFit: IMAGE_OBJECT_FIT_OPTIONS.includes(objectFit as ImageObjectFit)
       ? objectFit as ImageObjectFit
       : 'cover' as ImageObjectFit,
+  };
+};
+
+const appearanceFieldsFromElement = (element: Record<string, unknown> | null): InlineAppearanceFields => {
+  const props = elementProps(element);
+  return {
+    color: stringProp(props, 'color'),
+    backgroundColor: stringProp(props, 'backgroundColor'),
+    borderColor: stringProp(props, 'borderColor'),
+    borderRadius: lengthProp(props, 'borderRadius'),
   };
 };
 
@@ -243,6 +271,17 @@ const updateElementImage = (
   objectFit: input.objectFit,
 });
 
+const updateElementAppearance = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  input: InlineAppearanceFields,
+): Record<string, unknown> | null => updateElementProps(content, elementId, {
+  color: input.color.trim(),
+  backgroundColor: input.backgroundColor.trim(),
+  borderColor: input.borderColor.trim(),
+  borderRadius: input.borderRadius.trim(),
+});
+
 export function LivePageManagementOverlay({
   enabled,
   siteId,
@@ -271,6 +310,11 @@ export function LivePageManagementOverlay({
   const [inlineImageTitle, setInlineImageTitle] = useState('');
   const [inlineImageObjectFit, setInlineImageObjectFit] = useState<ImageObjectFit>('cover');
   const [inlineImageSaving, setInlineImageSaving] = useState(false);
+  const [inlineAppearanceColor, setInlineAppearanceColor] = useState('');
+  const [inlineAppearanceBackgroundColor, setInlineAppearanceBackgroundColor] = useState('');
+  const [inlineAppearanceBorderColor, setInlineAppearanceBorderColor] = useState('');
+  const [inlineAppearanceBorderRadius, setInlineAppearanceBorderRadius] = useState('');
+  const [inlineAppearanceSaving, setInlineAppearanceSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
     if (!siteId || !pageId) return '';
@@ -369,6 +413,10 @@ export function LivePageManagementOverlay({
       setInlineImageAlt('');
       setInlineImageTitle('');
       setInlineImageObjectFit('cover');
+      setInlineAppearanceColor('');
+      setInlineAppearanceBackgroundColor('');
+      setInlineAppearanceBorderColor('');
+      setInlineAppearanceBorderRadius('');
       return;
     }
 
@@ -404,6 +452,11 @@ export function LivePageManagementOverlay({
     setInlineImageAlt(imageFields.alt);
     setInlineImageTitle(imageFields.title);
     setInlineImageObjectFit(imageFields.objectFit);
+    const appearanceFields = appearanceFieldsFromElement(selectedContentElement);
+    setInlineAppearanceColor(appearanceFields.color);
+    setInlineAppearanceBackgroundColor(appearanceFields.backgroundColor);
+    setInlineAppearanceBorderColor(appearanceFields.borderColor);
+    setInlineAppearanceBorderRadius(appearanceFields.borderRadius);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -592,6 +645,55 @@ export function LivePageManagementOverlay({
       setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected image.');
     } finally {
       setInlineImageSaving(false);
+    }
+  };
+
+  const saveInlineAppearance = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+
+    const nextContent = updateElementAppearance(page.content, selectedElementId, {
+      color: inlineAppearanceColor,
+      backgroundColor: inlineAppearanceBackgroundColor,
+      borderColor: inlineAppearanceBorderColor,
+      borderRadius: inlineAppearanceBorderRadius,
+    });
+    if (!nextContent) {
+      setError('Unable to update this appearance from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineAppearanceSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected appearance.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Appearance saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected appearance.');
+    } finally {
+      setInlineAppearanceSaving(false);
     }
   };
 
@@ -913,6 +1015,93 @@ export function LivePageManagementOverlay({
                     }}
                   >
                     {inlineImageSaving ? 'Saving image...' : 'Save image'}
+                  </button>
+                </div>
+              ) : null}
+              {selectedElementId ? (
+                <div data-backy-live-appearance-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Appearance
+                  </span>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Text color
+                    <span style={{ display: 'grid', gridTemplateColumns: '38px 1fr', gap: 6 }}>
+                      <input
+                        type="color"
+                        value={hexColorInputValue(inlineAppearanceColor)}
+                        onChange={(event) => setInlineAppearanceColor(event.target.value)}
+                        aria-label="Text color swatch"
+                        style={{ width: 38, height: 36, border: '1px solid #cbd5e1', borderRadius: 6, padding: 2, background: '#fff' }}
+                      />
+                      <input
+                        value={inlineAppearanceColor}
+                        onChange={(event) => setInlineAppearanceColor(event.target.value)}
+                        placeholder="#111827 or token"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </span>
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Background
+                    <span style={{ display: 'grid', gridTemplateColumns: '38px 1fr', gap: 6 }}>
+                      <input
+                        type="color"
+                        value={hexColorInputValue(inlineAppearanceBackgroundColor)}
+                        onChange={(event) => setInlineAppearanceBackgroundColor(event.target.value)}
+                        aria-label="Background color swatch"
+                        style={{ width: 38, height: 36, border: '1px solid #cbd5e1', borderRadius: 6, padding: 2, background: '#fff' }}
+                      />
+                      <input
+                        value={inlineAppearanceBackgroundColor}
+                        onChange={(event) => setInlineAppearanceBackgroundColor(event.target.value)}
+                        placeholder="#ffffff, transparent, or token"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </span>
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Border color
+                    <span style={{ display: 'grid', gridTemplateColumns: '38px 1fr', gap: 6 }}>
+                      <input
+                        type="color"
+                        value={hexColorInputValue(inlineAppearanceBorderColor)}
+                        onChange={(event) => setInlineAppearanceBorderColor(event.target.value)}
+                        aria-label="Border color swatch"
+                        style={{ width: 38, height: 36, border: '1px solid #cbd5e1', borderRadius: 6, padding: 2, background: '#fff' }}
+                      />
+                      <input
+                        value={inlineAppearanceBorderColor}
+                        onChange={(event) => setInlineAppearanceBorderColor(event.target.value)}
+                        placeholder="#cbd5e1 or token"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </span>
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Radius
+                    <input
+                      value={inlineAppearanceBorderRadius}
+                      onChange={(event) => setInlineAppearanceBorderRadius(event.target.value)}
+                      placeholder="0, 8, 999px"
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={saveInlineAppearance}
+                    disabled={inlineAppearanceSaving}
+                    style={{
+                      justifySelf: 'start',
+                      border: 0,
+                      borderRadius: 6,
+                      background: inlineAppearanceSaving ? '#94a3b8' : '#2563eb',
+                      color: '#fff',
+                      cursor: inlineAppearanceSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      padding: '7px 10px',
+                    }}
+                  >
+                    {inlineAppearanceSaving ? 'Saving appearance...' : 'Save appearance'}
                   </button>
                 </div>
               ) : null}
