@@ -78,6 +78,14 @@ assert(
   'Admin media folder create/update routes must reject invalid sortOrder values instead of silently ignoring or storing unstable ordering metadata.',
 );
 assert(
+  mediaFoldersRoute.includes('"INVALID_MEDIA_FOLDER_PARENT"') &&
+    mediaFoldersRoute.includes('mediaFolderParentIdFromInput') &&
+    mediaFolderDetailRoute.includes('"INVALID_MEDIA_FOLDER_PARENT"') &&
+    mediaFolderDetailRoute.includes('mediaFolderParentIdFromInput') &&
+    mediaFolderDetailRoute.includes('Folder name must be a non-empty string.'),
+  'Admin media folder create/update routes must reject invalid parentId and explicit empty rename payloads.',
+);
+assert(
   adminSignedMediaUrlRoute.includes("'INVALID_MEDIA_DISPOSITION'") &&
     adminSignedMediaUrlRoute.includes('parseSignedUrlDisposition') &&
     adminSignedMediaUrlRoute.includes('disposition: disposition.value'),

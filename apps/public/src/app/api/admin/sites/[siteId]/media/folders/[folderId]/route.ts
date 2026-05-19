@@ -51,14 +51,23 @@ const parseJsonBody = async (
   }
 };
 
-const nullableString = (value: unknown): string | null | undefined => {
+const mediaFolderParentIdFromInput = (
+  value: unknown,
+): { value?: string | null; invalid?: boolean } => {
   if (value === undefined) {
-    return undefined;
+    return {};
   }
 
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
+  if (value === null) {
+    return { value: null };
+  }
+
+  if (typeof value !== "string") {
+    return { invalid: true };
+  }
+
+  const trimmed = value.trim();
+  return { value: trimmed.length > 0 ? trimmed : null };
 };
 
 const mediaFolderSortOrderFromInput = (
@@ -198,7 +207,27 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
-    const parentId = nullableString(body.parentId);
+    const parentIdInput = mediaFolderParentIdFromInput(body.parentId);
+    if (parentIdInput.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_FOLDER_PARENT",
+        "Media folder parentId must be a folder id string or null.",
+        requestId,
+      );
+    }
+    const parentId = parentIdInput.value;
+    if (
+      body.name !== undefined &&
+      (typeof body.name !== "string" || body.name.trim().length === 0)
+    ) {
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "Folder name must be a non-empty string.",
+        requestId,
+      );
+    }
     const sortOrder = mediaFolderSortOrderFromInput(body.sortOrder);
     if (sortOrder.invalid) {
       return errorResponse(

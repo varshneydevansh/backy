@@ -49,14 +49,23 @@ const parseJsonBody = async (
   }
 };
 
-const nullableString = (value: unknown): string | null | undefined => {
+const mediaFolderParentIdFromInput = (
+  value: unknown,
+): { value?: string | null; invalid?: boolean } => {
   if (value === undefined) {
-    return undefined;
+    return {};
   }
 
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
+  if (value === null) {
+    return { value: null };
+  }
+
+  if (typeof value !== "string") {
+    return { invalid: true };
+  }
+
+  const trimmed = value.trim();
+  return { value: trimmed.length > 0 ? trimmed : null };
 };
 
 const mediaFolderSortOrderFromInput = (
@@ -220,7 +229,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const parentId = nullableString(body.parentId);
+    const parentIdInput = mediaFolderParentIdFromInput(body.parentId);
+    if (parentIdInput.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_FOLDER_PARENT",
+        "Media folder parentId must be a folder id string or null.",
+        requestId,
+      );
+    }
+    const parentId = parentIdInput.value;
     const folders = repositories
       ? await repositories.media.listFolders(site.id)
       : listMediaFolders(site.id);
