@@ -11387,12 +11387,20 @@ function buildTemplateElements(input: {
             width: 560,
             height: 72,
             props: { content: title, level: 'h1', fontSize: 48, fontWeight: '800', color: '#111827' },
+            responsive: {
+                tablet: { x: 54, y: 80, width: 560, height: 86, props: { fontSize: 42 } },
+                mobile: { x: 24, y: 64, width: 327, height: 116, props: { fontSize: 34 } },
+            },
         }),
         createCanvasElement('paragraph', 102, 188, {
             id: 'blank-intro',
             width: 620,
             height: 110,
             props: { content: description, fontSize: 18, lineHeight: 1.65, color: '#475569' },
+            responsive: {
+                tablet: { x: 56, y: 190, width: 560, height: 110, props: { fontSize: 16 } },
+                mobile: { x: 26, y: 208, width: 323, height: 154, props: { fontSize: 16 } },
+            },
         }),
     ];
 }

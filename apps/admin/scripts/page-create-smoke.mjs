@@ -1901,6 +1901,13 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { x: 0, y: index * 104, width: 327, height: 94 }"),
     'Member-account page starter must seed explicit tablet/mobile responsive overrides for profile, preferences, and protected resource cards.',
   );
+  assert(
+    source.includes("id: 'blank-heading'") &&
+      source.includes("mobile: { x: 24, y: 64, width: 327, height: 116, props: { fontSize: 34 } }") &&
+      source.includes("id: 'blank-intro'") &&
+      source.includes("mobile: { x: 26, y: 208, width: 323, height: 154, props: { fontSize: 16 } }"),
+    'Blank page starter must seed explicit tablet/mobile responsive overrides for default heading and intro copy.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
