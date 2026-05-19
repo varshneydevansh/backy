@@ -279,6 +279,7 @@ interface FormTemplateBlueprint {
   fields: FormFieldDefinition[];
   contactShare?: FormDefinition['contactShare'];
   collectionTarget?: FormDefinition['collectionTarget'];
+  frontendFieldKeyMap?: Record<string, string>;
 }
 
 const FORM_TEMPLATES: FormTemplateBlueprint[] = [
@@ -5865,6 +5866,16 @@ const frontendTemplateFieldAliasesFromFields = (fields: FormFieldDefinition[]): 
   return fieldKeyAliases;
 };
 
+const frontendTemplateFieldKeyMapFromAliases = (
+  fieldKeyAliases: Map<string, string>,
+): Record<string, string> | undefined => {
+  const entries = Array.from(fieldKeyAliases.entries())
+    .filter(([alias, fieldKey]) => alias && fieldKey)
+    .sort(([firstAlias], [secondAlias]) => firstAlias.localeCompare(secondAlias));
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
+
 const remapFrontendTemplateFieldReference = (
   value: string | undefined,
   fieldKeyAliases: Map<string, string>,
@@ -5965,6 +5976,7 @@ const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate
     fields: normalizedFields,
     contactShare: contactShare?.enabled ? contactShare : undefined,
     collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined,
+    frontendFieldKeyMap: frontendTemplateFieldKeyMapFromAliases(fieldKeyAliases),
   };
 };
 
@@ -6238,6 +6250,7 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
     },
     contactShare: contactShare?.enabled ? contactShare : undefined,
     collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined,
+    frontendFieldKeyMap: template.frontendFieldKeyMap,
     fields: template.fields,
     editorFormBlockProps: {
       formId: `form-{pageSlug}-${template.id}`,
@@ -6247,6 +6260,7 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
       formActive: true,
       formAudience: template.audience,
       fields: template.fields,
+      frontendFieldKeyMap: template.frontendFieldKeyMap,
       successMessage: template.successMessage,
       enableHoneypot: true,
       enableCaptcha: false,

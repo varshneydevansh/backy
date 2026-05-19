@@ -233,6 +233,10 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('addFrontendTemplateFieldKeyAlias') &&
       source.includes('fieldKeyAliases.set(alias, normalizedKey)') &&
       source.includes('frontendTemplateFieldAliasesFromFields') &&
+      source.includes('frontendTemplateFieldKeyMapFromAliases') &&
+      source.includes('frontendFieldKeyMap?: Record<string, string>') &&
+      source.includes('frontendFieldKeyMap: frontendTemplateFieldKeyMapFromAliases(fieldKeyAliases)') &&
+      source.includes('frontendFieldKeyMap: template.frontendFieldKeyMap') &&
       source.includes('addFrontendTemplateFieldKeyAlias(fieldKeyAliases, field.label, field.key)') &&
       source.includes('return fieldKeyAliases.get(trimmed) || fieldKeyAliases.get(normalizeFieldKey(trimmed))') &&
       source.includes('const fieldKeyAliases = fields.length > 0') &&
