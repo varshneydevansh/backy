@@ -40,6 +40,7 @@ const doctor = read('./backy-release-certification-doctor.mjs');
 const doctorContract = read('./backy-release-certification-doctor-contract-smoke.mjs');
 const rootPackage = read('../package.json');
 const rootPackageJson = JSON.parse(rootPackage);
+const publicPackage = read('../apps/public/package.json');
 const setup = read('../SETUP.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
@@ -355,6 +356,7 @@ includesAll(
     '"test:release-certification-preflight-contract"',
     '"test:release-certification-doctor-contract"',
     '"doctor:release-certification"',
+    '"test:admin-contract-source"',
     '"test:forms-postgres-preflight-contract"',
     '"test:sdk-postgres-preflight-contract"',
     '"test:sdk-postgres-disposable-guard"',
@@ -367,6 +369,15 @@ includesAll(
     '"ci:commerce-provider-certification"',
   ],
   'Root package release certification script wiring',
+);
+
+includesAll(
+  publicPackage,
+  [
+    '"test:admin-contract-source"',
+    'BACKY_ADMIN_CONTRACT_SOURCE_GUARD=1 node scripts/admin-contract-smoke.mjs',
+  ],
+  'Public package admin contract source script wiring',
 );
 
 const partialGatePreflights = rootPackageJson.scripts?.['test:partial-gate-preflights'] || '';

@@ -23,6 +23,7 @@
     "test:smoke:all": "npm run test:smoke:admin && npm run test:smoke:public && npm run test:smoke:sdk && npm run test:smoke:storage",
     "ci:blog-api-contract": "node scripts/blog-api-contract-ci.mjs",
     "test:frontend-contract-types": "npm run test:frontend-contract --workspace @backy/public && npm run test:generated-types --workspace @backy/sdk-js",
+    "test:admin-contract-source": "npm run test:admin-contract-source --workspace @backy/public",
     "test:settings-admin-contract": "npm run test:settings-admin-contract --workspace @backy/public",
     "test:settings-provider-certification-preflight-contract": "node scripts/settings-provider-certification-preflight-contract-smoke.mjs",
     "test:commerce-provider-certification-preflight-contract": "node scripts/commerce-provider-certification-preflight-contract-smoke.mjs",

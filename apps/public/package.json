@@ -38,6 +38,7 @@
         "test:page-renderer": "tsx scripts/page-renderer-rich-text-smoke.tsx",
         "test:hosted-responsive": "node scripts/hosted-responsive-smoke.mjs",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs",
+        "test:admin-contract-source": "BACKY_ADMIN_CONTRACT_SOURCE_GUARD=1 node scripts/admin-contract-smoke.mjs",
         "test:public-security": "node scripts/public-security-regression-smoke.mjs"
     },
     "dependencies": {
