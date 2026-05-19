@@ -9360,12 +9360,20 @@ function buildTemplateElements(input: {
                 height: 420,
                 dataBindings: [{ source: 'blog', mode: 'post', fields: ['title', 'excerpt', 'slug', 'author', 'publishedAt', 'readingTime', 'featuredImage'] }],
                 props: { backgroundColor: '#eef2ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 760 },
+                    mobile: { width: 375, height: 880 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'blog-post-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Article', fontSize: 13, fontWeight: '800', color: '#4338ca', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'blog-post-heading',
@@ -9373,6 +9381,10 @@ function buildTemplateElements(input: {
                         height: 118,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
                         dataBindings: [{ source: 'blog', mode: 'post', field: 'title', targetPath: 'props.content' }],
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 560, height: 126, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 176, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 232, {
                         id: 'blog-post-excerpt',
@@ -9380,6 +9392,10 @@ function buildTemplateElements(input: {
                         height: 76,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
                         dataBindings: [{ source: 'blog', mode: 'post', field: 'excerpt', targetPath: 'props.content' }],
+                        responsive: {
+                            tablet: { x: 56, y: 240, width: 540, height: 86, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 286, width: 323, height: 126, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 76, 326, {
                         id: 'blog-post-meta-row',
@@ -9387,6 +9403,10 @@ function buildTemplateElements(input: {
                         height: 44,
                         dataBindings: [{ source: 'blog', mode: 'post-meta', fields: ['author', 'publishedAt', 'readingTime'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#c7d2fe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 360, width: 520, height: 44 },
+                            mobile: { x: 24, y: 438, width: 327, height: 124 },
+                        },
                         children: [
                             createCanvasElement('text', 18, 12, {
                                 id: 'blog-post-author-name',
@@ -9394,6 +9414,9 @@ function buildTemplateElements(input: {
                                 height: 22,
                                 props: { content: 'By Editorial team', fontSize: 14, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'blog', mode: 'post', field: 'author.name', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { x: 18, y: 16, width: 240 },
+                                },
                             }),
                             createCanvasElement('text', 236, 12, {
                                 id: 'blog-post-published-at',
@@ -9401,6 +9424,9 @@ function buildTemplateElements(input: {
                                 height: 22,
                                 props: { content: 'Published today', fontSize: 14, color: '#4b5563' },
                                 dataBindings: [{ source: 'blog', mode: 'post', field: 'publishedAt', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { x: 18, y: 50, width: 240 },
+                                },
                             }),
                             createCanvasElement('text', 380, 12, {
                                 id: 'blog-post-reading-time',
@@ -9408,6 +9434,9 @@ function buildTemplateElements(input: {
                                 height: 22,
                                 props: { content: '6 min read', fontSize: 14, color: '#4b5563' },
                                 dataBindings: [{ source: 'blog', mode: 'post', field: 'readingTime', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { x: 18, y: 84, width: 240 },
+                                },
                             }),
                         ],
                     }),
@@ -9417,12 +9446,20 @@ function buildTemplateElements(input: {
                         height: 240,
                         dataBindings: [{ source: 'blog', mode: 'post', field: 'featuredImage', targetPath: 'props.media' }],
                         props: { backgroundColor: '#c7d2fe', borderRadius: 8, borderColor: '#a5b4fc', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 450, width: 660, height: 250 },
+                            mobile: { x: 24, y: 610, width: 327, height: 210 },
+                        },
                         children: [
                             createCanvasElement('text', 38, 104, {
                                 id: 'blog-post-featured-media-label',
                                 width: 230,
                                 height: 28,
                                 props: { content: 'Featured media', fontSize: 16, fontWeight: '800', color: '#3730a3', textAlign: 'center' },
+                                responsive: {
+                                    tablet: { x: 214, y: 112 },
+                                    mobile: { x: 48, y: 92 },
+                                },
                             }),
                         ],
                     }),
@@ -9434,6 +9471,10 @@ function buildTemplateElements(input: {
                 height: 540,
                 dataBindings: [{ source: 'blog', mode: 'post-body', fields: ['content', 'blocks', 'taxonomy', 'author'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 760, width: 768, height: 1140 },
+                    mobile: { y: 880, width: 375, height: 1400 },
+                },
                 children: [
                     createCanvasElement('box', 76, 62, {
                         id: 'blog-post-body-card',
@@ -9441,30 +9482,50 @@ function buildTemplateElements(input: {
                         height: 390,
                         dataBindings: [{ source: 'blog', mode: 'post-body', field: 'content', targetPath: 'props.content' }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 500 },
+                            mobile: { x: 24, y: 46, width: 327, height: 640 },
+                        },
                         children: [
                             createCanvasElement('heading', 34, 30, {
                                 id: 'blog-post-body-heading',
                                 width: 420,
                                 height: 40,
                                 props: { content: 'Article section heading', level: 'h2', fontSize: 30, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 520 },
+                                    mobile: { x: 24, y: 26, width: 270, height: 78, props: { fontSize: 26 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 34, 88, {
                                 id: 'blog-post-body-copy-0',
                                 width: 580,
                                 height: 86,
                                 props: { content: 'Use this body card as the editable article content area. Bind rich text blocks, media embeds, tables, and callouts from the Backy blog post payload.', fontSize: 17, lineHeight: 1.65, color: '#374151' },
+                                responsive: {
+                                    tablet: { width: 560, height: 110 },
+                                    mobile: { x: 24, y: 122, width: 270, height: 180, props: { fontSize: 16 } },
+                                },
                             }),
                             createCanvasElement('box', 34, 198, {
                                 id: 'blog-post-callout',
                                 width: 570,
                                 height: 94,
                                 props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+                                responsive: {
+                                    tablet: { y: 238, width: 560, height: 110 },
+                                    mobile: { x: 24, y: 330, width: 270, height: 140 },
+                                },
                                 children: [
                                     createCanvasElement('paragraph', 22, 20, {
                                         id: 'blog-post-callout-copy',
                                         width: 500,
                                         height: 46,
                                         props: { content: 'Highlight a quote, product note, newsletter prompt, or reusable editorial callout.', fontSize: 16, lineHeight: 1.45, color: '#334155' },
+                                        responsive: {
+                                            tablet: { width: 500, height: 56 },
+                                            mobile: { width: 220, height: 88 },
+                                        },
                                     }),
                                 ],
                             }),
@@ -9473,6 +9534,10 @@ function buildTemplateElements(input: {
                                 width: 580,
                                 height: 46,
                                 props: { content: 'Continue the article with reusable sections or content synced from the blog editor.', fontSize: 17, lineHeight: 1.55, color: '#374151' },
+                                responsive: {
+                                    tablet: { y: 388, width: 560, height: 56 },
+                                    mobile: { x: 24, y: 506, width: 270, height: 86, props: { fontSize: 16 } },
+                                },
                             }),
                         ],
                     }),
@@ -9482,12 +9547,19 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'blog', mode: 'author', fields: ['name', 'bio', 'avatar'] }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 610, width: 660, height: 190 },
+                            mobile: { x: 24, y: 740, width: 327, height: 230 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'blog-post-author-heading',
                                 width: 200,
                                 height: 30,
                                 props: { content: 'About the author', level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('text', 24, 68, {
                                 id: 'blog-post-author-display',
@@ -9495,6 +9567,9 @@ function buildTemplateElements(input: {
                                 height: 24,
                                 props: { content: 'Editorial team', fontSize: 15, fontWeight: '800', color: '#4338ca' },
                                 dataBindings: [{ source: 'blog', mode: 'author', field: 'name', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 106, {
                                 id: 'blog-post-author-bio',
@@ -9502,6 +9577,10 @@ function buildTemplateElements(input: {
                                 height: 54,
                                 props: { content: 'Bind author bios, avatars, and archive links from Backy editorial profiles.', fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
                                 dataBindings: [{ source: 'blog', mode: 'author', field: 'bio', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500 },
+                                    mobile: { width: 270, height: 82 },
+                                },
                             }),
                         ],
                     }),
@@ -9511,6 +9590,10 @@ function buildTemplateElements(input: {
                         height: 170,
                         dataBindings: [{ source: 'blog', mode: 'taxonomy', fields: ['category', 'tags'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 850, width: 660, height: 170 },
+                            mobile: { x: 24, y: 1028, width: 327, height: 210 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'blog-post-taxonomy-heading',
@@ -9523,6 +9606,10 @@ function buildTemplateElements(input: {
                                 width: 74,
                                 height: 36,
                                 props: { label: tag, backgroundColor: '#eef2ff', color: '#3730a3', borderRadius: 8, fontSize: 13, fontWeight: '800', action: 'blog.filter.tag' },
+                                responsive: {
+                                    tablet: { width: 90 },
+                                    mobile: { x: 24, y: 76 + index * 42, width: 110, height: 36 },
+                                },
                             })),
                         ],
                     }),
@@ -9534,12 +9621,20 @@ function buildTemplateElements(input: {
                 height: 300,
                 dataBindings: [{ source: 'blog', mode: 'related-posts', limit: 3 }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1900, width: 768, height: 620 },
+                    mobile: { y: 2280, width: 375, height: 700 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 50, {
                         id: 'blog-post-related-heading',
                         width: 360,
                         height: 42,
                         props: { content: 'Related articles', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 360 },
+                            mobile: { x: 24, y: 46, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...['Editorial workflow', 'Content models', 'Launch checklist'].map((item, index) => createCanvasElement('box', 74 + index * 330, 126, {
                         id: `blog-post-related-card-${index}`,
@@ -9547,6 +9642,10 @@ function buildTemplateElements(input: {
                         height: 112,
                         dataBindings: [{ source: 'blog', mode: 'related-post', index }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 126 + index * 140, width: 660, height: 112 },
+                            mobile: { x: 24, y: 116 + index * 158, width: 327, height: 136 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 18, {
                                 id: `blog-post-related-title-${index}`,
@@ -9554,6 +9653,10 @@ function buildTemplateElements(input: {
                                 height: 28,
                                 props: { content: item, level: 'h3', fontSize: 18, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'blog', mode: 'related-post', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 46 },
+                                },
                             }),
                             createCanvasElement('text', 20, 62, {
                                 id: `blog-post-related-meta-${index}`,
@@ -9561,6 +9664,9 @@ function buildTemplateElements(input: {
                                 height: 22,
                                 props: { content: '4 min read', fontSize: 13, color: '#6b7280' },
                                 dataBindings: [{ source: 'blog', mode: 'related-post', index, field: 'readingTime', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { y: 82, width: 140 },
+                                },
                             }),
                         ],
                     })),

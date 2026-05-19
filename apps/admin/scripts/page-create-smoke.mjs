@@ -1725,6 +1725,27 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { x: 20, y: 88, width: 120 }"),
     'Blog index page starter must seed explicit tablet/mobile responsive overrides for featured and latest article rows.',
   );
+  assert(
+    source.includes("id: 'blog-post-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 880 }") &&
+      source.includes("id: 'blog-post-meta-row'") &&
+      source.includes("mobile: { x: 24, y: 438, width: 327, height: 124 }") &&
+      source.includes("id: 'blog-post-featured-media'") &&
+      source.includes("tablet: { x: 54, y: 450, width: 660, height: 250 }") &&
+      source.includes("id: 'blog-post-body-section'") &&
+      source.includes("mobile: { y: 880, width: 375, height: 1400 }") &&
+      source.includes("id: 'blog-post-body-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 640 }") &&
+      source.includes("id: 'blog-post-author-card'") &&
+      source.includes("tablet: { x: 54, y: 610, width: 660, height: 190 }") &&
+      source.includes("id: 'blog-post-taxonomy-card'") &&
+      source.includes("mobile: { x: 24, y: 1028, width: 327, height: 210 }") &&
+      source.includes("id: 'blog-post-related-section'") &&
+      source.includes("mobile: { y: 2280, width: 375, height: 700 }") &&
+      source.includes("id: `blog-post-related-card-${index}`") &&
+      source.includes("tablet: { x: 54, y: 126 + index * 140, width: 660, height: 112 }"),
+    'Blog post page starter must seed explicit tablet/mobile responsive overrides for article, sidebar, taxonomy, and related sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
