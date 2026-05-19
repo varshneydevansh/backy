@@ -7975,30 +7975,50 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'commerce', mode: 'checkout', fields: ['cartItems', 'subtotal', 'shipping', 'tax', 'total'] }],
                 props: { backgroundColor: '#ecfdf5', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 590 },
+                },
                 children: [
                     createCanvasElement('text', 76, 62, {
                         id: 'checkout-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Secure checkout', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 100, {
                         id: 'checkout-heading',
                         width: 600,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#064e3b' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 214, {
                         id: 'checkout-copy',
                         width: 560,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#065f46' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 748, 78, {
                         id: 'checkout-provider-note',
                         width: 330,
                         height: 150,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a7f3d0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 360, height: 130 },
+                            mobile: { x: 24, y: 388, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('heading', 22, 22, {
                                 id: 'checkout-provider-heading',
@@ -8011,6 +8031,10 @@ function buildTemplateElements(input: {
                                 width: 262,
                                 height: 56,
                                 props: { content: 'Collect customer and shipping details here, then send payment through Stripe, PayPal, Razorpay, or another configured provider.', fontSize: 13, lineHeight: 1.45, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 300 },
+                                    mobile: { width: 270 },
+                                },
                             }),
                         ],
                     }),
@@ -8021,6 +8045,10 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 470,
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 820 },
+                    mobile: { y: 590, width: 375, height: 840 },
+                },
                 children: [
                     createCanvasElement('box', 72, 58, {
                         id: 'checkout-customer-card',
@@ -8028,6 +8056,10 @@ function buildTemplateElements(input: {
                         height: 340,
                         dataBindings: [{ source: 'commerce', mode: 'checkout-customer', fields: ['email', 'shippingAddress', 'billingAddress'] }],
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 340 },
+                            mobile: { x: 24, y: 46, width: 327, height: 388 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'checkout-customer-heading',
@@ -8040,18 +8072,30 @@ function buildTemplateElements(input: {
                                 width: 420,
                                 height: 54,
                                 props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { width: 279 },
+                                },
                             }),
                             createCanvasElement('input', 24, 154, {
                                 id: 'checkout-shipping-address',
                                 width: 420,
                                 height: 54,
                                 props: { label: 'Shipping address', name: 'shipping_address', placeholder: 'Street, city, region', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { width: 279 },
+                                },
                             }),
                             createCanvasElement('select', 24, 224, {
                                 id: 'checkout-shipping-method',
                                 width: 260,
                                 height: 54,
                                 props: { label: 'Shipping method', name: 'shipping_method', options: ['Standard', 'Express', 'Pickup'], placeholder: 'Choose shipping' },
+                                responsive: {
+                                    tablet: { width: 360 },
+                                    mobile: { width: 279 },
+                                },
                             }),
                         ],
                     }),
@@ -8061,6 +8105,10 @@ function buildTemplateElements(input: {
                         height: 340,
                         dataBindings: [{ source: 'commerce', mode: 'cart-summary', fields: ['items', 'subtotal', 'discount', 'shipping', 'tax', 'total'] }],
                         props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        responsive: {
+                            tablet: { x: 54, y: 450, width: 660, height: 300 },
+                            mobile: { x: 24, y: 482, width: 327, height: 310 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'checkout-summary-heading',
@@ -8079,6 +8127,10 @@ function buildTemplateElements(input: {
                                 width: 72,
                                 height: 24,
                                 props: { content: item, fontSize: 15, fontWeight: '700', color: '#ffffff', textAlign: 'right' },
+                                responsive: {
+                                    tablet: { x: 540, width: 80 },
+                                    mobile: { x: 214, width: 70 },
+                                },
                             })),
                             createCanvasElement('text', 24, 238, {
                                 id: 'checkout-total-label',
@@ -8092,6 +8144,10 @@ function buildTemplateElements(input: {
                                 height: 30,
                                 props: { content: '$59.40', fontSize: 20, fontWeight: '800', color: '#a7f3d0', textAlign: 'right' },
                                 dataBindings: [{ source: 'commerce', mode: 'cart-summary', field: 'total', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { x: 530, width: 90 },
+                                    mobile: { x: 200, width: 94 },
+                                },
                             }),
                         ],
                     }),
@@ -8103,30 +8159,50 @@ function buildTemplateElements(input: {
                 height: 300,
                 dataBindings: [{ source: 'commerce', mode: 'payment-provider', fields: ['provider', 'status', 'checkoutUrl'] }],
                 props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1280, width: 768, height: 360 },
+                    mobile: { y: 1430, width: 375, height: 430 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 54, {
                         id: 'checkout-payment-heading',
                         width: 440,
                         height: 44,
                         props: { content: 'Complete payment', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 440 },
+                            mobile: { x: 24, y: 46, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 118, {
                         id: 'checkout-payment-copy',
                         width: 560,
                         height: 70,
                         props: { content: 'Use this button to launch the configured provider checkout session. Keep card fields inside the provider flow, not inside Backy page forms.', fontSize: 16, lineHeight: 1.55, color: '#4b5563' },
+                        responsive: {
+                            tablet: { x: 56, y: 118, width: 520, height: 70 },
+                            mobile: { x: 26, y: 106, width: 323, height: 104 },
+                        },
                     }),
                     createCanvasElement('button', 720, 82, {
                         id: 'checkout-payment-button',
                         width: 220,
                         height: 56,
                         props: { label: 'Continue to payment', backgroundColor: '#047857', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '800', action: 'commerce.checkout' },
+                        responsive: {
+                            tablet: { x: 54, y: 220, width: 260 },
+                            mobile: { x: 24, y: 238, width: 327, height: 56 },
+                        },
                     }),
                     createCanvasElement('text', 720, 158, {
                         id: 'checkout-payment-safe-note',
                         width: 300,
                         height: 44,
                         props: { content: 'No card number, CVV, or raw payment secret is collected by this page starter.', fontSize: 13, lineHeight: 1.45, color: '#6b7280' },
+                        responsive: {
+                            tablet: { x: 338, y: 226, width: 320 },
+                            mobile: { x: 26, y: 318, width: 323, height: 54 },
+                        },
                     }),
                 ],
             }),

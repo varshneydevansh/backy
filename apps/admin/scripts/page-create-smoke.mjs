@@ -1612,6 +1612,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { x: 24, y: 126, width: 327, height: 54 }"),
     'Cart page starter must seed explicit tablet/mobile responsive overrides for cart review and checkout actions.',
   );
+  assert(
+    source.includes("id: 'checkout-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 590 }") &&
+      source.includes("id: 'checkout-provider-note'") &&
+      source.includes("mobile: { x: 24, y: 388, width: 327, height: 150 }") &&
+      source.includes("id: 'checkout-main-section'") &&
+      source.includes("tablet: { y: 460, width: 768, height: 820 }") &&
+      source.includes("id: 'checkout-customer-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 388 }") &&
+      source.includes("id: 'checkout-order-summary'") &&
+      source.includes("tablet: { x: 54, y: 450, width: 660, height: 300 }") &&
+      source.includes("id: 'checkout-payment-section'") &&
+      source.includes("mobile: { y: 1430, width: 375, height: 430 }") &&
+      source.includes("id: 'checkout-payment-button'") &&
+      source.includes("mobile: { x: 24, y: 238, width: 327, height: 56 }") &&
+      source.includes("id: 'checkout-payment-safe-note'") &&
+      source.includes("No card number, CVV, or raw payment secret is collected by this page starter."),
+    'Checkout page starter must seed explicit tablet/mobile responsive overrides for customer, summary, and payment sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

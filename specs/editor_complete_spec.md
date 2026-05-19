@@ -553,6 +553,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Refund-policy starter pages now seed explicit tablet/mobile responsive overrides for return-window metadata, refund rule cards, eligibility checklists, and return request CTAs so commerce policy pages remain readable and actionable across breakpoints.
   - Shipping-policy starter pages now seed explicit tablet/mobile responsive overrides for delivery timeline metadata, shipping method cards, tracking support lists, and order tracking CTAs so commerce delivery policy pages remain readable and actionable across breakpoints.
   - Cart starter pages now seed explicit tablet/mobile responsive overrides for cart status metadata, stacked cart item rows, quantity/remove controls, summary totals, and checkout actions so cart review flows remain usable across breakpoints.
+  - Checkout starter pages now seed explicit tablet/mobile responsive overrides for provider handoff notes, customer/shipping fields, order summaries, payment actions, and raw-card-data safety notes so checkout flows remain usable and provider-safe across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves
