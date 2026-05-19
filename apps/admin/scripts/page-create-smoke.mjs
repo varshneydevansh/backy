@@ -1542,6 +1542,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
     'Cookie policy page starter must seed explicit tablet/mobile responsive overrides for consent sections.',
   );
+  assert(
+    source.includes("id: 'accessibility-statement-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 590 }") &&
+      source.includes("id: 'accessibility-statement-standard-card'") &&
+      source.includes("mobile: { x: 24, y: 388, width: 327, height: 150 }") &&
+      source.includes("id: 'accessibility-statement-support-section'") &&
+      source.includes("tablet: { y: 460, width: 768, height: 1120 }") &&
+      source.includes("id: `accessibility-statement-support-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 134 + index * 330, width: 327, height: 300 }") &&
+      source.includes("id: 'accessibility-statement-feedback-section'") &&
+      source.includes("mobile: { y: 1750, width: 375, height: 680 }") &&
+      source.includes("id: 'accessibility-statement-review-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 308 }") &&
+      source.includes("id: 'accessibility-statement-feedback-card'") &&
+      source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
+    'Accessibility statement page starter must seed explicit tablet/mobile responsive overrides for support and feedback sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

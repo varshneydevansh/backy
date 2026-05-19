@@ -6993,24 +6993,40 @@ function buildTemplateElements(input: {
                 height: 320,
                 dataBindings: [{ source: 'settings', mode: 'accessibility-statement', fields: ['standard', 'conformanceLevel', 'lastReviewedAt', 'contactEmail'] }],
                 props: { backgroundColor: '#eef2ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 590 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'accessibility-statement-kicker',
                         width: 260,
                         height: 28,
                         props: { content: 'Accessibility', fontSize: 13, fontWeight: '800', color: '#4338ca', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'accessibility-statement-heading',
                         width: 680,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#312e81' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'accessibility-statement-copy',
                         width: 620,
                         height: 64,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4338ca' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 86, {
                         id: 'accessibility-statement-standard-card',
@@ -7018,6 +7034,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'settings', mode: 'accessibility-standard', fields: ['standard', 'conformanceLevel', 'lastReviewedAt'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#c7d2fe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 330, height: 130 },
+                            mobile: { x: 24, y: 388, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'accessibility-statement-standard-label',
@@ -7037,6 +7057,10 @@ function buildTemplateElements(input: {
                                 width: 230,
                                 height: 32,
                                 props: { content: 'Bind standards and review dates from site accessibility settings.', fontSize: 13, lineHeight: 1.35, color: '#4338ca' },
+                                responsive: {
+                                    tablet: { width: 260 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -7048,12 +7072,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'settings', mode: 'accessibility-support', fields: ['keyboard', 'screenReaders', 'mediaAlternatives', 'knownLimitations'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 590, width: 375, height: 1160 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'accessibility-statement-support-heading',
                         width: 520,
                         height: 42,
                         props: { content: 'Supported accessibility features', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 520 },
+                            mobile: { x: 24, y: 42, width: 320, height: 72, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Keyboard and focus', body: 'Document keyboard navigation, visible focus states, skip links, form labels, and predictable page structure.' },
@@ -7065,6 +7097,10 @@ function buildTemplateElements(input: {
                         height: 290,
                         dataBindings: [{ source: 'settings', mode: 'accessibility-support-item', index }],
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e0e7ff', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 324, width: 660, height: 286 },
+                            mobile: { x: 24, y: 134 + index * 330, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `accessibility-statement-support-card-title-${index}`,
@@ -7072,6 +7108,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: item.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#312e81' },
                                 dataBindings: [{ source: 'settings', mode: 'accessibility-support-item', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 320 },
+                                    mobile: { width: 260, height: 52 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: `accessibility-statement-support-card-copy-${index}`,
@@ -7079,12 +7119,20 @@ function buildTemplateElements(input: {
                                 height: 124,
                                 props: { content: item.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
                                 dataBindings: [{ source: 'settings', mode: 'accessibility-support-item', index, field: 'body', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500, height: 104 },
+                                    mobile: { width: 268, height: 132 },
+                                },
                             }),
                             createCanvasElement('text', 24, 232, {
                                 id: `accessibility-statement-support-card-note-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: 'Editable accessibility content', fontSize: 13, fontWeight: '800', color: '#4338ca' },
+                                responsive: {
+                                    tablet: { y: 228 },
+                                    mobile: { y: 252 },
+                                },
                             }),
                         ],
                     })),
@@ -7096,6 +7144,10 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'settings', mode: 'accessibility-feedback', fields: ['contactEmail', 'feedbackUrl', 'responseTime', 'remediationPlan'] }],
                 props: { backgroundColor: '#f5f3ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 620 },
+                    mobile: { y: 1750, width: 375, height: 680 },
+                },
                 children: [
                     createCanvasElement('box', 74, 62, {
                         id: 'accessibility-statement-review-card',
@@ -7103,18 +7155,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'accessibility-review', fields: ['lastReviewedAt', 'auditCadence', 'remediationPlan', 'owner'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#ddd6fe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 250 },
+                            mobile: { x: 24, y: 46, width: 327, height: 308 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 26, {
                                 id: 'accessibility-statement-review-heading',
                                 width: 360,
                                 height: 34,
                                 props: { content: 'Review and remediation', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64, props: { fontSize: 24 } },
+                                },
                             }),
                             ...['Last review', 'Audit cadence', 'Issue owner', 'Remediation plan'].map((item, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
                                 id: `accessibility-statement-review-item-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: item, fontSize: 15, fontWeight: '800', color: '#4338ca' },
+                                responsive: {
+                                    tablet: { x: 30 + (index % 2) * 300, y: 92 + Math.floor(index / 2) * 48, width: 240 },
+                                    mobile: { x: 28, y: 104 + index * 44, width: 240 },
+                                },
                             })),
                         ],
                     }),
@@ -7124,6 +7187,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'accessibility-feedback-action', fields: ['feedbackUrl', 'contactEmail'] }],
                         props: { backgroundColor: '#312e81', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 350, width: 660, height: 190 },
+                            mobile: { x: 24, y: 410, width: 327, height: 214 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 26, {
                                 id: 'accessibility-statement-feedback-heading',
@@ -7136,12 +7203,20 @@ function buildTemplateElements(input: {
                                 width: 250,
                                 height: 46,
                                 props: { content: 'Bind this action to an accessibility request form, support email, or feedback workflow.', fontSize: 14, lineHeight: 1.45, color: '#e0e7ff' },
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('button', 26, 138, {
                                 id: 'accessibility-statement-feedback-button',
                                 width: 156,
                                 height: 40,
                                 props: { label: 'Send feedback', backgroundColor: '#e0e7ff', color: '#312e81', borderRadius: 8, fontWeight: '800', action: 'accessibility.feedback.open' },
+                                responsive: {
+                                    tablet: { x: 470, y: 112 },
+                                    mobile: { x: 26, y: 150 },
+                                },
                             }),
                         ],
                     }),
