@@ -494,6 +494,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `PATCH /api/admin/sites/:siteId/media/:mediaId`
   - Current implementation updates original name, folder, tags, alt text, caption, scope, scope target, visibility, page/post references, and metadata in the local runtime catalog.
+  - Invalid explicit media update payloads return `400` errors instead of silently keeping previous metadata: `INVALID_MEDIA_VISIBILITY`, `INVALID_MEDIA_SCOPE`, `INVALID_MEDIA_SCOPE_TARGET`, or `INVALID_MEDIA_FOLDER`.
   - Font media metadata can register `fontFamily`, `fontWeight`, `fontStyle`, `fontFallback`, and `fontDisplay`; `/render` exposes public font media in `assets.fonts` with `weights`, `styles`, `fallbackStack`, `display`, and `cssFamily`, and hosted page/post rendering injects matching `@font-face` rules.
 
 - `POST /api/admin/sites/:siteId/media/:mediaId`

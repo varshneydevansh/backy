@@ -393,6 +393,75 @@ const visibilityFromInput = (
 ): "public" | "private" | undefined =>
   value === "public" || value === "private" ? value : undefined;
 
+const hasBodyKey = (body: Record<string, unknown>, key: string) =>
+  Object.prototype.hasOwnProperty.call(body, key);
+
+const isMediaScopeInput = (
+  value: unknown,
+): value is "global" | "page" | "post" =>
+  value === "global" || value === "page" || value === "post";
+
+const mediaUpdateValidationError = (
+  body: Record<string, unknown>,
+  requestId: string,
+) => {
+  if (
+    hasBodyKey(body, "visibility") &&
+    body.visibility !== undefined &&
+    !visibilityFromInput(body.visibility)
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_MEDIA_VISIBILITY",
+      "Invalid media visibility. Use public or private.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "scope") &&
+    body.scope !== undefined &&
+    !isMediaScopeInput(body.scope)
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_MEDIA_SCOPE",
+      "Invalid media scope. Use global, page, or post.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "scopeTargetId") &&
+    body.scopeTargetId !== undefined &&
+    body.scopeTargetId !== null &&
+    typeof body.scopeTargetId !== "string"
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_MEDIA_SCOPE_TARGET",
+      "Invalid media scope target. Use a string id or null.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "folderId") &&
+    body.folderId !== undefined &&
+    body.folderId !== null &&
+    typeof body.folderId !== "string"
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_MEDIA_FOLDER",
+      "Invalid media folder. Use a folder id string or null.",
+      requestId,
+    );
+  }
+
+  return null;
+};
+
 const nullableStringFromBody = (value: unknown): string | null | undefined => {
   if (value === undefined) {
     return undefined;
@@ -524,6 +593,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const validationError = mediaUpdateValidationError(body, requestId);
+      if (validationError) {
+        return validationError;
+      }
       const folderId = nullableStringFromBody(body.folderId);
       const inputMetadata = metadataFromInput(body.metadata);
       const scopePatch = buildMediaScopeMetadataPatch(
@@ -642,6 +715,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const validationError = mediaUpdateValidationError(body, requestId);
+    if (validationError) {
+      return validationError;
+    }
     const folderId = nullableStringFromBody(body.folderId);
     const inputMetadata = metadataFromInput(body.metadata);
     const scopePatch = buildMediaScopeMetadataPatch(

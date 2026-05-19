@@ -15,6 +15,7 @@ const assert = (condition, message) => {
 };
 
 const mediaRoute = read('../src/app/api/admin/sites/[siteId]/media/route.ts');
+const mediaDetailRoute = read('../src/app/api/admin/sites/[siteId]/media/[mediaId]/route.ts');
 const mediaFoldersRoute = read('../src/app/api/admin/sites/[siteId]/media/folders/route.ts');
 const mediaFolderDetailRoute = read('../src/app/api/admin/sites/[siteId]/media/folders/[folderId]/route.ts');
 const adminSignedMediaUrlRoute = read('../src/app/api/admin/sites/[siteId]/media/[mediaId]/signed-url/route.ts');
@@ -85,6 +86,15 @@ assert(
     mediaFolderDetailRoute.includes('mediaFolderParentIdFromInput') &&
     mediaFolderDetailRoute.includes('Folder name must be a non-empty string.'),
   'Admin media folder create/update routes must reject invalid parentId and explicit empty rename payloads.',
+);
+assert(
+  mediaDetailRoute.includes('"INVALID_MEDIA_VISIBILITY"') &&
+    mediaDetailRoute.includes('"INVALID_MEDIA_SCOPE"') &&
+    mediaDetailRoute.includes('"INVALID_MEDIA_SCOPE_TARGET"') &&
+    mediaDetailRoute.includes('"INVALID_MEDIA_FOLDER"') &&
+    mediaDetailRoute.includes('mediaUpdateValidationError') &&
+    mediaDetailRoute.includes('isMediaScopeInput'),
+  'Admin media detail update route must reject invalid explicit visibility, scope, scopeTargetId, and folderId payloads instead of silently keeping previous metadata.',
 );
 assert(
   adminSignedMediaUrlRoute.includes("'INVALID_MEDIA_DISPOSITION'") &&
