@@ -110,6 +110,15 @@ const assertFormsPersistenceCertificationSource = () => {
     'Forms builder must normalize options and compatible validation when a field type changes',
   );
   assert(
+    source.includes('getFormFieldValidationRuleDefinitions') &&
+      source.includes('fieldValidationRuleDefinitions.map') &&
+      source.includes('data-testid="form-field-validation-unavailable"') &&
+      source.includes('const allowedValidationTypes = new Set(validationTypesForFieldType(normalizeFormFieldType(field.type)))') &&
+      source.includes('if (!allowedValidationTypes.has(ruleType))') &&
+      source.includes('normalizeValidationRules({ ...field, type: fieldType })'),
+    'Forms builder must only expose and persist validation rules compatible with each field type',
+  );
+  assert(
     source.includes('patchFormDraftContactShare') &&
       source.includes('data-testid="form-contact-share-panel"') &&
       source.includes('data-testid={`form-contact-share-${key}`}') &&

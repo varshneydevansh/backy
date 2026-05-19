@@ -1672,7 +1672,18 @@ function FormsRoute() {
         fields: current.fields.map((field, index) => {
           if (index !== fieldIndex) return field;
 
-          const existingRules = field.validation || [];
+          const allowedValidationTypes = new Set(validationTypesForFieldType(normalizeFormFieldType(field.type)));
+          const compatibleRules = (field.validation || []).filter((rule) => (
+            allowedValidationTypes.has(rule.type as FormValidationRuleType)
+          ));
+          if (!allowedValidationTypes.has(ruleType)) {
+            return {
+              ...field,
+              validation: compatibleRules.length > 0 ? compatibleRules : undefined,
+            };
+          }
+
+          const existingRules = compatibleRules;
           const existingRule = existingRules.find((rule) => rule.type === ruleType);
           const nextRule = {
             type: ruleType,
@@ -4164,8 +4175,13 @@ function FormsRoute() {
                             </div>
                           </div>
                           <div className="mt-3 grid gap-3">
-                            {formDraft.fields.map((field, fieldIndex) => (
-                              <div key={`${field.key}-${fieldIndex}`} className="rounded-lg border border-border bg-card p-3">
+                            {formDraft.fields.map((field, fieldIndex) => {
+                              const fieldType = normalizeFormFieldType(field.type);
+                              const fieldValidationRuleDefinitions = getFormFieldValidationRuleDefinitions(fieldType);
+                              const fieldValidationCount = normalizeValidationRules({ ...field, type: fieldType })?.length || 0;
+
+                              return (
+                                <div key={`${field.key}-${fieldIndex}`} className="rounded-lg border border-border bg-card p-3">
                                 <div className="grid gap-3 xl:grid-cols-[minmax(120px,0.8fr)_minmax(140px,1fr)_140px_110px_auto]">
                                   <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
                                     Key
@@ -4308,55 +4324,65 @@ function FormsRoute() {
                                       </p>
                                     </div>
                                     <span className="rounded-full bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
-                                      {field.validation?.length || 0} active
+                                      {fieldValidationCount} active
                                     </span>
                                   </div>
-                                  <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                                    {FORM_VALIDATION_RULES.map((ruleDefinition) => {
-                                      const rule = getValidationRule(field, ruleDefinition.type);
-                                      const value = rule?.value ?? '';
-                                      return (
-                                        <div key={ruleDefinition.type} className="rounded-lg border border-border bg-card p-3">
-                                          <div className="grid gap-2 sm:grid-cols-[minmax(100px,0.7fr)_minmax(100px,0.7fr)_minmax(140px,1fr)]">
-                                            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                                              Rule
-                                              <span className="flex min-h-10 items-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground">
-                                                {ruleDefinition.label}
-                                              </span>
-                                            </label>
-                                            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                                              Value
-                                              <input
-                                                type={ruleDefinition.valueMode === 'number' ? 'number' : 'text'}
-                                                value={String(value)}
-                                                placeholder={ruleDefinition.valuePlaceholder}
-                                                onChange={(event) => patchFormDraftFieldValidation(fieldIndex, ruleDefinition.type, {
-                                                  value: parseValidationValue(ruleDefinition.valueMode, event.target.value),
-                                                })}
-                                                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
-                                                aria-label={`${field.label} ${ruleDefinition.label} value`}
-                                              />
-                                            </label>
-                                            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                                              Message
-                                              <input
-                                                value={rule?.message || ''}
-                                                placeholder={defaultValidationMessage(field.label, ruleDefinition.type)}
-                                                onChange={(event) => patchFormDraftFieldValidation(fieldIndex, ruleDefinition.type, {
-                                                  message: event.target.value,
-                                                })}
-                                                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
-                                                aria-label={`${field.label} ${ruleDefinition.label} message`}
-                                              />
-                                            </label>
+                                  {fieldValidationRuleDefinitions.length > 0 ? (
+                                    <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                                      {fieldValidationRuleDefinitions.map((ruleDefinition) => {
+                                        const rule = getValidationRule(field, ruleDefinition.type);
+                                        const value = rule?.value ?? '';
+                                        return (
+                                          <div key={ruleDefinition.type} className="rounded-lg border border-border bg-card p-3">
+                                            <div className="grid gap-2 sm:grid-cols-[minmax(100px,0.7fr)_minmax(100px,0.7fr)_minmax(140px,1fr)]">
+                                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                                Rule
+                                                <span className="flex min-h-10 items-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground">
+                                                  {ruleDefinition.label}
+                                                </span>
+                                              </label>
+                                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                                Value
+                                                <input
+                                                  type={ruleDefinition.valueMode === 'number' ? 'number' : 'text'}
+                                                  value={String(value)}
+                                                  placeholder={ruleDefinition.valuePlaceholder}
+                                                  onChange={(event) => patchFormDraftFieldValidation(fieldIndex, ruleDefinition.type, {
+                                                    value: parseValidationValue(ruleDefinition.valueMode, event.target.value),
+                                                  })}
+                                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                                  aria-label={`${field.label} ${ruleDefinition.label} value`}
+                                                />
+                                              </label>
+                                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                                Message
+                                                <input
+                                                  value={rule?.message || ''}
+                                                  placeholder={defaultValidationMessage(field.label, ruleDefinition.type)}
+                                                  onChange={(event) => patchFormDraftFieldValidation(fieldIndex, ruleDefinition.type, {
+                                                    message: event.target.value,
+                                                  })}
+                                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                                  aria-label={`${field.label} ${ruleDefinition.label} message`}
+                                                />
+                                              </label>
+                                            </div>
                                           </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="mt-3 rounded-lg border border-dashed border-border bg-card px-3 py-2 text-xs text-muted-foreground"
+                                      data-testid="form-field-validation-unavailable"
+                                    >
+                                      No configurable validation rules for this field type.
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       </fieldset>
@@ -5399,6 +5425,11 @@ const validationTypesForFieldType = (type: FormFieldType): FormValidationRuleTyp
   return [];
 };
 
+const getFormFieldValidationRuleDefinitions = (type: FormFieldType): typeof FORM_VALIDATION_RULES => {
+  const allowedValidationTypes = new Set(validationTypesForFieldType(type));
+  return FORM_VALIDATION_RULES.filter((rule) => allowedValidationTypes.has(rule.type));
+};
+
 const normalizeFormFieldType = (value: string | undefined): FormFieldType => (
   FORM_FIELD_TYPES.includes(value as FormFieldType) ? value as FormFieldType : 'text'
 );
@@ -5788,10 +5819,11 @@ const defaultValidationMessage = (fieldLabel: string, ruleType: FormValidationRu
 
 const normalizeValidationRules = (field: FormFieldDefinition): FormValidationRule[] | undefined => {
   const rules: FormValidationRule[] = [];
+  const allowedValidationTypes = new Set(validationTypesForFieldType(normalizeFormFieldType(field.type)));
 
   (field.validation || []).forEach((rule) => {
     const type = rule.type as FormValidationRuleType;
-    if (!FORM_VALIDATION_RULES.some((definition) => definition.type === type)) {
+    if (!allowedValidationTypes.has(type) || !FORM_VALIDATION_RULES.some((definition) => definition.type === type)) {
       return;
     }
 
