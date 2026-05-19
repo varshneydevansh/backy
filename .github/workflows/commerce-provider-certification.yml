@@ -264,9 +264,9 @@ jobs:
           {
             echo "## Backy Commerce Provider Certification"
             echo ""
-            echo "| Partial row | Gate | Requested | Non-secret target evidence |"
-            echo "| --- | --- | --- | --- |"
-            echo "| /products and /orders | npm run ci:commerce-provider-certification | true | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
+            echo "| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            echo "| /products and /orders | npm run ci:commerce-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
             echo ""
             echo "| Selector | Value |"
             echo "| --- | --- |"
