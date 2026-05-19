@@ -40,6 +40,8 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 const mediaTypeValues = ['image', 'video', 'audio', 'document', 'font', 'other'] as const satisfies readonly MediaItem['type'][];
 const mediaScopeValues = ['global', 'page', 'post'] as const;
+const DEFAULT_MEDIA_LIMIT = 50;
+const MAX_MEDIA_LIMIT = 100;
 
 type PublicMediaScopeFilter = typeof mediaScopeValues[number];
 
@@ -94,6 +96,24 @@ const booleanFilterFromInput = (value: string | null): { value?: boolean; invali
     return { value: parsed };
 };
 
+const integerQueryFromInput = (
+    value: string | null,
+    fallback: number,
+    min: number,
+    max?: number,
+): { value: number; invalid?: string } => {
+    if (value === null || value.trim() === '') {
+        return { value: fallback };
+    }
+
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < min || (max !== undefined && parsed > max)) {
+        return { value: fallback, invalid: value };
+    }
+
+    return { value: parsed };
+};
+
 const mediaTagMatches = (tags: string[], tag: string | null) => {
     if (!tag) {
         return true;
@@ -133,8 +153,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             );
         }
         const type = mediaType.type;
-        const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '50', 10) || 50));
-        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
+        const mediaLimit = integerQueryFromInput(searchParams.get('limit'), DEFAULT_MEDIA_LIMIT, 1, MAX_MEDIA_LIMIT);
+        if (mediaLimit.invalid) {
+            return errorResponse(
+                400,
+                'INVALID_MEDIA_LIMIT',
+                'Invalid media limit. Use an integer from 1 to 100.',
+                requestId,
+            );
+        }
+        const limit = mediaLimit.value;
+        const mediaOffset = integerQueryFromInput(searchParams.get('offset'), 0, 0);
+        if (mediaOffset.invalid) {
+            return errorResponse(
+                400,
+                'INVALID_MEDIA_OFFSET',
+                'Invalid media offset. Use an integer greater than or equal to 0.',
+                requestId,
+            );
+        }
+        const offset = mediaOffset.value;
         const mediaScope = mediaScopeFromInput(searchParams.get('scope'));
         if (mediaScope.invalid) {
             return errorResponse(

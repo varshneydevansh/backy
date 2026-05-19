@@ -1054,7 +1054,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   },
                 },
                 "400": {
-                  description: "Invalid media type, scope, or global filter",
+                  description: "Invalid media type, scope, global, limit, or offset filter",
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },

@@ -89,6 +89,13 @@ assert(
   'Public media list route must reject invalid global filters instead of silently returning all assets.',
 );
 assert(
+  publicMediaRoute.includes("'INVALID_MEDIA_LIMIT'") &&
+    publicMediaRoute.includes("'INVALID_MEDIA_OFFSET'") &&
+    publicMediaRoute.includes('integerQueryFromInput') &&
+    publicMediaRoute.includes('MAX_MEDIA_LIMIT = 100'),
+  'Public media list route must reject invalid pagination filters instead of silently clamping or defaulting them.',
+);
+assert(
   publicFontManifestRoute.includes("from '@/lib/mediaSafety'") &&
     publicFontManifestRoute.includes('!isMediaQuarantined(item)') &&
     publicFontManifestRoute.includes('buildPublicFontManifest('),
@@ -157,9 +164,9 @@ assert(
 );
 assert(
   openApiRoute.includes('"400"') &&
-    openApiRoute.includes('Invalid media type, scope, or global filter') &&
+    openApiRoute.includes('Invalid media type, scope, global, limit, or offset filter') &&
     openApiRoute.includes('#/components/schemas/ErrorEnvelope'),
-  'Public OpenAPI media list route must document invalid type/scope/global filter error envelopes.',
+  'Public OpenAPI media list route must document invalid media filter error envelopes.',
 );
 assert(
   openApiRoute.includes('Fetch public, non-quarantined uploaded font families'),
@@ -218,6 +225,10 @@ assert(
 assert(
   apiContracts.includes('Invalid public media global filters return `400 INVALID_MEDIA_GLOBAL_FILTER`'),
   'API contract docs must describe invalid public media global filter errors.',
+);
+assert(
+  apiContracts.includes('Invalid public media pagination filters return `400 INVALID_MEDIA_LIMIT` or `400 INVALID_MEDIA_OFFSET`'),
+  'API contract docs must describe invalid public media pagination filter errors.',
 );
 assert(
   apiContracts.includes('Public font manifests exclude quarantined font assets'),
