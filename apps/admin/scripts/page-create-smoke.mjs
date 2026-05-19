@@ -1709,6 +1709,22 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 250, width: 660, height: 150 }"),
     'Testimonials page starter must seed explicit tablet/mobile responsive overrides for proof, review, and inquiry sections.',
   );
+  assert(
+    source.includes("id: 'blog-index-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 560 }") &&
+      source.includes("id: 'blog-index-featured-card'") &&
+      source.includes("mobile: { x: 24, y: 390, width: 327, height: 140 }") &&
+      source.includes("id: 'blog-index-list-section'") &&
+      source.includes("tablet: { y: 460, width: 768, height: 560 }") &&
+      source.includes("id: `blog-index-post-row-${index}`") &&
+      source.includes("tablet: { x: 54, y: 126 + index * 118, width: 660, height: 92 }") &&
+      source.includes("mobile: { x: 24, y: 120 + index * 158, width: 327, height: 132 }") &&
+      source.includes("id: `blog-index-post-title-${index}`") &&
+      source.includes("mobile: { width: 260, height: 54 }") &&
+      source.includes("id: `blog-index-post-meta-${index}`") &&
+      source.includes("mobile: { x: 20, y: 88, width: 120 }"),
+    'Blog index page starter must seed explicit tablet/mobile responsive overrides for featured and latest article rows.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

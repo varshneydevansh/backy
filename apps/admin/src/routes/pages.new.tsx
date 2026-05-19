@@ -9217,24 +9217,40 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'blog', mode: 'latest', limit: 1 }],
                 props: { backgroundColor: '#111827', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 560 },
+                },
                 children: [
                     createCanvasElement('text', 74, 62, {
                         id: 'blog-index-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Publication', fontSize: 13, fontWeight: '800', color: '#7dd3fc', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 98, {
                         id: 'blog-index-heading',
                         width: 640,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 50, fontWeight: '800', lineHeight: 1.08, color: '#ffffff' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 520, height: 92, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'blog-index-copy',
                         width: 560,
                         height: 72,
                         props: { content: description, fontSize: 17, lineHeight: 1.55, color: '#d1d5db' },
+                        responsive: {
+                            tablet: { x: 56, y: 204, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 70, {
                         id: 'blog-index-featured-card',
@@ -9242,6 +9258,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'blog', mode: 'featured', fields: ['title', 'excerpt', 'slug', 'publishedAt'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#374151', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 360, height: 130 },
+                            mobile: { x: 24, y: 390, width: 327, height: 140 },
+                        },
                         children: [
                             createCanvasElement('text', 22, 24, {
                                 id: 'blog-index-featured-label',
@@ -9254,12 +9274,20 @@ function buildTemplateElements(input: {
                                 width: 240,
                                 height: 54,
                                 props: { content: 'Latest article title', level: 'h3', fontSize: 21, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 300, height: 36 },
+                                    mobile: { width: 270, height: 38 },
+                                },
                             }),
                             createCanvasElement('paragraph', 22, 122, {
                                 id: 'blog-index-featured-copy',
                                 width: 230,
                                 height: 44,
                                 props: { content: 'Bind this to the latest or selected Backy blog post.', fontSize: 13, lineHeight: 1.45, color: '#4b5563' },
+                                responsive: {
+                                    tablet: { y: 102, width: 300, height: 28 },
+                                    mobile: { y: 104, width: 270, height: 36 },
+                                },
                             }),
                         ],
                     }),
@@ -9271,12 +9299,20 @@ function buildTemplateElements(input: {
                 height: 420,
                 dataBindings: [{ source: 'blog', mode: 'list', limit: 8, sort: 'publishedAt:desc' }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 560 },
+                    mobile: { y: 560, width: 375, height: 660 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'blog-index-list-heading',
                         width: 420,
                         height: 46,
                         props: { content: 'Latest articles', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 420 },
+                            mobile: { x: 24, y: 46, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...['Design notes', 'Product update', 'Field guide'].map((item, index) => createCanvasElement('box', 74, 130 + index * 86, {
                         id: `blog-index-post-row-${index}`,
@@ -9284,18 +9320,30 @@ function buildTemplateElements(input: {
                         height: 68,
                         dataBindings: [{ source: 'blog', mode: 'item', index }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 126 + index * 118, width: 660, height: 92 },
+                            mobile: { x: 24, y: 120 + index * 158, width: 327, height: 132 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 14, {
                                 id: `blog-index-post-title-${index}`,
                                 width: 320,
                                 height: 30,
                                 props: { content: item, level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 54 },
+                                },
                             }),
                             createCanvasElement('text', 650, 20, {
                                 id: `blog-index-post-meta-${index}`,
                                 width: 150,
                                 height: 24,
                                 props: { content: '5 min read', fontSize: 13, color: '#6b7280' },
+                                responsive: {
+                                    tablet: { x: 500, width: 110 },
+                                    mobile: { x: 20, y: 88, width: 120 },
+                                },
                             }),
                         ],
                     })),
