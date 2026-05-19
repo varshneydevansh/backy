@@ -795,14 +795,45 @@ interface ApiBlogPostResponse {
   };
 }
 
+export interface FormsPersistenceCertification {
+  schemaVersion: 'backy.forms-persistence-certification.v1';
+  status: 'external-database-gate';
+  selectedSiteId: string;
+  requiredDatabaseEnv: string[];
+  requiredConfirmationEnv: string;
+  localEvidence: string[];
+  databaseGate: string;
+  ciGate: string;
+  workflow: string;
+  targetGuards: string[];
+  requires: string[];
+  coverage?: string[];
+  runtime?: {
+    dataMode?: string;
+    databaseType?: string;
+    databaseUrlConfigured?: boolean;
+    databaseUrlAlias?: string | null;
+    disposableConfirmed?: boolean;
+    expectedHostConfigured?: boolean;
+    expectedDatabaseConfigured?: boolean;
+    readyForCertification?: boolean;
+    missing?: string[];
+    secretHandling?: string;
+  };
+  secretHandling: string;
+  checks?: Array<Record<string, unknown>>;
+}
+
 interface ApiListFormsResponse {
   success: boolean;
   data?: {
     forms: FormDefinition[];
     total?: number;
     pagination?: FormSubmissionList['pagination'];
+    persistenceCertification?: FormsPersistenceCertification;
   };
   forms?: FormDefinition[];
+  persistenceCertification?: FormsPersistenceCertification;
   error?: {
     message?: string;
   };
@@ -5665,6 +5696,14 @@ export async function listForms(
   siteId: string,
   filters: { pageId?: string; postId?: string } = {},
 ): Promise<FormDefinition[]> {
+  const result = await listFormsWithMetadata(siteId, filters);
+  return result.forms;
+}
+
+export async function listFormsWithMetadata(
+  siteId: string,
+  filters: { pageId?: string; postId?: string } = {},
+): Promise<{ forms: FormDefinition[]; persistenceCertification?: FormsPersistenceCertification }> {
   const query = new URLSearchParams();
   if (filters.pageId) query.set('pageId', filters.pageId);
   if (filters.postId) query.set('postId', filters.postId);
@@ -5677,7 +5716,10 @@ export async function listForms(
     throw new Error(payload.error?.message || 'Unable to load forms');
   }
 
-  return forms;
+  return {
+    forms,
+    persistenceCertification: payload.data?.persistenceCertification || payload.persistenceCertification,
+  };
 }
 
 export async function createForm(

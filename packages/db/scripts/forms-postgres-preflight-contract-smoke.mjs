@@ -243,6 +243,11 @@ includesEvery(adminFormsPage, [
   'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
   'disposable migrated Supabase/Postgres database',
   'disposable_database_confirmed=true',
+  'runtime: formsPersistenceCertification?.runtime',
+  'forms-persistence-runtime-evidence',
+  'readyForCertification',
+  'databaseUrlConfigured',
+  'Database URLs and credentials are never returned',
   'persistenceCertification: formPersistenceCertification',
   'forms handoff manifests only expose non-secret gate names and readiness evidence',
 ], 'Admin Forms page handoff persistence certification manifest');

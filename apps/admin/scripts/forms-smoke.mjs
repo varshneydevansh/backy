@@ -82,6 +82,11 @@ const assertFormsPersistenceCertificationSource = () => {
     'disposable migrated Supabase/Postgres database',
     'disposable_database_confirmed=true',
     'external-database-gate',
+    'forms-persistence-runtime-evidence',
+    'Runtime evidence',
+    'readyForCertification',
+    'databaseUrlConfigured',
+    'Database URLs and credentials are never returned',
   ]) {
     assert(source.includes(label), `Forms persistence certification must name ${label}`);
   }
@@ -2069,7 +2074,10 @@ const assertLayout = async (client) => {
       document.body?.innerText?.includes('Registration/account handoff') &&
       document.body?.innerText?.includes('Create registration form'),
     hasPersistenceCertification: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-persistence-runtime-evidence"]')) &&
       document.body?.innerText?.includes('Persistence certification') &&
+      document.body?.innerText?.includes('Runtime evidence') &&
+      document.body?.innerText?.includes('Database URLs and credentials are never returned') &&
       document.body?.innerText?.includes('test:forms-postgres') &&
       Boolean(document.querySelector('[data-testid="forms-persistence-certification-download-button"]')) &&
       Boolean(document.querySelector('[data-testid="forms-persistence-certification-copy-button"]')) &&

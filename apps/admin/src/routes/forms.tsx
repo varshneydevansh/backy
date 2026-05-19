@@ -34,7 +34,7 @@ import {
   listFormDeliveryEvents,
   listCollections,
   cloneForm,
-  listForms,
+  listFormsWithMetadata,
   createForm,
   deleteForm,
   retryFormEmailDelivery,
@@ -47,6 +47,7 @@ import {
   type FormDeliveryEvent,
   type FormFieldDefinition,
   type FormsAnalytics,
+  type FormsPersistenceCertification,
   type FormSubmission,
   type FormSubmissionStatus,
   type AdminUserPermissionMatrix,
@@ -516,6 +517,7 @@ function FormsRoute() {
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [deliveryEventsByForm, setDeliveryEventsByForm] = useState<Record<string, FormDeliveryEvent[]>>({});
   const [formsAnalytics, setFormsAnalytics] = useState<FormsAnalytics | null>(null);
+  const [formsPersistenceCertification, setFormsPersistenceCertification] = useState<FormsPersistenceCertification | null>(null);
   const [formsAuditLogs, setFormsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
   const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
@@ -916,9 +918,18 @@ function FormsRoute() {
       'disposable_database_confirmed=true',
       'form_definitions, form_submissions, and form_contacts migrations with RLS policies',
     ],
+    coverage: formsPersistenceCertification?.coverage || [
+      'form definitions',
+      'form submissions',
+      'form contacts',
+      'collection-record routing',
+      'contact merge and promotion metadata',
+      'consent/spam settings persistence',
+    ],
+    runtime: formsPersistenceCertification?.runtime || null,
     secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
     checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
-  }), [activeSiteId]);
+  }), [activeSiteId, formsPersistenceCertification?.coverage, formsPersistenceCertification?.runtime]);
   const formsTemplatePack = useMemo(() => ({
     schemaVersion: 'backy.form-template-pack.v1',
     generatedAt: new Date().toISOString(),
@@ -1201,6 +1212,7 @@ function FormsRoute() {
       setInboxByForm({});
       setDeliveryEventsByForm({});
       setFormsAnalytics(null);
+      setFormsPersistenceCertification(null);
       setFormsAuditLogs([]);
       setError(viewPermissionTitle || 'Your account cannot view forms.');
       setNotice(null);
@@ -1212,12 +1224,13 @@ function FormsRoute() {
     setNotice(null);
 
     try {
-      const [loadedForms, loadedCollections, loadedAnalytics, loadedAuditResult] = await Promise.all([
-        listForms(activeSiteId),
+      const [loadedFormsResult, loadedCollections, loadedAnalytics, loadedAuditResult] = await Promise.all([
+        listFormsWithMetadata(activeSiteId),
         canViewCollections ? listCollections(activeSiteId).catch(() => []) : Promise.resolve([]),
         getFormsAnalytics(activeSiteId, { days: 14 }).catch(() => null),
         canExportActivity ? listAdminAuditLogs({ siteId: activeSiteId, limit: 40 }).catch(() => null) : Promise.resolve(null),
       ]);
+      const loadedForms = loadedFormsResult.forms;
       const inboxPairs = await Promise.all(
         loadedForms.map(async (form) => {
           const detail = await getFormWithSubmissions(activeSiteId, form.id, { limit: 100 });
@@ -1244,6 +1257,7 @@ function FormsRoute() {
       setInboxByForm(nextInbox);
       setDeliveryEventsByForm(Object.fromEntries(deliveryPairs));
       setFormsAnalytics(loadedAnalytics);
+      setFormsPersistenceCertification(loadedFormsResult.persistenceCertification || null);
       setFormsAuditLogs((loadedAuditResult?.logs || []).filter(isFormsAuditLog).slice(0, 8));
       setSelectedFormId((current) => (
         current && loadedForms.some((form) => form.id === current)
@@ -1257,6 +1271,7 @@ function FormsRoute() {
         setInboxByForm({});
         setDeliveryEventsByForm({});
         setFormsAnalytics(null);
+        setFormsPersistenceCertification(null);
         setFormsAuditLogs([]);
       }
       setError(loadError instanceof Error ? loadError.message : 'Unable to load forms');
@@ -2702,6 +2717,51 @@ function FormsRoute() {
             </div>
             <div className="mt-1">
               Target guards: {formPersistenceCertification.targetGuards.join(', ')}; requires {formPersistenceCertification.requires.slice(0, 2).join(' and ')}.
+            </div>
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-card px-3 py-2 text-xs" data-testid="forms-persistence-runtime-evidence">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="font-medium text-foreground">Runtime evidence</div>
+              <span className={cn(
+                'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                formPersistenceCertification.runtime?.readyForCertification
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700',
+              )}>
+                {formPersistenceCertification.runtime?.readyForCertification ? 'Ready for DB smoke' : 'Needs DB smoke inputs'}
+              </span>
+            </div>
+            <div className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded border border-border bg-background px-2 py-1.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Data mode</div>
+                <div className="mt-1 font-mono text-[11px] text-foreground">{formPersistenceCertification.runtime?.dataMode || 'unknown'}</div>
+              </div>
+              <div className="rounded border border-border bg-background px-2 py-1.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Database type</div>
+                <div className="mt-1 font-mono text-[11px] text-foreground">{formPersistenceCertification.runtime?.databaseType || 'unknown'}</div>
+              </div>
+              <div className="rounded border border-border bg-background px-2 py-1.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">URL alias</div>
+                <div className="mt-1 font-mono text-[11px] text-foreground">
+                  {formPersistenceCertification.runtime?.databaseUrlConfigured
+                    ? formPersistenceCertification.runtime.databaseUrlAlias || 'configured'
+                    : 'missing'}
+                </div>
+              </div>
+              <div className="rounded border border-border bg-background px-2 py-1.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Disposable confirmation</div>
+                <div className="mt-1 font-mono text-[11px] text-foreground">
+                  {formPersistenceCertification.runtime?.disposableConfirmed ? 'confirmed' : 'missing'}
+                </div>
+              </div>
+            </div>
+            {formPersistenceCertification.runtime?.missing?.length ? (
+              <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+                Missing runtime inputs: {formPersistenceCertification.runtime.missing.join(', ')}
+              </div>
+            ) : null}
+            <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+              Database URLs and credentials are never returned; this runtime summary exposes alias/configuration state only.
             </div>
           </div>
         </div>
