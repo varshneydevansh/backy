@@ -140,6 +140,14 @@ const assertFormsPersistenceCertificationSource = () => {
     'Forms builder must expose explicit contact-share mapping controls',
   );
   assert(
+    source.includes('normalizeFormContactShare') &&
+      source.includes('normalizeContactShareFieldReference') &&
+      source.includes('const contactShare = normalizeFormContactShare(form.contactShare, form.fields)') &&
+      source.includes('contactShare: contactShare?.enabled ? contactShare : { enabled: false }') &&
+      source.includes('checked={Boolean(formDraft.contactShare.emailField) && formDraft.contactShare.dedupeByEmail !== false}'),
+    'Forms builder must persist only current contact-share field references and keep email dedupe tied to an email mapping',
+  );
+  assert(
     source.includes('data-testid="form-field-default-value-input"') &&
       source.includes('onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}') &&
       source.includes('placeholder={field.options?.[0] || field.placeholder ||') &&

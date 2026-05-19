@@ -1617,12 +1617,14 @@ function FormsRoute() {
       if (!current) return current;
 
       const currentShare = current.contactShare || { enabled: false };
+      const nextShare = normalizeFormContactShare({
+        ...currentShare,
+        ...patch,
+      }, current.fields);
+
       return {
         ...current,
-        contactShare: {
-          ...currentShare,
-          ...patch,
-        },
+        contactShare: nextShare,
       };
     });
   };
@@ -3878,7 +3880,7 @@ function FormsRoute() {
                             <label className="mt-3 flex items-start gap-2 text-sm font-medium">
                               <input
                                 type="checkbox"
-                                checked={formDraft.contactShare.dedupeByEmail !== false}
+                                checked={Boolean(formDraft.contactShare.emailField) && formDraft.contactShare.dedupeByEmail !== false}
                                 onChange={(event) => patchFormDraftContactShare({ dedupeByEmail: event.target.checked })}
                                 disabled={!canEditForms || !formDraft.contactShare.emailField}
                                 data-testid="form-contact-share-dedupe-toggle"
@@ -5391,6 +5393,35 @@ const normalizeFormCollectionTarget = (
   };
 };
 
+const normalizeContactShareFieldReference = (
+  value: string | undefined,
+  fields: FormFieldDefinition[],
+): string | undefined => {
+  const normalizedKey = value ? normalizeFieldKey(value) : '';
+  return normalizedKey && formFieldKeySet(fields).has(normalizedKey) ? normalizedKey : undefined;
+};
+
+const normalizeFormContactShare = (
+  contactShare: FormDefinition['contactShare'],
+  fields: FormFieldDefinition[],
+): FormDefinition['contactShare'] => {
+  if (!contactShare) return contactShare;
+
+  const nameField = normalizeContactShareFieldReference(contactShare.nameField, fields);
+  const emailField = normalizeContactShareFieldReference(contactShare.emailField, fields);
+  const phoneField = normalizeContactShareFieldReference(contactShare.phoneField, fields);
+  const notesField = normalizeContactShareFieldReference(contactShare.notesField, fields);
+
+  return {
+    enabled: contactShare.enabled === true,
+    ...(nameField ? { nameField } : {}),
+    ...(emailField ? { emailField } : {}),
+    ...(phoneField ? { phoneField } : {}),
+    ...(notesField ? { notesField } : {}),
+    dedupeByEmail: Boolean(emailField) && contactShare.dedupeByEmail !== false,
+  };
+};
+
 const remapFormContactShareFieldKey = (
   contactShare: FormDefinition['contactShare'],
   oldKey: string,
@@ -5913,6 +5944,7 @@ const buildDefaultCollectionFieldMap = (
 };
 
 const buildFormUpdatePayload = (form: FormDefinition) => {
+  const contactShare = normalizeFormContactShare(form.contactShare, form.fields);
   const collectionTarget = normalizeFormCollectionTarget(form.collectionTarget, form.fields);
 
   return {
@@ -5959,7 +5991,7 @@ const buildFormUpdatePayload = (form: FormDefinition) => {
     enableHoneypot: form.enableHoneypot !== false,
     enableCaptcha: form.enableCaptcha === true,
     moderationMode: form.moderationMode || 'manual',
-    contactShare: form.contactShare?.enabled ? form.contactShare : { enabled: false },
+    contactShare: contactShare?.enabled ? contactShare : { enabled: false },
     collectionTarget: collectionTarget?.enabled
       ? collectionTarget
       : { enabled: false, collectionId: collectionTarget?.collectionId || '', fieldMap: collectionTarget?.fieldMap || {} },
