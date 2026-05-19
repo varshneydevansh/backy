@@ -109,8 +109,8 @@ Legend:
 
 #### `/pages` (`pages.tsx`)
 - ✅ table/list scaffold and “New page” navigation
-- ⚠️ filtering/search UX minimal
-- ❌ backend pagination, statuses, last modified, page template assignment, slug validation missing
+- ✅ backend-backed pagination intake, status/last-modified columns, route diagnostics, and page template provenance are surfaced in the table, CSV export, and handoff manifest.
+- ⚠️ continue hardening filter ergonomics and broader slug-validation/provider certification coverage.
 
 #### `/pages.new` (`pages.new.tsx`)
 - ✅ create page form shell

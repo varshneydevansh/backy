@@ -34,6 +34,9 @@ const assertPagesListSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Pages list route must use the shared EmptyState component');
   assert(source.includes('No saved snapshots yet'), 'Pages revision column must keep an explicit empty revision title visible');
   assert(source.includes('Save this page in the editor to capture a rollback-ready revision.'), 'Pages revision empty state must explain how snapshots are captured');
+  assert(source.includes('function PageTemplateCell') && source.includes('data-testid={`pages-template-${page.id}`}'), 'Pages list must render page template provenance per row');
+  assert(source.includes("'template_source'") && source.includes("'frontend_design_template_id'") && source.includes("'collection_dataset_slug'"), 'Pages CSV export must include template provenance columns');
+  assert(source.includes('const templateInfo = pageTemplateInfo(page)') && source.includes('template: templateInfo') && source.includes("pageMetaString(page, 'frontendDesignTemplateId')") && source.includes("pageMetaRecord(page, 'collectionDataset')"), 'Pages handoff must expose starter, frontend-design, and dataset page provenance');
 };
 
 const requestApi = async (endpoint, options = {}) => {
@@ -246,6 +249,7 @@ const createHierarchyPages = async () => {
         title: parentTitle,
         description: 'Temporary parent page for pages list hierarchy smoke.',
         canonical: `/${parentSlug}`,
+        template: 'landing',
       },
     }),
   });
@@ -267,6 +271,7 @@ const createHierarchyPages = async () => {
         parentPageTitle: parentPage.title,
         navigationPlacement: 'primary',
         navigationLabel: 'Smoke Child Link',
+        template: 'about',
       },
     }),
   });
@@ -588,6 +593,37 @@ const waitForHierarchyRow = async (client, page, expectedText, expectedSearch = 
 
     if (attempt === 99) {
       throw new Error(`Hierarchy row did not render expected text "${expectedText}": ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const waitForTemplateRow = async (client, page, expectedText, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const template = document.querySelector('[data-testid="pages-template-${page.id}"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        templateText: template?.textContent || '',
+        body: document.body?.innerText?.slice(0, 700) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.templateText.includes(expectedText)
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Template row did not render expected text "${expectedText}": ${JSON.stringify(state)}`);
     }
 
     await sleep(250);
@@ -1466,6 +1502,11 @@ const main = async () => {
       hierarchyPages.parentPage,
       '1 child page',
     );
+    const parentTemplate = await waitForTemplateRow(
+      client,
+      hierarchyPages.parentPage,
+      'Landing',
+    );
     const parentDeliveryHealth = await waitForDeliveryRow(
       client,
       hierarchyPages.parentPage,
@@ -1537,6 +1578,7 @@ const main = async () => {
       registrationShortcut,
       childHierarchy,
       parentHierarchy,
+      parentTemplate,
       parentDeliveryHealth,
       deliveryRefresh,
       childRevisions,

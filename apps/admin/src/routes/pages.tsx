@@ -275,6 +275,12 @@ const PAGE_EXPORT_COLUMNS = [
   'title',
   'slug',
   'path',
+  'template_source',
+  'template_label',
+  'frontend_design_template_id',
+  'frontend_design_template_name',
+  'collection_dataset_mode',
+  'collection_dataset_slug',
   'status',
   'is_homepage',
   'route_status',
@@ -705,6 +711,7 @@ function PagesListView() {
       const deliveryStatus = getPageDeliveryStatus(page, readiness, routeDiagnostic);
       const deliveryHealth = deliveryHealthMap[page.id];
       const deliveryHistory = deliveryHealthHistoryMap[page.id] || [];
+      const templateInfo = pageTemplateInfo(page);
 
       return [
         page.id,
@@ -713,6 +720,12 @@ function PagesListView() {
         page.title,
         page.slug,
         pagePath,
+        templateInfo.source,
+        templateInfo.label,
+        pageMetaString(page, 'frontendDesignTemplateId'),
+        pageMetaString(page, 'frontendDesignTemplateName'),
+        templateInfo.datasetMode || '',
+        templateInfo.datasetSlug || '',
         page.status,
         Boolean(page.isHomepage),
         pageRouteDiagnostics[page.id]?.status || 'available',
@@ -1449,6 +1462,11 @@ function PagesListView() {
       )
     },
     {
+      key: 'template',
+      label: 'Template',
+      render: (page) => <PageTemplateCell page={page} />,
+    },
+    {
       key: 'status',
       label: 'Status',
       sortable: true,
@@ -1848,12 +1866,14 @@ function PagesListView() {
       const encodedSiteId = encodeURIComponent(pageSiteId);
       const encodedPath = encodeURIComponent(pagePath);
       const encodedPageId = encodeURIComponent(page.id);
+      const templateInfo = pageTemplateInfo(page);
 
       return {
         id: page.id,
         title: page.title,
         slug: page.slug,
         path: pagePath,
+        template: templateInfo,
         status: page.status,
         isHomepage: Boolean(page.isHomepage),
         route: {
@@ -3001,6 +3021,31 @@ function PageHierarchyCell({ page, parentPage, childCount }: { page: Page; paren
   );
 }
 
+function PageTemplateCell({ page }: { page: Page }) {
+  const template = pageTemplateInfo(page);
+  const badgeClass = template.source === 'frontend-design'
+    ? 'bg-teal-50 text-teal-700'
+    : template.source === 'collection-dataset'
+      ? 'bg-sky-50 text-sky-700'
+      : template.source === 'starter-template'
+        ? 'bg-primary/10 text-primary'
+        : 'bg-muted text-muted-foreground';
+
+  return (
+    <div className="min-w-48 space-y-1" data-testid={`pages-template-${page.id}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', badgeClass)}>
+          {template.badge}
+        </span>
+        <span className="text-sm font-medium text-foreground">{template.label}</span>
+      </div>
+      <p className="max-w-56 truncate text-xs text-muted-foreground" title={template.detail}>
+        {template.detail}
+      </p>
+    </div>
+  );
+}
+
 function PageRouteCell({ page, diagnostic }: { page: Page; diagnostic: PageRouteDiagnostic | undefined }) {
   const route = diagnostic || {
     path: pagePublicPath(page),
@@ -3568,6 +3613,70 @@ const buildPageRouteDiagnostics = (pages: Page[], collections: Collection[]): Re
 const pageMetaString = (page: Page, key: string): string => {
   const value = page.meta?.[key];
   return typeof value === 'string' ? value : '';
+};
+
+const pageMetaRecord = (page: Page, key: string): Record<string, unknown> | null => {
+  const value = page.meta?.[key];
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+};
+
+const pageTemplateLabel = (value: string): string => (
+  value
+    .split('-')
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+);
+
+const pageTemplateInfo = (page: Page): {
+  source: 'starter-template' | 'frontend-design' | 'collection-dataset' | 'custom-canvas';
+  badge: string;
+  label: string;
+  detail: string;
+  datasetMode?: string;
+  datasetSlug?: string;
+} => {
+  const frontendTemplateId = pageMetaString(page, 'frontendDesignTemplateId');
+  const frontendTemplateName = pageMetaString(page, 'frontendDesignTemplateName');
+  if (frontendTemplateId || frontendTemplateName) {
+    return {
+      source: 'frontend-design',
+      badge: 'Frontend',
+      label: frontendTemplateName || frontendTemplateId,
+      detail: pageMetaString(page, 'frontendDesignRoutePattern') || 'Captured frontend design contract',
+    };
+  }
+
+  const dataset = pageMetaRecord(page, 'collectionDataset');
+  const datasetMode = typeof dataset?.mode === 'string' ? dataset.mode : '';
+  const datasetSlug = typeof dataset?.collectionSlug === 'string' ? dataset.collectionSlug : '';
+  if (dataset) {
+    return {
+      source: 'collection-dataset',
+      badge: 'Dataset',
+      label: `${typeof dataset.collectionName === 'string' ? dataset.collectionName : datasetSlug || 'Collection'} ${datasetMode === 'item' ? 'detail' : 'list'}`.trim(),
+      detail: typeof dataset.routePattern === 'string' ? dataset.routePattern : 'Collection-backed page template',
+      datasetMode,
+      datasetSlug,
+    };
+  }
+
+  const starterTemplate = pageMetaString(page, 'template') || page.template || '';
+  if (starterTemplate) {
+    return {
+      source: 'starter-template',
+      badge: 'Starter',
+      label: pageTemplateLabel(starterTemplate),
+      detail: starterTemplate === 'blank' ? 'Blank canvas starter' : 'Backy editable page starter',
+    };
+  }
+
+  return {
+    source: 'custom-canvas',
+    badge: 'Custom',
+    label: 'Custom canvas',
+    detail: 'No starter, dataset, or frontend-template provenance recorded',
+  };
 };
 
 const getParentPageTitle = (page: Page, pageMap: Map<string, Page>): string => (

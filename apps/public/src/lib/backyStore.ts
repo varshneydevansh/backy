@@ -53,6 +53,7 @@ interface PageMeta {
   ogImage?: string | null;
   canonical?: string | null;
   jsonLd?: Array<Record<string, unknown>>;
+  template?: string | null;
   noIndex?: boolean;
   noFollow?: boolean;
   parentPageId?: string | null;
@@ -8382,6 +8383,7 @@ export function createAdminPage(
       ogImage: sanitizeString(metaInput.ogImage) || null,
       canonical: sanitizeString(metaInput.canonical) || `/${slug}`,
       jsonLd: toJsonObjectArray(metaInput.jsonLd),
+      template: sanitizeString(metaInput.template) || null,
       noIndex: parseBooleanInput(
         metaInput.noIndex,
         defaultNoIndexForStatus(status),
@@ -8555,6 +8557,10 @@ export function updateAdminPage(
               metaInput.jsonLd === undefined
                 ? current.meta.jsonLd
                 : toJsonObjectArray(metaInput.jsonLd),
+            template:
+              metaInput.template === undefined
+                ? current.meta.template
+                : sanitizeString(metaInput.template) || null,
             noIndex:
               metaInput.noIndex === undefined
                 ? current.meta.noIndex

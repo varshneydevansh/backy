@@ -953,6 +953,9 @@ export interface PageMeta {
   /** Route-specific JSON-LD objects */
   jsonLd?: Array<Record<string, unknown>>;
 
+  /** Backy starter template used to seed this page */
+  template?: string;
+
   /** Whether to exclude from search engines */
   noIndex?: boolean;
 

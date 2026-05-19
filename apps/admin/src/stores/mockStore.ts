@@ -39,6 +39,7 @@ export interface Page {
     parentId?: string | null;
     status: ContentStatus;
     scheduledAt?: string | null;
+    template?: string | null;
     content?: string;
     meta?: Record<string, any>;
     lastUpdated: string;

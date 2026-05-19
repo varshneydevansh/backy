@@ -3885,6 +3885,7 @@ const toStorePage = (page: ApiPage): Page => ({
   parentId: page.parentId || null,
   status: toContentStatus(page.status, page.status === 'published'),
   scheduledAt: page.scheduledAt || null,
+  template: typeof page.meta?.template === 'string' ? page.meta.template : null,
   content: page.content ? JSON.stringify(page.content) : undefined,
   meta: page.meta || {
     title: page.title,
