@@ -215,6 +215,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("selectedIds.length > 1 ? 'selected layers' : 'selected layer'"), 'Editor selected-layer toolbar actions must label multi-selection states');
   assert(source.includes('const canDeleteSelected') && source.includes('disabled={isCanvasMutationDisabled || !canDeleteSelected}'), 'Editor delete toolbar button must be disabled when selection has no unlocked deletable layers');
   assert(source.includes('handleSelectParentLayer') && source.includes('data-testid="editor-select-parent-layer"'), 'Editor inspector must expose a nested-layer parent selection action');
+  assert(source.includes('handleSelectFirstChildLayer') && source.includes('data-testid="editor-select-child-layer"'), 'Editor inspector must expose a nested-layer child selection action');
+  assert(source.includes("e.key === 'Enter'") && source.includes('handleSelectFirstChildLayer();') && source.includes('handleSelectParentLayer();'), 'Editor keyboard handler must support Enter child selection and Shift+Enter parent selection');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -9884,6 +9886,17 @@ const testLayerHierarchyControls = async (client) => {
   await clickControlByTestId(client, 'editor-select-parent-layer');
   const parentSelection = await readSelectedLayerIds(client);
   assert(parentSelection.includes('smoke-box'), `Inspector parent selection action did not select smoke-box: ${JSON.stringify(parentSelection)}`);
+  await pressKey(client, 'Enter');
+  const keyboardChildSelection = await readSelectedLayerIds(client);
+  const keyboardChildId = keyboardChildSelection.find((id) => id !== 'smoke-box');
+  const keyboardChildTree = await readLayerTreeState(client, ['smoke-image', 'smoke-box', 'smoke-child-button']);
+  assert(
+    keyboardChildId && keyboardChildTree.byId[keyboardChildId]?.depth > keyboardChildTree.byId['smoke-box'].depth,
+    `Enter did not drill into a child layer: ${JSON.stringify({ keyboardChildSelection, keyboardChildTree })}`,
+  );
+  await pressKey(client, 'Enter', { shiftKey: true });
+  const keyboardParentSelection = await readSelectedLayerIds(client);
+  assert(keyboardParentSelection.includes('smoke-box'), `Shift+Enter did not select the parent layer: ${JSON.stringify(keyboardParentSelection)}`);
 
   const nestedDrag = await dragElement(client, 'smoke-image', 500, 0, { skipDeltaAssert: true });
   const afterNestedDragState = await readEditorElementState(client, ['smoke-image', 'smoke-box']);
