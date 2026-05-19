@@ -1612,12 +1612,32 @@ function FormsRoute() {
     if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
+      const currentField = current.fields[fieldIndex];
+      if (!currentField) return current;
+      const hasKeyPatch = Object.prototype.hasOwnProperty.call(patch, 'key');
+      const currentKey = normalizeFieldKey(currentField.key);
+      const patchedKey = hasKeyPatch
+        ? getUniqueFormDraftFieldKey(
+            current.fields.filter((_, index) => index !== fieldIndex),
+            normalizeFieldKey(String(patch.key || '')) || currentKey,
+          )
+        : currentKey;
+      const nextPatch = hasKeyPatch ? { ...patch, key: patchedKey } : patch;
+      const fieldKeyChanged = hasKeyPatch && Boolean(currentKey) && Boolean(patchedKey) && currentKey !== patchedKey;
+      const nextContactShare = fieldKeyChanged
+        ? remapFormContactShareFieldKey(current.contactShare, currentKey, patchedKey)
+        : current.contactShare;
+      const nextCollectionTarget = fieldKeyChanged
+        ? remapFormCollectionTargetFieldKey(current.collectionTarget, currentKey, patchedKey)
+        : current.collectionTarget;
 
       return {
         ...current,
         fields: current.fields.map((field, index) => (
-          index === fieldIndex ? { ...field, ...patch } : field
+          index === fieldIndex ? { ...field, ...nextPatch } : field
         )),
+        ...(nextContactShare ? { contactShare: nextContactShare } : {}),
+        ...(nextCollectionTarget ? { collectionTarget: nextCollectionTarget } : {}),
       };
     });
   };
@@ -5129,6 +5149,46 @@ const getUniqueFormDraftFieldKey = (fields: FormFieldDefinition[], baseKey: stri
   }
 
   return candidate;
+};
+
+const remapFieldKeyReference = (value: string | undefined, oldKey: string, nextKey: string): string | undefined => (
+  value === oldKey ? nextKey : value
+);
+
+const remapFormContactShareFieldKey = (
+  contactShare: FormDefinition['contactShare'],
+  oldKey: string,
+  nextKey: string,
+): FormDefinition['contactShare'] => (
+  contactShare
+    ? {
+        ...contactShare,
+        nameField: remapFieldKeyReference(contactShare.nameField, oldKey, nextKey),
+        emailField: remapFieldKeyReference(contactShare.emailField, oldKey, nextKey),
+        phoneField: remapFieldKeyReference(contactShare.phoneField, oldKey, nextKey),
+        notesField: remapFieldKeyReference(contactShare.notesField, oldKey, nextKey),
+      }
+    : contactShare
+);
+
+const remapFormCollectionTargetFieldKey = (
+  collectionTarget: FormDefinition['collectionTarget'],
+  oldKey: string,
+  nextKey: string,
+): FormDefinition['collectionTarget'] => {
+  if (!collectionTarget) return collectionTarget;
+
+  const fieldMap = { ...(collectionTarget.fieldMap || {}) };
+  if (Object.prototype.hasOwnProperty.call(fieldMap, oldKey)) {
+    fieldMap[nextKey] = fieldMap[oldKey];
+    delete fieldMap[oldKey];
+  }
+
+  return {
+    ...collectionTarget,
+    slugField: remapFieldKeyReference(collectionTarget.slugField, oldKey, nextKey),
+    fieldMap,
+  };
 };
 
 const buildFormDraftFieldPreset = (

@@ -82,6 +82,15 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("return baseField('attachment', 'Attachment'"),
     'Forms builder must expose typed add-field presets for common form controls',
   );
+  assert(
+    source.includes('remapFormContactShareFieldKey') &&
+      source.includes('remapFormCollectionTargetFieldKey') &&
+      source.includes('fieldKeyChanged') &&
+      source.includes('nameField: remapFieldKeyReference') &&
+      source.includes('slugField: remapFieldKeyReference') &&
+      source.includes('fieldMap[nextKey] = fieldMap[oldKey]'),
+    'Forms builder must preserve contact-share and collection-write mappings when a form field key is renamed',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',
