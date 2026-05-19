@@ -2676,6 +2676,29 @@ export function CanvasEditor({
     }, selectedId);
   }, [breakpoint, displayedElements, elements, findElementById, selectedId, updateElementsWithHistory]);
 
+  const handleLayerRename = useCallback((elementId: string, name: string) => {
+    const nextName = name.trim();
+
+    updateElementsWithHistory((currentElements) => {
+      const result = updateElementById(currentElements, elementId, (element) => {
+        if (element.locked) {
+          return element;
+        }
+
+        const nextElement: CanvasElement = { ...element };
+        if (nextName) {
+          nextElement.name = nextName;
+        } else {
+          delete nextElement.name;
+        }
+
+        return nextElement;
+      });
+
+      return result.updated ? result.elements : currentElements;
+    }, selectedId);
+  }, [selectedId, updateElementsWithHistory]);
+
   const handleLayerDelete = useCallback((elementId: string) => {
     if (isCanvasMutationDisabled) {
       return;
@@ -5785,6 +5808,7 @@ export function CanvasEditor({
                     onNestSelection={handleNestSelectionIntoLayer}
                     onVisibilityToggle={handleLayerVisibilityToggle}
                     onLockToggle={handleLayerLockToggle}
+                    onRename={handleLayerRename}
                     onDelete={handleLayerDelete}
                     onDuplicate={handleLayerDuplicate}
                     disabled={isCanvasMutationDisabled}

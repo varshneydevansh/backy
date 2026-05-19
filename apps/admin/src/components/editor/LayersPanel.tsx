@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, CornerUpLeft, MoveRight } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, CornerUpLeft, MoveRight, Pencil } from 'lucide-react';
 import type { CanvasElement } from '../../types/editor';
 
 // ==========================================================================
@@ -27,6 +27,7 @@ interface LayersPanelProps {
     onNestSelection: (parentId: string) => void;
     onVisibilityToggle: (id: string) => void;
     onLockToggle: (id: string) => void;
+    onRename: (id: string, name: string) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
     disabled?: boolean;
@@ -59,6 +60,7 @@ interface LayerItemProps {
     onNestSelection: (parentId: string) => void;
     onVisibilityToggle: (id: string) => void;
     onLockToggle: (id: string) => void;
+    onRename: (id: string, name: string) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
     disabled?: boolean;
@@ -180,17 +182,27 @@ function LayerItem({
     onNestSelection,
     onVisibilityToggle,
     onLockToggle,
+    onRename,
     onDelete,
     onDuplicate,
     disabled = false,
     depth = 0,
 }: LayerItemProps) {
     const [showActions, setShowActions] = useState(false);
-    const layerName = (element.props.name as string) || `${element.type}-${element.id.slice(0, 4)}`;
+    const [isRenaming, setIsRenaming] = useState(false);
+    const fallbackLayerName = `${element.type}-${element.id.slice(0, 4)}`;
+    const layerName = element.name || (element.props.layerName as string) || (element.props.name as string) || fallbackLayerName;
+    const [draftLayerName, setDraftLayerName] = useState(layerName);
     const hasExternalSelection = selectedIds.some((id) => id !== element.id);
     const canNestSelectedHere = !disabled && !isLocked && canAcceptChildren && hasExternalSelection;
     const showRowActions = showActions || isSelected;
     const actionButtonTabIndex = showRowActions ? 0 : -1;
+
+    useEffect(() => {
+        if (!isRenaming) {
+            setDraftLayerName(layerName);
+        }
+    }, [isRenaming, layerName]);
 
     const iconButtonStyle = (active = true, danger = false): React.CSSProperties => ({
         padding: '4px',
@@ -202,6 +214,32 @@ function LayerItem({
 
     const handleClick = (e: React.MouseEvent) => {
         onSelect(element.id, e.metaKey || e.ctrlKey, e.shiftKey);
+    };
+
+    const startRenaming = () => {
+        if (disabled || isLocked) {
+            return;
+        }
+        setDraftLayerName(layerName);
+        setIsRenaming(true);
+        onSelect(element.id, false, false);
+    };
+
+    const commitRename = () => {
+        if (disabled || isLocked) {
+            setIsRenaming(false);
+            setDraftLayerName(layerName);
+            return;
+        }
+
+        const nextName = draftLayerName.trim();
+        onRename(element.id, nextName);
+        setIsRenaming(false);
+    };
+
+    const cancelRename = () => {
+        setDraftLayerName(layerName);
+        setIsRenaming(false);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -345,8 +383,44 @@ function LayerItem({
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                 }}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startRenaming();
+                }}
             >
-                {layerName}
+                {isRenaming ? (
+                    <input
+                        type="text"
+                        value={draftLayerName}
+                        onChange={(e) => setDraftLayerName(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                commitRename();
+                            } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                cancelRename();
+                            }
+                        }}
+                        autoFocus
+                        data-layer-rename-input={element.id}
+                        aria-label={`Rename ${layerName}`}
+                        style={{
+                            width: '100%',
+                            border: '1px solid #6366f1',
+                            borderRadius: '4px',
+                            padding: '2px 6px',
+                            fontSize: '13px',
+                            outline: 'none',
+                        }}
+                    />
+                ) : (
+                    layerName
+                )}
             </span>
 
             {/* Action buttons (shown on hover) */}
@@ -486,6 +560,23 @@ function LayerItem({
                     tabIndex={actionButtonTabIndex}
                     onClick={(e) => {
                         e.stopPropagation();
+                        startRenaming();
+                    }}
+                    disabled={disabled || isLocked}
+                    data-layer-action="rename"
+                    data-layer-action-id={element.id}
+                    aria-label={`Rename ${layerName}`}
+                    style={iconButtonStyle(!disabled && !isLocked)}
+                    title={isLocked ? 'Unlock to rename' : 'Rename'}
+                >
+                    <Pencil size={14} strokeWidth={2} />
+                </button>
+
+                <button
+                    type="button"
+                    tabIndex={actionButtonTabIndex}
+                    onClick={(e) => {
+                        e.stopPropagation();
                         if (disabled || isLocked) {
                             return;
                         }
@@ -538,6 +629,7 @@ export function LayersPanel({
     onNestSelection,
     onVisibilityToggle,
     onLockToggle,
+    onRename,
     onDelete,
     onDuplicate,
     disabled = false,
@@ -705,6 +797,10 @@ export function LayersPanel({
         onLockToggle(id);
     }, [onLockToggle]);
 
+    const handleRename = useCallback((id: string, name: string) => {
+        onRename(id, name);
+    }, [onRename]);
+
     const renderLayerItems = (items: CanvasElement[], depth = 0) => (
         [...items].reverse().map((element) => {
             const hasChildren = Boolean(element.children?.length);
@@ -735,6 +831,7 @@ export function LayersPanel({
                         onNestSelection={onNestSelection}
                         onVisibilityToggle={handleVisibilityToggle}
                         onLockToggle={handleLockToggle}
+                        onRename={handleRename}
                         onDelete={onDelete}
                         onDuplicate={onDuplicate}
                         depth={depth}

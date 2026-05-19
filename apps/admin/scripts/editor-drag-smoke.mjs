@@ -228,6 +228,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('focusedLayerId') && layersPanelSource.includes('isFocusable') && layersPanelSource.includes('disabled || !isFocusable ? -1 : 0'), 'Editor layers panel must use roving focus so only the active row is tabbable');
   assert(layersPanelSource.includes('collapsedLayerIds') && layersPanelSource.includes('data-layer-action="toggle-expand"') && layersPanelSource.includes('aria-expanded={hasChildren ? isExpanded : undefined}'), 'Editor layers panel must expose collapsible nested layer rows');
   assert(layersPanelSource.includes("e.key === 'ArrowLeft' || e.key === 'ArrowRight'") && layersPanelSource.includes('onToggleExpanded(element.id)'), 'Editor layers panel must support keyboard collapse and expand for nested rows');
+  assert(layersPanelSource.includes('data-layer-action="rename"') && layersPanelSource.includes('data-layer-rename-input') && layersPanelSource.includes('element.name ||'), 'Editor layers panel must support inline top-level layer renaming');
+  assert(source.includes('const handleLayerRename') && source.includes('nextElement.name = nextName') && source.includes('onRename={handleLayerRename}'), 'Editor layer rename must update the selected canvas element name through history');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -3281,9 +3283,10 @@ const waitForPersistedLayerState = async (pageId, expected) => {
               exists: true,
               hidden: element.visible === false,
               locked: element.locked === true,
+              name: element.name || '',
               zIndex: element.zIndex,
             }
-          : { exists: false, hidden: false, locked: false, zIndex: null },
+          : { exists: false, hidden: false, locked: false, name: '', zIndex: null },
       ];
     }));
 
@@ -10221,6 +10224,40 @@ const testLayersPanelControls = async (client, pageId) => {
       keyboardRowNavigation.selected.includes(keyboardRowNavigation.expectedId),
     `Keyboard layer row Arrow navigation did not move focus and selection: ${JSON.stringify(keyboardRowNavigation)}`,
   );
+  const renameLayerClick = await clickLayerAction(client, 'rename', 'smoke-link');
+  const renamedLayerName = `Smoke CTA ${Date.now().toString(36)}`;
+  const renameLayer = await evaluate(client, `(async () => {
+    const input = document.querySelector('[data-layer-rename-input="smoke-link"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        reason: 'missing-rename-input',
+        availableInputs: Array.from(document.querySelectorAll('[data-layer-rename-input]')).map((node) => node.getAttribute('data-layer-rename-input')),
+      };
+    }
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(renamedLayerName)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const row = document.querySelector('[data-layer-id="smoke-link"]');
+    return {
+      ok: true,
+      rowText: row?.textContent || '',
+      selected: row?.getAttribute('data-layer-selected') || '',
+      inputStillOpen: Boolean(document.querySelector('[data-layer-rename-input="smoke-link"]')),
+    };
+  })()`);
+  assert(
+    renameLayer?.ok &&
+      renameLayer.rowText.includes(renamedLayerName) &&
+      renameLayer.selected === 'true' &&
+      renameLayer.inputStillOpen === false,
+    `Layer inline rename did not update the row label: ${JSON.stringify({ renameLayerClick, renamedLayer })}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10326,6 +10363,7 @@ const testLayersPanelControls = async (client, pageId) => {
   const persisted = await waitForPersistedLayerState(pageId, {
     'smoke-form': { hidden: true },
     'smoke-icon': { locked: true },
+    'smoke-link': { name: renamedLayerName },
   });
 
   return {
@@ -10341,6 +10379,9 @@ const testLayersPanelControls = async (client, pageId) => {
     keyboardTreeCollapseExpand,
     keyboardRowSelection,
     keyboardRowNavigation,
+    renameLayerClick,
+    renamedLayerName,
+    renameLayer,
     reorder,
     hiddenState,
     toolbarVisibleState,
