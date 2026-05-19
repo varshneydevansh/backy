@@ -151,6 +151,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('updatedOrders.length === 0'), 'Orders bulk workflow must distinguish total failure from partial success');
   assert(source.includes('could not be updated'), 'Orders bulk workflow must report partial failures to admins');
   assert(!source.includes('const updatedOrders = await Promise.all(selectedOrders.map((order) => ('), 'Orders bulk workflow must not collapse all selected updates into one generic Promise.all failure');
+  assert(source.includes('selectedLoadedOrders') && source.includes('hiddenSelectedOrderCount'), 'Orders bulk workflow must track selected orders outside the active filtered view');
+  assert(source.includes('data-testid="orders-bulk-selection-summary"') && source.includes('data-testid="orders-bulk-clear-selection"'), 'Orders bulk toolbar must expose selection summary and clear-selection controls');
   assert(source.includes('providerAnalytics: orderAnalytics?.providerOperations || null'), 'Orders handoff manifest must expose provider analytics for custom admin frontends');
   assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');

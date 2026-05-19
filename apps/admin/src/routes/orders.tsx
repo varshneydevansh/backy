@@ -975,6 +975,11 @@ function OrdersRoute() {
     () => filteredOrders.filter((order) => selectedOrderIds.includes(order.id)),
     [filteredOrders, selectedOrderIds],
   );
+  const selectedLoadedOrders = useMemo(
+    () => orders.filter((order) => selectedOrderIds.includes(order.id)),
+    [orders, selectedOrderIds],
+  );
+  const hiddenSelectedOrderCount = Math.max(0, selectedLoadedOrders.length - selectedVisibleOrders.length);
   const allVisibleOrdersSelected = filteredOrders.length > 0 && selectedVisibleOrders.length === filteredOrders.length;
   const metrics = useMemo(() => ({
     orders: totalOrderCount,
@@ -2558,6 +2563,10 @@ function OrdersRoute() {
     });
   };
 
+  const clearOrderSelection = () => {
+    setSelectedOrderIds([]);
+  };
+
   const bulkUpdateOrderWorkflow = async (
     action: 'paid' | 'processing' | 'fulfilled' | 'cancelled',
   ) => {
@@ -4109,9 +4118,24 @@ function OrdersRoute() {
                         disabled={isOrdersAccessBusy || !canEditOrders || filteredOrders.length === 0}
                         className="size-4 rounded border-border"
                       />
-                      {selectedVisibleOrders.length} selected
+                      <span data-testid="orders-bulk-selection-summary">
+                        {selectedVisibleOrders.length} visible selected
+                        {hiddenSelectedOrderCount > 0 ? ` · ${hiddenSelectedOrderCount} outside this view` : ''}
+                      </span>
                     </label>
                     <div className="flex flex-wrap items-center gap-2">
+                      {selectedLoadedOrders.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={clearOrderSelection}
+                          disabled={isOrdersAccessBusy || !canEditOrders}
+                          title={!canEditOrders ? editPermissionTitle : undefined}
+                          data-testid="orders-bulk-clear-selection"
+                        >
+                          Clear selection
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
