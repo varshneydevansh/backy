@@ -228,8 +228,10 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('focusedLayerId') && layersPanelSource.includes('isFocusable') && layersPanelSource.includes('disabled || !isFocusable ? -1 : 0'), 'Editor layers panel must use roving focus so only the active row is tabbable');
   assert(layersPanelSource.includes('collapsedLayerIds') && layersPanelSource.includes('data-layer-action="toggle-expand"') && layersPanelSource.includes('aria-expanded={hasChildren ? isExpanded : undefined}'), 'Editor layers panel must expose collapsible nested layer rows');
   assert(layersPanelSource.includes("e.key === 'ArrowLeft' || e.key === 'ArrowRight'") && layersPanelSource.includes('onToggleExpanded(element.id)'), 'Editor layers panel must support keyboard collapse and expand for nested rows');
-  assert(layersPanelSource.includes('data-layer-action="rename"') && layersPanelSource.includes('data-layer-rename-input') && layersPanelSource.includes('element.name ||'), 'Editor layers panel must support inline top-level layer renaming');
+  assert(layersPanelSource.includes('data-layer-action="rename"') && layersPanelSource.includes('data-layer-rename-input') && layersPanelSource.includes('getLayerDisplayName'), 'Editor layers panel must support inline top-level layer renaming');
   assert(source.includes('const handleLayerRename') && source.includes('nextElement.name = nextName') && source.includes('onRename={handleLayerRename}'), 'Editor layer rename must update the selected canvas element name through history');
+  assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
+  assert(layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') && layersPanelSource.includes('data-testid="editor-layer-search-empty"'), 'Editor layer search must reveal matching descendants and expose an empty state');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10092,6 +10094,61 @@ const testLayersPanelControls = async (client, pageId) => {
       keyboardTreeCollapseExpand.afterExpand.childVisible === true,
     `Layers panel keyboard collapse/expand did not toggle nested rows: ${JSON.stringify(keyboardTreeCollapseExpand)}`,
   );
+  const collapsedBeforeSearch = await clickLayerAction(client, 'toggle-expand', 'smoke-box');
+  const layerSearch = await evaluate(client, `(async () => {
+    const input = document.querySelector('[data-testid="editor-layer-search"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-search-input' };
+    }
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, 'child-button');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const filteredRows = Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => ({
+      id: node.getAttribute('data-layer-id'),
+      depth: Number(node.getAttribute('data-layer-depth') || 0),
+      expanded: node.getAttribute('aria-expanded') || '',
+    }));
+    const parent = filteredRows.find((row) => row.id === 'smoke-box');
+    const child = filteredRows.find((row) => row.id === 'smoke-child-button');
+    const headingVisibleDuringSearch = filteredRows.some((row) => row.id === 'smoke-heading');
+    const resultCount = input.getAttribute('data-layer-search-results') || '';
+
+    const clear = document.querySelector('[data-testid="editor-layer-search-clear"]');
+    if (!(clear instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-clear-button', filteredRows };
+    }
+    clear.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    return {
+      ok: true,
+      filteredRows,
+      parent,
+      child,
+      headingVisibleDuringSearch,
+      resultCount,
+      afterClearValue: input.value,
+      afterClearChildVisible: Boolean(document.querySelector('[data-layer-id="smoke-child-button"]')),
+      afterClearParentExpanded: document.querySelector('[data-layer-id="smoke-box"]')?.getAttribute('aria-expanded') || '',
+    };
+  })()`);
+  assert(
+    layerSearch?.ok &&
+      layerSearch.parent &&
+      layerSearch.child &&
+      layerSearch.child.depth > layerSearch.parent.depth &&
+      layerSearch.parent.expanded === 'true' &&
+      layerSearch.headingVisibleDuringSearch === false &&
+      Number(layerSearch.resultCount) >= 2 &&
+      layerSearch.afterClearValue === '' &&
+      layerSearch.afterClearChildVisible === false &&
+      layerSearch.afterClearParentExpanded === 'false',
+    `Layer search did not filter rows or reveal a collapsed child match: ${JSON.stringify({ collapsedBeforeSearch, layerSearch })}`,
+  );
+  const expandedAfterSearch = await clickLayerAction(client, 'toggle-expand', 'smoke-box');
 
   const multiSelected = await selectLayerIds(client, ['smoke-heading', 'smoke-image']);
   assert(
@@ -10377,6 +10434,9 @@ const testLayersPanelControls = async (client, pageId) => {
     expandedTreeClick,
     expandedTree,
     keyboardTreeCollapseExpand,
+    collapsedBeforeSearch,
+    layerSearch,
+    expandedAfterSearch,
     keyboardRowSelection,
     keyboardRowNavigation,
     renameLayerClick,

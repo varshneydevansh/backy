@@ -155,6 +155,17 @@ const CHILD_ACCEPTING_TYPES = new Set([
     'form',
 ]);
 
+const getLayerDisplayName = (element: CanvasElement): string => (
+    element.name
+    || (element.props.layerName as string)
+    || (element.props.name as string)
+    || `${element.type}-${element.id.slice(0, 4)}`
+);
+
+const getLayerSearchText = (element: CanvasElement): string => (
+    `${getLayerDisplayName(element)} ${element.type} ${element.id}`.toLowerCase()
+);
+
 // ==========================================================================
 // LAYER ITEM COMPONENT
 // ==========================================================================
@@ -190,8 +201,7 @@ function LayerItem({
 }: LayerItemProps) {
     const [showActions, setShowActions] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
-    const fallbackLayerName = `${element.type}-${element.id.slice(0, 4)}`;
-    const layerName = element.name || (element.props.layerName as string) || (element.props.name as string) || fallbackLayerName;
+    const layerName = getLayerDisplayName(element);
     const [draftLayerName, setDraftLayerName] = useState(layerName);
     const hasExternalSelection = selectedIds.some((id) => id !== element.id);
     const canNestSelectedHere = !disabled && !isLocked && canAcceptChildren && hasExternalSelection;
@@ -641,20 +651,61 @@ export function LayersPanel({
     const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
     const [focusedLayerId, setFocusedLayerId] = useState<string | null>(null);
     const [collapsedLayerIds, setCollapsedLayerIds] = useState<string[]>([]);
+    const [layerSearch, setLayerSearch] = useState('');
     const collapsedLayerIdSet = useMemo(() => new Set(collapsedLayerIds), [collapsedLayerIds]);
+    const normalizedLayerSearch = layerSearch.trim().toLowerCase();
+    const filteredLayerIdSet = useMemo(() => {
+        if (!normalizedLayerSearch) {
+            return null;
+        }
+
+        const visibleIds = new Set<string>();
+        const addDescendants = (element: CanvasElement) => {
+            element.children?.forEach((child) => {
+                visibleIds.add(child.id);
+                addDescendants(child);
+            });
+        };
+        const walk = (items: CanvasElement[], ancestorIds: string[]): boolean => {
+            let hasMatch = false;
+            items.forEach((element) => {
+                const selfMatches = getLayerSearchText(element).includes(normalizedLayerSearch);
+                const childMatches = element.children?.length
+                    ? walk(element.children, [...ancestorIds, element.id])
+                    : false;
+
+                if (selfMatches || childMatches) {
+                    ancestorIds.forEach((id) => visibleIds.add(id));
+                    visibleIds.add(element.id);
+                    if (selfMatches) {
+                        addDescendants(element);
+                    }
+                }
+
+                hasMatch = hasMatch || selfMatches || childMatches;
+            });
+            return hasMatch;
+        };
+
+        walk(elements, []);
+        return visibleIds;
+    }, [elements, normalizedLayerSearch]);
     const renderedLayerIds = useMemo(() => {
         const ids: string[] = [];
         const collect = (items: CanvasElement[]) => {
             [...items].reverse().forEach((element) => {
+                if (filteredLayerIdSet && !filteredLayerIdSet.has(element.id)) {
+                    return;
+                }
                 ids.push(element.id);
-                if (element.children?.length && !collapsedLayerIdSet.has(element.id)) {
+                if (element.children?.length && (normalizedLayerSearch || !collapsedLayerIdSet.has(element.id))) {
                     collect(element.children);
                 }
             });
         };
         collect(elements);
         return ids;
-    }, [collapsedLayerIdSet, elements]);
+    }, [collapsedLayerIdSet, elements, filteredLayerIdSet, normalizedLayerSearch]);
 
     const handleSelect = useCallback(
         (id: string, multiSelect: boolean, rangeSelect: boolean) => {
@@ -803,8 +854,12 @@ export function LayersPanel({
 
     const renderLayerItems = (items: CanvasElement[], depth = 0) => (
         [...items].reverse().map((element) => {
+            if (filteredLayerIdSet && !filteredLayerIdSet.has(element.id)) {
+                return null;
+            }
+
             const hasChildren = Boolean(element.children?.length);
-            const isExpanded = !collapsedLayerIdSet.has(element.id);
+            const isExpanded = Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id);
             return (
                 <React.Fragment key={element.id}>
                     <LayerItem
@@ -879,6 +934,55 @@ export function LayersPanel({
                 </div>
             )}
 
+            <div
+                style={{
+                    padding: '10px 12px',
+                    borderBottom: '1px solid #e5e7eb',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                }}
+                data-testid="editor-layer-search-controls"
+            >
+                <input
+                    type="search"
+                    value={layerSearch}
+                    onChange={(e) => setLayerSearch(e.target.value)}
+                    placeholder="Search layers"
+                    aria-label="Search layers"
+                    data-testid="editor-layer-search"
+                    data-layer-search-results={renderedLayerIds.length}
+                    style={{
+                        minWidth: 0,
+                        flex: 1,
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        padding: '6px 8px',
+                        fontSize: '13px',
+                        outline: 'none',
+                    }}
+                />
+                <button
+                    type="button"
+                    onClick={() => setLayerSearch('')}
+                    disabled={!layerSearch}
+                    aria-label="Clear layer search"
+                    data-testid="editor-layer-search-clear"
+                    style={{
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        background: '#ffffff',
+                        color: layerSearch ? '#374151' : '#9ca3af',
+                        cursor: layerSearch ? 'pointer' : 'not-allowed',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        padding: '6px 8px',
+                    }}
+                >
+                    Clear
+                </button>
+            </div>
+
             {/* Layer list */}
             <div
                 role="tree"
@@ -900,6 +1004,18 @@ export function LayersPanel({
                         No elements on canvas.
                         <br />
                         Drag components from the library.
+                    </div>
+                ) : normalizedLayerSearch && renderedLayerIds.length === 0 ? (
+                    <div
+                        style={{
+                            padding: '24px 16px',
+                            textAlign: 'center',
+                            color: '#9ca3af',
+                            fontSize: '13px',
+                        }}
+                        data-testid="editor-layer-search-empty"
+                    >
+                        No matching layers.
                     </div>
                 ) : (
                     renderLayerItems(elements)
