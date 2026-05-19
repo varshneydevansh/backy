@@ -33,6 +33,13 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog editor must use the shared EmptyState component for sidebar empty states');
   assert(source.includes('Public comments for this post will appear here for quick review'), 'Blog editor comments empty state must explain how post comments populate');
   assert(source.includes('create a restorable revision snapshot'), 'Blog editor revision empty state must explain how revisions populate');
+  assert(
+    source.includes('getScheduledBlogEditorDateError') &&
+      source.includes('Date.parse(scheduledAt)') &&
+      source.includes('scheduledAtMs <= Date.now()') &&
+      source.includes('Choose a future publish date before scheduling changes.'),
+    'Blog editor must block scheduled posts with non-future publish dates before save',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

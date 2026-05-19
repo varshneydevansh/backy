@@ -158,6 +158,18 @@ const getMetaBoolean = (meta: Record<string, any> | undefined, key: string): boo
     return typeof value === 'boolean' ? value : false;
 };
 
+const getScheduledBlogEditorDateError = (status: ContentStatus, scheduledAt: string | null): string | null => {
+    if (status !== 'scheduled') return null;
+    if (!scheduledAt) return 'Choose a publish date before scheduling changes.';
+
+    const scheduledAtMs = Date.parse(scheduledAt);
+    if (!Number.isFinite(scheduledAtMs) || scheduledAtMs <= Date.now()) {
+        return 'Choose a future publish date before scheduling changes.';
+    }
+
+    return null;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
 );
@@ -673,6 +685,12 @@ function EditBlogPostPage() {
             setWorkflowNotice(null);
             return;
         }
+        const currentScheduleValidationMessage = getScheduledBlogEditorDateError(status, scheduledAt);
+        if (currentScheduleValidationMessage) {
+            setSaveWarning(currentScheduleValidationMessage);
+            setWorkflowNotice(null);
+            return;
+        }
         if (!canSave) {
             setSaveWarning(
                 isCheckingRoutes
@@ -685,8 +703,8 @@ function EditBlogPostPage() {
                                 ? 'Canonical path must start with / before saving.'
                                 : (status === 'published' || status === 'scheduled') && interactivePublishDisabledReason
                                     ? interactivePublishDisabledReason
-                                : status === 'scheduled' && !scheduledAt
-                                    ? 'Choose a publish date before scheduling changes.'
+                                : scheduleValidationMessage
+                                    ? scheduleValidationMessage
                                     : 'Add a title and URL slug before saving.',
             );
             setWorkflowNotice(null);
@@ -1154,6 +1172,9 @@ function EditBlogPostPage() {
         },
     };
     const editorHasUnsavedChanges = JSON.stringify(savedEditorSnapshot) !== JSON.stringify(currentEditorSnapshot);
+    const scheduleValidationMessage = getScheduledBlogEditorDateError(status, scheduledAt);
+    const hasFutureSchedule = scheduleValidationMessage === null;
+    const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
     const localReadinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slug.trim().length > 0 },
@@ -1164,7 +1185,7 @@ function EditBlogPostPage() {
         { label: 'Comments', complete: commentsModerated },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Interactive blocks', complete: interactivePublishReady },
-        { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
+        { label: 'Schedule', complete: hasFutureSchedule },
     ];
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
     const canSave = title.trim().length > 0
@@ -1172,7 +1193,7 @@ function EditBlogPostPage() {
         && !routeBlocked
         && canonicalValid
         && ((status !== 'published' && status !== 'scheduled') || interactivePublishReady)
-        && (status !== 'scheduled' || Boolean(scheduledAt));
+        && hasFutureSchedule;
     const editorBusy = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;
     const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
     const editorFormDisabled = editorBusy || !canEditBlog || isUsingLocalPostCopy;
@@ -1234,8 +1255,8 @@ function EditBlogPostPage() {
         },
         {
             label: 'Schedule',
-            detail: status === 'scheduled' ? scheduledAt ? 'Scheduled publish time is set.' : 'Choose a publish time.' : `${status} workflow selected.`,
-            ready: status !== 'scheduled' || Boolean(scheduledAt),
+            detail: status === 'scheduled' ? scheduleValidationMessage || 'Scheduled publish time is set.' : `${status} workflow selected.`,
+            ready: hasFutureSchedule,
         },
         {
             label: 'Backend readiness',
@@ -2105,6 +2126,7 @@ function EditBlogPostPage() {
                                         <input
                                             type="datetime-local"
                                             value={toDateTimeLocalValue(scheduledAt)}
+                                            min={minimumScheduledAt}
                                             onChange={(e) => {
                                                 if (!canEditBlog || !canPublishBlog) return;
                                                 clearEditorFeedback();
@@ -2112,9 +2134,13 @@ function EditBlogPostPage() {
                                             }}
                                             disabled={editorFormDisabled || !canPublishBlog}
                                             title={publishBlogPermissionTitle}
+                                            aria-invalid={Boolean(scheduleValidationMessage)}
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
                                         />
+                                        {scheduleValidationMessage && (
+                                            <p className="text-xs text-destructive">{scheduleValidationMessage}</p>
+                                        )}
                                     </div>
                                 )}
 

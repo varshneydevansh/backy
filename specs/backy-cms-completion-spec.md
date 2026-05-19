@@ -130,9 +130,8 @@ Legend:
 - ⚠️ continue hardening relation-based publish flow and broader external-provider certification.
 
 #### `/blog.$postId` (`blog.$postId.tsx`)
-- ✅ editor+canvas for article-like content
-- ⚠️ no revision graph and relation-based publish flow
-- ❌ scheduled publish + author/team attribution + comment options
+- ✅ editor+canvas for article-like content with revision snapshots, author/taxonomy assignment, comments sidebar, guarded publish/archive workflow, and future-date scheduled save validation.
+- ⚠️ continue hardening relation-based publish flow, team attribution depth, and revision graph ergonomics.
 
 #### Editor interaction parity
 - ✅ media picker now passes page/post context into the property panel and media uploads
