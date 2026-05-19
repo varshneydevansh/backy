@@ -1459,6 +1459,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { y: 1910, width: 375, height: 390 }"),
     'Portfolio page starter must seed explicit tablet/mobile responsive overrides for project gallery sections.',
   );
+  assert(
+    source.includes("id: 'gallery-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 650 }") &&
+      source.includes("id: 'gallery-featured-asset'") &&
+      source.includes("mobile: { x: 24, y: 390, width: 327, height: 220 }") &&
+      source.includes("id: 'gallery-filter-section'") &&
+      source.includes("mobile: { y: 650, width: 375, height: 250 }") &&
+      source.includes("id: 'gallery-folder-filter'") &&
+      source.includes("mobile: { x: 24, y: 94, width: 327, height: 118 }") &&
+      source.includes("id: 'gallery-grid-section'") &&
+      source.includes("tablet: { y: 710, width: 768, height: 980 }") &&
+      source.includes("id: `gallery-media-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 44 + index * 246, width: 327, height: 226 }") &&
+      source.includes("id: 'gallery-lightbox-section'") &&
+      source.includes("mobile: { y: 2440, width: 375, height: 420 }"),
+    'Gallery page starter must seed explicit tablet/mobile responsive overrides for media library sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
