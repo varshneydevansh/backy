@@ -186,6 +186,47 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'services',
+    title: 'Smoke Services Template',
+    slugBase: 'smoke-services-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'services',
+    navigationItem: 'Services',
+    headingId: 'services-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 46,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'services-site-header',
+      'services-site-navigation',
+      'services-site-footer',
+      'services-hero-section',
+      'services-format-filter',
+      'services-filter-all',
+      'services-filter-online',
+      'services-list-section',
+      'services-card-0',
+      'services-card-title-0',
+      'services-card-price-0',
+      'services-booking-button-0',
+      'services-process-section',
+      'services-process-step-0',
+      'services-inquiry-card',
+      'services-inquiry-button',
+    ],
+    dataBindingElementIds: [
+      'services-hero-section',
+      'services-format-filter',
+      'services-list-section',
+      'services-card-0',
+      'services-card-title-0',
+      'services-card-duration-0',
+      'services-card-price-0',
+      'services-process-section',
+      'services-process-step-0',
+    ],
+  },
+  {
     template: 'cart',
     title: 'Smoke Cart Template',
     slugBase: 'smoke-cart-template',
@@ -586,6 +627,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes("'pricing'") &&
       source.includes('pricing-plan-card-${index}') &&
       source.includes('pricing-billing-toggle') &&
+      source.includes("'services'") &&
+      source.includes('services-format-filter') &&
+      source.includes('services-booking-button-${index}') &&
+      source.includes('services.inquiry.open') &&
       source.includes("'cart'") &&
       source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
@@ -602,7 +647,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, help-center, and blog-post starters',
   );
 };
 
@@ -1175,6 +1220,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Pricing page',
       forms: 'none',
       dynamicData: 'Backy pricing plan placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'services',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Services page',
+      forms: 'none',
+      dynamicData: 'Backy service package placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

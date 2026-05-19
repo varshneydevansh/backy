@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -160,6 +160,13 @@ const TEMPLATE_OPTIONS: Array<{
         desc: 'Plan cards, feature comparison, subscription CTA, and pricing FAQ.',
         detail: 'Creates a public pricing page for one-time products, recurring plans, and provider checkout handoff.',
         sections: ['Pricing hero', 'Plan cards', 'Feature comparison'],
+    },
+    {
+        id: 'services',
+        name: 'Services page',
+        desc: 'Service cards, format filters, booking CTAs, process steps, and FAQ.',
+        detail: 'Creates a public services page ready to bind service packages, durations, prices, and booking handoff actions.',
+        sections: ['Services hero', 'Service cards', 'Booking process'],
     },
     {
         id: 'cart',
@@ -262,6 +269,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'pricing',
         description: 'A public pricing page ready to bind plans, subscription options, features, and checkout actions.',
     },
+    services: {
+        title: 'Services',
+        slug: 'services',
+        description: 'A public services page ready to bind packages, formats, durations, booking actions, and inquiry handoff.',
+    },
     cart: {
         title: 'Cart',
         slug: 'cart',
@@ -325,6 +337,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     storefront: 'primary',
     'product-detail': 'primary',
     pricing: 'primary',
+    services: 'primary',
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
@@ -554,6 +567,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     storefront: ['Home', 'Shop', 'About', 'Contact'],
     'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
     pricing: ['Home', 'Pricing', 'Shop', 'Contact'],
+    services: ['Home', 'Services', 'Pricing', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
@@ -606,6 +620,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Basic', x: 8, y: 48, w: 24, h: 28, className: 'border-violet-100 bg-white' },
         { label: 'Pro', x: 38, y: 44, w: 24, h: 34, className: 'border-violet-200 bg-white' },
         { label: 'Team', x: 68, y: 48, w: 24, h: 28, className: 'border-violet-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    services: [
+        { label: 'Services', x: 8, y: 14, w: 84, h: 24, className: 'border-rose-200 bg-rose-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-rose-800' },
+        { label: 'Filters', x: 62, y: 24, w: 22, h: 6, className: 'border-rose-100 bg-white' },
+        { label: 'Consult', x: 8, y: 48, w: 26, h: 28, className: 'border-rose-100 bg-white' },
+        { label: 'Build', x: 38, y: 48, w: 26, h: 28, className: 'border-rose-100 bg-white' },
+        { label: 'Care', x: 68, y: 48, w: 24, h: 28, className: 'border-rose-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     cart: [
@@ -1673,6 +1696,8 @@ function NewPageRoute() {
                 ? 'Backy product detail placeholders'
                 : formData.template === 'pricing'
                     ? 'Backy pricing plan placeholders'
+                : formData.template === 'services'
+                    ? 'Backy service package placeholders'
                 : formData.template === 'cart'
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
@@ -1792,7 +1817,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1842,7 +1867,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3874,6 +3899,8 @@ function buildTemplateElements(input: {
                 ? 'View order'
             : input.template === 'pricing'
                 ? 'View plans'
+            : input.template === 'services'
+                ? 'Book now'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'help-center'
@@ -4318,6 +4345,183 @@ function buildTemplateElements(input: {
                                 width: 214,
                                 height: 70,
                                 props: { content: 'Bind plan terms, billing intervals, refunds, and trial rules from Backy commerce settings or custom collections.', fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'services') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'services-hero-section',
+                width: 1200,
+                height: 340,
+                dataBindings: [{ source: 'services', mode: 'overview', fields: ['packages', 'formats', 'bookingUrl', 'availability'] }],
+                props: { backgroundColor: '#fff1f2', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'services-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Services', fontSize: 13, fontWeight: '800', color: '#be123c', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'services-heading',
+                        width: 640,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 214, {
+                        id: 'services-copy',
+                        width: 580,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4b5563' },
+                    }),
+                    createCanvasElement('box', 754, 96, {
+                        id: 'services-format-filter',
+                        width: 340,
+                        height: 86,
+                        dataBindings: [{ source: 'services', mode: 'format-filter', fields: ['all', 'online', 'inPerson'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fecdd3', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('button', 16, 20, {
+                                id: 'services-filter-all',
+                                width: 86,
+                                height: 46,
+                                props: { label: 'All', backgroundColor: '#be123c', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'services.filter.all' },
+                            }),
+                            createCanvasElement('button', 116, 20, {
+                                id: 'services-filter-online',
+                                width: 92,
+                                height: 46,
+                                props: { label: 'Online', backgroundColor: '#fff1f2', color: '#9f1239', borderRadius: 8, fontWeight: '800', action: 'services.filter.online' },
+                            }),
+                            createCanvasElement('button', 222, 20, {
+                                id: 'services-filter-in-person',
+                                width: 102,
+                                height: 46,
+                                props: { label: 'In person', backgroundColor: '#fff1f2', color: '#9f1239', borderRadius: 8, fontWeight: '800', action: 'services.filter.in_person' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 340, {
+                id: 'services-list-section',
+                width: 1200,
+                height: 470,
+                dataBindings: [{ source: 'services', mode: 'list', limit: 6 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 54, {
+                        id: 'services-list-heading',
+                        width: 400,
+                        height: 42,
+                        props: { content: 'Choose a service', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { name: 'Strategy session', duration: '60 minutes', price: '$120' },
+                        { name: 'Implementation sprint', duration: '2 weeks', price: '$1,800' },
+                        { name: 'Monthly care plan', duration: 'Ongoing', price: '$320/mo' },
+                    ].map((service, index) => createCanvasElement('box', 74 + index * 350, 130, {
+                        id: `services-card-${index}`,
+                        width: 310,
+                        height: 260,
+                        dataBindings: [{ source: 'services', mode: 'service', index }],
+                        props: { backgroundColor: index === 1 ? '#111827' : '#f9fafb', borderRadius: 8, borderColor: index === 1 ? '#111827' : '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: `services-card-title-${index}`,
+                                width: 230,
+                                height: 34,
+                                props: { content: service.name, level: 'h3', fontSize: 22, fontWeight: '800', color: index === 1 ? '#ffffff' : '#111827' },
+                                dataBindings: [{ source: 'services', mode: 'service', index, field: 'name', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 78, {
+                                id: `services-card-duration-${index}`,
+                                width: 150,
+                                height: 24,
+                                props: { content: service.duration, fontSize: 14, fontWeight: '800', color: index === 1 ? '#fecdd3' : '#be123c' },
+                                dataBindings: [{ source: 'services', mode: 'service', index, field: 'duration', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 118, {
+                                id: `services-card-price-${index}`,
+                                width: 150,
+                                height: 36,
+                                props: { content: service.price, fontSize: 28, fontWeight: '800', color: index === 1 ? '#ffffff' : '#111827' },
+                                dataBindings: [{ source: 'services', mode: 'service', index, field: 'price', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 166, {
+                                id: `services-card-copy-${index}`,
+                                width: 230,
+                                height: 42,
+                                props: { content: 'Bind service descriptions, availability, and delivery format from Backy collections or service settings.', fontSize: 13, lineHeight: 1.45, color: index === 1 ? '#d1d5db' : '#4b5563' },
+                            }),
+                            createCanvasElement('button', 24, 218, {
+                                id: `services-booking-button-${index}`,
+                                width: 150,
+                                height: 42,
+                                props: { label: 'Book service', backgroundColor: index === 1 ? '#f43f5e' : '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'services.booking.request' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 810, {
+                id: 'services-process-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'services', mode: 'process', fields: ['steps', 'faq', 'contactUrl'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'services-process-heading',
+                        width: 460,
+                        height: 42,
+                        props: { content: 'How booking works', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...['Pick a package', 'Share context', 'Confirm the slot'].map((step, index) => createCanvasElement('box', 74 + index * 270, 132, {
+                        id: `services-process-step-${index}`,
+                        width: 230,
+                        height: 118,
+                        dataBindings: [{ source: 'services', mode: 'process-step', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 22, 18, {
+                                id: `services-process-number-${index}`,
+                                width: 40,
+                                height: 24,
+                                props: { content: `0${index + 1}`, fontSize: 14, fontWeight: '800', color: '#be123c' },
+                            }),
+                            createCanvasElement('heading', 22, 52, {
+                                id: `services-process-title-${index}`,
+                                width: 170,
+                                height: 28,
+                                props: { content: step, level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'services', mode: 'process-step', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    })),
+                    createCanvasElement('box', 908, 132, {
+                        id: 'services-inquiry-card',
+                        width: 220,
+                        height: 118,
+                        props: { backgroundColor: '#111827', borderRadius: 8 },
+                        children: [
+                            createCanvasElement('paragraph', 22, 20, {
+                                id: 'services-inquiry-copy',
+                                width: 160,
+                                height: 38,
+                                props: { content: 'Need a custom scope?', fontSize: 15, fontWeight: '800', lineHeight: 1.35, color: '#ffffff' },
+                            }),
+                            createCanvasElement('button', 22, 70, {
+                                id: 'services-inquiry-button',
+                                width: 132,
+                                height: 36,
+                                props: { label: 'Send inquiry', backgroundColor: '#f43f5e', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'services.inquiry.open' },
                             }),
                         ],
                     }),
