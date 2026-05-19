@@ -618,6 +618,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `PATCH /api/admin/sites/:siteId/forms/:formId`
   - Admin form create/update rejects invalid explicit `audience`, `moderationMode`, or boolean control values with `400 INVALID_ADMIN_FORM_AUDIENCE`, `INVALID_ADMIN_FORM_MODERATION_MODE`, or `INVALID_ADMIN_FORM_BOOLEAN_CONTROL` instead of defaulting them; boolean controls include `isActive`, `enableHoneypot`, and `enableCaptcha`.
 - `POST /api/admin/sites/:siteId/forms/:formId/clone`
+  - Clones the source form definition, fields, notification settings, spam/consent settings, contact sharing, collection target, and custom settings without copying submissions or contacts. Optional `name`, `title`, and `isActive` overrides are validated before cloning; invalid explicit overrides return `400 INVALID_ADMIN_FORM_CLONE_NAME`, `INVALID_ADMIN_FORM_CLONE_TITLE`, or `INVALID_ADMIN_FORM_CLONE_ACTIVE`. Clone creation enforces the same `BILLING_FORM_LIMIT` policy as form creation.
 - `POST /api/admin/sites/:siteId/forms/:formId/embed-block`
   - Form embed block creation rejects invalid explicit `publicBaseUrl` values with `400 INVALID_ADMIN_FORM_EMBED_PUBLIC_BASE_URL`; omitted values use the request origin, and accepted values must be `http(s)` URLs.
 - `GET /api/admin/sites/:siteId/forms/:formId/submissions`

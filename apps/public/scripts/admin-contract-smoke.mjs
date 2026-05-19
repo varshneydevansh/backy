@@ -320,6 +320,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormCloneRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/clone/route.ts', import.meta.url),
+    'utf8',
+  );
   const adminFormSubmissionsRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/submissions/route.ts', import.meta.url),
     'utf8',
@@ -493,6 +497,11 @@ function assertAdminPageContentValidationSource() {
   assert(adminFormDetailRoute.includes("'INVALID_ADMIN_FORM_BOOLEAN_CONTROL'"), 'admin form update route must reject invalid boolean controls');
   assert(adminFormDetailRoute.includes('formConfigurationValidationError'), 'admin form update route must validate explicit configuration values before defaulting');
   assert(adminFormDetailRoute.includes('parseBooleanControl'), 'admin form update route must parse boolean controls strictly');
+  assert(adminFormCloneRoute.includes("'INVALID_ADMIN_FORM_CLONE_NAME'"), 'admin form clone route must reject invalid clone name overrides');
+  assert(adminFormCloneRoute.includes("'INVALID_ADMIN_FORM_CLONE_TITLE'"), 'admin form clone route must reject invalid clone title overrides');
+  assert(adminFormCloneRoute.includes("'INVALID_ADMIN_FORM_CLONE_ACTIVE'"), 'admin form clone route must reject invalid clone active overrides');
+  assert(adminFormCloneRoute.includes('cloneFormInput'), 'admin form clone route must clone source form fields and settings');
+  assert(adminFormCloneRoute.includes('BILLING_FORM_LIMIT'), 'admin form clone route must enforce form billing limits');
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_STATUS'"), 'admin form submissions route must reject invalid status filters');
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_LIMIT'"), 'admin form submissions route must reject invalid limit filters');
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_OFFSET'"), 'admin form submissions route must reject invalid offset filters');
@@ -579,6 +588,9 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_ADMIN_FORM_AUDIENCE') &&
       apiContracts.includes('INVALID_ADMIN_FORM_MODERATION_MODE') &&
       apiContracts.includes('INVALID_ADMIN_FORM_BOOLEAN_CONTROL') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_CLONE_NAME') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_CLONE_TITLE') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_CLONE_ACTIVE') &&
       apiContracts.includes('INVALID_ADMIN_FORM_SUBMISSION_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_FORM_SUBMISSION_LIMIT') &&
       apiContracts.includes('INVALID_ADMIN_FORM_SUBMISSION_OFFSET') &&
