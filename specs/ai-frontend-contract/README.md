@@ -73,7 +73,7 @@ The first implementation-backed endpoint is:
 - `GET /api/sites/:siteId/render?path=/blog/example-post`
 - `GET /api/sites/:siteId/render?path=/team/ada-lovelace`
 
-It returns the `content-payload.schema.json` shape for pages, blog posts, and collection dynamic item routes from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
+It returns the `content-payload.schema.json` shape for pages, blog posts, and collection dynamic item routes from the current public data adapter. Database-backed repository mode and local contract smokes are implemented for the current public surface; the remaining production gate is running `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres service before the SDK/database-mode contract can move from Partial to Ready.
 
 `npm run test:admin-contract --workspace @backy/public` validates the page, blog post, collection-bound page, and collection dynamic item render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass. The same smoke verifies that `/render` exposes the dataset manifest, resolved collection fields/records, normalized element binding, collection-record editable map entry, and uploaded public font asset manifests.
 

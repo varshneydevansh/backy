@@ -44,6 +44,7 @@ const setup = read('../SETUP.md');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
 const wixCanvaRoadmap = read('../specs/backy-wix-canva-cms-v1-roadmap.md');
 const platformGapAnalysis = read('../specs/backy-platform-gap-analysis-and-ai-frontend-contract.md');
+const aiFrontendContractReadme = read('../specs/ai-frontend-contract/README.md');
 const completionSpec = read('../specs/backy-cms-completion-spec.md');
 const fullParityRoadmap = read('../specs/backy-full-parity-roadmap-spec.md');
 const phaseCompletionSpec = read('../specs/phase-docs/backy-phase-a-j-completion-spec.md');
@@ -524,9 +525,16 @@ includesAll(
   platformGapAnalysis,
   [
     'current page-surface audit has moved most primary admin/editor/API surfaces out of prototype status',
+    'Remaining production risks',
     'Admin authentication is backend-backed through `apps/public` auth routes',
     'The page editor save path now writes through the authenticated admin page API',
+    'Public/admin contract tests now guard the current response envelopes',
+    'Admin/public route boundaries are locally enforced',
     'Settings now include backend-backed delivery mode',
+    'Backy now has the main collection, dataset, dynamic route, template, SEO, and live-management loop locally implemented',
+    'Current remaining risks by area',
+    'Public renderer covers the current element, reusable-section, media, form/comment, commerce, interactive component, and responsive contracts',
+    'This area now includes README guidance, JSON schemas, and examples',
     'Run the SDK Postgres smoke against a migrated database',
     'current 39 Ready / 6 Partial / 0 Prototype / 0 Missing audit state',
   ],
@@ -544,8 +552,35 @@ excludesAll(
     'Settings include a delivery-mode/API display surface, but API keys are local mock settings',
     'Auth/storage packages are placeholders or partial abstractions',
     'Mock auth; limited roles',
+    'What is incomplete or unsafe for production',
+    'Public API responses are not consistently wrapped in the documented',
+    'Admin/public route boundaries are not hardened into separate read/write surfaces',
+    'Backy currently has pieces of this model but not the complete loop',
+    'Current incomplete surfaces by area',
+    'Public renderer exists; needs to consume the canonical content contract rather than local types',
+    'This pass adds the starter `README.md`',
   ],
   'Backy platform gap analysis current-state documentation',
+);
+
+includesAll(
+  aiFrontendContractReadme,
+  [
+    'content-payload.schema.json',
+    'Database-backed repository mode and local contract smokes are implemented for the current public surface',
+    'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke',
+    'before the SDK/database-mode contract can move from Partial to Ready',
+  ],
+  'Backy AI frontend contract README current-state documentation',
+);
+
+excludesAll(
+  aiFrontendContractReadme,
+  [
+    'This is not yet the final durable database-backed service',
+    'while Backy replaces seeded/mock persistence',
+  ],
+  'Backy AI frontend contract README current-state documentation',
 );
 
 includesAll(

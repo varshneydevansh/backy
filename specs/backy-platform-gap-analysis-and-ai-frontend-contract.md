@@ -29,18 +29,18 @@ Backy is not yet a complete Wix/Canva/WordPress-class CMS platform, but the curr
 - Core type definitions include sites, pages, blog posts, media, forms, comments, contacts, public payloads, domains, custom links, activity logs, and page views.
 - Database schema scaffolding exists in Drizzle/Supabase migrations for important CMS entities.
 
-### What is incomplete or unsafe for production
+### Remaining production risks
 
 - Some admin UI routes still import the demo `mockStore` types/state for local fallback and hydrated client context, but mutation-critical routes have moved behind authenticated admin/public APIs and repository adapters for the current Ready surfaces.
 - Admin authentication is backend-backed through `apps/public` auth routes with httpOnly sessions, invite/password reset flows, MFA, audit events, Supabase Auth integration, production local-auth policy guards, and site/team RBAC coverage.
 - The page editor save path now writes through the authenticated admin page API with conflict detection and reload-latest recovery instead of relying on a browser-only `updatePage` mock mutation.
 - Public data can still run in seeded/demo mode, but the remaining production risk is executing the configured Supabase/Postgres service-data gates for Forms and SDK manifests plus live provider certification.
-- There are at least three editor/content contracts:
+- Contract convergence remains an ongoing compatibility concern rather than an unimplemented local blocker:
   - `packages/core/src/types/index.ts` uses a node-map `PageContent` model.
   - `apps/admin/src/types/editor.ts` uses a canvas `elements[]` model.
   - `apps/public/src/components/PageRenderer.tsx` declares another local renderer `CanvasElement` and `PageContent`.
-- Public API responses are not consistently wrapped in the documented `{ success, data, error }` envelope.
-- Admin/public route boundaries are not hardened into separate read/write surfaces.
+- Public/admin contract tests now guard the current response envelopes, request ids, cache/contract headers, manifest/OpenAPI/SDK shape, and route-boundary expectations; future routes must stay on those guarded contracts.
+- Admin/public route boundaries are locally enforced through authenticated admin APIs, public read/interaction APIs, RBAC checks, CORS policy, and service-key/session handling, with remaining risk tied to external deployment and provider certification.
 - Media upload now has runtime admin/public APIs, environment-selected local/S3/Supabase-compatible storage, quotas, signed private delivery, generated responsive WebP transform files, DB-backed retained-version create/list/compare/restore/delete paths with checksum/path/name/timeline diff review plus media-aware previews, static upload safety checks, optional HTTP scanner and ClamAV `clamd` scanning, quarantine controls, manual provider/CDN metric intake with conversions/value/attribution windows, media.configure-gated provider metadata controls, media.edit-gated mutation routes, site/team-scoped ownership enforcement through central admin access checks, provider analytics batch ingestion by media id/storage path/URL, library-wide provider ROI rollups, and admin audit logging. Production still needs automated provider-account bucket creation/secret rotation and cross-channel attribution beyond provider feeds; the current media flow validates the active runtime bucket/path and gives operators a credential-rotation runbook without storing secrets.
 - Settings now include backend-backed delivery mode, API-key rotation history, hash-only named service-key issuance/revocation, runtime diagnostics, provider metadata, audit logs, and site-scoped settings; remaining risk is live external provider certification.
 - Blog authoring reuses the shared editor while now owning post workflow controls for categories, tags, authors, featured images, scheduling, revisions, previews, comments, and public feeds; remaining blog/editor risk is deeper canonical content-contract convergence and broader visual QA rather than missing editorial workflow primitives.
@@ -49,7 +49,7 @@ Backy is not yet a complete Wix/Canva/WordPress-class CMS platform, but the curr
 
 Official Wix CMS docs describe collection-backed content, datasets that connect editor elements to collection fields, dynamic list/item pages, visitor submissions into collections, presets, AI-assisted collection setup, and dynamic-page SEO controls.
 
-Backy currently has pieces of this model but not the complete loop.
+Backy now has the main collection, dataset, dynamic route, template, SEO, and live-management loop locally implemented; remaining work is richer operator UX, versioning depth, and external database/provider certification.
 
 | Capability | Wix-like expectation | Backy state | Required Backy work |
 |---|---|---|---|
@@ -122,14 +122,14 @@ Backy has the right direction but lacks the production maturity.
    - Collection schemas and data bindings so an AI/frontend can know what is editable and where it renders.
    - Element-level control down to text spans, assets, actions, tokens, and conditions.
 
-## 6. Current incomplete surfaces by area
+## 6. Current remaining risks by area
 
 ### Admin app
 
 - Dashboard: backend metrics, onboarding, recent activity, publish/readiness status, workflow alerts, API consumer readiness, persistence/deployment health, RBAC scoping, and a named downloadable `backy.dashboard-handoff.v1` contract are implemented; remaining dashboard risk belongs to the global production auth/RBAC, provider, and database rollout gates.
 - Sites: list/create/detail now cover owner/team-scoped creation and access, backend slug validation, status workflows, custom-domain DNS verification metadata, readiness, SEO/navigation/redirect controls, frontend-design template registry, and downloadable create/detail handoff manifests; remaining Sites risk belongs to global production auth/RBAC, provider execution, and database rollout gates.
 - Pages: list/new/edit now use authenticated backend APIs for create/read/update/delete, page quotas, route/slug conflict checks, parent/child hierarchy, dataset and frontend-design template seeding, SEO/social metadata, status/schedule handling, preview/publish/archive/rollback workflows, revision summaries, delivery/readiness diagnostics, conflict-safe saves with `expectedUpdatedAt`, and downloadable handoff manifests; remaining Pages risk belongs to global database rollout, cross-browser visual CI, and the broader canonical editor/content contract hardening.
-- Editor: useful action wiring exists; responsive overrides, layer controls, multi-select operations, composed presets, editor-level synced reusable-section instances, reusable-section instance propagation, and conflict-safe page saves are now implemented. Page editor saves send `expectedUpdatedAt`, stale saves return `PAGE_VERSION_CONFLICT`, and the editor renders a reload-latest recovery action. It still needs a canonical schema, shared renderer parity hardening, nested block confidence, and richer keyboard/undo QA.
+- Editor: responsive overrides, layer controls, multi-select operations, composed presets, editor-level synced reusable-section instances, reusable-section instance propagation, conflict-safe page saves, grouping, keyboard shortcuts, and long-session recovery are implemented and covered by focused smokes. Page editor saves send `expectedUpdatedAt`, stale saves return `PAGE_VERSION_CONFLICT`, and the editor renders a reload-latest recovery action. Remaining editor risk is continued canonical schema convergence and regression coverage as new block controls ship.
 - Blog: list/new/edit now cover backend-backed posts, taxonomy categories/tags, author resources, featured media, scheduling/editorial statuses, frontend-design post templates, canvas focus authoring, SEO/comment controls, public search/archive/RSS feeds, preview/publish/archive/rollback workflows, revision summaries, conflict-safe updates, and downloadable CSV/handoff exports; remaining Blog risk belongs to global database rollout, audit/event UI hardening, and broader editor/content contract convergence.
 - Forms: backend form builder, public definition/submit APIs, moderation, contacts, analytics, reusable embed-block export, notification delivery, template pack export, and downloadable non-secret Postgres persistence-certification evidence are implemented; remaining risk is running the configured Supabase/Postgres service-data gate.
 - Media: backend and UI now cover runtime storage, media.configure-gated provider metadata, media.edit-gated existing-media mutations, metadata, folders, replacement, retained-version listing/compare/restore/deletion with SHA-256/path/name/timeline deltas plus media-aware previews, bindings, safety-scan state, optional HTTP and ClamAV scanning, quarantine controls, generated responsive manifests, quotas, signed/private delivery, audit activity, usage analytics, Backy-served delivery counts, manual provider/CDN metric recording with conversions/value/attribution windows, batch provider/CDN analytics ingestion, and provider ROI dashboards; still needs automated provider-account bucket creation/secret rotation and cross-channel attribution beyond provider feeds; active runtime bucket/path validation and credential rotation guidance now exist in Media.
@@ -141,13 +141,13 @@ Backy has the right direction but lacks the production maturity.
 ### Public app
 
 - Site/page resolution works against seeded and DB-backed site settings for slug, custom-domain discovery, path, redirects, gone routes, dynamic lists/items, and unpublished guards. The public manifest now advertises delivery domains, locale strategy, locale route variants, sitemap/robots URLs, and canonical bases; remaining delivery risk is hosted custom-domain/edge deployment certification rather than missing manifest metadata.
-- Public renderer exists; needs to consume the canonical content contract rather than local types.
+- Public renderer covers the current element, reusable-section, media, form/comment, commerce, interactive component, and responsive contracts; remaining renderer risk is continued convergence with canonical editor/generated schemas as new block types ship.
 - Forms/comments are backend-backed with moderation, delivery, analytics, RBAC, repository coverage, and public/admin API contracts; remaining Forms risk is executing the configured Supabase/Postgres smoke against a migrated disposable database.
 - Public API has manifest/OpenAPI/SDK coverage, configurable navigation backed by a dedicated admin endpoint, configured-origin CORS handling, locale/domain delivery variants, discovery cache headers with ETag/revision support, tokenless preview-token creation audits bound to resolved admin actors, tokenless preview-token use audits for page/blog/render/resolve/hosted reads, and hosted SEO/RSS feed success/error responses on the public cache/contract header contract; remaining work is hosted-domain certification and keeping future public feed variants on the same contract.
 
 ### Shared packages
 
-- `packages/core` has many useful types, while the remaining contract risk is continued convergence between editor, public renderer, and generated frontend schemas as new blocks are added.
+- `packages/core` owns the shared public contract baseline, while the remaining contract risk is continued convergence between editor, public renderer, and generated frontend schemas as new blocks are added.
 - `packages/db` and `packages/database` both exist, which creates a decision point. Choose one database package boundary and one ORM/query strategy.
 - Auth and storage now have real app-level service paths through admin auth, media storage, provider diagnostics, and secret handoff contracts; the remaining package-level work is consolidating those boundaries so shared packages own the reusable provider adapters instead of app-local glue.
 
@@ -168,7 +168,7 @@ Minimum files this area should own:
 - `data-bindings.schema.json`: JSON Schema for mapping content collections to element fields.
 - `examples/`: sample payloads for page, blog post, dynamic collection page, form page, and comment-enabled page.
 
-This pass adds the starter `README.md`. The schema files should be generated after Backy locks the canonical content model.
+This area now includes README guidance, JSON schemas, and examples for content payloads, frontend manifests, theme tokens, element actions, data bindings, and editable maps. Keep it synchronized with manifest/OpenAPI/SDK changes as public contracts evolve.
 
 ## 8. Required contract for AI-built frontends
 
