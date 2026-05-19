@@ -233,6 +233,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('const handleLayerRename') && source.includes('nextElement.name = nextName') && source.includes('onRename={handleLayerRename}'), 'Editor layer rename must update the selected canvas element name through history');
   assert(source.includes('selectedElement.name || selectedElementTypeLabel') && source.includes('data-testid="editor-inspector-selection-label"') && source.includes('data-testid="editor-inspector-selection-detail"'), 'Editor inspector selection card must display custom layer names with type/id detail');
   assert(source.includes('data-testid="editor-inspector-layer-name"') && source.includes('handleLayerRename(selectedElement.id') && source.includes('placeholder={selectedElementTypeLabel'), 'Editor inspector must expose a selected-layer name editor');
+  assert(source.includes('data-testid="editor-group-selection"') && source.includes('aria-keyshortcuts="Control+G Meta+G"'), 'Editor group action must expose Cmd/Ctrl+G through aria-keyshortcuts');
+  assert(source.includes('data-testid="editor-ungroup-selection"') && source.includes('aria-keyshortcuts="Shift+Control+G Shift+Meta+G"'), 'Editor ungroup action must expose Shift+Cmd/Ctrl+G through aria-keyshortcuts');
   assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
   assert(layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') && layersPanelSource.includes('data-testid="editor-layer-search-empty"'), 'Editor layer search must reveal matching descendants and expose an empty state');
   assert(layersPanelSource.includes('data-testid="editor-layer-expand-all"') && layersPanelSource.includes('data-testid="editor-layer-collapse-all"') && layersPanelSource.includes('collapsibleLayerIds'), 'Editor layers panel must support bulk expand and collapse controls');
@@ -14649,6 +14651,10 @@ const main = async () => {
   assertInteractiveRegistryVersionPinningSource();
   assertComponentLibraryEmptyStateSource();
   assertMediaLibraryModalEmptyStateSource();
+  if (process.env.BACKY_EDITOR_SOURCE_ONLY === '1') {
+    return;
+  }
+
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
   const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;

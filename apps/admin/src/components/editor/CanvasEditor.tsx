@@ -4914,6 +4914,7 @@ export function CanvasEditor({
               className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Group selected layers (Cmd/Ctrl+G)"
               aria-label="Group selected layers"
+              aria-keyshortcuts="Control+G Meta+G"
               data-testid="editor-group-selection"
             >
               <Group className="h-4 w-4" />
@@ -4926,6 +4927,7 @@ export function CanvasEditor({
               className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Ungroup selected element (Shift+Cmd/Ctrl+G)"
               aria-label="Ungroup selected element"
+              aria-keyshortcuts="Shift+Control+G Shift+Meta+G"
               data-testid="editor-ungroup-selection"
             >
               <Ungroup className="h-4 w-4" />
