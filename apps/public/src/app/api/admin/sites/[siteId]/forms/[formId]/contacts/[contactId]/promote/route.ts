@@ -33,8 +33,11 @@ interface RouteParams {
 
 type PromotionRole = 'viewer' | 'editor';
 type PromotionStatus = 'invited' | 'active';
+type ParsedPromotionValue<TValue> = { value: TValue; invalid?: true };
 
 const PROMOTION_SOURCE_KEY = '__backyPromotion';
+const PROMOTION_ROLES: PromotionRole[] = ['viewer', 'editor'];
+const PROMOTION_STATUSES: PromotionStatus[] = ['invited', 'active'];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -50,13 +53,21 @@ const normalizeEmail = (value: unknown): string => (
   typeof value === 'string' ? value.trim().toLowerCase() : ''
 );
 
-const normalizeRole = (value: unknown): PromotionRole => (
-  value === 'editor' ? 'editor' : 'viewer'
-);
+const normalizeRole = (value: unknown): ParsedPromotionValue<PromotionRole> => {
+  if (value === undefined || value === null || value === '') return { value: 'viewer' };
+  const role = typeof value === 'string' ? value.trim() : '';
+  return PROMOTION_ROLES.includes(role as PromotionRole)
+    ? { value: role as PromotionRole }
+    : { value: 'viewer', invalid: true };
+};
 
-const normalizeStatus = (value: unknown): PromotionStatus => (
-  value === 'active' ? 'active' : 'invited'
-);
+const normalizeStatus = (value: unknown): ParsedPromotionValue<PromotionStatus> => {
+  if (value === undefined || value === null || value === '') return { value: 'invited' };
+  const status = typeof value === 'string' ? value.trim() : '';
+  return PROMOTION_STATUSES.includes(status as PromotionStatus)
+    ? { value: status as PromotionStatus }
+    : { value: 'invited', invalid: true };
+};
 
 const readBillingSeatPolicy = (settings: unknown) => {
   const root = isRecord(settings) ? settings : {};
@@ -90,12 +101,13 @@ const enforceSeatBillingLimit = (
   return null;
 };
 
-const normalizeExpiresInMinutes = (value: unknown): number | null => {
-  if (value === undefined || value === null || value === '') return 10080;
+const normalizeExpiresInMinutes = (value: unknown): ParsedPromotionValue<number> => {
+  if (value === undefined || value === null || value === '') return { value: 10080 };
+  if (typeof value === 'string' && value.trim() === '') return { value: 10080 };
   const minutes = Number(value);
-  if (!Number.isFinite(minutes)) return null;
-  const normalized = Math.round(minutes);
-  return normalized >= 30 && normalized <= 43200 ? normalized : null;
+  return Number.isInteger(minutes) && minutes >= 30 && minutes <= 43200
+    ? { value: minutes }
+    : { value: 10080, invalid: true };
 };
 
 const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
@@ -152,14 +164,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, formId, contactId } = await params;
     const body = await parseJsonBody(request);
-    const role = normalizeRole(body.role);
-    const status = normalizeStatus(body.status);
-    const createInvite = body.createInvite !== false;
-    const expiresInMinutes = normalizeExpiresInMinutes(body.expiresInMinutes);
-    const authPolicySettings = await getAdminAuthPolicySettings();
-    if (!expiresInMinutes) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Invite expiry must be between 30 minutes and 30 days.', requestId);
+    const roleFilter = normalizeRole(body.role);
+    if (roleFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_CONTACT_PROMOTION_ROLE', 'Role must be viewer or editor.', requestId);
     }
+    const statusFilter = normalizeStatus(body.status);
+    if (statusFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_CONTACT_PROMOTION_STATUS', 'Status must be invited or active.', requestId);
+    }
+    const role = roleFilter.value;
+    const status = statusFilter.value;
+    const createInvite = body.createInvite !== false;
+    const expiresInMinutesFilter = normalizeExpiresInMinutes(body.expiresInMinutes);
+    if (expiresInMinutesFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY', 'Invite expiry must be an integer between 30 minutes and 30 days.', requestId);
+    }
+    const expiresInMinutes = expiresInMinutesFilter.value;
+    const authPolicySettings = await getAdminAuthPolicySettings();
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

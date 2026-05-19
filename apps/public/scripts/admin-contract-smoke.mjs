@@ -348,6 +348,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/analytics/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormContactPromotionRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/promote/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -481,6 +485,12 @@ function assertAdminPageContentValidationSource() {
   assert(adminContactListsRoute.includes('validateExplicitFilters'), 'admin contact lists route must validate explicit filters before normalizing');
   assert(adminFormsAnalyticsRoute.includes("'INVALID_ADMIN_FORM_ANALYTICS_DAYS'"), 'admin forms analytics route must reject invalid days filters');
   assert(adminFormsAnalyticsRoute.includes('daysFilter.invalid'), 'admin forms analytics route must branch on invalid days filters');
+  assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_ROLE'"), 'admin form contact promotion route must reject invalid role values');
+  assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_STATUS'"), 'admin form contact promotion route must reject invalid status values');
+  assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY'"), 'admin form contact promotion route must reject invalid invite expiry values');
+  assert(adminFormContactPromotionRoute.includes('roleFilter.invalid'), 'admin form contact promotion route must branch on invalid role values');
+  assert(adminFormContactPromotionRoute.includes('statusFilter.invalid'), 'admin form contact promotion route must branch on invalid status values');
+  assert(adminFormContactPromotionRoute.includes('expiresInMinutesFilter.invalid'), 'admin form contact promotion route must branch on invalid invite expiry values');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -527,6 +537,9 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_QUALITY') &&
       apiContracts.includes('INVALID_ADMIN_FORM_ANALYTICS_DAYS') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_ROLE') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_STATUS') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
     'API contracts must document invalid page, blog, comment, and form filter/content errors',
   );
