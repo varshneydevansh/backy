@@ -32,12 +32,17 @@ const INLINE_TEXT_ELEMENT_TYPES = new Set(['text', 'heading', 'paragraph', 'quot
 const INLINE_LINK_ELEMENT_TYPES = new Set(['button', 'link']);
 const INLINE_IMAGE_ELEMENT_TYPES = new Set(['image']);
 const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-down'] as const;
+const BORDER_STYLE_OPTIONS = ['', 'solid', 'dashed', 'dotted', 'double', 'none'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
+type BorderStyleOption = typeof BORDER_STYLE_OPTIONS[number];
 type InlineAppearanceFields = {
   color: string;
   backgroundColor: string;
   borderColor: string;
+  borderStyle: BorderStyleOption;
+  borderWidth: string;
   borderRadius: string;
+  padding: string;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -192,11 +197,17 @@ const imageFieldsFromElement = (element: Record<string, unknown> | null) => {
 
 const appearanceFieldsFromElement = (element: Record<string, unknown> | null): InlineAppearanceFields => {
   const props = elementProps(element);
+  const borderStyle = stringProp(props, 'borderStyle');
   return {
     color: stringProp(props, 'color'),
     backgroundColor: stringProp(props, 'backgroundColor'),
     borderColor: stringProp(props, 'borderColor'),
+    borderStyle: BORDER_STYLE_OPTIONS.includes(borderStyle as BorderStyleOption)
+      ? borderStyle as BorderStyleOption
+      : '',
+    borderWidth: lengthProp(props, 'borderWidth'),
     borderRadius: lengthProp(props, 'borderRadius'),
+    padding: lengthProp(props, 'padding'),
   };
 };
 
@@ -279,7 +290,10 @@ const updateElementAppearance = (
   color: input.color.trim(),
   backgroundColor: input.backgroundColor.trim(),
   borderColor: input.borderColor.trim(),
+  borderStyle: input.borderStyle,
+  borderWidth: input.borderWidth.trim(),
   borderRadius: input.borderRadius.trim(),
+  padding: input.padding.trim(),
 });
 
 export function LivePageManagementOverlay({
@@ -313,7 +327,10 @@ export function LivePageManagementOverlay({
   const [inlineAppearanceColor, setInlineAppearanceColor] = useState('');
   const [inlineAppearanceBackgroundColor, setInlineAppearanceBackgroundColor] = useState('');
   const [inlineAppearanceBorderColor, setInlineAppearanceBorderColor] = useState('');
+  const [inlineAppearanceBorderStyle, setInlineAppearanceBorderStyle] = useState<BorderStyleOption>('');
+  const [inlineAppearanceBorderWidth, setInlineAppearanceBorderWidth] = useState('');
   const [inlineAppearanceBorderRadius, setInlineAppearanceBorderRadius] = useState('');
+  const [inlineAppearancePadding, setInlineAppearancePadding] = useState('');
   const [inlineAppearanceSaving, setInlineAppearanceSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
@@ -416,7 +433,10 @@ export function LivePageManagementOverlay({
       setInlineAppearanceColor('');
       setInlineAppearanceBackgroundColor('');
       setInlineAppearanceBorderColor('');
+      setInlineAppearanceBorderStyle('');
+      setInlineAppearanceBorderWidth('');
       setInlineAppearanceBorderRadius('');
+      setInlineAppearancePadding('');
       return;
     }
 
@@ -456,7 +476,10 @@ export function LivePageManagementOverlay({
     setInlineAppearanceColor(appearanceFields.color);
     setInlineAppearanceBackgroundColor(appearanceFields.backgroundColor);
     setInlineAppearanceBorderColor(appearanceFields.borderColor);
+    setInlineAppearanceBorderStyle(appearanceFields.borderStyle);
+    setInlineAppearanceBorderWidth(appearanceFields.borderWidth);
     setInlineAppearanceBorderRadius(appearanceFields.borderRadius);
+    setInlineAppearancePadding(appearanceFields.padding);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -655,7 +678,10 @@ export function LivePageManagementOverlay({
       color: inlineAppearanceColor,
       backgroundColor: inlineAppearanceBackgroundColor,
       borderColor: inlineAppearanceBorderColor,
+      borderStyle: inlineAppearanceBorderStyle,
+      borderWidth: inlineAppearanceBorderWidth,
       borderRadius: inlineAppearanceBorderRadius,
+      padding: inlineAppearancePadding,
     });
     if (!nextContent) {
       setError('Unable to update this appearance from the live overlay. Open the full editor instead.');
@@ -1077,12 +1103,44 @@ export function LivePageManagementOverlay({
                       />
                     </span>
                   </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Border style
+                      <select
+                        value={inlineAppearanceBorderStyle}
+                        onChange={(event) => setInlineAppearanceBorderStyle(event.target.value as BorderStyleOption)}
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                      >
+                        {BORDER_STYLE_OPTIONS.map((option) => (
+                          <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Border width
+                      <input
+                        value={inlineAppearanceBorderWidth}
+                        onChange={(event) => setInlineAppearanceBorderWidth(event.target.value)}
+                        placeholder="0, 1, 2px"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
                   <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
                     Radius
                     <input
                       value={inlineAppearanceBorderRadius}
                       onChange={(event) => setInlineAppearanceBorderRadius(event.target.value)}
                       placeholder="0, 8, 999px"
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Padding
+                    <input
+                      value={inlineAppearancePadding}
+                      onChange={(event) => setInlineAppearancePadding(event.target.value)}
+                      placeholder="0, 12, 12px 16px"
                       style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
                     />
                   </label>
