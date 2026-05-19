@@ -197,7 +197,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const globalOnly = globalFilter.value;
         const search = searchParams.get('search') || searchParams.get('q');
         const tag = searchParams.get('tag');
-        const folderId = searchParams.has('folderId') ? searchParams.get('folderId') : undefined;
+        const folderId = searchParams.has('folderId')
+            ? searchParams.get('folderId')
+            : searchParams.has('folder')
+                ? searchParams.get('folder')
+                : undefined;
 
         if (!shouldUseDemoStoreFallback()) {
             const repositories = await getRequiredDatabaseRepositories();

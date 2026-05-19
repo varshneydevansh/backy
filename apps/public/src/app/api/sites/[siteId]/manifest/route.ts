@@ -677,6 +677,7 @@ const buildManifestMediaDiscovery = (
     listUrl: `/api/sites/${siteId}/media`,
     endpoints: {
       list: `/api/sites/${siteId}/media`,
+      folders: `/api/sites/${siteId}/media/folders`,
       fonts: `/api/sites/${siteId}/media/fonts`,
       detail: `/api/sites/${siteId}/media/{mediaId}`,
       file: `/api/sites/${siteId}/media/{mediaId}/file`,
@@ -684,6 +685,7 @@ const buildManifestMediaDiscovery = (
     },
     capabilities: {
       publicAssets: true,
+      publicFolderDiscovery: true,
       signedPrivateFiles: true,
       responsiveImages: true,
       imageTransforms: true,
@@ -720,6 +722,30 @@ const buildManifestMediaDiscovery = (
         blogId: 'postId',
         fileType: 'document',
       },
+    },
+    methods: {
+      list: 'GET',
+      folders: 'GET',
+      fonts: 'GET',
+      detail: 'GET',
+      file: 'GET',
+      transform: 'GET',
+    },
+    cache: {
+      list: 'public-discovery',
+      folders: 'public-discovery',
+      fonts: 'public-discovery',
+      detail: 'public-discovery',
+      file: 'public-or-signed',
+      transform: 'public-redirect',
+    },
+    schemas: {
+      list: 'backy.media-discovery.v1',
+      folders: 'backy.media-folders.v1',
+      fonts: 'backy.font-manifest.v1',
+      references: 'backy.media.references.v1',
+      editableMetadata: 'backy.media.editable-metadata.v1',
+      notFound: 'MEDIA_NOT_FOUND',
     },
   };
 };
@@ -1376,6 +1402,7 @@ const buildRepositoryManifest = (
         interactiveRuntimeEvents: `/api/sites/${input.site.id}/interactive-components/runtime-events`,
         interactiveComponentsInManifest: `/api/sites/${input.site.id}/manifest#data.modules.interactiveComponents`,
         media: `/api/sites/${input.site.id}/media`,
+        mediaFolders: `/api/sites/${input.site.id}/media/folders`,
         mediaFonts: `/api/sites/${input.site.id}/media/fonts`,
         mediaDetail: `/api/sites/${input.site.id}/media/{mediaId}`,
         mediaFile: `/api/sites/${input.site.id}/media/{mediaId}/file`,
@@ -1713,6 +1740,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           interactiveRuntimeEvents: `/api/sites/${site.id}/interactive-components/runtime-events`,
           interactiveComponentsInManifest: `/api/sites/${site.id}/manifest#data.modules.interactiveComponents`,
           media: `/api/sites/${site.id}/media`,
+          mediaFolders: `/api/sites/${site.id}/media/folders`,
           mediaFonts: `/api/sites/${site.id}/media/fonts`,
           mediaDetail: `/api/sites/${site.id}/media/{mediaId}`,
           mediaFile: `/api/sites/${site.id}/media/{mediaId}/file`,

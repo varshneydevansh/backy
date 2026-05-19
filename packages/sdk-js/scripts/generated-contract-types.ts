@@ -2,6 +2,8 @@ import type {
   BackyLocaleStrategy,
   BackyInteractiveComponentsContract,
   BackyMediaAsset,
+  BackyMediaFolder,
+  BackyMediaFolderList,
   BackyMediaListOptions,
   BackyManifestBlogAuthor,
   BackyManifestBlogCategory,
@@ -145,6 +147,9 @@ import type {
   GeneratedBackyOpenApiMediaAsset,
   GeneratedBackyOpenApiMediaDetailEnvelope,
   GeneratedBackyOpenApiMediaEditableMetadata,
+  GeneratedBackyOpenApiMediaFolder,
+  GeneratedBackyOpenApiMediaFolderListEnvelope,
+  GeneratedBackyOpenApiMediaFolderRoot,
   GeneratedBackyOpenApiMediaList,
   GeneratedBackyOpenApiMediaReferenceTarget,
   GeneratedBackyOpenApiMediaReferences,
@@ -742,6 +747,7 @@ const manifest = {
     interactiveComponentsInManifest:
       "/api/sites/site_demo/manifest#data.modules.interactiveComponents",
     media: "/api/sites/site_demo/media",
+    mediaFolders: "/api/sites/site_demo/media/folders",
     mediaFonts: "/api/sites/site_demo/media/fonts",
     mediaDetail: "/api/sites/site_demo/media/{mediaId}",
     mediaFile: "/api/sites/site_demo/media/{mediaId}/file",
@@ -1324,6 +1330,7 @@ const manifest = {
       listUrl: "/api/sites/site_demo/media",
       endpoints: {
         list: "/api/sites/site_demo/media",
+        folders: "/api/sites/site_demo/media/folders",
         fonts: "/api/sites/site_demo/media/fonts",
         detail: "/api/sites/site_demo/media/{mediaId}",
         file: "/api/sites/site_demo/media/{mediaId}/file",
@@ -1331,6 +1338,7 @@ const manifest = {
       },
       capabilities: {
         publicAssets: true,
+        publicFolderDiscovery: true,
         signedPrivateFiles: true,
         responsiveImages: true,
         imageTransforms: true,
@@ -1353,6 +1361,30 @@ const manifest = {
           blogId: "postId",
           fileType: "document",
         },
+      },
+      methods: {
+        list: "GET",
+        folders: "GET",
+        fonts: "GET",
+        detail: "GET",
+        file: "GET",
+        transform: "GET",
+      },
+      cache: {
+        list: "public-discovery",
+        folders: "public-discovery",
+        fonts: "public-discovery",
+        detail: "public-discovery",
+        file: "public-or-signed",
+        transform: "public-redirect",
+      },
+      schemas: {
+        list: "backy.media-discovery.v1",
+        folders: "backy.media-folders.v1",
+        fonts: "backy.font-manifest.v1",
+        references: "backy.media.references.v1",
+        editableMetadata: "backy.media.editable-metadata.v1",
+        notFound: "MEDIA_NOT_FOUND",
       },
     },
     commerce: {
@@ -2096,6 +2128,7 @@ const sdkManifestMedia = {
   listUrl: "/api/sites/site_demo/media",
   endpoints: {
     list: "/api/sites/site_demo/media",
+    folders: "/api/sites/site_demo/media/folders",
     fonts: "/api/sites/site_demo/media/fonts",
     detail: "/api/sites/site_demo/media/{mediaId}",
     file: "/api/sites/site_demo/media/{mediaId}/file",
@@ -2103,6 +2136,7 @@ const sdkManifestMedia = {
   },
   capabilities: {
     publicAssets: true,
+    publicFolderDiscovery: true,
     signedPrivateFiles: true,
     responsiveImages: true,
     imageTransforms: true,
@@ -2125,6 +2159,30 @@ const sdkManifestMedia = {
       blogId: "postId",
       fileType: "document",
     },
+  },
+  methods: {
+    list: "GET",
+    folders: "GET",
+    fonts: "GET",
+    detail: "GET",
+    file: "GET",
+    transform: "GET",
+  },
+  cache: {
+    list: "public-discovery",
+    folders: "public-discovery",
+    fonts: "public-discovery",
+    detail: "public-discovery",
+    file: "public-or-signed",
+    transform: "public-redirect",
+  },
+  schemas: {
+    list: "backy.media-discovery.v1",
+    folders: "backy.media-folders.v1",
+    fonts: "backy.font-manifest.v1",
+    references: "backy.media.references.v1",
+    editableMetadata: "backy.media.editable-metadata.v1",
+    notFound: "MEDIA_NOT_FOUND",
   },
 } satisfies BackyManifestMediaModule;
 
@@ -3168,6 +3226,64 @@ const sdkGenericFileMediaListOptions = {
   siteId: "site_demo",
   limit: 20,
 } satisfies BackyMediaListOptions;
+
+const mediaFolder = {
+  id: "folder_brand",
+  siteId: "site_demo",
+  parentId: null,
+  name: "Brand",
+  sortOrder: 10,
+  createdAt: "2026-05-16T00:00:00.000Z",
+  path: "Brand",
+  depth: 0,
+  childIds: [],
+  directAssetCount: 1,
+  assetCount: 1,
+} satisfies GeneratedBackyOpenApiMediaFolder;
+
+const mediaFolderRoot = {
+  id: null,
+  name: "Root",
+  path: "Root",
+  depth: -1,
+  childIds: ["folder_brand"],
+  directAssetCount: 0,
+  assetCount: 1,
+} satisfies GeneratedBackyOpenApiMediaFolderRoot;
+
+const mediaFolderListEnvelope = {
+  success: true,
+  requestId: "req_media_folders",
+  data: {
+    schemaVersion: "backy.media-folders.v1",
+    folders: [mediaFolder],
+    root: mediaFolderRoot,
+    count: 1,
+    publicAssetCount: 1,
+  },
+} satisfies GeneratedBackyOpenApiMediaFolderListEnvelope;
+
+const sdkMediaFolder = {
+  id: "folder_brand",
+  siteId: "site_demo",
+  parentId: null,
+  name: "Brand",
+  sortOrder: 10,
+  createdAt: "2026-05-16T00:00:00.000Z",
+  path: "Brand",
+  depth: 0,
+  childIds: [],
+  directAssetCount: 1,
+  assetCount: 1,
+} satisfies BackyMediaFolder;
+
+const sdkMediaFolderList = {
+  schemaVersion: "backy.media-folders.v1",
+  folders: [sdkMediaFolder],
+  root: mediaFolderRoot,
+  count: 1,
+  publicAssetCount: 1,
+} satisfies BackyMediaFolderList;
 
 const mediaList = {
   success: true,
@@ -4654,6 +4770,12 @@ const invalidMediaEditableMetadataScope = { ...mediaEditableMetadata, scope: "si
 // @ts-expect-error media list envelopes require pagination for library browsing.
 const invalidMediaList = { ...mediaList, data: { media: [mediaAsset] }, } satisfies GeneratedBackyOpenApiMediaList;
 
+// @ts-expect-error media folder discovery envelopes require the public folder schema marker.
+const invalidMediaFolderListSchema = { success: true, requestId: "req_media_folders_invalid", data: { schemaVersion: "backy.media-folders.v0", folders: [mediaFolder], root: mediaFolderRoot, count: 1, publicAssetCount: 1 }, } satisfies GeneratedBackyOpenApiMediaFolderListEnvelope;
+
+// @ts-expect-error SDK media folder lists require a root folder summary for picker navigation.
+const invalidSdkMediaFolderList = { ...sdkMediaFolderList, root: undefined, } satisfies BackyMediaFolderList;
+
 // @ts-expect-error comment target types are limited to page and post discussions.
 const invalidCommentTargetType = { ...comment, targetType: "product", } satisfies GeneratedBackyOpenApiComment;
 
@@ -4821,6 +4943,11 @@ void mediaAsset;
 void genericFileMediaAsset;
 void sdkGenericFileMediaAsset;
 void sdkGenericFileMediaListOptions;
+void mediaFolder;
+void mediaFolderRoot;
+void mediaFolderListEnvelope;
+void sdkMediaFolder;
+void sdkMediaFolderList;
 void mediaList;
 void mediaDetailEnvelope;
 void fontVariant;
@@ -5002,6 +5129,8 @@ void invalidFormContactUpdatedAt;
 void invalidMediaReferences;
 void invalidMediaEditableMetadataScope;
 void invalidMediaList;
+void invalidMediaFolderListSchema;
+void invalidSdkMediaFolderList;
 void invalidCommentTargetType;
 void invalidCommentStatus;
 void invalidCommentUpdateRequest;

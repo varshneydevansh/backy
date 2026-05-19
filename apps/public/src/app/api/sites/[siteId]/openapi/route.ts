@@ -1211,6 +1211,34 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             },
           },
+          [`/api/sites/${site.id}/media/folders`]: {
+            get: {
+              tags: ["Media"],
+              summary:
+                "List public media folders that contain public, non-quarantined assets or are ancestors of those folders",
+              operationId: "listBackyMediaFolders",
+              responses: {
+                "200": {
+                  description: "Public media folder tree",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/MediaFolderListEnvelope",
+                      },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           [`/api/sites/${site.id}/media/fonts`]: {
             get: {
               tags: ["Media"],
@@ -3766,6 +3794,80 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     items: { $ref: "#/components/schemas/MediaAsset" },
                   },
                   pagination: { type: "object", additionalProperties: true },
+                },
+              }),
+            },
+            MediaFolder: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "id",
+                "siteId",
+                "parentId",
+                "name",
+                "sortOrder",
+                "createdAt",
+                "path",
+                "depth",
+                "childIds",
+                "directAssetCount",
+                "assetCount",
+              ],
+              properties: {
+                id: { type: "string" },
+                siteId: { type: "string" },
+                parentId: { type: ["string", "null"] },
+                name: { type: "string" },
+                sortOrder: { type: "integer" },
+                createdAt: { type: "string" },
+                path: { type: "string" },
+                depth: { type: "integer", minimum: 0 },
+                childIds: { type: "array", items: { type: "string" } },
+                directAssetCount: { type: "integer", minimum: 0 },
+                assetCount: { type: "integer", minimum: 0 },
+              },
+            },
+            MediaFolderRoot: {
+              type: "object",
+              additionalProperties: false,
+              required: [
+                "id",
+                "name",
+                "path",
+                "depth",
+                "childIds",
+                "directAssetCount",
+                "assetCount",
+              ],
+              properties: {
+                id: { type: "null" },
+                name: { const: "Root" },
+                path: { const: "Root" },
+                depth: { const: -1 },
+                childIds: { type: "array", items: { type: "string" } },
+                directAssetCount: { type: "integer", minimum: 0 },
+                assetCount: { type: "integer", minimum: 0 },
+              },
+            },
+            MediaFolderListEnvelope: {
+              ...envelopeSchema({
+                type: "object",
+                required: [
+                  "schemaVersion",
+                  "folders",
+                  "root",
+                  "count",
+                  "publicAssetCount",
+                ],
+                properties: {
+                  schemaVersion: { const: "backy.media-folders.v1" },
+                  folders: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/MediaFolder" },
+                  },
+                  root: { $ref: "#/components/schemas/MediaFolderRoot" },
+                  count: { type: "integer", minimum: 0 },
+                  publicAssetCount: { type: "integer", minimum: 0 },
                 },
               }),
             },

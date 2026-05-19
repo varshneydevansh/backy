@@ -121,6 +121,9 @@ export type {
   GeneratedBackyOpenApiMediaAsset,
   GeneratedBackyOpenApiMediaDetailEnvelope,
   GeneratedBackyOpenApiMediaEditableMetadata,
+  GeneratedBackyOpenApiMediaFolder,
+  GeneratedBackyOpenApiMediaFolderListEnvelope,
+  GeneratedBackyOpenApiMediaFolderRoot,
   GeneratedBackyOpenApiMediaList,
   GeneratedBackyOpenApiMediaReferenceTarget,
   GeneratedBackyOpenApiMediaReferences,
@@ -555,6 +558,40 @@ export interface BackyMediaAsset {
     metadata: Record<string, unknown>;
   };
   metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyMediaFolder {
+  id: string;
+  siteId?: string;
+  parentId: string | null;
+  name: string;
+  sortOrder: number;
+  createdAt?: string;
+  path: string;
+  depth: number;
+  childIds: string[];
+  directAssetCount: number;
+  assetCount: number;
+  [key: string]: unknown;
+}
+
+export interface BackyMediaFolderRoot {
+  id: null;
+  name: "Root";
+  path: "Root";
+  depth: -1;
+  childIds: string[];
+  directAssetCount: number;
+  assetCount: number;
+}
+
+export interface BackyMediaFolderList {
+  schemaVersion: "backy.media-folders.v1";
+  folders: BackyMediaFolder[];
+  root: BackyMediaFolderRoot;
+  count: number;
+  publicAssetCount: number;
   [key: string]: unknown;
 }
 
@@ -2367,6 +2404,7 @@ export interface BackyManifestMediaModule {
   listUrl: string;
   endpoints: {
     list: string;
+    folders: string;
     fonts: string;
     detail: string;
     file: string;
@@ -2375,6 +2413,7 @@ export interface BackyManifestMediaModule {
   };
   capabilities: {
     publicAssets: boolean;
+    publicFolderDiscovery: boolean;
     signedPrivateFiles: boolean;
     responsiveImages: boolean;
     imageTransforms: boolean;
@@ -2400,6 +2439,33 @@ export interface BackyManifestMediaModule {
       fileType: "document";
       [key: string]: unknown;
     };
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    folders: "GET";
+    fonts: "GET";
+    detail: "GET";
+    file: "GET";
+    transform: "GET";
+    [key: string]: unknown;
+  };
+  cache: {
+    list: "public-discovery";
+    folders: "public-discovery";
+    fonts: "public-discovery";
+    detail: "public-discovery";
+    file: "public-or-signed";
+    transform: "public-redirect";
+    [key: string]: unknown;
+  };
+  schemas: {
+    list: "backy.media-discovery.v1";
+    folders: "backy.media-folders.v1";
+    fonts: "backy.font-manifest.v1";
+    references: "backy.media.references.v1";
+    editableMetadata: "backy.media.editable-metadata.v1";
+    notFound: "MEDIA_NOT_FOUND";
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -3107,6 +3173,26 @@ export class BackyClient {
         query,
         ifNoneMatch: etag,
         requestId,
+      },
+    );
+  }
+
+  mediaFolders(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyMediaFolderList>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/media/folders`,
+    );
+  }
+
+  mediaFoldersCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<BackyMediaFolderList>>> {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/folders`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
       },
     );
   }

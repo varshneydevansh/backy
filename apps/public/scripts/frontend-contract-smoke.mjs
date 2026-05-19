@@ -107,7 +107,9 @@ assert(
     manifestRoute.includes("schemaVersion: 'backy.media-discovery.v1'") &&
     manifestRoute.includes("signedPrivateFiles: true") &&
     manifestRoute.includes("responsiveImages: true") &&
+    manifestRoute.includes("publicFolderDiscovery: true") &&
     manifestRoute.includes("editableMetadata: true") &&
+    manifestRoute.includes("folders: `/api/sites/${siteId}/media/folders`") &&
     manifestRoute.includes("'folderId'") &&
     manifestRoute.includes("'scope'") &&
     manifestRoute.includes("'tag'") &&
@@ -116,14 +118,19 @@ assert(
     manifestRoute.includes('media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total)') &&
     frontendManifestSchema.includes('"backy.media-discovery.v1"') &&
     frontendManifestSchema.includes('"signedPrivateFiles"') &&
+    frontendManifestSchema.includes('"publicFolderDiscovery"') &&
     frontendManifestSchema.includes('"queryParams"') &&
     frontendManifestSchema.includes('"folderId"') &&
+    frontendManifestSchema.includes('"backy.media-folders.v1"') &&
     frontendManifestSchema.includes('"maxLimit"') &&
     sdkSource.includes('schemaVersion: "backy.media-discovery.v1";') &&
+    sdkSource.includes('BackyMediaFolder') &&
+    sdkSource.includes('mediaFolders(') &&
     sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') &&
     sdkSource.includes('siteId?: string') &&
     sdkSmoke.includes('manifest() missing media discovery module') &&
     sdkSmoke.includes('manifest() media discovery missing folderId filter') &&
+    sdkSmoke.includes('mediaFolders() missing folder array') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery'),
   'Frontend manifest and SDK must expose structured media discovery for custom frontend asset browsers.',
 );

@@ -20,6 +20,7 @@ const mediaFoldersRoute = read('../src/app/api/admin/sites/[siteId]/media/folder
 const mediaFolderDetailRoute = read('../src/app/api/admin/sites/[siteId]/media/folders/[folderId]/route.ts');
 const adminSignedMediaUrlRoute = read('../src/app/api/admin/sites/[siteId]/media/[mediaId]/signed-url/route.ts');
 const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
+const publicMediaFoldersRoute = read('../src/app/api/sites/[siteId]/media/folders/route.ts');
 const publicFontManifestRoute = read('../src/app/api/sites/[siteId]/media/fonts/route.ts');
 const publicMediaFileRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts');
 const publicMediaTransformRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts');
@@ -141,6 +142,12 @@ assert(
   'Public media list route must reject invalid media scope filters instead of silently returning all assets.',
 );
 assert(
+  publicMediaRoute.includes("searchParams.has('folderId')") &&
+    publicMediaRoute.includes("searchParams.has('folder')") &&
+    publicMediaRoute.includes("searchParams.get('folder')"),
+  'Public media list route must honor the documented folder alias for custom frontend media pickers.',
+);
+assert(
   publicMediaRoute.includes("'INVALID_MEDIA_GLOBAL_FILTER'") &&
     publicMediaRoute.includes('globalFilter.invalid') &&
     publicMediaRoute.includes('Use true or false'),
@@ -157,6 +164,17 @@ assert(
     publicMediaRoute.includes('integerQueryFromInput') &&
     publicMediaRoute.includes('MAX_MEDIA_LIMIT = 100'),
   'Public media list route must reject invalid pagination filters instead of silently clamping or defaulting them.',
+);
+assert(
+  publicMediaFoldersRoute.includes("MEDIA_FOLDERS_SCHEMA_VERSION = 'backy.media-folders.v1'") &&
+    publicMediaFoldersRoute.includes('publicContractJson') &&
+    publicMediaFoldersRoute.includes('repositories.media.listFolders(site.id)') &&
+    publicMediaFoldersRoute.includes('listMediaFolders(site.id)') &&
+    publicMediaFoldersRoute.includes('!isMediaQuarantined(item)') &&
+    publicMediaFoldersRoute.includes('includeFolderAndAncestors') &&
+    publicMediaFoldersRoute.includes('directAssetCount') &&
+    publicMediaFoldersRoute.includes('assetCount'),
+  'Public media folder route must expose a cacheable read-only folder tree limited to folders with public, non-quarantined assets and their ancestors.',
 );
 assert(
   publicFontManifestRoute.includes("from '@/lib/mediaSafety'") &&
@@ -250,6 +268,13 @@ assert(
   'Public OpenAPI media list route must document search/folder/scope filters and the type=file alias for custom frontend media pickers.',
 );
 assert(
+  openApiRoute.includes('operationId: "listBackyMediaFolders"') &&
+    openApiRoute.includes('MediaFolderListEnvelope') &&
+    openApiRoute.includes('MediaFolderRoot') &&
+    openApiRoute.includes('backy.media-folders.v1'),
+  'Public OpenAPI must document public media folder discovery for custom frontend media pickers.',
+);
+assert(
   openApiRoute.includes('Fetch public, non-quarantined uploaded font families'),
   'Public OpenAPI font manifest route must advertise that quarantined fonts are excluded.',
 );
@@ -290,6 +315,13 @@ assert(
     sdkSource.includes('global?: boolean') &&
     sdkSource.includes('siteId?: string'),
   'SDK media list options must expose public route aliases for custom frontend media pickers.',
+);
+assert(
+  sdkSource.includes('BackyMediaFolder') &&
+    sdkSource.includes('BackyMediaFolderList') &&
+    sdkSource.includes('mediaFolders(') &&
+    sdkSource.includes('mediaFoldersCached('),
+  'SDK must expose public media folder discovery helpers for custom frontend media pickers.',
 );
 assert(
   generatedSdkSource.includes('type?: "image" | "video" | "audio" | "document" | "font" | "other"'),
