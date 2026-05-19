@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -169,6 +169,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Order summary', 'Customer details', 'Payment handoff'],
     },
     {
+        id: 'order-confirmation',
+        name: 'Order confirmation',
+        desc: 'Receipt status, order summary, fulfillment notes, and support actions.',
+        detail: 'Creates a post-purchase page that custom frontends can bind to Backy order status without exposing payment secrets.',
+        sections: ['Order status', 'Receipt summary', 'Next steps'],
+    },
+    {
         id: 'blog-index',
         name: 'Blog index',
         desc: 'Editorial intro, featured story, and article list blocks.',
@@ -239,6 +246,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'checkout',
         description: 'A checkout page ready to bind cart items, customer details, shipping choices, and provider payment handoff.',
     },
+    'order-confirmation': {
+        title: 'Order confirmation',
+        slug: 'order-confirmation',
+        description: 'A post-purchase confirmation page ready to bind receipt details, fulfillment status, and support actions.',
+    },
     'blog-index': {
         title: 'Blog',
         slug: 'blog',
@@ -278,6 +290,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     'product-detail': 'primary',
     cart: 'primary',
     checkout: 'primary',
+    'order-confirmation': 'primary',
     'blog-index': 'primary',
     about: 'primary',
     contact: 'footer',
@@ -503,6 +516,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
+    'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
@@ -561,6 +575,16 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { x: 66, y: 36, w: 20, h: 5, className: 'bg-slate-900' },
         { label: 'Customer', x: 8, y: 56, w: 38, h: 22, className: 'border-emerald-100 bg-white' },
         { label: 'Payment', x: 54, y: 56, w: 38, h: 22, className: 'border-emerald-100 bg-white' },
+    ],
+    'order-confirmation': [
+        { label: 'Success', x: 8, y: 14, w: 46, h: 24, className: 'border-green-200 bg-green-50' },
+        { x: 16, y: 24, w: 24, h: 5, className: 'bg-green-700' },
+        { label: 'Receipt', x: 60, y: 14, w: 32, h: 38, className: 'border-slate-200 bg-white' },
+        { x: 66, y: 25, w: 18, h: 4, className: 'bg-slate-300' },
+        { x: 66, y: 38, w: 18, h: 5, className: 'bg-slate-900' },
+        { label: 'Next', x: 8, y: 60, w: 24, h: 18, className: 'border-green-100 bg-white' },
+        { x: 38, y: 60, w: 24, h: 18, className: 'border-green-100 bg-white' },
+        { x: 68, y: 60, w: 24, h: 18, className: 'border-green-100 bg-white' },
     ],
     'blog-index': [
         { label: 'Feature', x: 8, y: 16, w: 84, h: 28, className: 'border-indigo-200 bg-indigo-50' },
@@ -1583,6 +1607,8 @@ function NewPageRoute() {
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
                     ? 'Backy checkout and order placeholders'
+                    : formData.template === 'order-confirmation'
+                        ? 'Backy order confirmation placeholders'
             : selectedDatasetCollection
                 ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
@@ -1692,7 +1718,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'cart', 'checkout', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'cart', 'checkout', 'order-confirmation', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1742,7 +1768,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, cart, checkout, and blog index templates seed dynamic data placeholders for products, carts, orders, and posts.',
+            'Storefront, product-detail, cart, checkout, order-confirmation, and blog index templates seed dynamic data placeholders for products, carts, orders, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3770,6 +3796,8 @@ function buildTemplateElements(input: {
             ? 'Checkout'
             : input.template === 'checkout'
             ? 'Checkout'
+            : input.template === 'order-confirmation'
+                ? 'View order'
             : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
     });
 
@@ -4393,6 +4421,188 @@ function buildTemplateElements(input: {
                         height: 44,
                         props: { content: 'No card number, CVV, or raw payment secret is collected by this page starter.', fontSize: 13, lineHeight: 1.45, color: '#6b7280' },
                     }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'order-confirmation') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'order-confirmation-hero-section',
+                width: 1200,
+                height: 380,
+                dataBindings: [{ source: 'commerce', mode: 'order-confirmation', fields: ['orderId', 'status', 'customerEmail', 'total', 'createdAt'] }],
+                props: { backgroundColor: '#f0fdf4', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 66, {
+                        id: 'order-confirmation-kicker',
+                        width: 240,
+                        height: 28,
+                        props: { content: 'Order received', fontSize: 13, fontWeight: '800', color: '#15803d', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 106, {
+                        id: 'order-confirmation-heading',
+                        width: 620,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#052e16' },
+                    }),
+                    createCanvasElement('paragraph', 76, 222, {
+                        id: 'order-confirmation-copy',
+                        width: 560,
+                        height: 72,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#166534' },
+                    }),
+                    createCanvasElement('box', 748, 78, {
+                        id: 'order-confirmation-status-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'commerce', mode: 'order-status', fields: ['orderId', 'status', 'total'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'order-confirmation-status-label',
+                                width: 160,
+                                height: 24,
+                                props: { content: 'Status', fontSize: 14, fontWeight: '800', color: '#15803d' },
+                            }),
+                            createCanvasElement('heading', 24, 58, {
+                                id: 'order-confirmation-status',
+                                width: 220,
+                                height: 44,
+                                props: { content: 'Paid', level: 'h2', fontSize: 32, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'commerce', mode: 'order-status', field: 'status', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 124, {
+                                id: 'order-confirmation-number',
+                                width: 240,
+                                height: 26,
+                                props: { content: 'Order #1001', fontSize: 16, fontWeight: '700', color: '#334155' },
+                                dataBindings: [{ source: 'commerce', mode: 'order-status', field: 'orderId', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 380, {
+                id: 'order-confirmation-receipt-section',
+                width: 1200,
+                height: 430,
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 72, 62, {
+                        id: 'order-confirmation-receipt-card',
+                        width: 520,
+                        height: 300,
+                        dataBindings: [{ source: 'commerce', mode: 'order-receipt', fields: ['customerEmail', 'lineItems', 'subtotal', 'shipping', 'tax', 'total'] }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'order-confirmation-receipt-heading',
+                                width: 260,
+                                height: 34,
+                                props: { content: 'Receipt summary', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Digital kit', 'Service package', 'Estimated tax'].map((item, index) => createCanvasElement('text', 24, 86 + index * 42, {
+                                id: `order-confirmation-receipt-line-${index}`,
+                                width: 260,
+                                height: 24,
+                                props: { content: item, fontSize: 15, color: '#475569' },
+                            })),
+                            ...['$49.00', '$99.00', '$11.44'].map((item, index) => createCanvasElement('text', 390, 86 + index * 42, {
+                                id: `order-confirmation-receipt-value-${index}`,
+                                width: 82,
+                                height: 24,
+                                props: { content: item, fontSize: 15, fontWeight: '700', color: '#111827', textAlign: 'right' },
+                            })),
+                            createCanvasElement('text', 24, 226, {
+                                id: 'order-confirmation-total-label',
+                                width: 120,
+                                height: 28,
+                                props: { content: 'Total paid', fontSize: 18, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('text', 374, 226, {
+                                id: 'order-confirmation-total-value',
+                                width: 98,
+                                height: 28,
+                                props: { content: '$159.44', fontSize: 18, fontWeight: '800', color: '#15803d', textAlign: 'right' },
+                                dataBindings: [{ source: 'commerce', mode: 'order-receipt', field: 'total', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 664, 62, {
+                        id: 'order-confirmation-delivery-card',
+                        width: 400,
+                        height: 300,
+                        dataBindings: [{ source: 'commerce', mode: 'fulfillment', fields: ['fulfillmentStatus', 'trackingNumber', 'estimatedDelivery'] }],
+                        props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'order-confirmation-delivery-heading',
+                                width: 280,
+                                height: 34,
+                                props: { content: 'What happens next', level: 'h2', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 24, 80, {
+                                id: 'order-confirmation-delivery-copy',
+                                width: 310,
+                                height: 80,
+                                props: { content: 'Fulfillment, tracking, and support updates can bind to the private order record while this page only shows customer-safe receipt details.', fontSize: 15, lineHeight: 1.5, color: '#d1d5db' },
+                            }),
+                            createCanvasElement('text', 24, 186, {
+                                id: 'order-confirmation-tracking-status',
+                                width: 230,
+                                height: 26,
+                                props: { content: 'Preparing fulfillment', fontSize: 16, fontWeight: '800', color: '#bbf7d0' },
+                                dataBindings: [{ source: 'commerce', mode: 'fulfillment', field: 'fulfillmentStatus', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 810, {
+                id: 'order-confirmation-next-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'commerce', mode: 'post-purchase-actions', fields: ['accountUrl', 'supportUrl', 'continueShoppingUrl'] }],
+                props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 54, {
+                        id: 'order-confirmation-next-heading',
+                        width: 380,
+                        height: 44,
+                        props: { content: 'Next steps', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Create an account', copy: 'Save receipt history and update profile details.', button: 'Account', href: '/account' },
+                        { title: 'Keep shopping', copy: 'Return to products, subscriptions, or digital downloads.', button: 'Shop', href: '/store' },
+                        { title: 'Need help?', copy: 'Send customers to support with the order id attached.', button: 'Support', href: '/contact' },
+                    ].map((item, index) => createCanvasElement('box', 72 + index * 360, 126, {
+                        id: `order-confirmation-next-card-${index}`,
+                        width: 318,
+                        height: 128,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 18, {
+                                id: `order-confirmation-next-title-${index}`,
+                                width: 210,
+                                height: 28,
+                                props: { content: item.title, level: 'h3', fontSize: 19, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 20, 54, {
+                                id: `order-confirmation-next-copy-${index}`,
+                                width: 190,
+                                height: 48,
+                                props: { content: item.copy, fontSize: 13, lineHeight: 1.4, color: '#64748b' },
+                            }),
+                            createCanvasElement('button', 222, 48, {
+                                id: `order-confirmation-next-button-${index}`,
+                                width: 72,
+                                height: 38,
+                                props: { label: item.button, href: item.href, backgroundColor: '#dcfce7', color: '#166534', borderRadius: 8, fontSize: 13, fontWeight: '800' },
+                            }),
+                        ],
+                    })),
                 ],
             }),
         ]);

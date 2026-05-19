@@ -48,8 +48,10 @@ const assertPagesListSourceContract = () => {
       source.includes("key: 'cart'") &&
       source.includes('cartPageTemplate') &&
       source.includes("key: 'checkout'") &&
-      source.includes('checkoutPageTemplate'),
-    'Pages list must expose the member, product-detail, cart, and checkout starters and handoff routes',
+      source.includes('checkoutPageTemplate') &&
+      source.includes("key: 'order-confirmation'") &&
+      source.includes('orderConfirmationPageTemplate'),
+    'Pages list must expose the member, product-detail, cart, checkout, and confirmation starters and handoff routes',
   );
 };
 
@@ -1540,6 +1542,12 @@ const main = async () => {
       ['template=checkout'],
       { title: 'Checkout', slug: 'checkout', template: 'checkout', homepage: false },
     );
+    const orderConfirmationShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-order-confirmation',
+      ['template=order-confirmation'],
+      { title: 'Order confirmation', slug: 'order-confirmation', template: 'order-confirmation', homepage: false },
+    );
     const childHierarchy = await waitForHierarchyRow(
       client,
       hierarchyPages.childPage,
@@ -1629,6 +1637,7 @@ const main = async () => {
       productDetailShortcut,
       cartShortcut,
       checkoutShortcut,
+      orderConfirmationShortcut,
       childHierarchy,
       parentHierarchy,
       parentTemplate,

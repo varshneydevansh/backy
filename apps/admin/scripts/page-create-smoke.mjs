@@ -220,6 +220,45 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'order-confirmation',
+    title: 'Smoke Order Confirmation Template',
+    slugBase: 'smoke-order-confirmation-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'order-confirmation',
+    navigationItem: 'Orders',
+    headingId: 'order-confirmation-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 40,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'order-confirmation-site-header',
+      'order-confirmation-site-navigation',
+      'order-confirmation-site-footer',
+      'order-confirmation-hero-section',
+      'order-confirmation-status-card',
+      'order-confirmation-number',
+      'order-confirmation-receipt-section',
+      'order-confirmation-receipt-card',
+      'order-confirmation-total-value',
+      'order-confirmation-delivery-card',
+      'order-confirmation-tracking-status',
+      'order-confirmation-next-section',
+      'order-confirmation-next-card-0',
+      'order-confirmation-next-button-0',
+    ],
+    dataBindingElementIds: [
+      'order-confirmation-hero-section',
+      'order-confirmation-status-card',
+      'order-confirmation-status',
+      'order-confirmation-number',
+      'order-confirmation-receipt-card',
+      'order-confirmation-total-value',
+      'order-confirmation-delivery-card',
+      'order-confirmation-tracking-status',
+      'order-confirmation-next-section',
+    ],
+  },
+  {
     template: 'blog-index',
     title: 'Smoke Blog Index Template',
     slugBase: 'smoke-blog-index-template',
@@ -428,8 +467,11 @@ const assertPageCreateSourceContracts = () => {
       source.includes("'checkout'") &&
       source.includes('checkout-payment-safe-note') &&
       source.includes('No card number, CVV, or raw payment secret is collected by this page starter.') &&
+      source.includes("'order-confirmation'") &&
+      source.includes('order-confirmation-status-card') &&
+      source.includes('customer-safe receipt details') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member starters and commerce product-detail/cart/checkout starters',
+    'Page create must keep safe member starters and commerce product-detail/cart/checkout/confirmation starters',
   );
 };
 
@@ -1010,6 +1052,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Checkout page',
       forms: 'none',
       dynamicData: 'Backy checkout and order placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'order-confirmation',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Order confirmation',
+      forms: 'none',
+      dynamicData: 'Backy order confirmation placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

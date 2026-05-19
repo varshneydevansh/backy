@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -382,6 +382,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'checkout',
     title: 'Checkout',
     detail: 'Create an order summary, customer details, shipping choice, and payment-provider handoff page.',
+    badge: 'Commerce',
+    icon: ShoppingBag,
+  },
+  {
+    key: 'order-confirmation',
+    title: 'Order confirmation',
+    detail: 'Create a receipt, fulfillment status, account handoff, and support next-steps page.',
     badge: 'Commerce',
     icon: ShoppingBag,
   },
@@ -1858,6 +1865,7 @@ function PagesListView() {
       productDetailPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
+      orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
     },
     export: {
@@ -1884,6 +1892,7 @@ function PagesListView() {
         productDetail: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
+        orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       },
     },
