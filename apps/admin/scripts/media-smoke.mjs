@@ -58,6 +58,8 @@ const assert = (condition, message) => {
 
 const assertMediaRouteSourceContract = () => {
   const source = fs.readFileSync(new URL('../src/routes/media.tsx', import.meta.url), 'utf8');
+  const modalSource = fs.readFileSync(new URL('../src/components/editor/MediaLibraryModal.tsx', import.meta.url), 'utf8');
+  const editorSpec = fs.readFileSync(new URL('../../../specs/editor_complete_spec.md', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Media route must use the shared EmptyState component');
   assert(source.includes('title="No media audit records"'), 'Media library audit empty state must keep the shared title visible');
   assert(source.includes('title="No large assets yet"'), 'Media analytics panel must keep the largest-assets empty state visible');
@@ -81,6 +83,10 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('aria-label={`Confirm deleting folder ${pendingDeleteFolder.name}`}') && source.includes('aria-label={`Cancel deleting folder ${pendingDeleteFolder.name}`}'), 'Media folder delete confirmation actions must have explicit labels');
   assert(source.includes('aria-label={`Confirm deleting ${selectedMediaAssets.length} selected media asset') && source.includes('aria-label="Cancel deleting selected media"'), 'Media bulk delete confirmation actions must have explicit labels');
   assert(source.includes('hover:bg-red-50 hover:text-red-600 focus-ring') && source.includes('text-red-600 hover:bg-red-50 focus-ring'), 'Media destructive icon controls must keep visible focus rings');
+  assert(modalSource.includes('listMediaLibrary') && modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must keep loading scoped media through the admin media API');
+  assert(modalSource.includes('scope: targetScope') && modalSource.includes('scopeTargetId: targetId || null'), 'Editor media uploads must keep persisting page/post scope metadata');
+  assert(!editorSpec.includes('shared in-memory store state inside admin'), 'Editor spec must not regress to stale in-memory media contract language');
+  assert(editorSpec.includes('The finalized media scope model is `global|page|post`'), 'Editor spec must document the finalized media scope model');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

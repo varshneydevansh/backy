@@ -44,8 +44,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows including cross-node mark splits, bounded selected-list indentation/button-reorder/drag-reorder, imported-depth normalization, nested child list targeting, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split/alignment/fill/border/vertical alignment, selected multi-cell table fill/border/vertical style ranges, table captions, color clearing, and header row/column/cell toggles are covered | ✅ |
 | paragraph | ✅ | ✅ | ✅ | Same covered rich-text table/list behavior as heading | ✅ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
-| image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
-| video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; broader media-version UX remains in media route | ✅ |
+| image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Transform/version-management UX lives in the central media route and is covered by media smoke tests | ✅ |
+| video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; version-management UX lives in the central media route | ✅ |
 | button | ✅ label/link-like styling + action presets | ✅ | ✅ | Action presets now normalize page/section/email/phone/download/custom href behavior with smoke coverage | ✅ |
 | link | ✅ href/content/underline/target/rel | ✅ | ✅ | `_blank` target now enforces `noopener noreferrer` in property controls, editor preview, persistence, and public rendering | ✅ |
 | divider | ✅ style controls | ✅ | ✅ | Public renderer now matches editor border-only line geometry and margin spacing | ✅ |
@@ -61,15 +61,14 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ## Canvas-to-Backend/Frontend Contract
 
-- `media` currently uses shared in-memory store state inside admin for both:
-  - media library modal (`components/editor/MediaLibraryModal.tsx`)
-  - media management route (`routes/media.tsx`)
+- `media` now uses the site-scoped admin media API contract for both:
+  - media library modal (`components/editor/MediaLibraryModal.tsx`), through `listMediaLibrary`, `uploadMedia`, `replaceMedia`, and scoped `pageId`/`postId` filters.
+  - media management route (`routes/media.tsx`), through `/api/admin/sites/:siteId/media`, folders, versions, transforms, signed URLs, provider analytics, and storage/runtime settings.
+- The finalized media scope model is `global|page|post`; `blogId` remains an API alias for `postId`. Page/post uploads send `scopeTargetId`, and returned selections persist `mediaId`, `mediaScope`, and `mediaScopeTargetId` into canvas payloads.
 - `embed/map` now support:
   - normalized embed source parsing (YouTube/Vimeo/watch/watch URLs + iframe snippets)
   - address-based map conversion to Google Maps embed URL when non-URL text is provided
-- Remaining design contract decision:
-  - Confirm whether media assets must be global-only or scoped by `siteId/pageId`
-  - Add explicit API endpoints for global + page/blog scope after backend API migration.
+- Coverage: `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`, `npm run test:media --workspace @backy-cms/admin`, and `npm run test:media-scope --workspace @backy/public`.
 
 ## Feature-by-Feature Analysis
 
