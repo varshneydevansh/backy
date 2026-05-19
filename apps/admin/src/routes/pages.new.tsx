@@ -6273,24 +6273,40 @@ function buildTemplateElements(input: {
                 height: 320,
                 dataBindings: [{ source: 'settings', mode: 'legal-policy', fields: ['privacyPolicy', 'effectiveDate', 'contactEmail', 'processors'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 580 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'privacy-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Privacy', fontSize: 13, fontWeight: '800', color: '#475569', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 200 },
+                            mobile: { x: 24, y: 44, width: 180 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'privacy-heading',
                         width: 640,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 80, width: 327, height: 124, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'privacy-copy',
                         width: 600,
                         height: 64,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 222, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 86, {
                         id: 'privacy-effective-card',
@@ -6298,6 +6314,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'settings', mode: 'legal-policy', fields: ['effectiveDate', 'version', 'jurisdiction'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 330, height: 130 },
+                            mobile: { x: 24, y: 378, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'privacy-effective-label',
@@ -6317,6 +6337,10 @@ function buildTemplateElements(input: {
                                 width: 220,
                                 height: 32,
                                 props: { content: 'Bind this card from Settings legal metadata.', fontSize: 13, lineHeight: 1.35, color: '#64748b' },
+                                responsive: {
+                                    tablet: { width: 260 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -6328,12 +6352,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'settings', mode: 'privacy-sections', fields: ['dataCollected', 'usage', 'retention', 'processors', 'rights'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 580, width: 375, height: 1160 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'privacy-policy-heading',
                         width: 420,
                         height: 42,
                         props: { content: 'How data is handled', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Data we collect', body: 'Account details, form submissions, content edits, media metadata, and commerce/order information needed to run the site.' },
@@ -6345,6 +6377,10 @@ function buildTemplateElements(input: {
                         height: 290,
                         dataBindings: [{ source: 'settings', mode: 'privacy-section', index }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 324, width: 660, height: 286 },
+                            mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `privacy-policy-card-title-${index}`,
@@ -6352,6 +6388,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: section.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'settings', mode: 'privacy-section', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 280 },
+                                    mobile: { width: 250 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: `privacy-policy-card-copy-${index}`,
@@ -6359,12 +6399,20 @@ function buildTemplateElements(input: {
                                 height: 120,
                                 props: { content: section.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
                                 dataBindings: [{ source: 'settings', mode: 'privacy-section', index, field: 'body', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500, height: 104 },
+                                    mobile: { width: 268, height: 132 },
+                                },
                             }),
                             createCanvasElement('text', 24, 232, {
                                 id: `privacy-policy-card-note-${index}`,
                                 width: 210,
                                 height: 24,
                                 props: { content: 'Editable legal content', fontSize: 13, fontWeight: '800', color: '#475569' },
+                                responsive: {
+                                    tablet: { y: 228 },
+                                    mobile: { y: 252 },
+                                },
                             }),
                         ],
                     })),
@@ -6376,6 +6424,10 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'settings', mode: 'privacy-rights', fields: ['rights', 'contactEmail', 'requestUrl', 'processors'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 620 },
+                    mobile: { y: 1740, width: 375, height: 680 },
+                },
                 children: [
                     createCanvasElement('box', 74, 62, {
                         id: 'privacy-rights-card',
@@ -6383,18 +6435,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'privacy-rights', fields: ['access', 'export', 'delete', 'correct'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 250 },
+                            mobile: { x: 24, y: 46, width: 327, height: 308 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 26, {
                                 id: 'privacy-rights-heading',
                                 width: 320,
                                 height: 34,
                                 props: { content: 'Visitor rights', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, props: { fontSize: 24 } },
+                                },
                             }),
                             ...['Access your data', 'Correct details', 'Request export', 'Request deletion'].map((right, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
                                 id: `privacy-right-${index}`,
                                 width: 210,
                                 height: 24,
                                 props: { content: right, fontSize: 15, fontWeight: '800', color: '#334155' },
+                                responsive: {
+                                    tablet: { x: 30 + (index % 2) * 300, y: 92 + Math.floor(index / 2) * 48, width: 240 },
+                                    mobile: { x: 28, y: 86 + index * 48, width: 240 },
+                                },
                             })),
                         ],
                     }),
@@ -6404,6 +6467,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'settings', mode: 'legal-contact', fields: ['contactEmail', 'requestUrl'] }],
                         props: { backgroundColor: '#111827', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 350, width: 660, height: 190 },
+                            mobile: { x: 24, y: 410, width: 327, height: 214 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 26, {
                                 id: 'privacy-contact-heading',
@@ -6416,12 +6483,20 @@ function buildTemplateElements(input: {
                                 width: 240,
                                 height: 46,
                                 props: { content: 'Bind the request destination to Settings or a custom frontend privacy workflow.', fontSize: 14, lineHeight: 1.45, color: '#cbd5e1' },
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('button', 26, 138, {
                                 id: 'privacy-contact-button',
                                 width: 158,
                                 height: 40,
                                 props: { label: 'Contact privacy', backgroundColor: '#e2e8f0', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'privacy.request.open' },
+                                responsive: {
+                                    tablet: { x: 470, y: 112 },
+                                    mobile: { x: 26, y: 150 },
+                                },
                             }),
                         ],
                     }),

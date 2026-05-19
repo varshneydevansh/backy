@@ -1491,6 +1491,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 420, width: 660, height: 130 }"),
     'Events page starter must seed explicit tablet/mobile responsive overrides for event and agenda sections.',
   );
+  assert(
+    source.includes("id: 'privacy-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 580 }") &&
+      source.includes("id: 'privacy-effective-card'") &&
+      source.includes("mobile: { x: 24, y: 378, width: 327, height: 150 }") &&
+      source.includes("id: 'privacy-policy-section'") &&
+      source.includes("tablet: { y: 460, width: 768, height: 1120 }") &&
+      source.includes("id: `privacy-policy-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 }") &&
+      source.includes("id: 'privacy-rights-section'") &&
+      source.includes("mobile: { y: 1740, width: 375, height: 680 }") &&
+      source.includes("id: 'privacy-rights-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 308 }") &&
+      source.includes("id: 'privacy-contact-card'") &&
+      source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
+    'Privacy page starter must seed explicit tablet/mobile responsive overrides for legal policy sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

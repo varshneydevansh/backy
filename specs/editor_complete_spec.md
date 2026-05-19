@@ -546,6 +546,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Portfolio starter pages now seed explicit tablet/mobile responsive overrides for featured project cards, category filters, project media cards, and inquiry CTAs so project galleries stack predictably on narrower canvases.
   - Gallery starter pages now seed explicit tablet/mobile responsive overrides for featured media, folder/type filters, upload handoff controls, asset cards, thumbnails, and lightbox/download CTAs so central media-library pages remain usable across breakpoints.
   - Events starter pages now seed explicit tablet/mobile responsive overrides for event format filters, stacked event cards, agenda steps, and RSVP CTAs so event registration pages are authored for narrower canvases instead of scaled from desktop.
+  - Privacy starter pages now seed explicit tablet/mobile responsive overrides for legal metadata cards, policy sections, visitor-rights lists, and privacy request CTAs so legal pages remain readable and actionable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves
