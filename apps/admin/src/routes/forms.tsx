@@ -1608,6 +1608,22 @@ function FormsRoute() {
     });
   };
 
+  const patchFormDraftContactShare = (patch: Partial<NonNullable<FormDefinition['contactShare']>>) => {
+    if (!canEditForms) return;
+    setFormDraft((current) => {
+      if (!current) return current;
+
+      const currentShare = current.contactShare || { enabled: false };
+      return {
+        ...current,
+        contactShare: {
+          ...currentShare,
+          ...patch,
+        },
+      };
+    });
+  };
+
   const patchFormDraftField = (fieldIndex: number, patch: Partial<FormFieldDefinition>) => {
     if (!canEditForms) return;
     setFormDraft((current) => {
@@ -3769,6 +3785,78 @@ function FormsRoute() {
                             {collectionTargetUnavailableReason}
                           </div>
                         ) : null}
+
+                        {formDraft.contactShare?.enabled && (
+                          <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="form-contact-share-panel">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <h3 className="text-sm font-semibold">Contact share mapping</h3>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Choose which submitted fields create or update the private contact profile after approval.
+                                </p>
+                              </div>
+                              <span className={cn(
+                                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                formDraft.contactShare.emailField || formDraft.contactShare.phoneField
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-amber-50 text-amber-700',
+                              )}
+                              >
+                                {formDraft.contactShare.emailField || formDraft.contactShare.phoneField
+                                  ? 'identity mapped'
+                                  : 'needs identity'}
+                              </span>
+                            </div>
+                            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              {([
+                                ['nameField', 'Name field'],
+                                ['emailField', 'Email field'],
+                                ['phoneField', 'Phone field'],
+                                ['notesField', 'Notes field'],
+                              ] as const).map(([key, label]) => (
+                                <label key={key} className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                  {label}
+                                  <select
+                                    value={formDraft.contactShare?.[key] || ''}
+                                    onChange={(event) => patchFormDraftContactShare({ [key]: event.target.value || undefined })}
+                                    disabled={!canEditForms}
+                                    className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                    aria-label={`Contact share ${label.toLowerCase()}`}
+                                    data-testid={`form-contact-share-${key}`}
+                                  >
+                                    <option value="">Do not share</option>
+                                    {formDraft.fields.map((field) => (
+                                      <option key={field.key} value={field.key}>
+                                        {field.label} ({field.key})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ))}
+                            </div>
+                            <label className="mt-3 flex items-start gap-2 text-sm font-medium">
+                              <input
+                                type="checkbox"
+                                checked={formDraft.contactShare.dedupeByEmail !== false}
+                                onChange={(event) => patchFormDraftContactShare({ dedupeByEmail: event.target.checked })}
+                                disabled={!canEditForms || !formDraft.contactShare.emailField}
+                                data-testid="form-contact-share-dedupe-toggle"
+                                className="mt-1 disabled:cursor-not-allowed disabled:opacity-60"
+                              />
+                              <span>
+                                Dedupe contacts by email
+                                <span className="block text-xs font-normal leading-5 text-muted-foreground">
+                                  When enabled, approved submissions update an existing private contact with the same email instead of creating duplicates.
+                                </span>
+                              </span>
+                            </label>
+                            {!formDraft.contactShare.emailField && !formDraft.contactShare.phoneField ? (
+                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                Map an email or phone field before relying on contact creation.
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
 
                         <div data-testid="form-spam-settings-panel" className="rounded-lg border border-border bg-muted/30 p-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">

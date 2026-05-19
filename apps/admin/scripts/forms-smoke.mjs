@@ -100,6 +100,15 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("if (type === 'number') return ['min', 'max'];"),
     'Forms builder must normalize options and compatible validation when a field type changes',
   );
+  assert(
+    source.includes('patchFormDraftContactShare') &&
+      source.includes('data-testid="form-contact-share-panel"') &&
+      source.includes('data-testid={`form-contact-share-${key}`}') &&
+      source.includes('data-testid="form-contact-share-dedupe-toggle"') &&
+      source.includes('Map an email or phone field before relying on contact creation.') &&
+      source.includes('Dedupe contacts by email'),
+    'Forms builder must expose explicit contact-share mapping controls',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',
