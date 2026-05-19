@@ -348,6 +348,9 @@ function assertAdminPageContentValidationSource() {
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_SORT'"), 'public page comments route must reject invalid sort filters');
   assert(publicPageCommentsRoute.includes('statusFilter.invalid'), 'public page comments route must branch on invalid status filters');
   assert(publicPageCommentsRoute.includes('sortFilter.invalid'), 'public page comments route must branch on invalid sort filters');
+  assert(publicPageCommentsRoute.includes('pageCommentValidationResponse'), 'public page comments route must use structured validation error envelopes');
+  assert(publicPageCommentsRoute.includes("code: 'VALIDATION_ERROR'"), 'public page comments route must return stable validation error codes');
+  assert(!publicPageCommentsRoute.includes("error: 'Validation failed'"), 'public page comments route must not return legacy string validation errors');
   assert(publicPageCommentDetailRoute.includes("'INVALID_PAGE_COMMENT_STATUS'"), 'public page comment detail route must reject invalid moderation status updates');
   assert(publicPageCommentDetailRoute.includes('statusProvided'), 'public page comment detail route must distinguish missing status from invalid status values');
 

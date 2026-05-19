@@ -364,6 +364,7 @@ Public page payload should include:
 - `POST /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
   - Body: comment + optional parentId + optional identity fields.
   - Response uses `{ success, requestId, data: { comment, message } }`; legacy top-level `comment` and `message` remain for compatibility.
+  - Validation and spam rejections return structured `422` envelopes with `error.code: "VALIDATION_ERROR"`, `details`, and `validation` field errors instead of legacy string errors.
 
 - `GET /api/sites/:siteId/pages/:pageId/comments?status=approved&limit=&cursor=`
 - `GET /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
