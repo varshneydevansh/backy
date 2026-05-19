@@ -220,7 +220,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("e.key === 'Enter'") && source.includes('handleSelectFirstChildLayer();') && source.includes('handleSelectParentLayer();'), 'Editor keyboard handler must support Enter child selection and Shift+Enter parent selection');
   assert(source.includes('isLayerOrderShortcut') && source.includes("handleZOrderChange(isBackward") && source.includes('Cmd/Ctrl+]'), 'Editor keyboard handler must support Cmd/Ctrl bracket layer ordering shortcuts');
   assert(source.includes('const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1') && source.includes('const duplicatedIds: string[] = [];'), 'Editor layer row duplicate/delete actions must support selected multi-layer actions');
-  assert(source.includes('options: { renameRoot?: boolean }') && source.includes('`${clone.name} Copy`') && source.includes('{ renameRoot: true }'), 'Editor duplicate actions must distinguish copied custom layer names');
+  assert(source.includes('const getUniqueDuplicateLayerName') && source.includes('siblingNames?: string[]') && source.includes('`${stem} Copy ${suffix}`') && source.includes('{ renameRoot: true, siblingNames }'), 'Editor duplicate actions must distinguish repeated copied custom layer names');
   assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
   assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
@@ -10530,7 +10530,34 @@ const testLayersPanelControls = async (client, pageId) => {
       duplicateNameState.originalText.includes(inspectorLayerName),
     `Layer duplicate did not distinguish copied custom name: ${JSON.stringify({ duplicateClick, duplicateNameState })}`,
   );
+  const secondDuplicateClick = await clickLayerAction(client, 'duplicate', 'smoke-link');
+  const selectedAfterSecondDuplicate = await readSelectedLayerIds(client);
+  const secondDuplicateId = selectedAfterSecondDuplicate.find((id) => (
+    id && id !== 'smoke-link' && id !== duplicateId
+  ));
+  assert(
+    secondDuplicateId && secondDuplicateId !== duplicateId,
+    `Second layer duplicate did not select a fresh duplicate row: ${JSON.stringify({ secondDuplicateClick, selectedAfterSecondDuplicate, duplicateId })}`,
+  );
+  const secondDuplicateTree = await readLayerTreeState(client, ['smoke-link', duplicateId, secondDuplicateId]);
+  const secondDuplicateNameState = await evaluate(client, `(() => {
+    const firstDuplicate = document.querySelector('[data-layer-id="${duplicateId}"]');
+    const secondDuplicate = document.querySelector('[data-layer-id="${secondDuplicateId}"]');
+    return {
+      firstDuplicateText: firstDuplicate?.textContent || '',
+      secondDuplicateText: secondDuplicate?.textContent || '',
+      expectedFirstName: ${JSON.stringify(`${inspectorLayerName} Copy`)},
+      expectedSecondName: ${JSON.stringify(`${inspectorLayerName} Copy 2`)},
+    };
+  })()`);
+  assert(
+    secondDuplicateNameState.firstDuplicateText.includes(`${inspectorLayerName} Copy`) &&
+      secondDuplicateNameState.secondDuplicateText.includes(`${inspectorLayerName} Copy 2`),
+    `Repeated layer duplicate did not produce a unique copied custom name: ${JSON.stringify({ secondDuplicateClick, secondDuplicateNameState })}`,
+  );
 
+  const secondDeleteClick = await clickLayerAction(client, 'delete', secondDuplicateId);
+  const deletedSecondDuplicate = await waitForElementPresence(client, secondDuplicateId, false, 'after second layer duplicate delete');
   const deleteClick = await clickLayerAction(client, 'delete', duplicateId);
   const deletedDuplicate = await waitForElementPresence(client, duplicateId, false, 'after layer duplicate delete');
 
@@ -10606,6 +10633,12 @@ const testLayersPanelControls = async (client, pageId) => {
     duplicateId,
     duplicateTree,
     duplicateNameState,
+    secondDuplicateClick,
+    secondDuplicateId,
+    secondDuplicateTree,
+    secondDuplicateNameState,
+    secondDeleteClick,
+    deletedSecondDuplicate,
     deleteClick,
     deletedDuplicate,
     multiDuplicateClick,
