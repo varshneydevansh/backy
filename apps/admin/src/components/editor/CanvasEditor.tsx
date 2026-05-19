@@ -2196,15 +2196,25 @@ export function CanvasEditor({
   }, [getSelectedSiblingEntries]);
 
   const cloneElementTreeWithFreshIds = useCallback(
-    (sourceElement: CanvasElement, x = 20, y = 20, parentId: string | null = null): CanvasElement => {
+    (
+      sourceElement: CanvasElement,
+      x = 20,
+      y = 20,
+      parentId: string | null = null,
+      options: { renameRoot?: boolean } = {},
+    ): CanvasElement => {
       const highestZ = Math.max(walkTreeMaxZ(elements), 0);
       const cloneNode = (node: CanvasElement, nextParentId: string | null, isRoot = false): CanvasElement => {
         const clone = JSON.parse(JSON.stringify(node)) as CanvasElement;
         const nextId = generateId();
+        const rootCopyName = isRoot && options.renameRoot && clone.name
+          ? `${clone.name} Copy`
+          : clone.name;
         const nextNode: CanvasElement = {
           ...clone,
           id: nextId,
           type: normalizeElementType(clone.type),
+          name: rootCopyName,
           ...(nextParentId ? { parentId: nextParentId } : {}),
           children: clone.children?.map((child) => cloneNode(child, nextId)),
         };
@@ -2300,7 +2310,7 @@ export function CanvasEditor({
     let nextElements = currentElements;
     const duplicatedIds: string[] = [];
     for (const entry of entries) {
-      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId);
+      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId, { renameRoot: true });
       const duplicated = insertElementAsSibling(nextElements, entry.element.id, duplicate);
       if (!duplicated.updated) continue;
 
@@ -2784,7 +2794,7 @@ export function CanvasEditor({
     let nextElements = currentElements;
     const duplicatedIds: string[] = [];
     for (const entry of entries) {
-      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId);
+      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId, { renameRoot: true });
       const duplicated = insertElementAsSibling(nextElements, entry.element.id, duplicate);
       if (!duplicated.updated) continue;
 
