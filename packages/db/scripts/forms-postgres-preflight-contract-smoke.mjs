@@ -210,6 +210,7 @@ includesEvery(smoke, destructiveSafeWorkflowEvidence, 'Forms Postgres destructiv
 includesEvery(smoke, repositoryCoverageEvidence, 'Forms Postgres repository workflow coverage contract');
 includesEvery(adminFormsRoute, [
   'formPersistenceCertification',
+  'getFormsPersistenceRuntimeSummary',
   "schemaVersion: 'backy.forms-persistence-certification.v1'",
   "status: 'external-database-gate'",
   "'BACKY_DATABASE_URL', 'DATABASE_URL'",
@@ -221,8 +222,12 @@ includesEvery(adminFormsRoute, [
   "'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'",
   'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
   'disposable_database_confirmed=true',
+  'databaseUrlConfigured',
+  'readyForCertification',
+  'runtime: getFormsPersistenceRuntimeSummary()',
   'persistenceCertification: formPersistenceCertification(site.id)',
   'Database URLs stay in server/CI environment variables',
+  'Database URLs and credentials are never returned',
 ], 'Admin Forms API persistence certification handoff');
 includesEvery(adminFormsPage, [
   'formPersistenceCertification',
@@ -259,6 +264,9 @@ includesEvery(adminFormsSmoke, [
   'disposable migrated Supabase/Postgres database',
   'disposable_database_confirmed=true',
   'Database URLs stay in server/CI environment variables',
+  'certification.runtime',
+  'databaseUrlConfigured',
+  'readyForCertification',
   'assertFormsPersistenceCertificationResponse(payload);',
 ], 'Forms admin smoke runtime persistence certification response guard');
 

@@ -16,6 +16,50 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const envValue = (keys: string[]): { key: string; value: string } | null => {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) {
+      return { key, value };
+    }
+  }
+
+  return null;
+};
+
+const booleanEnvEnabled = (key: string): boolean => {
+  const value = process.env[key]?.trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+};
+
+const getFormsPersistenceRuntimeSummary = () => {
+  const databaseUrl = envValue(['BACKY_DATABASE_URL', 'DATABASE_URL']);
+  const dataMode = process.env.BACKY_DATA_MODE?.trim() || 'database';
+  const databaseType = process.env.BACKY_DATABASE_TYPE?.trim() || (
+    databaseUrl?.value.startsWith('mysql') ? 'mysql' : 'postgres'
+  );
+  const disposableConfirmed = booleanEnvEnabled('BACKY_DATABASE_DISPOSABLE_CONFIRMED');
+  const expectedHostConfigured = Boolean(process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST?.trim());
+  const expectedDatabaseConfigured = Boolean(process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE?.trim());
+  const missing = [
+    ...(dataMode !== 'demo' && !databaseUrl ? ['BACKY_DATABASE_URL or DATABASE_URL'] : []),
+    ...(!disposableConfirmed ? ['BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'] : []),
+  ];
+
+  return {
+    dataMode,
+    databaseType,
+    databaseUrlConfigured: Boolean(databaseUrl),
+    databaseUrlAlias: databaseUrl?.key || null,
+    disposableConfirmed,
+    expectedHostConfigured,
+    expectedDatabaseConfigured,
+    readyForCertification: dataMode !== 'demo' && Boolean(databaseUrl) && disposableConfirmed,
+    missing,
+    secretHandling: 'Database URLs and credentials are never returned; this runtime summary exposes alias/configuration state only.',
+  };
+};
+
 const formPersistenceCertification = (siteId: string) => ({
   schemaVersion: 'backy.forms-persistence-certification.v1',
   status: 'external-database-gate',
@@ -47,6 +91,7 @@ const formPersistenceCertification = (siteId: string) => ({
     'contact merge and promotion metadata',
     'consent/spam settings persistence',
   ],
+  runtime: getFormsPersistenceRuntimeSummary(),
   secretHandling: 'Database URLs stay in server/CI environment variables; Forms API responses expose only non-secret gate names and readiness evidence.',
 });
 
