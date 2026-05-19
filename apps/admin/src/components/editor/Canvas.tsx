@@ -2444,7 +2444,7 @@ export function Canvas({
 
       {/* Selection Info */}
       {!isPreview && selectedId && (
-        <SelectionInfo elements={elements} selectedId={selectedId} />
+        <SelectionInfo elements={elements} selectedId={selectedId} selectedIds={selectedIds} />
       )}
 
       {/* Canvas Resize Handle (Bottom) */}
@@ -4813,25 +4813,80 @@ function ResizeHandle({ position, onResizeStart }: ResizeHandleProps) {
 interface SelectionInfoProps {
   elements: CanvasElement[];
   selectedId: string;
+  selectedIds: string[];
 }
 
-function SelectionInfo({ elements, selectedId }: SelectionInfoProps) {
-  const element = findElementById(elements, selectedId);
-  if (!element) return null;
+type SelectionInfoMetric = {
+  id: string;
+  type: CanvasElement['type'];
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+const collectSelectionInfoMetrics = (
+  elements: CanvasElement[],
+  selectedIds: Set<string>,
+  origin = { x: 0, y: 0 },
+): SelectionInfoMetric[] => {
+  const metrics: SelectionInfoMetric[] = [];
+
+  for (const element of elements) {
+    const x = origin.x + element.x;
+    const y = origin.y + element.y;
+
+    if (selectedIds.has(element.id)) {
+      metrics.push({
+        id: element.id,
+        type: element.type,
+        x,
+        y,
+        width: element.width,
+        height: element.height,
+      });
+    }
+
+    if (element.children?.length) {
+      metrics.push(...collectSelectionInfoMetrics(element.children, selectedIds, { x, y }));
+    }
+  }
+
+  return metrics;
+};
+
+function SelectionInfo({ elements, selectedId, selectedIds }: SelectionInfoProps) {
+  const selectionSet = new Set(selectedIds.length ? selectedIds : [selectedId]);
+  const selectedMetrics = collectSelectionInfoMetrics(elements, selectionSet);
+  if (selectedMetrics.length === 0) return null;
+
+  const minX = Math.min(...selectedMetrics.map((metric) => metric.x));
+  const minY = Math.min(...selectedMetrics.map((metric) => metric.y));
+  const maxX = Math.max(...selectedMetrics.map((metric) => metric.x + metric.width));
+  const maxY = Math.max(...selectedMetrics.map((metric) => metric.y + metric.height));
+  const primaryMetric = selectedMetrics.find((metric) => metric.id === selectedId) || selectedMetrics[0];
+  const label = selectedMetrics.length > 1
+    ? `${selectedMetrics.length} layers`
+    : primaryMetric.type;
 
   return (
-    <div className="absolute bottom-4 left-4 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur">
+    <div
+      className="absolute bottom-4 left-4 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur"
+      data-testid="editor-selection-info"
+      data-selection-mode={selectedMetrics.length > 1 ? 'multi' : 'single'}
+      data-selection-count={selectedMetrics.length}
+    >
       <div className="flex items-center gap-3">
-        <span className="rounded bg-sky-50 px-2 py-0.5 font-semibold uppercase tracking-wide text-sky-700">{element.type}</span>
+        <span className="rounded bg-sky-50 px-2 py-0.5 font-semibold uppercase tracking-wide text-sky-700">{label}</span>
         <span className="text-slate-500">X</span>
-        <span className="font-medium text-slate-800">{element.x}</span>
+        <span className="font-medium text-slate-800">{Math.round(minX)}</span>
         <span className="text-slate-500">Y</span>
-        <span className="font-medium text-slate-800">{element.y}</span>
+        <span className="font-medium text-slate-800">{Math.round(minY)}</span>
         <span className="h-4 w-px bg-slate-200" />
         <span className="text-slate-500">W</span>
-        <span className="font-medium text-slate-800">{element.width}</span>
+        <span className="font-medium text-slate-800">{Math.round(maxX - minX)}</span>
         <span className="text-slate-500">H</span>
-        <span className="font-medium text-slate-800">{element.height}</span>
+        <span className="font-medium text-slate-800">{Math.round(maxY - minY)}</span>
       </div>
     </div>
   );

@@ -276,6 +276,14 @@ const assertCanvasNestedDropTargetSource = () => {
   assert(source.includes("event.dataTransfer.dropEffect = 'copy';") && source.includes('setIsNestedDropActive(false);'), 'Editor nested drop targets must set copy drop effect and clear hover state on leave/drop');
 };
 
+const assertCanvasSelectionInfoSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
+  assert(source.includes('<SelectionInfo elements={elements} selectedId={selectedId} selectedIds={selectedIds} />'), 'Editor canvas selection HUD must receive the full selected id set');
+  assert(source.includes('collectSelectionInfoMetrics') && source.includes('const selectionSet = new Set(selectedIds.length ? selectedIds : [selectedId]);'), 'Editor canvas selection HUD must collect metrics for every selected layer');
+  assert(source.includes('data-testid="editor-selection-info"') && source.includes("data-selection-mode={selectedMetrics.length > 1 ? 'multi' : 'single'}") && source.includes('data-selection-count={selectedMetrics.length}'), 'Editor canvas selection HUD must expose testable single/multi selection metadata');
+  assert(source.includes('`${selectedMetrics.length} layers`') && source.includes('Math.round(maxX - minX)') && source.includes('Math.round(maxY - minY)'), 'Editor canvas selection HUD must show multi-selection bounds instead of only the primary layer size');
+};
+
 const assertInteractiveRegistryVersionPinningSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
   assert(source.includes('interactiveComponentOptionValue'), 'Interactive registry selector must use a unique option value helper');
@@ -14674,6 +14682,7 @@ const main = async () => {
   assertPropertyPanelColorControlsSource();
   assertEditorInteractiveSandboxPreviewSource();
   assertCanvasNestedDropTargetSource();
+  assertCanvasSelectionInfoSource();
   assertInteractiveRegistryVersionPinningSource();
   assertComponentLibraryEmptyStateSource();
   assertMediaLibraryModalEmptyStateSource();
