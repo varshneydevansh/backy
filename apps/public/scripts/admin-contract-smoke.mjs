@@ -1099,6 +1099,8 @@ try {
       assert(preflight.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${preflight.url} missing allowed origin ${adminDevOrigin}`);
       assert(preflight.response.headers.get('access-control-allow-methods')?.includes('GET'), `${preflight.url} missing allowed methods`);
       assert(preflight.response.headers.get('access-control-allow-headers')?.toLowerCase().includes('x-backy-admin-key'), `${preflight.url} missing admin key header`);
+      assert(preflight.response.headers.get('access-control-expose-headers')?.toLowerCase().includes('x-backy-request-id'), `${preflight.url} missing exposed request id header`);
+      assert(preflight.response.headers.get('access-control-expose-headers')?.toLowerCase().includes('x-backy-contract-version'), `${preflight.url} missing exposed public contract header`);
       assert(preflight.response.headers.get('x-backy-request-id'), `${preflight.url} missing request id header`);
 
       const actual = await request('/api/admin/sites?includeUnpublished=true', {
@@ -1108,6 +1110,8 @@ try {
       });
       assert(actual.response.status === 200, `${actual.url} expected 200 for ${adminDevOrigin}, got ${actual.response.status}`);
       assert(actual.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${actual.url} missing CORS header for ${adminDevOrigin}`);
+      assert(actual.response.headers.get('access-control-expose-headers')?.toLowerCase().includes('x-backy-request-id'), `${actual.url} missing exposed request id header for ${adminDevOrigin}`);
+      assert(actual.response.headers.get('access-control-expose-headers')?.toLowerCase().includes('x-backy-cache-scope'), `${actual.url} missing exposed cache scope header for ${adminDevOrigin}`);
       assert(actual.response.headers.get('x-backy-request-id'), `${actual.url} missing request id header`);
     }
   });
