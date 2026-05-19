@@ -1957,6 +1957,89 @@ export interface BackyManifestBlogModule {
   [key: string]: unknown;
 }
 
+export interface BackyManifestBlogRuntimeModule {
+  schemaVersion: "backy.blog-discovery.v1";
+  count: number;
+  publishedCount: number;
+  scheduledCount: number;
+  categoryCount: number;
+  tagCount: number;
+  authorCount: number;
+  feedCount: number;
+  paths: string[];
+  endpoints: {
+    list: string;
+    detail: string;
+    rss: string;
+    categories: string;
+    tags: string;
+    authors: string;
+    resolve: string;
+    render: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    detail: "GET";
+    rss: "GET";
+    categories: "GET";
+    tags: "GET";
+    authors: "GET";
+    resolve: "GET";
+    render: "GET";
+    [key: string]: unknown;
+  };
+  capabilities: {
+    publicList: boolean;
+    publicDetail: boolean;
+    taxonomyFilters: boolean;
+    archiveFilters: boolean;
+    searchFilters: boolean;
+    rssFeed: boolean;
+    renderPayload: boolean;
+    routeResolve: boolean;
+    frontendDesignProvenance: boolean;
+    previewTokens: boolean;
+    conditionalRequests: boolean;
+    cacheablePosts: boolean;
+    [key: string]: unknown;
+  };
+  cache: {
+    list: string;
+    detail: string;
+    previewDetail: string;
+    taxonomy: string;
+    rss: string;
+    render: string;
+    [key: string]: unknown;
+  };
+  privacy: {
+    publicReadsOnlyIncludePublishedOrPastScheduledPosts: boolean;
+    draftPreviewRequiresToken: boolean;
+    previewTokenIsNeverReturned: boolean;
+    [key: string]: unknown;
+  };
+  filters: {
+    queryParams: string[];
+    maxLimit: number;
+    statuses: string[];
+    [key: string]: unknown;
+  };
+  schemas: {
+    post: "backy.blog-post.v1";
+    feed: "backy.blog-feed.v1";
+    renderPayload: "backy.render-payload.v1";
+    notFound: "POST_NOT_FOUND";
+    invalidLimit: "INVALID_BLOG_LIMIT";
+    invalidOffset: "INVALID_BLOG_OFFSET";
+    invalidStatus: "INVALID_BLOG_STATUS";
+    invalidArchiveYear: "INVALID_BLOG_ARCHIVE_YEAR";
+    invalidArchiveMonth: "INVALID_BLOG_ARCHIVE_MONTH";
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyManifestReusableSection {
   id: string;
   slug: string;
@@ -2265,6 +2348,7 @@ export interface BackyFrontendManifest {
     pages?: { count: number; items: BackyManifestPageResource[] };
     pagesRuntime?: BackyManifestPagesRuntimeModule;
     blog?: BackyManifestBlogModule;
+    blogRuntime?: BackyManifestBlogRuntimeModule;
     collections?: BackyManifestCollectionSchema[];
     collectionsRuntime?: BackyManifestCollectionsRuntimeModule;
     reusableSections?: BackyManifestReusableSectionsModule;

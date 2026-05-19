@@ -145,6 +145,21 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestBlogDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.blog-discovery.v1'") &&
+    manifestRoute.includes("draftPreviewRequiresToken: true") &&
+    manifestRoute.includes("notFound: 'POST_NOT_FOUND'") &&
+    manifestRoute.includes('blogRuntime: buildManifestBlogDiscovery(input.site.id, input.posts, input.categories, input.tags, input.authors, blogFeeds)') &&
+    manifestRoute.includes('blogRuntime: buildManifestBlogDiscovery(site.id, posts, categories, tags, authors, blogFeeds)') &&
+    frontendManifestSchema.includes('"backy.blog-discovery.v1"') &&
+    frontendManifestSchema.includes('"INVALID_BLOG_ARCHIVE_MONTH"') &&
+    sdkSource.includes('BackyManifestBlogRuntimeModule') &&
+    sdkSmoke.includes('manifest() missing blog runtime discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestBlogRuntimeDiscovery'),
+  'Frontend manifest and SDK must expose structured blog runtime discovery for custom frontend blog index/detail UIs.',
+);
+
+assert(
   manifestRoute.includes('buildManifestCollectionsDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.collections-discovery.v1'") &&
     manifestRoute.includes("fieldPolicyMetadata: 'metadata.visitorWritePolicy'") &&

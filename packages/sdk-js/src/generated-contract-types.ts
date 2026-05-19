@@ -2848,6 +2848,88 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           [key: string]: unknown;
         }>;
       };
+      blogRuntime: {
+        schemaVersion: "backy.blog-discovery.v1";
+        count: number;
+        publishedCount: number;
+        scheduledCount: number;
+        categoryCount: number;
+        tagCount: number;
+        authorCount: number;
+        feedCount: number;
+        paths: Array<string>;
+        endpoints: {
+          list: string;
+          detail: string;
+          rss: string;
+          categories: string;
+          tags: string;
+          authors: string;
+          resolve: string;
+          render: string;
+          [key: string]: unknown;
+        };
+        methods: {
+          list: "GET";
+          detail: "GET";
+          rss: "GET";
+          categories: "GET";
+          tags: "GET";
+          authors: "GET";
+          resolve: "GET";
+          render: "GET";
+          [key: string]: unknown;
+        };
+        capabilities: {
+          publicList: boolean;
+          publicDetail: boolean;
+          taxonomyFilters: boolean;
+          archiveFilters: boolean;
+          searchFilters: boolean;
+          rssFeed: boolean;
+          renderPayload: boolean;
+          routeResolve: boolean;
+          frontendDesignProvenance: boolean;
+          previewTokens: boolean;
+          conditionalRequests: boolean;
+          cacheablePosts: boolean;
+          [key: string]: unknown;
+        };
+        cache: {
+          list: string;
+          detail: string;
+          previewDetail: string;
+          taxonomy: string;
+          rss: string;
+          render: string;
+          [key: string]: unknown;
+        };
+        privacy: {
+          publicReadsOnlyIncludePublishedOrPastScheduledPosts: boolean;
+          draftPreviewRequiresToken: boolean;
+          previewTokenIsNeverReturned: boolean;
+          [key: string]: unknown;
+        };
+        filters: {
+          queryParams: Array<string>;
+          maxLimit: number;
+          statuses: Array<string>;
+          [key: string]: unknown;
+        };
+        schemas: {
+          post: "backy.blog-post.v1";
+          feed: "backy.blog-feed.v1";
+          renderPayload: "backy.render-payload.v1";
+          notFound: "POST_NOT_FOUND";
+          invalidLimit: "INVALID_BLOG_LIMIT";
+          invalidOffset: "INVALID_BLOG_OFFSET";
+          invalidStatus: "INVALID_BLOG_STATUS";
+          invalidArchiveYear: "INVALID_BLOG_ARCHIVE_YEAR";
+          invalidArchiveMonth: "INVALID_BLOG_ARCHIVE_MONTH";
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
       collections: Array<{
         id: string;
         slug: string;

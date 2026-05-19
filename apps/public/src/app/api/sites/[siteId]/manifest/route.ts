@@ -84,6 +84,12 @@ type ManifestPageDiscoverySource = {
   meta?: unknown;
 };
 
+type ManifestBlogPostDiscoverySource = {
+  slug: string;
+  status: string;
+  meta?: unknown;
+};
+
 type ManifestAdminDiscovery = {
   auth: {
     authenticated: boolean;
@@ -759,6 +765,88 @@ const buildManifestPagesDiscovery = (
   },
 });
 
+const buildManifestBlogDiscovery = (
+  siteId: string,
+  posts: ManifestBlogPostDiscoverySource[],
+  categories: Array<{ id: string; slug: string; name: string; postCount?: number }>,
+  tags: Array<{ id: string; slug: string; name: string; postCount?: number }>,
+  authors: Array<{ id: string; slug: string; name: string; postCount?: number }>,
+  feeds: ReturnType<typeof blogFeedDiscovery>,
+) => ({
+  schemaVersion: 'backy.blog-discovery.v1',
+  count: posts.length,
+  publishedCount: posts.filter((post) => post.status === 'published').length,
+  scheduledCount: posts.filter((post) => post.status === 'scheduled').length,
+  categoryCount: categories.length,
+  tagCount: tags.length,
+  authorCount: authors.length,
+  feedCount: feeds.length,
+  paths: posts.map((post) => `/blog/${post.slug}`),
+  endpoints: {
+    list: `/api/sites/${siteId}/blog`,
+    detail: `/api/sites/${siteId}/blog?slug={slug}`,
+    rss: `/api/sites/${siteId}/blog/rss`,
+    categories: `/api/sites/${siteId}/blog/categories`,
+    tags: `/api/sites/${siteId}/blog/tags`,
+    authors: `/api/sites/${siteId}/blog/authors`,
+    resolve: `/api/sites/${siteId}/resolve?path={path}`,
+    render: `/api/sites/${siteId}/render?path={path}`,
+  },
+  methods: {
+    list: 'GET',
+    detail: 'GET',
+    rss: 'GET',
+    categories: 'GET',
+    tags: 'GET',
+    authors: 'GET',
+    resolve: 'GET',
+    render: 'GET',
+  },
+  capabilities: {
+    publicList: true,
+    publicDetail: true,
+    taxonomyFilters: true,
+    archiveFilters: true,
+    searchFilters: true,
+    rssFeed: feeds.length > 0,
+    renderPayload: true,
+    routeResolve: true,
+    frontendDesignProvenance: posts.some((post) => Boolean(contentFrontendDesign(post))),
+    previewTokens: true,
+    conditionalRequests: true,
+    cacheablePosts: true,
+  },
+  cache: {
+    list: 'public-discovery',
+    detail: 'public-discovery',
+    previewDetail: 'private-no-store',
+    taxonomy: 'public-discovery',
+    rss: 'public-discovery',
+    render: 'public-discovery',
+  },
+  privacy: {
+    publicReadsOnlyIncludePublishedOrPastScheduledPosts: true,
+    draftPreviewRequiresToken: true,
+    previewTokenIsNeverReturned: true,
+  },
+  filters: {
+    queryParams: ['slug', 'previewToken', 'limit', 'offset', 'status', 'q', 'search', 'year', 'month', 'categoryId', 'categorySlug', 'tagId', 'tagSlug', 'authorId', 'authorSlug'],
+    maxLimit: 100,
+    statuses: ['published', 'draft', 'scheduled', 'archived'],
+  },
+  schemas: {
+    post: 'backy.blog-post.v1',
+    feed: 'backy.blog-feed.v1',
+    renderPayload: 'backy.render-payload.v1',
+    notFound: 'POST_NOT_FOUND',
+    invalidLimit: 'INVALID_BLOG_LIMIT',
+    invalidOffset: 'INVALID_BLOG_OFFSET',
+    invalidStatus: 'INVALID_BLOG_STATUS',
+    invalidArchiveYear: 'INVALID_BLOG_ARCHIVE_YEAR',
+    invalidArchiveMonth: 'INVALID_BLOG_ARCHIVE_MONTH',
+  },
+});
+
 const buildManifestFormsDiscovery = (
   siteId: string,
   forms: FormDefinition[],
@@ -1159,6 +1247,7 @@ const buildRepositoryManifest = (
             postCount: author.postCount || 0,
           })),
         },
+        blogRuntime: buildManifestBlogDiscovery(input.site.id, input.posts, input.categories, input.tags, input.authors, blogFeeds),
         collections: publicCollections.map((collection) => ({
           id: collection.id,
           slug: collection.slug,
@@ -1489,6 +1578,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               postCount: author.postCount,
             })),
           },
+          blogRuntime: buildManifestBlogDiscovery(site.id, posts, categories, tags, authors, blogFeeds),
           collections: collections.map((collection) => ({
             id: collection.id,
             slug: collection.slug,

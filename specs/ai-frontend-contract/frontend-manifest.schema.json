@@ -835,6 +835,120 @@
               },
               "required": ["count", "categories", "tags", "authors"]
             },
+            "blogRuntime": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.blog-discovery.v1" },
+                "count": { "type": "number", "minimum": 0 },
+                "publishedCount": { "type": "number", "minimum": 0 },
+                "scheduledCount": { "type": "number", "minimum": 0 },
+                "categoryCount": { "type": "number", "minimum": 0 },
+                "tagCount": { "type": "number", "minimum": 0 },
+                "authorCount": { "type": "number", "minimum": 0 },
+                "feedCount": { "type": "number", "minimum": 0 },
+                "paths": { "type": "array", "items": { "type": "string" } },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string", "minLength": 1 },
+                    "detail": { "type": "string", "minLength": 1 },
+                    "rss": { "type": "string", "minLength": 1 },
+                    "categories": { "type": "string", "minLength": 1 },
+                    "tags": { "type": "string", "minLength": 1 },
+                    "authors": { "type": "string", "minLength": 1 },
+                    "resolve": { "type": "string", "minLength": 1 },
+                    "render": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["list", "detail", "rss", "categories", "tags", "authors", "resolve", "render"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "const": "GET" },
+                    "detail": { "const": "GET" },
+                    "rss": { "const": "GET" },
+                    "categories": { "const": "GET" },
+                    "tags": { "const": "GET" },
+                    "authors": { "const": "GET" },
+                    "resolve": { "const": "GET" },
+                    "render": { "const": "GET" }
+                  },
+                  "required": ["list", "detail", "rss", "categories", "tags", "authors", "resolve", "render"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicList": { "type": "boolean" },
+                    "publicDetail": { "type": "boolean" },
+                    "taxonomyFilters": { "type": "boolean" },
+                    "archiveFilters": { "type": "boolean" },
+                    "searchFilters": { "type": "boolean" },
+                    "rssFeed": { "type": "boolean" },
+                    "renderPayload": { "type": "boolean" },
+                    "routeResolve": { "type": "boolean" },
+                    "frontendDesignProvenance": { "type": "boolean" },
+                    "previewTokens": { "type": "boolean" },
+                    "conditionalRequests": { "type": "boolean" },
+                    "cacheablePosts": { "type": "boolean" }
+                  },
+                  "required": ["publicList", "publicDetail", "taxonomyFilters", "archiveFilters", "searchFilters", "rssFeed", "renderPayload", "routeResolve", "frontendDesignProvenance", "previewTokens", "conditionalRequests", "cacheablePosts"]
+                },
+                "cache": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string" },
+                    "detail": { "type": "string" },
+                    "previewDetail": { "type": "string" },
+                    "taxonomy": { "type": "string" },
+                    "rss": { "type": "string" },
+                    "render": { "type": "string" }
+                  },
+                  "required": ["list", "detail", "previewDetail", "taxonomy", "rss", "render"]
+                },
+                "privacy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicReadsOnlyIncludePublishedOrPastScheduledPosts": { "type": "boolean" },
+                    "draftPreviewRequiresToken": { "type": "boolean" },
+                    "previewTokenIsNeverReturned": { "type": "boolean" }
+                  },
+                  "required": ["publicReadsOnlyIncludePublishedOrPastScheduledPosts", "draftPreviewRequiresToken", "previewTokenIsNeverReturned"]
+                },
+                "filters": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "queryParams": { "type": "array", "items": { "type": "string" } },
+                    "maxLimit": { "type": "number", "minimum": 1 },
+                    "statuses": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["queryParams", "maxLimit", "statuses"]
+                },
+                "schemas": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "post": { "const": "backy.blog-post.v1" },
+                    "feed": { "const": "backy.blog-feed.v1" },
+                    "renderPayload": { "const": "backy.render-payload.v1" },
+                    "notFound": { "const": "POST_NOT_FOUND" },
+                    "invalidLimit": { "const": "INVALID_BLOG_LIMIT" },
+                    "invalidOffset": { "const": "INVALID_BLOG_OFFSET" },
+                    "invalidStatus": { "const": "INVALID_BLOG_STATUS" },
+                    "invalidArchiveYear": { "const": "INVALID_BLOG_ARCHIVE_YEAR" },
+                    "invalidArchiveMonth": { "const": "INVALID_BLOG_ARCHIVE_MONTH" }
+                  },
+                  "required": ["post", "feed", "renderPayload", "notFound", "invalidLimit", "invalidOffset", "invalidStatus", "invalidArchiveYear", "invalidArchiveMonth"]
+                }
+              },
+              "required": ["schemaVersion", "count", "publishedCount", "scheduledCount", "categoryCount", "tagCount", "authorCount", "feedCount", "paths", "endpoints", "methods", "capabilities", "cache", "privacy", "filters", "schemas"]
+            },
             "collections": {
               "type": "array",
               "items": {
@@ -1592,7 +1706,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "theme", "liveManagement", "pages", "pagesRuntime", "blog", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "reusableSectionsRuntime", "media"]
+          "required": ["routing", "theme", "liveManagement", "pages", "pagesRuntime", "blog", "blogRuntime", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "reusableSectionsRuntime", "media"]
         },
         "admin": {
           "type": "object",

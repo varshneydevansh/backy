@@ -6,6 +6,7 @@ import type {
   BackyManifestBlogAuthor,
   BackyManifestBlogCategory,
   BackyManifestBlogModule,
+  BackyManifestBlogRuntimeModule,
   BackyManifestBlogTag,
   BackyManifestCollectionSchema,
   BackyManifestCollectionsRuntimeModule,
@@ -933,6 +934,80 @@ const manifest = {
         },
       ],
     },
+    blogRuntime: {
+      schemaVersion: "backy.blog-discovery.v1",
+      count: 1,
+      publishedCount: 1,
+      scheduledCount: 0,
+      categoryCount: 1,
+      tagCount: 1,
+      authorCount: 1,
+      feedCount: 1,
+      paths: ["/blog/welcome"],
+      endpoints: {
+        list: "/api/sites/site_demo/blog",
+        detail: "/api/sites/site_demo/blog?slug={slug}",
+        rss: "/api/sites/site_demo/blog/rss",
+        categories: "/api/sites/site_demo/blog/categories",
+        tags: "/api/sites/site_demo/blog/tags",
+        authors: "/api/sites/site_demo/blog/authors",
+        resolve: "/api/sites/site_demo/resolve?path={path}",
+        render: "/api/sites/site_demo/render?path={path}",
+      },
+      methods: {
+        list: "GET",
+        detail: "GET",
+        rss: "GET",
+        categories: "GET",
+        tags: "GET",
+        authors: "GET",
+        resolve: "GET",
+        render: "GET",
+      },
+      capabilities: {
+        publicList: true,
+        publicDetail: true,
+        taxonomyFilters: true,
+        archiveFilters: true,
+        searchFilters: true,
+        rssFeed: true,
+        renderPayload: true,
+        routeResolve: true,
+        frontendDesignProvenance: true,
+        previewTokens: true,
+        conditionalRequests: true,
+        cacheablePosts: true,
+      },
+      cache: {
+        list: "public-discovery",
+        detail: "public-discovery",
+        previewDetail: "private-no-store",
+        taxonomy: "public-discovery",
+        rss: "public-discovery",
+        render: "public-discovery",
+      },
+      privacy: {
+        publicReadsOnlyIncludePublishedOrPastScheduledPosts: true,
+        draftPreviewRequiresToken: true,
+        previewTokenIsNeverReturned: true,
+      },
+      filters: {
+        queryParams: ["slug", "previewToken", "limit", "offset", "categorySlug", "tagSlug", "authorSlug"],
+        maxLimit: 100,
+        statuses: ["published", "draft", "scheduled", "archived"],
+      },
+      schemas: {
+        post: "backy.blog-post.v1",
+        feed: "backy.blog-feed.v1",
+        renderPayload: "backy.render-payload.v1",
+        notFound: "POST_NOT_FOUND",
+        invalidLimit: "INVALID_BLOG_LIMIT",
+        invalidOffset: "INVALID_BLOG_OFFSET",
+        invalidStatus: "INVALID_BLOG_STATUS",
+        invalidArchiveYear: "INVALID_BLOG_ARCHIVE_YEAR",
+        invalidArchiveMonth: "INVALID_BLOG_ARCHIVE_MONTH",
+      },
+    },
     collections: [
       {
         id: "collection_articles",
@@ -1647,6 +1722,81 @@ const sdkManifestBlog = {
   tags: [sdkManifestBlogTag],
   authors: [sdkManifestBlogAuthor],
 } satisfies BackyManifestBlogModule;
+
+const sdkManifestBlogRuntime = {
+  schemaVersion: "backy.blog-discovery.v1",
+  count: 1,
+  publishedCount: 1,
+  scheduledCount: 0,
+  categoryCount: 1,
+  tagCount: 1,
+  authorCount: 1,
+  feedCount: 1,
+  paths: ["/blog/welcome"],
+  endpoints: {
+    list: "/api/sites/site_demo/blog",
+    detail: "/api/sites/site_demo/blog?slug={slug}",
+    rss: "/api/sites/site_demo/blog/rss",
+    categories: "/api/sites/site_demo/blog/categories",
+    tags: "/api/sites/site_demo/blog/tags",
+    authors: "/api/sites/site_demo/blog/authors",
+    resolve: "/api/sites/site_demo/resolve?path={path}",
+    render: "/api/sites/site_demo/render?path={path}",
+  },
+  methods: {
+    list: "GET",
+    detail: "GET",
+    rss: "GET",
+    categories: "GET",
+    tags: "GET",
+    authors: "GET",
+    resolve: "GET",
+    render: "GET",
+  },
+  capabilities: {
+    publicList: true,
+    publicDetail: true,
+    taxonomyFilters: true,
+    archiveFilters: true,
+    searchFilters: true,
+    rssFeed: true,
+    renderPayload: true,
+    routeResolve: true,
+    frontendDesignProvenance: true,
+    previewTokens: true,
+    conditionalRequests: true,
+    cacheablePosts: true,
+  },
+  cache: {
+    list: "public-discovery",
+    detail: "public-discovery",
+    previewDetail: "private-no-store",
+    taxonomy: "public-discovery",
+    rss: "public-discovery",
+    render: "public-discovery",
+  },
+  privacy: {
+    publicReadsOnlyIncludePublishedOrPastScheduledPosts: true,
+    draftPreviewRequiresToken: true,
+    previewTokenIsNeverReturned: true,
+  },
+  filters: {
+    queryParams: ["slug", "previewToken", "limit", "offset", "categorySlug", "tagSlug", "authorSlug"],
+    maxLimit: 100,
+    statuses: ["published", "draft", "scheduled", "archived"],
+  },
+  schemas: {
+    post: "backy.blog-post.v1",
+    feed: "backy.blog-feed.v1",
+    renderPayload: "backy.render-payload.v1",
+    notFound: "POST_NOT_FOUND",
+    invalidLimit: "INVALID_BLOG_LIMIT",
+    invalidOffset: "INVALID_BLOG_OFFSET",
+    invalidStatus: "INVALID_BLOG_STATUS",
+    invalidArchiveYear: "INVALID_BLOG_ARCHIVE_YEAR",
+    invalidArchiveMonth: "INVALID_BLOG_ARCHIVE_MONTH",
+  },
+} satisfies BackyManifestBlogRuntimeModule;
 
 const sdkManifestReusableSection = {
   id: "section_hero",
@@ -3948,6 +4098,15 @@ const invalidSdkManifestBlogTag = { ...sdkManifestBlogTag, postCount: undefined,
 // @ts-expect-error manifest blog modules include concrete category arrays.
 const invalidSdkManifestBlog = { ...sdkManifestBlog, categories: undefined, } satisfies BackyManifestBlogModule;
 
+const invalidGeneratedManifestBlogRuntimeDiscovery = {
+  ...manifest.modules.blogRuntime,
+  // @ts-expect-error generated manifest blog discovery uses a versioned schema marker.
+  schemaVersion: "backy.blog-discovery.v0",
+} satisfies GeneratedBackyFrontendManifest["modules"]["blogRuntime"];
+
+// @ts-expect-error manifest blog runtime modules require preview privacy metadata.
+const invalidSdkManifestBlogRuntime = { ...sdkManifestBlogRuntime, privacy: undefined, } satisfies BackyManifestBlogRuntimeModule;
+
 // @ts-expect-error manifest reusable-section entries require detail URLs for lazy loading section content.
 const invalidSdkManifestReusableSection = { ...sdkManifestReusableSection, detailUrl: undefined, } satisfies BackyManifestReusableSection;
 
@@ -4427,6 +4586,7 @@ void sdkManifestBlogCategory;
 void sdkManifestBlogTag;
 void sdkManifestBlogAuthor;
 void sdkManifestBlog;
+void sdkManifestBlogRuntime;
 void sdkManifestReusableSection;
 void sdkManifestReusableSections;
 void sdkManifestReusableSectionsRuntime;
@@ -4471,6 +4631,8 @@ void invalidGeneratedManifestBlogCategory;
 void invalidSdkManifestBlogCategory;
 void invalidSdkManifestBlogTag;
 void invalidSdkManifestBlog;
+void invalidGeneratedManifestBlogRuntimeDiscovery;
+void invalidSdkManifestBlogRuntime;
 void invalidSdkManifestReusableSection;
 void invalidSdkManifestReusableSections;
 void invalidSdkManifestReusableSectionsRuntime;

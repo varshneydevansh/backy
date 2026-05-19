@@ -758,6 +758,18 @@ const manifestBlogRssFeed = manifest.data.modules?.blog?.feeds?.find?.((feed) =>
 assert(manifestBlogRssFeed?.endpoint === manifest.data.endpoints.blogRss, 'manifest() missing structured blog RSS feed endpoint');
 assert(manifestBlogRssFeed?.hostedPath === '/blog/rss.xml', 'manifest() missing structured hosted blog RSS feed path');
 assert(manifestBlogRssFeed?.cache?.revisionHeader === 'x-backy-cache-revision', 'manifest() missing structured blog RSS cache metadata');
+const manifestBlogRuntime = manifest.data.modules?.blogRuntime;
+assert(manifestBlogRuntime?.schemaVersion === 'backy.blog-discovery.v1', 'manifest() missing blog runtime discovery module');
+assert(manifestBlogRuntime.endpoints?.list === manifest.data.endpoints.blog, 'manifest() blog runtime list endpoint drifted');
+assert(manifestBlogRuntime.endpoints?.rss === manifest.data.endpoints.blogRss, 'manifest() blog runtime RSS endpoint drifted');
+assert(manifestBlogRuntime.endpoints?.categories === manifest.data.endpoints.blogCategories, 'manifest() blog runtime categories endpoint drifted');
+assert(manifestBlogRuntime.methods?.detail === 'GET', 'manifest() blog runtime detail method drifted');
+assert(manifestBlogRuntime.capabilities?.taxonomyFilters === true, 'manifest() blog runtime missing taxonomy filters capability');
+assert(manifestBlogRuntime.capabilities?.rssFeed === true, 'manifest() blog runtime missing RSS feed capability');
+assert(manifestBlogRuntime.cache?.previewDetail === 'private-no-store', 'manifest() blog runtime preview cache policy drifted');
+assert(manifestBlogRuntime.privacy?.draftPreviewRequiresToken === true, 'manifest() blog runtime missing draft preview privacy boundary');
+assert(manifestBlogRuntime.filters?.queryParams?.includes?.('categorySlug'), 'manifest() blog runtime missing categorySlug filter metadata');
+assert(manifestBlogRuntime.schemas?.notFound === 'POST_NOT_FOUND', 'manifest() blog runtime not-found schema drifted');
 const discoveredBlogFeeds = await client.blogFeeds();
 assert(discoveredBlogFeeds.some((feed) => feed.id === 'blog-rss' && feed.endpoint === manifest.data.endpoints.blogRss), 'blogFeeds() missing RSS feed discovery');
 const blogRssUrl = client.blogRssUrl({ limit: 5 });
