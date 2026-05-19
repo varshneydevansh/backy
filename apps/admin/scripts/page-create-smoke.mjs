@@ -227,6 +227,61 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'booking',
+    title: 'Smoke Booking Template',
+    slugBase: 'smoke-booking-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'booking',
+    navigationItem: 'Book',
+    headingId: 'booking-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 48,
+    minCanvasHeight: 1400,
+    requiredElementIds: [
+      'booking-site-header',
+      'booking-site-navigation',
+      'booking-site-footer',
+      'booking-hero-section',
+      'booking-heading',
+      'booking-intro-copy',
+      'booking-availability-card',
+      'booking-availability-value',
+      'booking-appointment-section',
+      'booking-location-filter',
+      'booking-appointment-card-0',
+      'booking-appointment-title-0',
+      'booking-appointment-duration-0',
+      'booking-appointment-price-0',
+      'booking-appointment-summary-0',
+      'booking-appointment-button-0',
+      'booking-intake-section',
+      'booking-intake-form',
+      'booking-intake-name',
+      'booking-intake-email',
+      'booking-intake-topic',
+      'booking-confirmation-card',
+      'booking-confirmation-button',
+    ],
+    formElementIds: ['booking-intake-form'],
+    dataBindingElementIds: [
+      'booking-hero-section',
+      'booking-availability-card',
+      'booking-availability-value',
+      'booking-appointment-section',
+      'booking-location-filter',
+      'booking-appointment-card-0',
+      'booking-appointment-title-0',
+      'booking-appointment-duration-0',
+      'booking-appointment-price-0',
+      'booking-appointment-summary-0',
+      'booking-appointment-button-0',
+      'booking-intake-section',
+      'booking-intake-form',
+      'booking-confirmation-card',
+      'booking-confirmation-button',
+    ],
+  },
+  {
     template: 'portfolio',
     title: 'Smoke Portfolio Template',
     slugBase: 'smoke-portfolio-template',
@@ -1137,6 +1192,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('services-format-filter') &&
       source.includes('services-booking-button-${index}') &&
       source.includes('services.inquiry.open') &&
+      source.includes("'booking'") &&
+      source.includes('booking-appointment-card-${index}') &&
+      source.includes('booking-intake-form') &&
+      source.includes('booking.provider.open') &&
       source.includes("'portfolio'") &&
       source.includes('portfolio-category-filter') &&
       source.includes('portfolio-project-card-${index}') &&
@@ -1201,7 +1260,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('careers-benefits-card') &&
       source.includes('careers.application.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, and careers starters',
+    'Page create must keep safe member, commerce, pricing, services, booking, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, and careers starters',
   );
 };
 
@@ -1782,6 +1841,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Services page',
       forms: 'none',
       dynamicData: 'Backy service package placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'booking',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Booking page',
+      forms: 'none',
+      dynamicData: 'Backy booking and appointment placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

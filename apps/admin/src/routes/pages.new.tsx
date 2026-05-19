@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -167,6 +167,13 @@ const TEMPLATE_OPTIONS: Array<{
         desc: 'Service cards, format filters, booking CTAs, process steps, and FAQ.',
         detail: 'Creates a public services page ready to bind service packages, durations, prices, and booking handoff actions.',
         sections: ['Services hero', 'Service cards', 'Booking process'],
+    },
+    {
+        id: 'booking',
+        name: 'Booking page',
+        desc: 'Appointment types, availability, intake fields, calendar handoff, and confirmation notes.',
+        detail: 'Creates a public booking page ready to bind services, staff, locations, availability, intake questions, and scheduling-provider actions.',
+        sections: ['Booking hero', 'Appointment cards', 'Scheduling CTA'],
     },
     {
         id: 'portfolio',
@@ -358,6 +365,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'services',
         description: 'A public services page ready to bind packages, formats, durations, booking actions, and inquiry handoff.',
     },
+    booking: {
+        title: 'Book an appointment',
+        slug: 'booking',
+        description: 'A public booking page ready to bind appointment types, staff, locations, availability, intake questions, and scheduling handoff.',
+    },
     portfolio: {
         title: 'Portfolio',
         slug: 'portfolio',
@@ -482,6 +494,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     'product-detail': 'primary',
     pricing: 'primary',
     services: 'primary',
+    booking: 'primary',
     portfolio: 'primary',
     events: 'primary',
     privacy: 'footer',
@@ -724,6 +737,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
     pricing: ['Home', 'Pricing', 'Shop', 'Contact'],
     services: ['Home', 'Services', 'Pricing', 'Contact'],
+    booking: ['Home', 'Book', 'Services', 'Contact'],
     portfolio: ['Home', 'Portfolio', 'Services', 'Contact'],
     events: ['Home', 'Events', 'Blog', 'Contact'],
     privacy: ['Home', 'Privacy', 'Terms', 'Contact'],
@@ -797,6 +811,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Consult', x: 8, y: 48, w: 26, h: 28, className: 'border-rose-100 bg-white' },
         { label: 'Build', x: 38, y: 48, w: 26, h: 28, className: 'border-rose-100 bg-white' },
         { label: 'Care', x: 68, y: 48, w: 24, h: 28, className: 'border-rose-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    booking: [
+        { label: 'Booking', x: 8, y: 14, w: 84, h: 24, className: 'border-teal-200 bg-teal-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-teal-800' },
+        { label: 'Calendar', x: 64, y: 24, w: 20, h: 6, className: 'border-teal-100 bg-white' },
+        { label: 'Intro', x: 8, y: 48, w: 26, h: 26, className: 'border-teal-100 bg-white' },
+        { label: 'Session', x: 38, y: 48, w: 26, h: 26, className: 'border-teal-100 bg-white' },
+        { label: 'Confirm', x: 68, y: 48, w: 24, h: 26, className: 'border-teal-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     portfolio: [
@@ -1974,6 +1997,8 @@ function NewPageRoute() {
                     ? 'Backy pricing plan placeholders'
                 : formData.template === 'services'
                     ? 'Backy service package placeholders'
+                : formData.template === 'booking'
+                    ? 'Backy booking and appointment placeholders'
                 : formData.template === 'portfolio'
                     ? 'Backy portfolio project placeholders'
                 : formData.template === 'events'
@@ -2117,7 +2142,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'booking', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -2167,7 +2192,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, FAQ, testimonials, blog index, blog post, team, and careers templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, reusable answers, reviews, posts, people profiles, and job postings.',
+            'Storefront, product-detail, pricing, services, booking, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, FAQ, testimonials, blog index, blog post, team, and careers templates seed dynamic data placeholders for products, plans, services, appointments, projects, events, legal and commerce policy content, carts, orders, support content, reusable answers, reviews, posts, people profiles, and job postings.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4201,6 +4226,8 @@ function buildTemplateElements(input: {
                 ? 'View plans'
             : input.template === 'services'
                 ? 'Book now'
+            : input.template === 'booking'
+                ? 'Book now'
             : input.template === 'portfolio'
                 ? 'View work'
             : input.template === 'events'
@@ -4846,6 +4873,204 @@ function buildTemplateElements(input: {
                                 width: 132,
                                 height: 36,
                                 props: { label: 'Send inquiry', backgroundColor: '#f43f5e', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'services.inquiry.open' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'booking') {
+        const appointmentTypes = [
+            { name: 'Intro call', duration: '30 minutes', price: 'Free', summary: 'A quick fit check before a project, service package, or support plan.' },
+            { name: 'Strategy session', duration: '60 minutes', price: '$120', summary: 'A focused planning session with notes, next steps, and handoff actions.' },
+            { name: 'Implementation review', duration: '90 minutes', price: '$220', summary: 'Review a launch, content model, storefront, or editor workflow before release.' },
+        ];
+
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'booking-hero-section',
+                width: 1200,
+                height: 360,
+                dataBindings: [{ source: 'booking', mode: 'overview', fields: ['appointmentTypes', 'staff', 'locations', 'availability', 'bookingUrl'] }],
+                props: { backgroundColor: '#f0fdfa', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'booking-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Booking', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 98, {
+                        id: 'booking-heading',
+                        width: 650,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 212, {
+                        id: 'booking-intro-copy',
+                        width: 620,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                    }),
+                    createCanvasElement('box', 790, 92, {
+                        id: 'booking-availability-card',
+                        width: 300,
+                        height: 150,
+                        dataBindings: [{ source: 'booking', mode: 'availability-summary', fields: ['nextAvailable', 'timezone', 'locations'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'booking-availability-label',
+                                width: 170,
+                                height: 24,
+                                props: { content: 'Next available', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 58, {
+                                id: 'booking-availability-value',
+                                width: 230,
+                                height: 36,
+                                props: { content: 'This week', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'booking', mode: 'availability-summary', field: 'nextAvailable', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 108, {
+                                id: 'booking-timezone-note',
+                                width: 220,
+                                height: 24,
+                                props: { content: 'Local timezone shown at checkout', fontSize: 13, color: '#475569' },
+                                dataBindings: [{ source: 'booking', mode: 'availability-summary', field: 'timezone', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 360, {
+                id: 'booking-appointment-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'booking', mode: 'appointment-types', fields: ['appointmentTypes', 'staff', 'prices', 'durations'], limit: 6 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 58, {
+                        id: 'booking-appointment-heading',
+                        width: 420,
+                        height: 42,
+                        props: { content: 'Choose a session', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('box', 760, 54, {
+                        id: 'booking-location-filter',
+                        width: 320,
+                        height: 56,
+                        dataBindings: [{ source: 'booking', mode: 'filters', fields: ['staff', 'locations', 'formats'] }],
+                        props: { backgroundColor: '#f0fdfa', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 20, 17, {
+                                id: 'booking-location-filter-label',
+                                width: 250,
+                                height: 24,
+                                props: { content: 'Filter by staff, format, or location', fontSize: 13, fontWeight: '800', color: '#0f766e' },
+                            }),
+                        ],
+                    }),
+                    ...appointmentTypes.map((item, index) => createCanvasElement('box', 74 + index * 350, 146, {
+                        id: `booking-appointment-card-${index}`,
+                        width: 300,
+                        height: 300,
+                        dataBindings: [{ source: 'booking', mode: 'appointment-type', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 26, {
+                                id: `booking-appointment-title-${index}`,
+                                width: 230,
+                                height: 34,
+                                props: { content: item.name, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'name', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 78, {
+                                id: `booking-appointment-duration-${index}`,
+                                width: 150,
+                                height: 24,
+                                props: { content: item.duration, fontSize: 14, fontWeight: '800', color: '#0f766e' },
+                                dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'duration', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 190, 78, {
+                                id: `booking-appointment-price-${index}`,
+                                width: 80,
+                                height: 24,
+                                props: { content: item.price, fontSize: 14, fontWeight: '800', color: '#111827', textAlign: 'right' },
+                                dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'price', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 126, {
+                                id: `booking-appointment-summary-${index}`,
+                                width: 230,
+                                height: 70,
+                                props: { content: item.summary, fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                                dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'summary', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('button', 24, 234, {
+                                id: `booking-appointment-button-${index}`,
+                                width: 134,
+                                height: 42,
+                                props: { label: 'Select time', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'booking.appointment.select' },
+                                dataBindings: [{ source: 'booking', mode: 'appointment-type', index, field: 'bookingUrl', targetPath: 'props.href' }],
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 920, {
+                id: 'booking-intake-section',
+                width: 1200,
+                height: 360,
+                dataBindings: [{ source: 'booking', mode: 'intake', fields: ['intakeQuestions', 'calendarProvider', 'confirmationEmail', 'bookingUrl'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('form', 74, 58, {
+                        id: 'booking-intake-form',
+                        width: 470,
+                        height: 240,
+                        dataBindings: [{ source: 'booking', mode: 'intake-form', fields: ['name', 'email', 'topic', 'notes'] }],
+                        props: {
+                            formId: `form-${formSlug}-booking-intake`,
+                            formName: `${formSlug}-booking-intake`,
+                            formTitle: 'Booking intake',
+                            formDescription: 'Collect scheduling context before handing visitors to the configured booking provider.',
+                            formActive: true,
+                            formAudience: 'public',
+                        },
+                        children: [
+                            createCanvasElement('input', 24, 26, { id: 'booking-intake-name', width: 198, height: 52, props: { label: 'Name', name: 'name', placeholder: 'Your name', required: true } }),
+                            createCanvasElement('input', 244, 26, { id: 'booking-intake-email', width: 198, height: 52, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
+                            createCanvasElement('select', 24, 102, { id: 'booking-intake-topic', width: 418, height: 52, props: { label: 'Topic', name: 'topic', options: ['Strategy', 'Implementation', 'Support'], placeholder: 'Choose a topic', required: true } }),
+                            createCanvasElement('textarea', 24, 176, { id: 'booking-intake-notes', width: 418, height: 58, props: { label: 'Notes', name: 'notes', placeholder: 'Share context before the session', required: false } }),
+                        ],
+                    }),
+                    createCanvasElement('box', 650, 58, {
+                        id: 'booking-confirmation-card',
+                        width: 390,
+                        height: 240,
+                        dataBindings: [{ source: 'booking', mode: 'confirmation', fields: ['bookingUrl', 'calendarProvider', 'confirmationEmail'] }],
+                        props: { backgroundColor: '#134e4a', borderRadius: 8, borderColor: '#134e4a', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 28, {
+                                id: 'booking-confirmation-heading',
+                                width: 260,
+                                height: 34,
+                                props: { content: 'Confirm the slot', level: 'h2', fontSize: 26, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 28, 82, {
+                                id: 'booking-confirmation-copy',
+                                width: 300,
+                                height: 64,
+                                props: { content: 'Hand off to Calendly, Cal.com, Google Calendar, or a custom scheduling API without collecting payment secrets on this page.', fontSize: 14, lineHeight: 1.5, color: '#ccfbf1' },
+                            }),
+                            createCanvasElement('button', 28, 166, {
+                                id: 'booking-confirmation-button',
+                                width: 156,
+                                height: 44,
+                                props: { label: 'Continue booking', backgroundColor: '#ffffff', color: '#134e4a', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'booking.provider.open' },
+                                dataBindings: [{ source: 'booking', mode: 'confirmation', field: 'bookingUrl', targetPath: 'props.href' }],
                             }),
                         ],
                     }),

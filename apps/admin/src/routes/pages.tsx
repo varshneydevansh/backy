@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -382,6 +382,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'services',
     title: 'Services',
     detail: 'Create service cards, booking CTAs, format filters, process steps, and inquiry handoff.',
+    badge: 'Bookings',
+    icon: Sparkles,
+  },
+  {
+    key: 'booking',
+    title: 'Booking',
+    detail: 'Create appointment cards, availability, intake fields, and scheduling-provider handoff.',
     badge: 'Bookings',
     icon: Sparkles,
   },
@@ -1977,6 +1984,7 @@ function PagesListView() {
       productDetailPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
       pricingPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=pricing`,
       servicesPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
+      bookingPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=booking`,
       portfolioPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
       eventsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
       privacyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
@@ -2020,6 +2028,7 @@ function PagesListView() {
         productDetail: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
         pricing: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=pricing`,
         services: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
+        booking: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=booking`,
         portfolio: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
         events: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
         privacy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
