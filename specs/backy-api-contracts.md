@@ -382,6 +382,7 @@ Public page payload should include:
 - `GET /api/sites/:siteId/comments/report-reasons`
 - `GET/POST /api/sites/:siteId/comments/:commentId/report`
   - Site-wide comment moderation/read/report endpoints return `{ success, requestId, data }` while preserving legacy top-level `comments`, `comment`, `updated`, `reasons`, and related count fields.
+  - Page comment moderation updates reject invalid status values with `400 INVALID_PAGE_COMMENT_STATUS` instead of collapsing them into generic payload errors.
 
 - `GET /api/sites/:siteId/events`
   - Lists public interaction audit events with `{ success, requestId, data: { siteId, events, count, pagination } }`; legacy top-level `siteId/events/count/pagination` remain for compatibility.
