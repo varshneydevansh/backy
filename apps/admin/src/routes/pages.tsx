@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -466,6 +466,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'help-center',
     title: 'Help center',
     detail: 'Create a searchable support page with categories, FAQs, and escalation handoff.',
+    badge: 'Support',
+    icon: Mail,
+  },
+  {
+    key: 'faq',
+    title: 'FAQ',
+    detail: 'Create searchable questions, category filters, accordion answers, and support escalation.',
     badge: 'Support',
     icon: Mail,
   },
@@ -1975,6 +1982,7 @@ function PagesListView() {
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
       helpCenterPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
+      faqPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=faq`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       blogPostPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
       teamPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,
@@ -2016,6 +2024,7 @@ function PagesListView() {
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
         helpCenter: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
+        faq: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=faq`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
         blogPost: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
         team: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,

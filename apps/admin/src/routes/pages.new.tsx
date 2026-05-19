@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -253,6 +253,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Search hero', 'Support categories', 'FAQ answers'],
     },
     {
+        id: 'faq',
+        name: 'FAQ page',
+        desc: 'Searchable questions, category filters, accordion answers, and support escalation CTA.',
+        detail: 'Creates a public FAQ page ready to bind reusable questions, categories, answer content, and contact or support actions.',
+        sections: ['FAQ hero', 'Question list', 'Support CTA'],
+    },
+    {
         id: 'blog-index',
         name: 'Blog index',
         desc: 'Editorial intro, featured story, and article list blocks.',
@@ -404,6 +411,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'help',
         description: 'A self-service support page ready to bind help articles, FAQs, and escalation actions.',
     },
+    faq: {
+        title: 'FAQ',
+        slug: 'faq',
+        description: 'A public FAQ page ready to answer common questions with searchable categories, accordion answers, and support escalation.',
+    },
     'blog-index': {
         title: 'Blog',
         slug: 'blog',
@@ -470,6 +482,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     checkout: 'primary',
     'order-confirmation': 'primary',
     'help-center': 'primary',
+    faq: 'primary',
     'blog-index': 'primary',
     'blog-post': 'primary',
     team: 'primary',
@@ -710,6 +723,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
     'help-center': ['Home', 'Help', 'Orders', 'Contact'],
+    faq: ['Home', 'FAQ', 'Help', 'Contact'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     'blog-post': ['Home', 'Blog', 'Categories', 'Contact'],
     team: ['Home', 'Team', 'About', 'Contact'],
@@ -878,6 +892,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { x: 38, y: 50, w: 24, h: 20, className: 'border-sky-100 bg-white' },
         { x: 68, y: 50, w: 24, h: 20, className: 'border-sky-100 bg-white' },
         { label: 'FAQ', x: 8, y: 76, w: 84, h: 8, className: 'border-slate-200 bg-white' },
+    ],
+    faq: [
+        { label: 'FAQ', x: 8, y: 14, w: 84, h: 24, className: 'border-blue-200 bg-blue-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-blue-800' },
+        { label: 'Search', x: 64, y: 24, w: 20, h: 6, className: 'border-blue-100 bg-white' },
+        { label: 'Question', x: 8, y: 48, w: 56, h: 8, className: 'border-blue-100 bg-white' },
+        { x: 8, y: 60, w: 56, h: 8, className: 'border-blue-100 bg-white' },
+        { x: 8, y: 72, w: 56, h: 8, className: 'border-blue-100 bg-white' },
+        { label: 'Contact', x: 70, y: 48, w: 22, h: 32, className: 'border-slate-200 bg-white' },
     ],
     'blog-index': [
         { label: 'Feature', x: 8, y: 16, w: 84, h: 28, className: 'border-indigo-200 bg-indigo-50' },
@@ -1949,9 +1972,11 @@ function NewPageRoute() {
                 : formData.template === 'checkout'
                     ? 'Backy checkout and order placeholders'
                     : formData.template === 'order-confirmation'
-                        ? 'Backy order confirmation placeholders'
-                        : formData.template === 'help-center'
-                            ? 'Backy help center placeholders'
+                    ? 'Backy order confirmation placeholders'
+                    : formData.template === 'help-center'
+                        ? 'Backy help center placeholders'
+                    : formData.template === 'faq'
+                        ? 'Backy FAQ placeholders'
             : selectedDatasetCollection
                 ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
@@ -2067,7 +2092,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -2117,7 +2142,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, blog post, team, and careers templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, posts, people profiles, and job postings.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, FAQ, blog index, blog post, team, and careers templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, reusable answers, posts, people profiles, and job postings.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4167,6 +4192,8 @@ function buildTemplateElements(input: {
                 ? 'Start return'
             : input.template === 'shipping-policy'
                 ? 'Track order'
+            : input.template === 'faq'
+                ? 'Ask question'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'team'
@@ -6829,6 +6856,175 @@ function buildTemplateElements(input: {
                                 width: 150,
                                 height: 46,
                                 props: { label: 'Contact support', href: '/contact', backgroundColor: '#dbeafe', color: '#1e3a8a', borderRadius: 8, fontSize: 14, fontWeight: '800' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'faq') {
+        const questions = [
+            { question: 'How do I update page content?', answer: 'Open the editor, select the page section, edit the content, and publish when ready.' },
+            { question: 'Can I connect this page to my frontend?', answer: 'Use the public Backy API, manifest, or SDK payloads to hydrate answers in your custom site.' },
+            { question: 'Where do support requests go?', answer: 'Route visitors to a Backy form, help center, account area, or external support inbox.' },
+        ];
+
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'faq-hero-section',
+                width: 1200,
+                height: 340,
+                dataBindings: [{ source: 'faq', mode: 'overview', fields: ['questions', 'categories', 'searchUrl', 'contactUrl'] }],
+                props: { backgroundColor: '#eff6ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'faq-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Questions', fontSize: 13, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 98, {
+                        id: 'faq-heading',
+                        width: 620,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 76, 212, {
+                        id: 'faq-intro-copy',
+                        width: 610,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                    }),
+                    createCanvasElement('input', 752, 118, {
+                        id: 'faq-search-input',
+                        width: 330,
+                        height: 58,
+                        dataBindings: [{ source: 'faq', mode: 'search', fields: ['query', 'categories'] }],
+                        props: { label: 'Search FAQ', name: 'faq_search', placeholder: 'Search questions or topics' },
+                    }),
+                    createCanvasElement('button', 752, 202, {
+                        id: 'faq-search-button',
+                        width: 142,
+                        height: 48,
+                        props: { label: 'Search', backgroundColor: '#1d4ed8', color: '#ffffff', borderRadius: 8, fontSize: 15, fontWeight: '800', action: 'faq.search' },
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 340, {
+                id: 'faq-question-section',
+                width: 1200,
+                height: 470,
+                dataBindings: [{ source: 'faq', mode: 'questions', fields: ['questions', 'categories', 'answers'], limit: 10 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 60, {
+                        id: 'faq-category-filter',
+                        width: 270,
+                        height: 300,
+                        dataBindings: [{ source: 'faq', mode: 'categories', fields: ['name', 'slug', 'questionCount'] }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#dbeafe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 22, 24, {
+                                id: 'faq-category-heading',
+                                width: 190,
+                                height: 28,
+                                props: { content: 'Categories', level: 'h2', fontSize: 22, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Account', 'Orders', 'Content', 'Billing'].map((item, index) => createCanvasElement('button', 22, 74 + index * 48, {
+                                id: `faq-category-chip-${index}`,
+                                width: 180,
+                                height: 34,
+                                props: { label: item, backgroundColor: index === 0 ? '#1d4ed8' : '#ffffff', color: index === 0 ? '#ffffff' : '#1e3a8a', borderRadius: 8, fontSize: 13, fontWeight: '800', action: 'faq.filter.category' },
+                                dataBindings: [{ source: 'faq', mode: 'category', index, field: 'name', targetPath: 'props.label' }],
+                            })),
+                        ],
+                    }),
+                    createCanvasElement('box', 390, 60, {
+                        id: 'faq-question-list',
+                        width: 690,
+                        height: 300,
+                        dataBindings: [{ source: 'faq', mode: 'question-list', limit: 8 }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: questions.map((item, index) => createCanvasElement('box', 20, 20 + index * 88, {
+                            id: `faq-question-item-${index}`,
+                            width: 650,
+                            height: 74,
+                            dataBindings: [{ source: 'faq', mode: 'question', index }],
+                            props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                            children: [
+                                createCanvasElement('text', 18, 14, {
+                                    id: `faq-question-title-${index}`,
+                                    width: 500,
+                                    height: 24,
+                                    props: { content: item.question, fontSize: 15, fontWeight: '800', color: '#111827' },
+                                    dataBindings: [{ source: 'faq', mode: 'question', index, field: 'question', targetPath: 'props.content' }],
+                                }),
+                                createCanvasElement('paragraph', 18, 42, {
+                                    id: `faq-question-answer-${index}`,
+                                    width: 540,
+                                    height: 22,
+                                    props: { content: item.answer, fontSize: 13, lineHeight: 1.35, color: '#64748b' },
+                                    dataBindings: [{ source: 'faq', mode: 'question', index, field: 'answer', targetPath: 'props.content' }],
+                                }),
+                                createCanvasElement('button', 590, 18, {
+                                    id: `faq-question-toggle-${index}`,
+                                    width: 36,
+                                    height: 36,
+                                    props: { label: '+', backgroundColor: '#dbeafe', color: '#1e3a8a', borderRadius: 8, fontSize: 18, fontWeight: '800', action: 'faq.toggle' },
+                                }),
+                            ],
+                        })),
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 810, {
+                id: 'faq-support-section',
+                width: 1200,
+                height: 260,
+                dataBindings: [{ source: 'faq', mode: 'support', fields: ['contactUrl', 'helpCenterUrl', 'supportEmail'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 58, {
+                        id: 'faq-support-card',
+                        width: 520,
+                        height: 150,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 26, 26, {
+                                id: 'faq-support-heading',
+                                width: 300,
+                                height: 32,
+                                props: { content: 'Need a human answer?', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 26, 76, {
+                                id: 'faq-support-copy',
+                                width: 390,
+                                height: 44,
+                                props: { content: 'Route unanswered questions to your support form, help center, or account workspace with the visitor context attached.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 680, 58, {
+                        id: 'faq-contact-card',
+                        width: 360,
+                        height: 150,
+                        dataBindings: [{ source: 'faq', mode: 'contact', fields: ['contactUrl', 'supportEmail'] }],
+                        props: { backgroundColor: '#1e3a8a', borderRadius: 8, borderColor: '#1e3a8a', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 26, 24, {
+                                id: 'faq-contact-label',
+                                width: 230,
+                                height: 24,
+                                props: { content: 'Still stuck?', fontSize: 15, fontWeight: '800', color: '#dbeafe' },
+                            }),
+                            createCanvasElement('button', 26, 76, {
+                                id: 'faq-contact-button',
+                                width: 146,
+                                height: 42,
+                                props: { label: 'Contact support', backgroundColor: '#ffffff', color: '#1e3a8a', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'faq.contact.open' },
+                                dataBindings: [{ source: 'faq', mode: 'contact', field: 'contactUrl', targetPath: 'props.href' }],
                             }),
                         ],
                     }),

@@ -697,6 +697,54 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'faq',
+    title: 'Smoke FAQ Template',
+    slugBase: 'smoke-faq-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'faq',
+    navigationItem: 'FAQ',
+    headingId: 'faq-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'faq-site-header',
+      'faq-site-navigation',
+      'faq-site-footer',
+      'faq-hero-section',
+      'faq-heading',
+      'faq-intro-copy',
+      'faq-search-input',
+      'faq-search-button',
+      'faq-question-section',
+      'faq-category-filter',
+      'faq-category-chip-0',
+      'faq-question-list',
+      'faq-question-item-0',
+      'faq-question-title-0',
+      'faq-question-answer-0',
+      'faq-question-toggle-0',
+      'faq-support-section',
+      'faq-support-card',
+      'faq-contact-card',
+      'faq-contact-button',
+    ],
+    dataBindingElementIds: [
+      'faq-hero-section',
+      'faq-search-input',
+      'faq-question-section',
+      'faq-category-filter',
+      'faq-category-chip-0',
+      'faq-question-list',
+      'faq-question-item-0',
+      'faq-question-title-0',
+      'faq-question-answer-0',
+      'faq-support-section',
+      'faq-contact-card',
+      'faq-contact-button',
+    ],
+  },
+  {
     template: 'blog-index',
     title: 'Smoke Blog Index Template',
     slugBase: 'smoke-blog-index-template',
@@ -1083,6 +1131,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes("'help-center'") &&
       source.includes('help-center-search-input') &&
       source.includes('help-center-contact-button') &&
+      source.includes("'faq'") &&
+      source.includes('faq-question-item-${index}') &&
+      source.includes('faq-contact-card') &&
+      source.includes('faq.contact.open') &&
       source.includes("'blog-post'") &&
       source.includes('blog-post-body-section') &&
       source.includes('blog-post-author-card') &&
@@ -1096,7 +1148,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('careers-benefits-card') &&
       source.includes('careers.application.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, blog-post, team, and careers starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, blog-post, team, and careers starters',
   );
 };
 
@@ -1773,6 +1825,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Help center',
       forms: 'none',
       dynamicData: 'Backy help center placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'faq',
+      navPlacement: 'primary',
+      selectedTemplateName: 'FAQ page',
+      forms: 'none',
+      dynamicData: 'Backy FAQ placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
