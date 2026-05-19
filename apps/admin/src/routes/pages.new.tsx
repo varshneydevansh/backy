@@ -6023,24 +6023,40 @@ function buildTemplateElements(input: {
                 height: 350,
                 dataBindings: [{ source: 'events', mode: 'overview', fields: ['events', 'formats', 'locations', 'registrationUrl'] }],
                 props: { backgroundColor: '#f7fee7', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 450 },
+                    mobile: { width: 375, height: 570 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'events-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Events', fontSize: 13, fontWeight: '800', color: '#4d7c0f', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 200 },
+                            mobile: { x: 24, y: 44, width: 180 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'events-heading',
                         width: 640,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 80, width: 327, height: 124, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 214, {
                         id: 'events-copy',
                         width: 580,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 86, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 222, width: 323, height: 112, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 760, 98, {
                         id: 'events-format-filter',
@@ -6048,6 +6064,10 @@ function buildTemplateElements(input: {
                         height: 86,
                         dataBindings: [{ source: 'events', mode: 'format-filter', fields: ['all', 'online', 'inPerson'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#d9f99d', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 318, width: 340, height: 86 },
+                            mobile: { x: 24, y: 376, width: 327, height: 146 },
+                        },
                         children: [
                             createCanvasElement('button', 16, 20, {
                                 id: 'events-filter-all',
@@ -6066,6 +6086,9 @@ function buildTemplateElements(input: {
                                 width: 102,
                                 height: 46,
                                 props: { label: 'In person', backgroundColor: '#f7fee7', color: '#3f6212', borderRadius: 8, fontWeight: '800', action: 'events.filter.in_person' },
+                                responsive: {
+                                    mobile: { x: 16, y: 80, width: 130 },
+                                },
                             }),
                         ],
                     }),
@@ -6077,12 +6100,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'events', mode: 'list', limit: 6, sort: 'startsAt:asc' }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 450, width: 768, height: 1120 },
+                    mobile: { y: 570, width: 375, height: 1140 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'events-list-heading',
                         width: 440,
                         height: 42,
                         props: { content: 'Upcoming events', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Product workshop', date: 'Jun 18', location: 'Online', capacity: '24 seats' },
@@ -6094,6 +6125,10 @@ function buildTemplateElements(input: {
                         height: 330,
                         dataBindings: [{ source: 'events', mode: 'event', index }],
                         props: { backgroundColor: index === 1 ? '#111827' : '#f9fafb', borderRadius: 8, borderColor: index === 1 ? '#111827' : '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 332, width: 660, height: 286 },
+                            mobile: { x: 24, y: 118 + index * 328, width: 327, height: 294 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: `events-card-date-${index}`,
@@ -6108,6 +6143,10 @@ function buildTemplateElements(input: {
                                 height: 60,
                                 props: { content: event.title, level: 'h3', fontSize: 24, fontWeight: '800', color: index === 1 ? '#ffffff' : '#111827' },
                                 dataBindings: [{ source: 'events', mode: 'event', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 300, height: 34 },
+                                    mobile: { width: 240 },
+                                },
                             }),
                             createCanvasElement('text', 24, 152, {
                                 id: `events-card-location-${index}`,
@@ -6128,6 +6167,10 @@ function buildTemplateElements(input: {
                                 width: 132,
                                 height: 42,
                                 props: { label: 'RSVP', backgroundColor: index === 1 ? '#84cc16' : '#111827', color: index === 1 ? '#111827' : '#ffffff', borderRadius: 8, fontWeight: '800', action: 'events.registration.open' },
+                                responsive: {
+                                    tablet: { x: 480, y: 220 },
+                                    mobile: { x: 24, y: 232 },
+                                },
                             }),
                         ],
                     })),
@@ -6139,12 +6182,20 @@ function buildTemplateElements(input: {
                 height: 300,
                 dataBindings: [{ source: 'events', mode: 'agenda', fields: ['steps', 'speakers', 'faq'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1570, width: 768, height: 620 },
+                    mobile: { y: 1710, width: 375, height: 640 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'events-agenda-heading',
                         width: 420,
                         height: 42,
                         props: { content: 'What to expect', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...['Welcome and setup', 'Live walkthrough', 'Q&A and next steps'].map((step, index) => createCanvasElement('box', 74 + index * 270, 130, {
                         id: `events-agenda-step-${index}`,
@@ -6152,6 +6203,10 @@ function buildTemplateElements(input: {
                         height: 104,
                         dataBindings: [{ source: 'events', mode: 'agenda-step', index }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54 + (index % 2) * 330, y: 130 + Math.floor(index / 2) * 142, width: 300, height: 110 },
+                            mobile: { x: 24, y: 118 + index * 128, width: 327, height: 106 },
+                        },
                         children: [
                             createCanvasElement('text', 22, 18, {
                                 id: `events-agenda-time-${index}`,
@@ -6166,6 +6221,10 @@ function buildTemplateElements(input: {
                                 height: 28,
                                 props: { content: step, level: 'h3', fontSize: 18, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'events', mode: 'agenda-step', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 220 },
+                                    mobile: { width: 240 },
+                                },
                             }),
                         ],
                     })),
@@ -6174,18 +6233,30 @@ function buildTemplateElements(input: {
                         width: 220,
                         height: 104,
                         props: { backgroundColor: '#111827', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 420, width: 660, height: 130 },
+                            mobile: { x: 24, y: 510, width: 327, height: 120 },
+                        },
                         children: [
                             createCanvasElement('paragraph', 22, 18, {
                                 id: 'events-rsvp-copy',
                                 width: 160,
                                 height: 36,
                                 props: { content: 'Ready to join?', fontSize: 15, fontWeight: '800', lineHeight: 1.35, color: '#ffffff' },
+                                responsive: {
+                                    tablet: { width: 220 },
+                                    mobile: { width: 210 },
+                                },
                             }),
                             createCanvasElement('button', 22, 64, {
                                 id: 'events-main-rsvp-button',
                                 width: 120,
                                 height: 34,
                                 props: { label: 'Reserve spot', backgroundColor: '#84cc16', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'events.registration.open' },
+                                responsive: {
+                                    tablet: { x: 470, y: 48, width: 128 },
+                                    mobile: { x: 22, y: 68, width: 128 },
+                                },
                             }),
                         ],
                     }),

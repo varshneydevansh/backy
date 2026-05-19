@@ -1476,6 +1476,21 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { y: 2440, width: 375, height: 420 }"),
     'Gallery page starter must seed explicit tablet/mobile responsive overrides for media library sections.',
   );
+  assert(
+    source.includes("id: 'events-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 570 }") &&
+      source.includes("id: 'events-format-filter'") &&
+      source.includes("mobile: { x: 24, y: 376, width: 327, height: 146 }") &&
+      source.includes("id: 'events-list-section'") &&
+      source.includes("tablet: { y: 450, width: 768, height: 1120 }") &&
+      source.includes("id: `events-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 118 + index * 328, width: 327, height: 294 }") &&
+      source.includes("id: 'events-agenda-section'") &&
+      source.includes("mobile: { y: 1710, width: 375, height: 640 }") &&
+      source.includes("id: 'events-rsvp-card'") &&
+      source.includes("tablet: { x: 54, y: 420, width: 660, height: 130 }"),
+    'Events page starter must seed explicit tablet/mobile responsive overrides for event and agenda sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
