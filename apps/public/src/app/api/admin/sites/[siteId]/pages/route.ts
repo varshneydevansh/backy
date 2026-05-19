@@ -435,17 +435,26 @@ const deliverPageContentWebhook = async (params: {
     },
   });
 
-const parseBoundedInteger = (
+const integerQueryFromInput = (
   value: string | null,
   fallback: number,
   min: number,
-  max: number,
-) => {
-  const parsed = Number.parseInt(value || "", 10);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
+  max?: number,
+): { value: number; invalid?: string } => {
+  if (value === null || value.trim() === "") {
+    return { value: fallback };
   }
-  return Math.max(min, Math.min(max, parsed));
+
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < min ||
+    (max !== undefined && parsed > max)
+  ) {
+    return { value: fallback, invalid: value };
+  }
+
+  return { value: parsed };
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -460,13 +469,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
-    const limit = parseBoundedInteger(searchParams.get("limit"), 100, 1, 200);
-    const offset = parseBoundedInteger(
-      searchParams.get("offset"),
-      0,
-      0,
-      Number.MAX_SAFE_INTEGER,
-    );
+    const limitFilter = integerQueryFromInput(searchParams.get("limit"), 100, 1, 200);
+    if (limitFilter.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_PAGE_LIMIT",
+        "Invalid page limit. Use an integer from 1 to 200.",
+        requestId,
+      );
+    }
+    const offsetFilter = integerQueryFromInput(searchParams.get("offset"), 0, 0);
+    if (offsetFilter.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_PAGE_OFFSET",
+        "Invalid page offset. Use an integer greater than or equal to 0.",
+        requestId,
+      );
+    }
+    const limit = limitFilter.value;
+    const offset = offsetFilter.value;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site =

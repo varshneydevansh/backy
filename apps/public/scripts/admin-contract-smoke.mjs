@@ -322,6 +322,9 @@ function assertAdminPageContentValidationSource() {
   assert(blogListRoute.includes('"INVALID_BLOG_OFFSET"'), 'admin blog list route must reject invalid offset filters');
   assert(blogListRoute.includes('integerQueryFromInput'), 'admin blog list route must parse pagination filters strictly');
   assert(blogListRoute.includes('statusFilter.invalid'), 'admin blog list route must reject invalid status filters');
+  assert(pageListRoute.includes('"INVALID_PAGE_LIMIT"'), 'admin page list route must reject invalid limit filters');
+  assert(pageListRoute.includes('"INVALID_PAGE_OFFSET"'), 'admin page list route must reject invalid offset filters');
+  assert(pageListRoute.includes('integerQueryFromInput'), 'admin page list route must parse pagination filters strictly');
   assert(publicBlogRoute.includes("'INVALID_BLOG_LIMIT'"), 'public blog list route must reject invalid limit filters');
   assert(publicBlogRoute.includes("'INVALID_BLOG_OFFSET'"), 'public blog list route must reject invalid offset filters');
   assert(publicBlogRoute.includes("'INVALID_BLOG_ARCHIVE_YEAR'"), 'public blog list route must reject invalid archive year filters');

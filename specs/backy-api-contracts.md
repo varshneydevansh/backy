@@ -432,6 +432,7 @@ Public page payload should include:
 
 - `GET /api/admin/sites/:siteId/pages?includeUnpublished=true`
   - Current implementation returns page summaries without content.
+  - Invalid page list pagination filters return explicit `400` errors instead of silently clamping the query: `INVALID_PAGE_LIMIT` or `INVALID_PAGE_OFFSET`.
 
 - `POST /api/admin/sites/:siteId/pages`
   - Body: `{ title, slug?, description?, status?, isHomepage?, content?, meta?, forms?, scheduledAt? }`
