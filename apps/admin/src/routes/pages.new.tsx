@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -155,6 +155,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Product media', 'Purchase panel', 'Related products'],
     },
     {
+        id: 'pricing',
+        name: 'Pricing page',
+        desc: 'Plan cards, feature comparison, subscription CTA, and pricing FAQ.',
+        detail: 'Creates a public pricing page for one-time products, recurring plans, and provider checkout handoff.',
+        sections: ['Pricing hero', 'Plan cards', 'Feature comparison'],
+    },
+    {
         id: 'cart',
         name: 'Cart page',
         desc: 'Cart items, quantity controls, totals, and checkout handoff.',
@@ -243,6 +250,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'product',
         description: 'A public product detail page ready to bind media, price, variants, and checkout actions.',
     },
+    pricing: {
+        title: 'Pricing',
+        slug: 'pricing',
+        description: 'A public pricing page ready to bind plans, subscription options, features, and checkout actions.',
+    },
     cart: {
         title: 'Cart',
         slug: 'cart',
@@ -300,6 +312,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     landing: 'primary',
     storefront: 'primary',
     'product-detail': 'primary',
+    pricing: 'primary',
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
@@ -527,6 +540,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     landing: ['Home', 'Features', 'Contact'],
     storefront: ['Home', 'Shop', 'About', 'Contact'],
     'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
+    pricing: ['Home', 'Pricing', 'Shop', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
@@ -571,6 +585,14 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Related', x: 8, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
         { x: 38, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
         { x: 68, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
+    ],
+    pricing: [
+        { label: 'Plans', x: 8, y: 14, w: 84, h: 24, className: 'border-violet-200 bg-violet-50' },
+        { x: 18, y: 24, w: 34, h: 5, className: 'bg-violet-800' },
+        { label: 'Basic', x: 8, y: 48, w: 24, h: 28, className: 'border-violet-100 bg-white' },
+        { label: 'Pro', x: 38, y: 44, w: 24, h: 34, className: 'border-violet-200 bg-white' },
+        { label: 'Team', x: 68, y: 48, w: 24, h: 28, className: 'border-violet-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     cart: [
         { label: 'Cart', x: 8, y: 14, w: 52, h: 20, className: 'border-teal-200 bg-teal-50' },
@@ -1625,6 +1647,8 @@ function NewPageRoute() {
             ? 'Backy products catalog placeholders'
             : formData.template === 'product-detail'
                 ? 'Backy product detail placeholders'
+                : formData.template === 'pricing'
+                    ? 'Backy pricing plan placeholders'
                 : formData.template === 'cart'
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
@@ -1742,7 +1766,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1792,7 +1816,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, cart, checkout, order-confirmation, help-center, and blog index templates seed dynamic data placeholders for products, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, cart, checkout, order-confirmation, help-center, and blog index templates seed dynamic data placeholders for products, plans, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3822,6 +3846,8 @@ function buildTemplateElements(input: {
             ? 'Checkout'
             : input.template === 'order-confirmation'
                 ? 'View order'
+            : input.template === 'pricing'
+                ? 'View plans'
             : input.template === 'help-center'
                 ? 'Get help'
             : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
@@ -4097,6 +4123,176 @@ function buildTemplateElements(input: {
                             }),
                         ],
                     })),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'pricing') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'pricing-hero-section',
+                width: 1200,
+                height: 360,
+                dataBindings: [{ source: 'commerce', mode: 'pricing', fields: ['plans', 'currency', 'billingIntervals'] }],
+                props: { backgroundColor: '#f5f3ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 62, {
+                        id: 'pricing-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Pricing', fontSize: 13, fontWeight: '800', color: '#6d28d9', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 100, {
+                        id: 'pricing-heading',
+                        width: 650,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 216, {
+                        id: 'pricing-copy',
+                        width: 590,
+                        height: 72,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4b5563' },
+                    }),
+                    createCanvasElement('box', 760, 104, {
+                        id: 'pricing-billing-toggle',
+                        width: 300,
+                        height: 78,
+                        dataBindings: [{ source: 'commerce', mode: 'billing-toggle', fields: ['monthly', 'annual'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#ddd6fe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('button', 16, 16, {
+                                id: 'pricing-monthly-toggle',
+                                width: 124,
+                                height: 46,
+                                props: { label: 'Monthly', backgroundColor: '#6d28d9', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'pricing.interval.monthly' },
+                            }),
+                            createCanvasElement('button', 156, 16, {
+                                id: 'pricing-annual-toggle',
+                                width: 124,
+                                height: 46,
+                                props: { label: 'Annual', backgroundColor: '#f5f3ff', color: '#5b21b6', borderRadius: 8, fontWeight: '800', action: 'pricing.interval.annual' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 360, {
+                id: 'pricing-plan-section',
+                width: 1200,
+                height: 430,
+                dataBindings: [{ source: 'commerce', mode: 'pricing-plans', limit: 3 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    ...[
+                        { name: 'Starter', price: '$19', cta: 'Start starter' },
+                        { name: 'Growth', price: '$49', cta: 'Start growth' },
+                        { name: 'Scale', price: '$99', cta: 'Talk to sales' },
+                    ].map((plan, index) => createCanvasElement('box', 72 + index * 360, 62, {
+                        id: `pricing-plan-card-${index}`,
+                        width: 318,
+                        height: 300,
+                        dataBindings: [{ source: 'commerce', mode: 'pricing-plan', index }],
+                        props: {
+                            backgroundColor: index === 1 ? '#111827' : '#f9fafb',
+                            borderRadius: 8,
+                            borderColor: index === 1 ? '#111827' : '#e5e7eb',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                        },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: `pricing-plan-name-${index}`,
+                                width: 190,
+                                height: 34,
+                                props: { content: plan.name, level: 'h2', fontSize: 24, fontWeight: '800', color: index === 1 ? '#ffffff' : '#111827' },
+                                dataBindings: [{ source: 'commerce', mode: 'pricing-plan', index, field: 'name', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 82, {
+                                id: `pricing-plan-price-${index}`,
+                                width: 130,
+                                height: 42,
+                                props: { content: plan.price, fontSize: 34, fontWeight: '800', color: index === 1 ? '#c4b5fd' : '#6d28d9' },
+                                dataBindings: [{ source: 'commerce', mode: 'pricing-plan', index, field: 'price', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 142, {
+                                id: `pricing-plan-features-${index}`,
+                                width: 238,
+                                height: 72,
+                                props: { content: 'Includes hosted pages, CMS content, media library, commerce handoff, and editor controls.', fontSize: 14, lineHeight: 1.45, color: index === 1 ? '#d1d5db' : '#4b5563' },
+                            }),
+                            createCanvasElement('button', 24, 232, {
+                                id: `pricing-plan-button-${index}`,
+                                width: 166,
+                                height: 48,
+                                props: { label: plan.cta, backgroundColor: index === 1 ? '#8b5cf6' : '#111827', color: '#ffffff', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'commerce.checkout' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 790, {
+                id: 'pricing-comparison-section',
+                width: 1200,
+                height: 370,
+                dataBindings: [{ source: 'commerce', mode: 'pricing-features', limit: 8 }],
+                props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 52, {
+                        id: 'pricing-comparison-heading',
+                        width: 460,
+                        height: 42,
+                        props: { content: 'Compare plan features', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('box', 72, 126, {
+                        id: 'pricing-comparison-table',
+                        width: 720,
+                        height: 176,
+                        dataBindings: [{ source: 'commerce', mode: 'pricing-comparison', fields: ['feature', 'starter', 'growth', 'scale'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: ['Pages and sites', 'Products and orders', 'Team seats'].map((feature, index) => createCanvasElement('box', 18, 18 + index * 52, {
+                            id: `pricing-comparison-row-${index}`,
+                            width: 682,
+                            height: 42,
+                            dataBindings: [{ source: 'commerce', mode: 'pricing-feature', index }],
+                            props: { backgroundColor: '#ffffff', borderRadius: 8 },
+                            children: [
+                                createCanvasElement('text', 18, 10, {
+                                    id: `pricing-comparison-feature-${index}`,
+                                    width: 240,
+                                    height: 24,
+                                    props: { content: feature, fontSize: 14, fontWeight: '800', color: '#111827' },
+                                }),
+                                createCanvasElement('text', 342, 10, {
+                                    id: `pricing-comparison-check-${index}`,
+                                    width: 240,
+                                    height: 24,
+                                    props: { content: 'Included on Growth and Scale', fontSize: 14, color: '#4b5563' },
+                                }),
+                            ],
+                        })),
+                    }),
+                    createCanvasElement('box', 850, 126, {
+                        id: 'pricing-faq-card',
+                        width: 270,
+                        height: 176,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 22, 22, {
+                                id: 'pricing-faq-heading',
+                                width: 190,
+                                height: 30,
+                                props: { content: 'Pricing FAQ', level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 22, 70, {
+                                id: 'pricing-faq-copy',
+                                width: 214,
+                                height: 70,
+                                props: { content: 'Bind plan terms, billing intervals, refunds, and trial rules from Backy commerce settings or custom collections.', fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
+                            }),
+                        ],
+                    }),
                 ],
             }),
         ]);

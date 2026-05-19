@@ -146,6 +146,46 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'pricing',
+    title: 'Smoke Pricing Template',
+    slugBase: 'smoke-pricing-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'pricing',
+    navigationItem: 'Pricing',
+    headingId: 'pricing-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 42,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'pricing-site-header',
+      'pricing-site-navigation',
+      'pricing-site-footer',
+      'pricing-hero-section',
+      'pricing-billing-toggle',
+      'pricing-monthly-toggle',
+      'pricing-annual-toggle',
+      'pricing-plan-section',
+      'pricing-plan-card-0',
+      'pricing-plan-price-0',
+      'pricing-plan-button-0',
+      'pricing-comparison-section',
+      'pricing-comparison-table',
+      'pricing-comparison-row-0',
+      'pricing-faq-card',
+    ],
+    dataBindingElementIds: [
+      'pricing-hero-section',
+      'pricing-billing-toggle',
+      'pricing-plan-section',
+      'pricing-plan-card-0',
+      'pricing-plan-name-0',
+      'pricing-plan-price-0',
+      'pricing-comparison-section',
+      'pricing-comparison-table',
+      'pricing-comparison-row-0',
+    ],
+  },
+  {
     template: 'cart',
     title: 'Smoke Cart Template',
     slugBase: 'smoke-cart-template',
@@ -499,6 +539,9 @@ const assertPageCreateSourceContracts = () => {
       source.includes('member-account-preferences-form') &&
       source.includes("'product-detail'") &&
       source.includes('product-detail-buy-button') &&
+      source.includes("'pricing'") &&
+      source.includes('pricing-plan-card-${index}') &&
+      source.includes('pricing-billing-toggle') &&
       source.includes("'cart'") &&
       source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
@@ -511,7 +554,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('help-center-search-input') &&
       source.includes('help-center-contact-button') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, and help-center starters',
+    'Page create must keep safe member, commerce, pricing, and help-center starters',
   );
 };
 
@@ -1076,6 +1119,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Product detail',
       forms: 'none',
       dynamicData: 'Backy product detail placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'pricing',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Pricing page',
+      forms: 'none',
+      dynamicData: 'Backy pricing plan placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

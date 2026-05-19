@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -369,6 +369,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     title: 'Product detail',
     detail: 'Create a buy-ready product page with media, options, checkout, and related items.',
     badge: 'Commerce',
+    icon: ShoppingBag,
+  },
+  {
+    key: 'pricing',
+    title: 'Pricing',
+    detail: 'Create plan cards, feature comparison, subscription CTAs, and billing interval controls.',
+    badge: 'Plans',
     icon: ShoppingBag,
   },
   {
@@ -1870,6 +1877,7 @@ function PagesListView() {
       memberAccountPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
       storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       productDetailPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
+      pricingPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=pricing`,
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
@@ -1898,6 +1906,7 @@ function PagesListView() {
         memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
         storefront: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
         productDetail: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=product-detail`,
+        pricing: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=pricing`,
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,

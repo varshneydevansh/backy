@@ -45,6 +45,8 @@ const assertPagesListSourceContract = () => {
       source.includes('memberAccountPageTemplate') &&
       source.includes("key: 'product-detail'") &&
       source.includes('productDetailPageTemplate') &&
+      source.includes("key: 'pricing'") &&
+      source.includes('pricingPageTemplate') &&
       source.includes("key: 'cart'") &&
       source.includes('cartPageTemplate') &&
       source.includes("key: 'checkout'") &&
@@ -53,7 +55,7 @@ const assertPagesListSourceContract = () => {
       source.includes('orderConfirmationPageTemplate') &&
       source.includes("key: 'help-center'") &&
       source.includes('helpCenterPageTemplate'),
-    'Pages list must expose the member, commerce, and help-center starters and handoff routes',
+    'Pages list must expose the member, commerce, pricing, and help-center starters and handoff routes',
   );
 };
 
@@ -1532,6 +1534,12 @@ const main = async () => {
       ['template=product-detail'],
       { title: 'Product detail', slug: 'product', template: 'product-detail', homepage: false },
     );
+    const pricingShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-pricing',
+      ['template=pricing'],
+      { title: 'Pricing', slug: 'pricing', template: 'pricing', homepage: false },
+    );
     const cartShortcut = await clickEmptyCreate(
       client,
       'pages-create-cart',
@@ -1643,6 +1651,7 @@ const main = async () => {
       memberLoginShortcut,
       memberAccountShortcut,
       productDetailShortcut,
+      pricingShortcut,
       cartShortcut,
       checkoutShortcut,
       orderConfirmationShortcut,
