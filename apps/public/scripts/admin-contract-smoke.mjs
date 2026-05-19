@@ -288,6 +288,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/pages/[pageId]/comments/[commentId]/route.ts', import.meta.url),
     'utf8',
   );
+  const publicSiteCommentsRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/comments/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -353,6 +357,12 @@ function assertAdminPageContentValidationSource() {
   assert(!publicPageCommentsRoute.includes("error: 'Validation failed'"), 'public page comments route must not return legacy string validation errors');
   assert(publicPageCommentDetailRoute.includes("'INVALID_PAGE_COMMENT_STATUS'"), 'public page comment detail route must reject invalid moderation status updates');
   assert(publicPageCommentDetailRoute.includes('statusProvided'), 'public page comment detail route must distinguish missing status from invalid status values');
+  assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_STATUS'"), 'site comments route must reject invalid status filters');
+  assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_TARGET_TYPE'"), 'site comments route must reject invalid target type filters');
+  assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_SORT'"), 'site comments route must reject invalid sort filters');
+  assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_LIMIT'"), 'site comments route must reject invalid limit filters');
+  assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_OFFSET'"), 'site comments route must reject invalid offset filters');
+  assert(publicSiteCommentsRoute.includes('integerQueryFromInput'), 'site comments route must parse pagination filters strictly');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -365,6 +375,11 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_PAGE_COMMENT_OFFSET') &&
       apiContracts.includes('INVALID_PAGE_COMMENT_STATUS') &&
       apiContracts.includes('INVALID_PAGE_COMMENT_SORT') &&
+      apiContracts.includes('INVALID_SITE_COMMENT_STATUS') &&
+      apiContracts.includes('INVALID_SITE_COMMENT_TARGET_TYPE') &&
+      apiContracts.includes('INVALID_SITE_COMMENT_SORT') &&
+      apiContracts.includes('INVALID_SITE_COMMENT_LIMIT') &&
+      apiContracts.includes('INVALID_SITE_COMMENT_OFFSET') &&
       apiContracts.includes('INVALID_BLOG_CONTENT') &&
       apiContracts.includes('INVALID_BLOG_CONTENT_ELEMENTS') &&
       apiContracts.includes('INVALID_BLOG_CANVAS_SIZE') &&

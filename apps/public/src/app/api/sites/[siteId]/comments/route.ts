@@ -25,8 +25,14 @@ interface RouteParams {
 
 type CommentStatusFilter = CommentStatus | 'all';
 type CommentModerationStatus = CommentStatus;
+type CommentTargetTypeFilter = CommentTargetType | 'all';
+type CommentSort = 'newest' | 'oldest';
 
-function parseStatus(raw: string | null): CommentStatusFilter {
+function parseStatus(raw: string | null): { value: CommentStatusFilter; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: 'all' };
+  }
+
   if (
     raw === 'pending' ||
     raw === 'approved' ||
@@ -35,27 +41,39 @@ function parseStatus(raw: string | null): CommentStatusFilter {
     raw === 'blocked' ||
     raw === 'all'
   ) {
-    return raw;
+    return { value: raw };
   }
 
-  return 'all';
+  return { value: 'all', invalid: raw };
 }
 
 function parseModerationStatus(raw: string | null): CommentModerationStatus | null {
-  const status = parseStatus(raw);
+  const status = parseStatus(raw).value;
   return status === 'all' ? null : status;
 }
 
-function parseTargetType(raw: string | null): CommentTargetType | 'all' {
-  if (raw === 'page' || raw === 'post' || raw === 'all') {
-    return raw;
+function parseTargetType(raw: string | null): { value: CommentTargetTypeFilter; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: 'all' };
   }
 
-  return 'all';
+  if (raw === 'page' || raw === 'post' || raw === 'all') {
+    return { value: raw };
+  }
+
+  return { value: 'all', invalid: raw };
 }
 
-function parseSort(raw: string | null) {
-  return raw === 'oldest' ? 'oldest' : 'newest';
+function parseSort(raw: string | null): { value: CommentSort; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: 'newest' };
+  }
+
+  if (raw === 'oldest' || raw === 'newest') {
+    return { value: raw };
+  }
+
+  return { value: 'newest', invalid: raw };
 }
 
 function parseBoolean(raw: string | null): boolean {
@@ -72,13 +90,22 @@ function parseSearchQuery(raw: string | null): string | undefined {
   return value.length ? value : undefined;
 }
 
-function parseBoundedInteger(raw: string | null, fallback: number, min: number, max: number): number {
-  const parsed = Number.parseInt(raw || '', 10);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
+function integerQueryFromInput(
+  raw: string | null,
+  fallback: number,
+  min: number,
+  max?: number,
+): { value: number; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: fallback };
   }
 
-  return Math.max(min, Math.min(max, parsed));
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < min || (max !== undefined && parsed > max)) {
+    return { value: fallback, invalid: raw };
+  }
+
+  return { value: parsed };
 }
 
 function parseCommentIds(raw: unknown): string[] {
@@ -173,17 +200,62 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
-    const status = parseStatus(searchParams.get('status'));
-    const targetType = parseTargetType(searchParams.get('targetType'));
+    const statusFilter = parseStatus(searchParams.get('status'));
+    if (statusFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_SITE_COMMENT_STATUS',
+        'Invalid site comment status filter. Use pending, approved, rejected, spam, blocked, or all.',
+        responseRequestId,
+      );
+    }
+    const status = statusFilter.value;
+    const targetTypeFilter = parseTargetType(searchParams.get('targetType'));
+    if (targetTypeFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_SITE_COMMENT_TARGET_TYPE',
+        'Invalid site comment targetType filter. Use page, post, or all.',
+        responseRequestId,
+      );
+    }
+    const targetType = targetTypeFilter.value;
     const targetId = searchParams.get('targetId') || undefined;
     const requestId = parseRequestId(searchParams.get('requestId'));
     const q = parseSearchQuery(searchParams.get('q'));
     const parentId = searchParams.get('parentId');
     const parentOnly = parseBoolean(searchParams.get('parentOnly')) || Boolean(parentId);
     const commentThreadId = parseSearchQuery(searchParams.get('commentThreadId'));
-    const sort = parseSort(searchParams.get('sort'));
-    const limit = parseBoundedInteger(searchParams.get('limit'), 20, 1, 100);
-    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+    const sortFilter = parseSort(searchParams.get('sort'));
+    if (sortFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_SITE_COMMENT_SORT',
+        'Invalid site comment sort. Use newest or oldest.',
+        responseRequestId,
+      );
+    }
+    const sort = sortFilter.value;
+    const limitFilter = integerQueryFromInput(searchParams.get('limit'), 20, 1, 100);
+    if (limitFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_SITE_COMMENT_LIMIT',
+        'Invalid site comment limit. Use an integer from 1 to 100.',
+        responseRequestId,
+      );
+    }
+    const offsetFilter = integerQueryFromInput(searchParams.get('offset'), 0, 0);
+    if (offsetFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_SITE_COMMENT_OFFSET',
+        'Invalid site comment offset. Use an integer greater than or equal to 0.',
+        responseRequestId,
+      );
+    }
+    const limit = limitFilter.value;
+    const offset = offsetFilter.value;
 
     if (status !== 'approved') {
       const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
