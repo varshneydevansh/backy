@@ -282,6 +282,8 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes('collectSelectionInfoMetrics') && source.includes('const selectionSet = new Set(selectedIds.length ? selectedIds : [selectedId]);'), 'Editor canvas selection HUD must collect metrics for every selected layer');
   assert(source.includes('data-testid="editor-selection-info"') && source.includes("data-selection-mode={selectedMetrics.length > 1 ? 'multi' : 'single'}") && source.includes('data-selection-count={selectedMetrics.length}'), 'Editor canvas selection HUD must expose testable single/multi selection metadata');
   assert(source.includes('`${selectedMetrics.length} layers`') && source.includes('Math.round(maxX - minX)') && source.includes('Math.round(maxY - minY)'), 'Editor canvas selection HUD must show multi-selection bounds instead of only the primary layer size');
+  assert(source.includes('const multiSelectionBounds = useMemo(() =>') && source.includes('data-testid="editor-multi-selection-bounds"') && source.includes('data-testid="editor-multi-selection-bounds-label"'), 'Editor canvas must render a visible multi-selection bounding frame');
+  assert(source.includes('data-selection-count={multiSelectionBounds.count}') && source.includes('left: multiSelectionBounds.x') && source.includes('width: multiSelectionBounds.width'), 'Editor multi-selection bounding frame must expose count and use absolute selection geometry');
 };
 
 const assertInteractiveRegistryVersionPinningSource = () => {

@@ -2316,6 +2316,30 @@ export function Canvas({
     };
   }, [handleCanvasKeyDown, isPreview]);
 
+  const multiSelectionBounds = useMemo(() => {
+    if (isPreview || selectedIds.length < 2) {
+      return null;
+    }
+
+    const selectedMetrics = collectSelectionInfoMetrics(elements, new Set(selectedIds));
+    if (selectedMetrics.length < 2) {
+      return null;
+    }
+
+    const minX = Math.min(...selectedMetrics.map((metric) => metric.x));
+    const minY = Math.min(...selectedMetrics.map((metric) => metric.y));
+    const maxX = Math.max(...selectedMetrics.map((metric) => metric.x + metric.width));
+    const maxY = Math.max(...selectedMetrics.map((metric) => metric.y + metric.height));
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      count: selectedMetrics.length,
+    };
+  }, [elements, isPreview, selectedIds]);
+
   return (
     <div
       ref={canvasRef}
@@ -2441,6 +2465,27 @@ export function Canvas({
             onDoubleClick={() => handleDoubleClick(element.id)}
         />
       ))}
+
+      {multiSelectionBounds && (
+        <div
+          className="pointer-events-none absolute z-[70] rounded-sm border border-sky-600/80 bg-sky-500/5 shadow-[0_0_0_1px_rgba(14,165,233,0.12)]"
+          data-testid="editor-multi-selection-bounds"
+          data-selection-count={multiSelectionBounds.count}
+          style={{
+            left: multiSelectionBounds.x,
+            top: multiSelectionBounds.y,
+            width: multiSelectionBounds.width,
+            height: multiSelectionBounds.height,
+          }}
+        >
+          <div
+            className="absolute -top-6 left-0 rounded bg-sky-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+            data-testid="editor-multi-selection-bounds-label"
+          >
+            {multiSelectionBounds.count} layers
+          </div>
+        </div>
+      )}
 
       {/* Selection Info */}
       {!isPreview && selectedId && (
