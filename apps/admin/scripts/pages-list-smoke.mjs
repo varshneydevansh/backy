@@ -37,7 +37,14 @@ const assertPagesListSourceContract = () => {
   assert(source.includes('function PageTemplateCell') && source.includes('data-testid={`pages-template-${page.id}`}'), 'Pages list must render page template provenance per row');
   assert(source.includes("'template_source'") && source.includes("'frontend_design_template_id'") && source.includes("'collection_dataset_slug'"), 'Pages CSV export must include template provenance columns');
   assert(source.includes('const templateInfo = pageTemplateInfo(page)') && source.includes('template: templateInfo') && source.includes("pageMetaString(page, 'frontendDesignTemplateId')") && source.includes("pageMetaRecord(page, 'collectionDataset')"), 'Pages handoff must expose starter, frontend-design, and dataset page provenance');
-  assert(source.includes("key: 'member-login'") && source.includes('data-testid={`pages-create-${shortcut.key}`}') && source.includes('memberLoginPageTemplate'), 'Pages list must expose the member login starter and handoff route');
+  assert(
+    source.includes("key: 'member-login'") &&
+      source.includes("key: 'member-account'") &&
+      source.includes('data-testid={`pages-create-${shortcut.key}`}') &&
+      source.includes('memberLoginPageTemplate') &&
+      source.includes('memberAccountPageTemplate'),
+    'Pages list must expose the member login/account starters and handoff routes',
+  );
 };
 
 const requestApi = async (endpoint, options = {}) => {
@@ -1503,6 +1510,12 @@ const main = async () => {
       ['template=member-login'],
       { title: 'Member login', slug: 'login', template: 'member-login', homepage: false },
     );
+    const memberAccountShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-member-account',
+      ['template=member-account'],
+      { title: 'Member account', slug: 'account', template: 'member-account', homepage: false },
+    );
     const childHierarchy = await waitForHierarchyRow(
       client,
       hierarchyPages.childPage,
@@ -1588,6 +1601,7 @@ const main = async () => {
       emptyCreate,
       registrationShortcut,
       memberLoginShortcut,
+      memberAccountShortcut,
       childHierarchy,
       parentHierarchy,
       parentTemplate,

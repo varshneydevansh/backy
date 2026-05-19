@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -182,6 +182,13 @@ const TEMPLATE_OPTIONS: Array<{
         detail: 'Seeds a safe sign-in request page without storing visitor passwords in form submissions.',
         sections: ['Hero', 'Access form', 'Register link'],
     },
+    {
+        id: 'member-account',
+        name: 'Member account',
+        desc: 'Profile summary, preference form, and protected-resource cards.',
+        detail: 'Starts an authenticated account page that custom frontends can connect to member state.',
+        sections: ['Profile hero', 'Preferences form', 'Resource cards'],
+    },
 ];
 
 const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; description: string }> = {
@@ -221,6 +228,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'login',
         description: 'A public member access page where visitors request a secure sign-in link.',
     },
+    'member-account': {
+        title: 'Member account',
+        slug: 'account',
+        description: 'A protected member account page for profile details, preferences, and private resources.',
+    },
 };
 
 const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigationPlacement> = {
@@ -232,6 +244,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     contact: 'footer',
     registration: 'primary',
     'member-login': 'primary',
+    'member-account': 'primary',
 };
 
 const PAGE_CREATION_AREAS = [
@@ -453,6 +466,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     contact: ['Home', 'About', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
     'member-login': ['Home', 'Login', 'Register'],
+    'member-account': ['Home', 'Account', 'Support'],
 };
 
 const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
@@ -516,6 +530,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { x: 62, y: 30, w: 24, h: 6, className: 'bg-slate-100' },
         { x: 62, y: 45, w: 18, h: 7, className: 'bg-sky-600' },
         { label: 'Register', x: 56, y: 68, w: 36, h: 10, className: 'border-sky-100 bg-sky-50' },
+    ],
+    'member-account': [
+        { label: 'Profile', x: 8, y: 14, w: 38, h: 26, className: 'border-emerald-200 bg-emerald-50' },
+        { x: 14, y: 24, w: 25, h: 5, className: 'bg-emerald-800' },
+        { label: 'Prefs', x: 56, y: 14, w: 36, h: 42, className: 'border-slate-200 bg-white' },
+        { x: 62, y: 27, w: 24, h: 6, className: 'bg-slate-100' },
+        { x: 62, y: 43, w: 18, h: 7, className: 'bg-emerald-600' },
+        { label: 'Cards', x: 8, y: 64, w: 24, h: 14, className: 'border-emerald-100 bg-white' },
+        { x: 38, y: 64, w: 24, h: 14, className: 'border-emerald-100 bg-white' },
     ],
 };
 
@@ -1481,7 +1504,7 @@ function NewPageRoute() {
         siteChrome: selectedFrontendTemplate
             ? 'captured from frontend design contract'
             : formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
-        forms: ['contact', 'registration', 'member-login'].includes(formData.template) ? 'Backy form API seeded' : 'none',
+        forms: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
             : selectedDatasetCollection
@@ -1592,7 +1615,7 @@ function NewPageRoute() {
             name: selectedFrontendTemplate?.name || selectedTemplate.name,
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
-            seedsFormApi: ['contact', 'registration', 'member-login'].includes(formData.template),
+            seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
             seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
@@ -1642,7 +1665,7 @@ function NewPageRoute() {
         guardrails: [
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
-            'Contact, registration, and member-login templates seed editable form blocks that connect to Backy Forms and Contacts.',
+            'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
             'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
@@ -4188,6 +4211,124 @@ function buildTemplateElements(input: {
                             createCanvasElement('input', 24, 230, { id: 'member-login-access-reason', width: 360, height: 54, props: { label: 'Access reason', name: 'access_reason', placeholder: 'Customer portal, course, community...', required: false } }),
                             createCanvasElement('button', 24, 316, { id: 'member-login-submit', width: 190, height: 50, props: { label: 'Send access link', backgroundColor: '#0369a1', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
                         ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'member-account') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'member-account-hero-section',
+                width: 1200,
+                height: 720,
+                props: { backgroundColor: '#f0fdf4', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 70, {
+                        id: 'member-account-kicker',
+                        width: 260,
+                        height: 28,
+                        props: { content: 'Private member area', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 112, {
+                        id: 'member-account-heading',
+                        width: 560,
+                        height: 112,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 76, 248, {
+                        id: 'member-account-copy',
+                        width: 520,
+                        height: 104,
+                        props: { content: description, fontSize: 18, lineHeight: 1.62, color: '#334155' },
+                    }),
+                    createCanvasElement('box', 76, 398, {
+                        id: 'member-account-profile-card',
+                        width: 500,
+                        height: 150,
+                        dataBindings: [{ source: 'member', mode: 'profile', fields: ['name', 'email', 'status'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 22, 22, {
+                                id: 'member-account-profile-heading',
+                                width: 290,
+                                height: 34,
+                                props: { content: 'Welcome back, member', level: 'h2', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                            }),
+                            createCanvasElement('paragraph', 22, 70, {
+                                id: 'member-account-profile-copy',
+                                width: 370,
+                                height: 52,
+                                props: { content: 'Bind this card to the authenticated member profile in your custom frontend.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('form', 700, 84, {
+                        id: 'member-account-preferences-form',
+                        width: 420,
+                        height: 420,
+                        props: {
+                            formId: `form-${formSlug}-member-account`,
+                            formName: `${formSlug}-member-account`,
+                            formTitle: 'Member preferences',
+                            formDescription: 'Authenticated member preferences form generated from the page canvas.',
+                            formActive: true,
+                            formAudience: 'authenticated',
+                            successMessage: 'Your preferences were received.',
+                            enableHoneypot: true,
+                            enableCaptcha: false,
+                            moderationMode: 'auto-approve',
+                            contactShareEnabled: true,
+                            contactShareNameField: 'display_name',
+                            contactShareEmailField: 'email',
+                            contactShareNotesField: 'updates',
+                            backgroundColor: '#ffffff',
+                            borderRadius: 8,
+                            borderColor: '#bbf7d0',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                            boxShadow: '0 20px 60px rgba(22, 101, 52, 0.10)',
+                        },
+                        children: [
+                            createCanvasElement('heading', 24, 28, {
+                                id: 'member-account-form-heading',
+                                width: 330,
+                                height: 36,
+                                props: { content: 'Update preferences', level: 'h2', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                            }),
+                            createCanvasElement('input', 24, 90, { id: 'member-account-display-name', width: 360, height: 54, props: { label: 'Display name', name: 'display_name', placeholder: 'Ada Lovelace', required: true } }),
+                            createCanvasElement('input', 24, 162, { id: 'member-account-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
+                            createCanvasElement('select', 24, 234, { id: 'member-account-updates', width: 360, height: 54, props: { label: 'Updates', name: 'updates', options: ['Product updates', 'Billing notices', 'Community digest'], placeholder: 'Choose updates', required: false } }),
+                            createCanvasElement('button', 24, 330, { id: 'member-account-submit', width: 190, height: 50, props: { label: 'Save preferences', backgroundColor: '#047857', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                        ],
+                    }),
+                    createCanvasElement('section', 72, 590, {
+                        id: 'member-account-resource-section',
+                        width: 1056,
+                        height: 110,
+                        props: { backgroundColor: 'transparent', borderRadius: 0 },
+                        children: ['Downloads', 'Orders', 'Support'].map((item, index) => createCanvasElement('box', index * 352, 0, {
+                            id: `member-account-resource-${index}`,
+                            width: 320,
+                            height: 96,
+                            dataBindings: [{ source: 'member', mode: item.toLowerCase() }],
+                            props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#dcfce7', borderWidth: 1, borderStyle: 'solid' },
+                            children: [
+                                createCanvasElement('heading', 20, 20, {
+                                    id: `member-account-resource-heading-${index}`,
+                                    width: 230,
+                                    height: 30,
+                                    props: { content: item, level: 'h3', fontSize: 20, fontWeight: '750', color: '#0f172a' },
+                                }),
+                                createCanvasElement('text', 20, 58, {
+                                    id: `member-account-resource-copy-${index}`,
+                                    width: 250,
+                                    height: 24,
+                                    props: { content: 'Connect to protected member data.', fontSize: 13, color: '#64748b' },
+                                }),
+                            ],
+                        })),
                     }),
                 ],
             }),

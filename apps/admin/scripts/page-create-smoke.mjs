@@ -244,6 +244,37 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     formElementIds: ['member-login-access-form'],
   },
   {
+    template: 'member-account',
+    title: 'Smoke Member Account Template',
+    slugBase: 'smoke-member-account-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'member-account',
+    navigationItem: 'Account',
+    headingId: 'member-account-heading',
+    minRootElementCount: 3,
+    minTotalElementCount: 28,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'member-account-site-header',
+      'member-account-site-navigation',
+      'member-account-site-footer',
+      'member-account-hero-section',
+      'member-account-profile-card',
+      'member-account-preferences-form',
+      'member-account-display-name',
+      'member-account-email',
+      'member-account-updates',
+      'member-account-submit',
+      'member-account-resource-section',
+      'member-account-resource-0',
+    ],
+    formElementIds: ['member-account-preferences-form'],
+    dataBindingElementIds: [
+      'member-account-profile-card',
+      'member-account-resource-0',
+    ],
+  },
+  {
     template: 'blank',
     title: 'Smoke Blank Template',
     slugBase: 'smoke-blank-template',
@@ -281,8 +312,10 @@ const assertPageCreateSourceContracts = () => {
   assert(
     source.includes("'member-login'") &&
       source.includes('member-login-access-form') &&
+      source.includes("'member-account'") &&
+      source.includes('member-account-preferences-form') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep a safe member-login starter with an email-only access form',
+    'Page create must keep safe member-login and member-account starters',
   );
 };
 
@@ -869,6 +902,14 @@ const assertTemplateSwitching = async (client) => {
       template: 'member-login',
       navPlacement: 'primary',
       selectedTemplateName: 'Member login',
+      forms: 'Backy form API seeded',
+      dynamicData: 'none',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'member-account',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Member account',
       forms: 'Backy form API seeded',
       dynamicData: 'none',
       siteChrome: 'editable header, navigation, and footer seeded',

@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration' | 'member-login';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -391,6 +391,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create an email-only member access page that avoids password form capture.',
     badge: 'Access',
     icon: LogIn,
+  },
+  {
+    key: 'member-account',
+    title: 'Member account',
+    detail: 'Create a profile and preferences page for authenticated member areas.',
+    badge: 'Account',
+    icon: Home,
   },
 ];
 
@@ -1825,6 +1832,7 @@ function PagesListView() {
       contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
       registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
       memberLoginPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
+      memberAccountPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
       storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
     },
@@ -1847,6 +1855,7 @@ function PagesListView() {
         contact: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
         registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
         memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
+        memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
         storefront: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       },
