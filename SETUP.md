@@ -110,7 +110,7 @@ Current Partial-to-gate map:
 | `/settings` and Settings admin APIs | `npm run ci:settings-provider-certification` | Settings provider workflow or `certify_settings_providers` with selected storage, Vercel, notification, and provider-family inputs |
 | `/products` and `/orders` | `npm run ci:commerce-provider-certification` | Commerce provider workflow or `certify_commerce_providers` with selected payment, tax, shipping, catalog, subscription, and webhook provider inputs |
 
-Before running the external gates, use the non-secret readiness doctor to see which database, Settings, and Commerce credential groups are configured or missing. The manual certification workflows run it with `BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1` so missing requested credential groups fail before the live database/provider gates. Its JSON also includes `partialGateMap`, the current Partial row to local gate, local preflight/guard command, workflow, and input-family map:
+Before running the external gates, use the non-secret readiness doctor to see which database, Settings, and Commerce credential groups are configured or missing. The manual certification workflows run it with `BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1` so missing requested credential groups fail before the live database/provider gates. Its JSON also includes `partialGateMap`, the current Partial row to local gate, local preflight/guard command, aggregate preflight, admin source guard, workflow, and input-family map:
 
 ```bash
 npm run doctor:release-certification

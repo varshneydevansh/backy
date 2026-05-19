@@ -111,6 +111,8 @@ for (const { row, gate, preflight, workflow, requiredInputFamily, disposableGuar
   assert(entry, `Doctor Partial-to-gate map missing ${row}.`);
   assert(entry.gate === gate, `Doctor Partial-to-gate map for ${row} should use ${gate}.`);
   assert(entry.preflight === preflight, `Doctor Partial-to-gate map for ${row} should use ${preflight}.`);
+  assert(entry.aggregatePreflight === 'npm run test:partial-gate-preflights', `Doctor Partial-to-gate map for ${row} should expose the aggregate Partial preflight.`);
+  assert(entry.adminSourceGuard === 'npm run test:admin-contract-source', `Doctor Partial-to-gate map for ${row} should expose the admin source guard.`);
   assert(entry.workflow === workflow, `Doctor Partial-to-gate map for ${row} should use ${workflow}.`);
   if (disposableGuard) {
     assert(entry.disposableGuard === disposableGuard, `Doctor Partial-to-gate map for ${row} should use ${disposableGuard}.`);

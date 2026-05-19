@@ -293,12 +293,17 @@ const failures = [
   ...collectFailures(commerce),
 ];
 
+const aggregatePreflight = 'npm run test:partial-gate-preflights';
+const adminSourceGuard = 'npm run test:admin-contract-source';
+
 const partialGateMap = [
   {
     row: '/forms',
     gate: 'npm run ci:forms-postgres',
     preflight: 'npm run test:forms-postgres-preflight-contract',
     disposableGuard: 'npm run test:forms-postgres-disposable-guard',
+    aggregatePreflight,
+    adminSourceGuard,
     workflow: '.github/workflows/forms-postgres-contract.yml',
     requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL pointing at a disposable migrated Supabase/Postgres database',
   },
@@ -307,6 +312,8 @@ const partialGateMap = [
     gate: 'npm run ci:sdk-postgres-smoke',
     preflight: 'npm run test:sdk-postgres-preflight-contract',
     disposableGuard: 'npm run test:sdk-postgres-disposable-guard',
+    aggregatePreflight,
+    adminSourceGuard,
     workflow: '.github/workflows/sdk-postgres-smoke.yml',
     requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL pointing at a disposable migrated Supabase/Postgres database',
   },
@@ -314,6 +321,8 @@ const partialGateMap = [
     row: '/settings and Settings admin APIs',
     gate: 'npm run ci:settings-provider-certification',
     preflight: 'npm run test:settings-provider-certification-preflight-contract',
+    aggregatePreflight,
+    adminSourceGuard,
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
     workflow: '.github/workflows/settings-provider-certification.yml',
     requiredInputFamily: 'selected storage, Vercel, notification, and provider-family inputs',
@@ -323,6 +332,8 @@ const partialGateMap = [
     gate: 'npm run ci:commerce-provider-certification',
     preflight: 'npm run test:commerce-provider-certification-preflight-contract',
     mockGate: 'npm run ci:commerce-provider-smoke',
+    aggregatePreflight,
+    adminSourceGuard,
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
     workflow: '.github/workflows/commerce-provider-certification.yml',
     requiredInputFamily: 'selected payment, tax, shipping, catalog, subscription, and webhook provider inputs',

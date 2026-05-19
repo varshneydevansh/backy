@@ -749,7 +749,7 @@ includesAll(
     'Release certification readiness doctor',
     'backy.release-certification-doctor.v1',
     'partialGateMap',
-    'current Partial row to local gate, local preflight/guard command, workflow, and input-family map',
+    'current Partial row to local gate, local preflight/guard command, aggregate preflight, admin source guard, workflow, and input-family map',
     'external admin failures',
     'ci:forms-postgres',
     'ci:sdk-postgres-smoke',
