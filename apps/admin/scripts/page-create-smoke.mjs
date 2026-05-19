@@ -146,6 +146,42 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'checkout',
+    title: 'Smoke Checkout Template',
+    slugBase: 'smoke-checkout-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'checkout',
+    navigationItem: 'Checkout',
+    headingId: 'checkout-heading',
+    minRootElementCount: 6,
+    minTotalElementCount: 34,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'checkout-site-header',
+      'checkout-site-navigation',
+      'checkout-site-footer',
+      'checkout-hero-section',
+      'checkout-provider-note',
+      'checkout-main-section',
+      'checkout-customer-card',
+      'checkout-email',
+      'checkout-shipping-address',
+      'checkout-shipping-method',
+      'checkout-order-summary',
+      'checkout-total-value',
+      'checkout-payment-section',
+      'checkout-payment-button',
+      'checkout-payment-safe-note',
+    ],
+    dataBindingElementIds: [
+      'checkout-hero-section',
+      'checkout-customer-card',
+      'checkout-order-summary',
+      'checkout-total-value',
+      'checkout-payment-section',
+    ],
+  },
+  {
     template: 'blog-index',
     title: 'Smoke Blog Index Template',
     slugBase: 'smoke-blog-index-template',
@@ -349,8 +385,11 @@ const assertPageCreateSourceContracts = () => {
       source.includes('member-account-preferences-form') &&
       source.includes("'product-detail'") &&
       source.includes('product-detail-buy-button') &&
+      source.includes("'checkout'") &&
+      source.includes('checkout-payment-safe-note') &&
+      source.includes('No card number, CVV, or raw payment secret is collected by this page starter.') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member starters and commerce product-detail starter',
+    'Page create must keep safe member starters and commerce product-detail/checkout starters',
   );
 };
 
@@ -915,6 +954,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Product detail',
       forms: 'none',
       dynamicData: 'Backy product detail placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'checkout',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Checkout page',
+      forms: 'none',
+      dynamicData: 'Backy checkout and order placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

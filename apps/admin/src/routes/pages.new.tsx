@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'checkout' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -155,6 +155,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Product media', 'Purchase panel', 'Related products'],
     },
     {
+        id: 'checkout',
+        name: 'Checkout page',
+        desc: 'Order summary, customer details, shipping choices, and provider checkout handoff.',
+        detail: 'Creates a safe checkout surface that binds to Backy commerce state without collecting card data in page forms.',
+        sections: ['Order summary', 'Customer details', 'Payment handoff'],
+    },
+    {
         id: 'blog-index',
         name: 'Blog index',
         desc: 'Editorial intro, featured story, and article list blocks.',
@@ -215,6 +222,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'product',
         description: 'A public product detail page ready to bind media, price, variants, and checkout actions.',
     },
+    checkout: {
+        title: 'Checkout',
+        slug: 'checkout',
+        description: 'A checkout page ready to bind cart items, customer details, shipping choices, and provider payment handoff.',
+    },
     'blog-index': {
         title: 'Blog',
         slug: 'blog',
@@ -252,6 +264,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     landing: 'primary',
     storefront: 'primary',
     'product-detail': 'primary',
+    checkout: 'primary',
     'blog-index': 'primary',
     about: 'primary',
     contact: 'footer',
@@ -475,6 +488,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     landing: ['Home', 'Features', 'Contact'],
     storefront: ['Home', 'Shop', 'About', 'Contact'],
     'product-detail': ['Home', 'Shop', 'Product', 'Contact'],
+    checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
@@ -515,6 +529,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Related', x: 8, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
         { x: 38, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
         { x: 68, y: 66, w: 24, h: 12, className: 'border-orange-100 bg-white' },
+    ],
+    checkout: [
+        { label: 'Checkout', x: 8, y: 14, w: 46, h: 26, className: 'border-emerald-200 bg-emerald-50' },
+        { x: 14, y: 23, w: 30, h: 5, className: 'bg-emerald-800' },
+        { label: 'Summary', x: 60, y: 14, w: 32, h: 34, className: 'border-slate-200 bg-white' },
+        { x: 66, y: 25, w: 18, h: 4, className: 'bg-slate-300' },
+        { x: 66, y: 36, w: 20, h: 5, className: 'bg-slate-900' },
+        { label: 'Customer', x: 8, y: 56, w: 38, h: 22, className: 'border-emerald-100 bg-white' },
+        { label: 'Payment', x: 54, y: 56, w: 38, h: 22, className: 'border-emerald-100 bg-white' },
     ],
     'blog-index': [
         { label: 'Feature', x: 8, y: 16, w: 84, h: 28, className: 'border-indigo-200 bg-indigo-50' },
@@ -1533,6 +1556,8 @@ function NewPageRoute() {
             ? 'Backy products catalog placeholders'
             : formData.template === 'product-detail'
                 ? 'Backy product detail placeholders'
+                : formData.template === 'checkout'
+                    ? 'Backy checkout and order placeholders'
             : selectedDatasetCollection
                 ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
@@ -1642,7 +1667,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'checkout', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1692,7 +1717,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, and blog index templates seed dynamic data placeholders for products and posts.',
+            'Storefront, product-detail, checkout, and blog index templates seed dynamic data placeholders for products, orders, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3716,7 +3741,9 @@ function buildTemplateElements(input: {
         title,
         variant: input.template,
         navItems: templateNavigationItems[input.template],
-        headerActionLabel: ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
+        headerActionLabel: input.template === 'checkout'
+            ? 'Checkout'
+            : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
     });
 
     if (input.template === 'landing') {
@@ -3989,6 +4016,172 @@ function buildTemplateElements(input: {
                             }),
                         ],
                     })),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'checkout') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'checkout-hero-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'commerce', mode: 'checkout', fields: ['cartItems', 'subtotal', 'shipping', 'tax', 'total'] }],
+                props: { backgroundColor: '#ecfdf5', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 62, {
+                        id: 'checkout-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Secure checkout', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 100, {
+                        id: 'checkout-heading',
+                        width: 600,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#064e3b' },
+                    }),
+                    createCanvasElement('paragraph', 76, 214, {
+                        id: 'checkout-copy',
+                        width: 560,
+                        height: 70,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#065f46' },
+                    }),
+                    createCanvasElement('box', 748, 78, {
+                        id: 'checkout-provider-note',
+                        width: 330,
+                        height: 150,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a7f3d0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 22, 22, {
+                                id: 'checkout-provider-heading',
+                                width: 240,
+                                height: 34,
+                                props: { content: 'Payment provider handoff', level: 'h3', fontSize: 20, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 22, 70, {
+                                id: 'checkout-provider-copy',
+                                width: 262,
+                                height: 56,
+                                props: { content: 'Collect customer and shipping details here, then send payment through Stripe, PayPal, Razorpay, or another configured provider.', fontSize: 13, lineHeight: 1.45, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 330, {
+                id: 'checkout-main-section',
+                width: 1200,
+                height: 470,
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 72, 58, {
+                        id: 'checkout-customer-card',
+                        width: 500,
+                        height: 340,
+                        dataBindings: [{ source: 'commerce', mode: 'checkout-customer', fields: ['email', 'shippingAddress', 'billingAddress'] }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'checkout-customer-heading',
+                                width: 260,
+                                height: 34,
+                                props: { content: 'Customer details', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('input', 24, 84, {
+                                id: 'checkout-email',
+                                width: 420,
+                                height: 54,
+                                props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                            }),
+                            createCanvasElement('input', 24, 154, {
+                                id: 'checkout-shipping-address',
+                                width: 420,
+                                height: 54,
+                                props: { label: 'Shipping address', name: 'shipping_address', placeholder: 'Street, city, region', required: true },
+                            }),
+                            createCanvasElement('select', 24, 224, {
+                                id: 'checkout-shipping-method',
+                                width: 260,
+                                height: 54,
+                                props: { label: 'Shipping method', name: 'shipping_method', options: ['Standard', 'Express', 'Pickup'], placeholder: 'Choose shipping' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 648, 58, {
+                        id: 'checkout-order-summary',
+                        width: 420,
+                        height: 340,
+                        dataBindings: [{ source: 'commerce', mode: 'cart-summary', fields: ['items', 'subtotal', 'discount', 'shipping', 'tax', 'total'] }],
+                        props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'checkout-summary-heading',
+                                width: 240,
+                                height: 34,
+                                props: { content: 'Order summary', level: 'h2', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            ...['Product subtotal', 'Shipping', 'Estimated tax'].map((item, index) => createCanvasElement('text', 24, 86 + index * 44, {
+                                id: `checkout-summary-line-${index}`,
+                                width: 240,
+                                height: 24,
+                                props: { content: item, fontSize: 15, color: '#d1d5db' },
+                            })),
+                            ...['$49.00', '$6.00', '$4.40'].map((item, index) => createCanvasElement('text', 302, 86 + index * 44, {
+                                id: `checkout-summary-value-${index}`,
+                                width: 72,
+                                height: 24,
+                                props: { content: item, fontSize: 15, fontWeight: '700', color: '#ffffff', textAlign: 'right' },
+                            })),
+                            createCanvasElement('text', 24, 238, {
+                                id: 'checkout-total-label',
+                                width: 160,
+                                height: 30,
+                                props: { content: 'Total', fontSize: 20, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('text', 292, 238, {
+                                id: 'checkout-total-value',
+                                width: 88,
+                                height: 30,
+                                props: { content: '$59.40', fontSize: 20, fontWeight: '800', color: '#a7f3d0', textAlign: 'right' },
+                                dataBindings: [{ source: 'commerce', mode: 'cart-summary', field: 'total', targetPath: 'props.content' }],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 800, {
+                id: 'checkout-payment-section',
+                width: 1200,
+                height: 300,
+                dataBindings: [{ source: 'commerce', mode: 'payment-provider', fields: ['provider', 'status', 'checkoutUrl'] }],
+                props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 54, {
+                        id: 'checkout-payment-heading',
+                        width: 440,
+                        height: 44,
+                        props: { content: 'Complete payment', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 118, {
+                        id: 'checkout-payment-copy',
+                        width: 560,
+                        height: 70,
+                        props: { content: 'Use this button to launch the configured provider checkout session. Keep card fields inside the provider flow, not inside Backy page forms.', fontSize: 16, lineHeight: 1.55, color: '#4b5563' },
+                    }),
+                    createCanvasElement('button', 720, 82, {
+                        id: 'checkout-payment-button',
+                        width: 220,
+                        height: 56,
+                        props: { label: 'Continue to payment', backgroundColor: '#047857', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '800', action: 'commerce.checkout' },
+                    }),
+                    createCanvasElement('text', 720, 158, {
+                        id: 'checkout-payment-safe-note',
+                        width: 300,
+                        height: 44,
+                        props: { content: 'No card number, CVV, or raw payment secret is collected by this page starter.', fontSize: 13, lineHeight: 1.45, color: '#6b7280' },
+                    }),
                 ],
             }),
         ]);
