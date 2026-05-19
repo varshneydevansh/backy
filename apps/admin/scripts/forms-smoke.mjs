@@ -46,6 +46,11 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('templateExport'), 'Forms handoff manifest must summarize template export metadata');
   assert(source.includes('-backy-form-template-pack.json'), 'Forms template export must download a named JSON template pack');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Forms route must use the shared EmptyState component');
+  assert(source.includes('data-testid="forms-error-state"') && source.includes('Forms workspace needs attention'), 'Forms route must expose a labelled backend error state');
+  assert(source.includes('aria-label="Retry loading forms"') && source.includes('Clear form filters'), 'Forms backend error state must expose retry and filter recovery actions');
+  assert(source.includes('data-testid="forms-permission-state"') && source.includes('Form permissions could not be verified'), 'Forms route must expose a labelled permission error state');
+  assert(source.includes('to="/users"') && source.includes('Review users'), 'Forms permission error state must link to user access management');
+  assert(source.includes('data-testid="forms-rbac-permission-state"') && source.includes('aria-label="Retry loading form permissions"'), 'Forms permission banner must expose a retry action');
   assert(source.includes('title="No form audit events yet"'), 'Forms audit panel must keep the empty activity title visible');
   assert(source.includes('Form edits, submission review, consent retention, and embed-block changes will appear here.'), 'Forms audit empty state must explain which actions populate activity');
   assert(source.includes('title="No delivery events yet"'), 'Forms delivery panel must keep the empty delivery title visible');
@@ -2116,6 +2121,10 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   assertFormsPersistenceCertificationSource();
+  if (process.env.BACKY_FORMS_SOURCE_ONLY === '1') {
+    return;
+  }
+
   await loginAdminApi();
   const suffix = Date.now().toString(36);
   await assertFormsPermissionOverridesAreEnforced();

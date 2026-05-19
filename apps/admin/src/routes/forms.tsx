@@ -2333,8 +2333,28 @@ function FormsRoute() {
         title="Forms unavailable"
         description={viewPermissionTitle || 'Your account cannot view forms or submissions.'}
       >
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant forms.view access.'}
+        <div
+          role="alert"
+          data-testid="forms-permission-state"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Form permissions could not be verified</p>
+                <p className="mt-1 leading-6">
+                  {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant forms.view access.'}
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/users"
+              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+            >
+              Review users
+            </Link>
+          </div>
         </div>
       </PageShell>
     );
@@ -2371,13 +2391,68 @@ function FormsRoute() {
       }
     >
       {error && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {error}
+        <div
+          role="alert"
+          data-testid="forms-error-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Forms workspace needs attention</p>
+                <p className="mt-1 leading-6">{error}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {hasActiveFormFilters && (
+                <button
+                  type="button"
+                  onClick={clearFormFilters}
+                  disabled={isFormsBusy}
+                  className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Clear form filters
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void loadForms()}
+                disabled={isFormsBusy || !canViewForms}
+                title={!canViewForms ? viewPermissionTitle : undefined}
+                aria-label="Retry loading forms"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry load
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {permissionError && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError}
+        <div
+          role="alert"
+          data-testid="forms-rbac-permission-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Form permissions could not be verified</p>
+                <p className="mt-1 leading-6">{permissionError}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadForms()}
+              disabled={isFormsBusy}
+              aria-label="Retry loading form permissions"
+              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Retry permissions
+            </button>
+          </div>
         </div>
       )}
       {notice && (
