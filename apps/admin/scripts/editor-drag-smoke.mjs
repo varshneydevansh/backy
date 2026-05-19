@@ -207,6 +207,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
 
 const assertCanvasEditorShortcutSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const layersPanelSource = fs.readFileSync(new URL('../src/components/editor/LayersPanel.tsx', import.meta.url), 'utf8');
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
   assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
@@ -219,6 +220,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("e.key === 'Enter'") && source.includes('handleSelectFirstChildLayer();') && source.includes('handleSelectParentLayer();'), 'Editor keyboard handler must support Enter child selection and Shift+Enter parent selection');
   assert(source.includes('isLayerOrderShortcut') && source.includes("handleZOrderChange(isBackward") && source.includes('Cmd/Ctrl+]'), 'Editor keyboard handler must support Cmd/Ctrl bracket layer ordering shortcuts');
   assert(source.includes('const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1') && source.includes('const duplicatedIds: string[] = [];'), 'Editor layer row duplicate/delete actions must support selected multi-layer actions');
+  assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10017,6 +10019,30 @@ const testLayersPanelControls = async (client, pageId) => {
     ['smoke-heading', 'smoke-image'].every((id) => multiSelected.selectedLayers?.includes(id)),
     `Layers panel multi-select did not retain selected rows: ${JSON.stringify(multiSelected)}`,
   );
+  const rangeSelected = await evaluate(client, `(() => {
+    const ids = Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean);
+    const startId = 'smoke-heading';
+    const endId = 'smoke-image';
+    const startIndex = ids.indexOf(startId);
+    const endIndex = ids.indexOf(endId);
+    const start = document.querySelector('[data-layer-id="' + startId + '"]');
+    const end = document.querySelector('[data-layer-id="' + endId + '"]');
+    if (!(start instanceof HTMLElement) || !(end instanceof HTMLElement) || startIndex < 0 || endIndex < 0) {
+      return { ok: false, reason: 'missing-range-row', ids, startIndex, endIndex };
+    }
+    start.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    end.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    const expected = ids.slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1);
+    const selected = Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean);
+    return { ok: true, ids, expected, selected };
+  })()`);
+  assert(
+    rangeSelected?.ok &&
+      rangeSelected.expected.length >= 2 &&
+      rangeSelected.expected.every((id) => rangeSelected.selected.includes(id)) &&
+      rangeSelected.selected.length === rangeSelected.expected.length,
+    `Layers panel Shift range-select did not select exactly the rendered row range: ${JSON.stringify(rangeSelected)}`,
+  );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
 
@@ -10127,6 +10153,7 @@ const testLayersPanelControls = async (client, pageId) => {
   return {
     initialTree,
     multiSelected,
+    rangeSelected,
     reorder,
     hiddenState,
     toolbarVisibleState,

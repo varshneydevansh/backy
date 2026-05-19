@@ -10,7 +10,7 @@
  * - Selection & multi-select
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { ArrowDown, ArrowUp, CornerUpLeft, MoveRight } from 'lucide-react';
 import type { CanvasElement } from '../../types/editor';
 
@@ -45,7 +45,7 @@ interface LayerItemProps {
     canReorder: boolean;
     canAcceptChildren: boolean;
     selectedIds: string[];
-    onSelect: (id: string, multiSelect: boolean) => void;
+    onSelect: (id: string, multiSelect: boolean, rangeSelect: boolean) => void;
     onDragStart: (id: string) => void;
     onDragOver: (id: string) => void;
     onDrop: (id: string) => void;
@@ -189,7 +189,7 @@ function LayerItem({
     });
 
     const handleClick = (e: React.MouseEvent) => {
-        onSelect(element.id, e.metaKey || e.ctrlKey);
+        onSelect(element.id, e.metaKey || e.ctrlKey, e.shiftKey);
     };
 
     const handleDragStart = (e: React.DragEvent) => {
@@ -461,9 +461,36 @@ export function LayersPanel({
 }: LayersPanelProps) {
     const [dragFromId, setDragFromId] = useState<string | null>(null);
     const [dragTargetId, setDragTargetId] = useState<string | null>(null);
+    const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+    const renderedLayerIds = useMemo(() => {
+        const ids: string[] = [];
+        const collect = (items: CanvasElement[]) => {
+            [...items].reverse().forEach((element) => {
+                ids.push(element.id);
+                if (element.children?.length) {
+                    collect(element.children);
+                }
+            });
+        };
+        collect(elements);
+        return ids;
+    }, [elements]);
 
     const handleSelect = useCallback(
-        (id: string, multiSelect: boolean) => {
+        (id: string, multiSelect: boolean, rangeSelect: boolean) => {
+            if (rangeSelect && lastSelectedId) {
+                const fromIndex = renderedLayerIds.indexOf(lastSelectedId);
+                const toIndex = renderedLayerIds.indexOf(id);
+                if (fromIndex >= 0 && toIndex >= 0) {
+                    const start = Math.min(fromIndex, toIndex);
+                    const end = Math.max(fromIndex, toIndex);
+                    const rangeIds = renderedLayerIds.slice(start, end + 1);
+                    onSelect(multiSelect ? Array.from(new Set([...selectedIds, ...rangeIds])) : rangeIds);
+                    return;
+                }
+            }
+
+            setLastSelectedId(id);
             if (multiSelect) {
                 if (selectedIds.includes(id)) {
                     onSelect(selectedIds.filter((sid) => sid !== id));
@@ -474,7 +501,7 @@ export function LayersPanel({
                 onSelect([id]);
             }
         },
-        [selectedIds, onSelect]
+        [lastSelectedId, renderedLayerIds, selectedIds, onSelect]
     );
 
     const handleDragStart = useCallback((id: string) => {
