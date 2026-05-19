@@ -132,6 +132,15 @@ function assertHostedFeedErrorContractSource() {
     assert(source.includes("cache: 'error'"), `${label} 404 must use the public error cache scope`);
     assert(!source.includes("new NextResponse('Not found'"), `${label} must not return bare 404 text`);
   }
+
+  const hostedRssSource = fs.readFileSync(
+    new URL('../src/app/sites/[subdomain]/blog/rss.xml/route.ts', import.meta.url),
+    'utf8',
+  );
+  assert(hostedRssSource.includes('getRequiredDatabaseRepositories'), 'hosted RSS route must use repository runtime in database mode');
+  assert(hostedRssSource.includes('normalizeRepositoryPostForRss'), 'hosted RSS route must normalize database posts for RSS output');
+  assert(hostedRssSource.includes("scope: 'content'"), 'hosted RSS route must emit content-scope cache revisions in database mode');
+  assert(hostedRssSource.includes('Math.min(100'), 'hosted RSS route must cap caller-provided feed limits');
 }
 
 function assertSiteSettingsLocalizationSource() {

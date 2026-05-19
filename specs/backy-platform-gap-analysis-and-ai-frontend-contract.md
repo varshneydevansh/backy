@@ -63,6 +63,8 @@ Backy currently has pieces of this model but not the complete loop.
 
 Cache revision follow-up: global public site discovery (`GET /api/sites` and `GET /api/sites?identifier=...`) now records and emits database `discovery` invalidation revisions from admin site create/update, so custom frontend bootstrap clients can revalidate site identity, domain, and publication metadata changes through the same `x-backy-cache-revision` protocol used by site-scoped feeds.
 
+Hosted RSS follow-up: `/sites/:siteSlug/blog/rss.xml` now uses the repository runtime in database mode, applies the same published/past-scheduled visibility rules as `/api/sites/:siteId/blog/rss`, includes database taxonomy/author joins, caps caller-provided feed limits, and emits content-scope `x-backy-cache-revision` plus ETag revalidation through the public contract response.
+
 ## 4. Gap against WordPress-like CMS
 
 Official WordPress docs describe a block editor, reusable/synced patterns, global styles, REST APIs for pages/posts/media/users/taxonomies/revisions/templates/comments, and authenticated access rules.
