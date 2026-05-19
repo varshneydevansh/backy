@@ -624,6 +624,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `POST /api/admin/sites/:siteId/forms/consent-retention`
 - `POST /api/admin/sites/:siteId/forms/:formId/consent-retention`
   - status transitions `pending|approved|rejected|spam`
+  - Invalid admin form submission list filters return explicit `400` errors instead of silently widening or clamping: `INVALID_ADMIN_FORM_SUBMISSION_STATUS`, `INVALID_ADMIN_FORM_SUBMISSION_LIMIT`, or `INVALID_ADMIN_FORM_SUBMISSION_OFFSET`. Invalid admin form contact list filters return `INVALID_ADMIN_FORM_CONTACT_STATUS`, `INVALID_ADMIN_FORM_CONTACT_LIMIT`, or `INVALID_ADMIN_FORM_CONTACT_OFFSET`.
   - Webhook retry replays the configured form submission webhook for non-spam/non-rejected submissions, returns `{ success, requestId, data: { delivery, submission } }`, and records retry queued/succeeded/failed interaction events with `x-backy-webhook-retry`.
   - Email retry replays the configured form notification email for non-spam/non-rejected submissions, returns `{ success, requestId, data: { delivery, submission } }`, and records retry queued/succeeded/failed interaction events with `metadata.channel: "email"` and `metadata.retry: true`.
   - Form notification email events use the same interaction-event feed with `metadata.channel: "email"` and are displayed in the Forms delivery panel.
