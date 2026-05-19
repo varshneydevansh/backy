@@ -7,6 +7,9 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 
 export const runtime = 'nodejs';
 
+const MIN_SIGNED_URL_EXPIRES_IN_SECONDS = 30;
+const MAX_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60;
+
 interface RouteParams {
   params: Promise<{
     siteId: string;
@@ -53,6 +56,23 @@ const parseSignedUrlDisposition = (value: unknown): { value?: 'inline' | 'attach
   return { invalid: true };
 };
 
+const parseSignedUrlExpiresIn = (value: unknown): { value?: number; invalid?: boolean } => {
+  if (value === undefined || value === null || value === '') {
+    return {};
+  }
+
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < MIN_SIGNED_URL_EXPIRES_IN_SECONDS ||
+    parsed > MAX_SIGNED_URL_EXPIRES_IN_SECONDS
+  ) {
+    return { invalid: true };
+  }
+
+  return { value: parsed };
+};
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'media.view' });
@@ -87,11 +107,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (disposition.invalid) {
       return errorResponse(400, 'INVALID_MEDIA_DISPOSITION', 'Invalid media disposition. Use inline or attachment.', requestId);
     }
+    const expiresIn = parseSignedUrlExpiresIn(body.expiresInSeconds);
+    if (expiresIn.invalid) {
+      return errorResponse(400, 'INVALID_MEDIA_EXPIRY', 'expiresInSeconds must be an integer from 30 to 3600.', requestId);
+    }
 
     const signedAccess = createSignedMediaAccess({
       siteId: site.id,
       mediaId: media.id,
-      expiresInSeconds: body.expiresInSeconds,
+      expiresInSeconds: expiresIn.value,
       disposition: disposition.value,
     });
     const path = buildSignedMediaPath({

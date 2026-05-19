@@ -63,6 +63,14 @@ assert(
   'Admin signed media URL route must reject invalid disposition values before minting delivery signatures.',
 );
 assert(
+  adminSignedMediaUrlRoute.includes("'INVALID_MEDIA_EXPIRY'") &&
+    adminSignedMediaUrlRoute.includes('parseSignedUrlExpiresIn') &&
+    adminSignedMediaUrlRoute.includes('expiresInSeconds: expiresIn.value') &&
+    adminSignedMediaUrlRoute.includes('MIN_SIGNED_URL_EXPIRES_IN_SECONDS = 30') &&
+    adminSignedMediaUrlRoute.includes('MAX_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 60'),
+  'Admin signed media URL route must reject invalid expiry values before minting delivery signatures.',
+);
+assert(
   publicMediaRoute.includes("'INVALID_MEDIA_TYPE'") &&
     publicMediaRoute.includes('mediaType.invalid') &&
     publicMediaRoute.includes('document, file, font, other'),
@@ -226,6 +234,10 @@ assert(
 assert(
   apiContracts.includes('Signed media URL requests also reject invalid `disposition` values before minting tokens'),
   'API contract docs must describe signed media URL disposition validation.',
+);
+assert(
+  apiContracts.includes('Signed media URL requests reject invalid `expiresInSeconds` values with `400 INVALID_MEDIA_EXPIRY`'),
+  'API contract docs must describe signed media URL expiry validation.',
 );
 assert(
   apiContracts.includes('Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`') &&
