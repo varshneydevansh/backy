@@ -353,7 +353,10 @@ includesEvery(apiContracts, [
 
 includesEvery(audit, [
   'Forms API persistence certification handoff',
+  'Forms certification gate wording update',
   'backy.forms-persistence-certification.v1',
+  'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres',
+  'test:forms-postgres-disposable-guard',
   'GET /api/admin/sites/:siteId/forms',
 ], 'Forms audit persistence certification evidence');
 
