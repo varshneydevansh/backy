@@ -360,6 +360,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/consent-retention/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormContactSyncRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/sync/route.ts', import.meta.url),
+    'utf8',
+  );
   const adminFormContactPromotionRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/promote/route.ts', import.meta.url),
     'utf8',
@@ -509,6 +513,12 @@ function assertAdminPageContentValidationSource() {
   }
   assert(adminFormContactConsentRetentionRoute.includes("'INVALID_ADMIN_FORM_CONSENT_RETENTION_DAYS'"), 'admin form contact consent retention route must reject invalid retentionDays overrides');
   assert(adminFormContactConsentRetentionRoute.includes('retentionDaysFilter.invalid'), 'admin form contact consent retention route must branch on invalid retentionDays overrides');
+  assert(adminFormContactSyncRoute.includes("'INVALID_ADMIN_CONTACT_SYNC_CONTACT_IDS'"), 'admin form contact sync route must reject invalid contactIds payloads');
+  assert(adminFormContactSyncRoute.includes("'INVALID_ADMIN_CONTACT_SYNC_TARGET_URL'"), 'admin form contact sync route must reject invalid targetUrl payloads');
+  assert(adminFormContactSyncRoute.includes("'INVALID_ADMIN_CONTACT_SYNC_INCLUDE_SOURCE_VALUES'"), 'admin form contact sync route must reject invalid includeSourceValues payloads');
+  assert(adminFormContactSyncRoute.includes('contactIdsFilter.invalid'), 'admin form contact sync route must branch on invalid contactIds payloads');
+  assert(adminFormContactSyncRoute.includes('targetUrlFilter.invalid'), 'admin form contact sync route must branch on invalid targetUrl payloads');
+  assert(adminFormContactSyncRoute.includes('includeSourceValuesFilter.invalid'), 'admin form contact sync route must branch on invalid includeSourceValues payloads');
   assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_ROLE'"), 'admin form contact promotion route must reject invalid role values');
   assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_STATUS'"), 'admin form contact promotion route must reject invalid status values');
   assert(adminFormContactPromotionRoute.includes("'INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY'"), 'admin form contact promotion route must reject invalid invite expiry values');
@@ -564,6 +574,9 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_ADMIN_FORM_CONSENT_RETENTION_DRY_RUN') &&
       apiContracts.includes('INVALID_ADMIN_FORM_CONSENT_RETENTION_NOW') &&
       apiContracts.includes('INVALID_ADMIN_FORM_CONSENT_RETENTION_DAYS') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_SYNC_CONTACT_IDS') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_SYNC_TARGET_URL') &&
+      apiContracts.includes('INVALID_ADMIN_CONTACT_SYNC_INCLUDE_SOURCE_VALUES') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_ROLE') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY') &&

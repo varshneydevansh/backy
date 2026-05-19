@@ -21,6 +21,7 @@ interface RouteParams {
 }
 
 type SyncStatus = 'queued' | 'succeeded' | 'failed';
+type ParsedSyncValue<TValue> = { value: TValue; invalid?: true };
 
 const MAX_SYNC_CONTACTS = 50;
 
@@ -43,25 +44,45 @@ const parseBody = async (request: NextRequest): Promise<Record<string, unknown>>
   }
 };
 
-const parseContactIds = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-  return Array.from(new Set(value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean))).slice(0, MAX_SYNC_CONTACTS);
+const parseContactIds = (value: unknown): ParsedSyncValue<string[]> => {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_SYNC_CONTACTS) {
+    return { value: [], invalid: true };
+  }
+
+  const ids: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string' || !item.trim()) {
+      return { value: [], invalid: true };
+    }
+    ids.push(item.trim());
+  }
+
+  return { value: Array.from(new Set(ids)) };
 };
 
 const parseOptionalText = (value: unknown): string | null => (
   typeof value === 'string' && value.trim() ? value.trim() : null
 );
 
-const parseTargetUrl = (value: unknown): string | null => {
+const parseTargetUrl = (value: unknown): ParsedSyncValue<string | null> => {
   const raw = parseOptionalText(value);
-  if (!raw) return null;
+  if (!raw) return { value: null, invalid: true };
 
   try {
     const url = new URL(raw);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? { value: url.toString() }
+      : { value: null, invalid: true };
   } catch {
-    return null;
+    return { value: null, invalid: true };
   }
+};
+
+const parseIncludeSourceValues = (value: unknown): ParsedSyncValue<boolean> => {
+  if (value === undefined) return { value: true };
+  return typeof value === 'boolean'
+    ? { value }
+    : { value: true, invalid: true };
 };
 
 const auditMetadata = (value: Record<string, unknown>): BackyJsonObject => value as BackyJsonObject;
@@ -176,17 +197,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, formId } = await params;
     const body = await parseBody(request);
-    const contactIds = parseContactIds(body.contactIds);
-    const targetUrl = parseTargetUrl(body.targetUrl);
-    const includeSourceValues = body.includeSourceValues !== false;
+    const contactIdsFilter = parseContactIds(body.contactIds);
+    if (contactIdsFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_CONTACT_SYNC_CONTACT_IDS', `contactIds must be a non-empty array of up to ${MAX_SYNC_CONTACTS} string ids.`, requestId);
+    }
+    const contactIds = contactIdsFilter.value;
+    const targetUrlFilter = parseTargetUrl(body.targetUrl);
+    if (targetUrlFilter.invalid || !targetUrlFilter.value) {
+      return errorResponse(400, 'INVALID_ADMIN_CONTACT_SYNC_TARGET_URL', 'A valid http(s) targetUrl is required.', requestId);
+    }
+    const targetUrl = targetUrlFilter.value;
+    const includeSourceValuesFilter = parseIncludeSourceValues(body.includeSourceValues);
+    if (includeSourceValuesFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_CONTACT_SYNC_INCLUDE_SOURCE_VALUES', 'includeSourceValues must be a boolean when provided.', requestId);
+    }
+    const includeSourceValues = includeSourceValuesFilter.value;
     const reason = parseOptionalText(body.reason);
-
-    if (contactIds.length === 0) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Select at least one contact to sync.', requestId);
-    }
-    if (!targetUrl) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'A valid http(s) targetUrl is required.', requestId);
-    }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
