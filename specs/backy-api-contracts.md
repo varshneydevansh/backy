@@ -147,6 +147,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - `GET` requires an admin session or admin API key with `pages.view`; `PATCH` requires `pages.edit`.
   - Both methods enforce site team scope before delegating to the admin page detail route, so validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery match the normal admin API.
   - The endpoint is advertised by the public manifest as `endpoints.liveManagePage` and by the site-scoped OpenAPI document with `getBackyLiveManagedPage` and `updateBackyLiveManagedPage` operation ids.
+  - Hosted page routes can opt into the first live management overlay with `?backyManage=1` or `?manage=1`; the client overlay silently hides for unauthenticated visitors, reads through the bridge with admin session credentials, and saves title/status/homepage changes with `expectedUpdatedAt` conflict protection.
 
 - `POST /api/admin/sites/:siteId/pages`
   - Accepts top-level `frontendDesignTemplateId` or `designTemplateId` for connected frontend contracts.

@@ -24,6 +24,7 @@ import {
 } from '@/lib/backyStore';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
+import LivePageManagementOverlay from '@/components/LivePageManagementOverlay';
 import {
     buildCollectionItemContent,
     buildCollectionListContent,
@@ -405,11 +406,23 @@ interface PageProps {
     }>;
     searchParams?: Promise<{
         previewToken?: string | string[];
+        backyManage?: string | string[];
+        manage?: string | string[];
     }>;
 }
 
 const firstParam = (value: string | string[] | undefined): string | undefined => (
     Array.isArray(value) ? value[0] : value
+);
+
+const isLiveManageRequested = (value: string | undefined): boolean => (
+    value === '1' || value === 'true' || value === 'yes'
+);
+
+const adminAppUrl = () => (
+    process.env.BACKY_ADMIN_APP_URL ||
+    process.env.NEXT_PUBLIC_BACKY_ADMIN_APP_URL ||
+    ''
 );
 
 const routePathFromParts = (path: string[] | undefined): string => (
@@ -624,7 +637,11 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
 
 export default async function SitePage({ params, searchParams }: PageProps) {
     const { subdomain, path } = await params;
-    const previewToken = firstParam((await searchParams)?.previewToken);
+    const resolvedSearchParams = await searchParams;
+    const previewToken = firstParam(resolvedSearchParams?.previewToken);
+    const liveManageEnabled = isLiveManageRequested(
+        firstParam(resolvedSearchParams?.backyManage) || firstParam(resolvedSearchParams?.manage),
+    );
     const routePath = routePathFromParts(path);
 
     // Fetch site and page data
@@ -707,6 +724,12 @@ export default async function SitePage({ params, searchParams }: PageProps) {
                     pageId={page.id}
                     pageSlug={page.slug}
                 />
+                <LivePageManagementOverlay
+                    enabled={liveManageEnabled}
+                    siteId={site.id}
+                    pageId={page.id}
+                    adminAppUrl={adminAppUrl()}
+                />
                 <AnimationHydrator />
             </>
         );
@@ -756,6 +779,12 @@ export default async function SitePage({ params, searchParams }: PageProps) {
                     siteId={site.id}
                     pageId={page.id}
                     pageSlug={page.slug}
+                />
+                <LivePageManagementOverlay
+                    enabled={liveManageEnabled}
+                    siteId={site.id}
+                    pageId={page.id}
+                    adminAppUrl={adminAppUrl()}
                 />
 
                 {/* Client-side animation hydration */}

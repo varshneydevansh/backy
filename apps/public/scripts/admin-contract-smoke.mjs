@@ -293,6 +293,14 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/manage/pages/[pageId]/route.ts', import.meta.url),
     'utf8',
   );
+  const hostedPageRoute = fs.readFileSync(
+    new URL('../src/app/sites/[subdomain]/[[...path]]/page.tsx', import.meta.url),
+    'utf8',
+  );
+  const liveManageOverlay = fs.readFileSync(
+    new URL('../src/components/LivePageManagementOverlay.tsx', import.meta.url),
+    'utf8',
+  );
   const publicManifestRoute = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/manifest/route.ts', import.meta.url),
     'utf8',
@@ -475,6 +483,10 @@ function assertAdminPageContentValidationSource() {
   assert(publicLiveManagePageRoute.includes('requireAdminTeamScopeAccess'), 'live manage page route must enforce site team scope');
   assert(publicLiveManagePageRoute.includes('FORBIDDEN_LIVE_MANAGE_SITE_SCOPE'), 'live manage page route must return a distinct live-management scope error');
   assert(publicLiveManagePageRoute.includes('getAdminPage') && publicLiveManagePageRoute.includes('patchAdminPage'), 'live manage page route must delegate to the admin page detail behavior');
+  assert(hostedPageRoute.includes('backyManage') && hostedPageRoute.includes('LivePageManagementOverlay'), 'hosted page route must expose opt-in live management overlay wiring');
+  assert(liveManageOverlay.includes("credentials: 'include'"), 'live management overlay must rely on admin session credentials');
+  assert(liveManageOverlay.includes('expectedUpdatedAt'), 'live management overlay must preserve optimistic conflict checks');
+  assert(liveManageOverlay.includes('data-backy-live-management-overlay="page"'), 'live management overlay must expose a stable test hook');
   const publicOpenApiRouteSource = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url),
     'utf8',
