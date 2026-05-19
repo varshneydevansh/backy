@@ -254,15 +254,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             pageId: pageId || undefined,
             postId: postId || undefined,
             global: globalOnly,
-            limit,
-            offset,
+            limit: 10000,
+            offset: 0,
         });
-        const mediaWithVariants = {
-            ...mediaPayload,
-            media: mediaPayload.media
-                .filter((item) => !isMediaQuarantined(item))
-                .map((item) => toPublicMediaAsset(site.id, item)),
-        };
+        const visibleMedia = mediaPayload.media.filter((item) => !isMediaQuarantined(item));
+        const mediaWithVariants = paginateMedia(site.id, visibleMedia, limit, offset);
 
         return publicContractJson({
             success: true,

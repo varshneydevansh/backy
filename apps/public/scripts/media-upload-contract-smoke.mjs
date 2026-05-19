@@ -119,6 +119,11 @@ assert(
   'Public media list route must reject invalid global filters instead of silently returning all assets.',
 );
 assert(
+  publicMediaRoute.includes('const visibleMedia = mediaPayload.media.filter((item) => !isMediaQuarantined(item))') &&
+    publicMediaRoute.includes('paginateMedia(site.id, visibleMedia, limit, offset)'),
+  'Public demo media list route must exclude quarantined assets before pagination totals and slices are computed.',
+);
+assert(
   publicMediaRoute.includes("'INVALID_MEDIA_LIMIT'") &&
     publicMediaRoute.includes("'INVALID_MEDIA_OFFSET'") &&
     publicMediaRoute.includes('integerQueryFromInput') &&
