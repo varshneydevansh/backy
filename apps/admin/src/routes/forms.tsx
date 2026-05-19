@@ -5730,10 +5730,28 @@ const normalizeFrontendFieldType = (value: unknown): FormFieldType => {
   return normalizeFormFieldType(type);
 };
 
-const normalizeFrontendTemplateField = (value: unknown, index: number): FormFieldDefinition | null => {
+const getUniqueFrontendTemplateFieldKey = (usedKeys: Set<string>, baseKey: string, index: number): string => {
+  const normalizedBase = normalizeFieldKey(baseKey) || `field_${index + 1}`;
+  let candidate = normalizedBase;
+  let suffix = 2;
+
+  while (usedKeys.has(candidate)) {
+    candidate = `${normalizedBase}_${suffix}`;
+    suffix += 1;
+  }
+
+  usedKeys.add(candidate);
+  return candidate;
+};
+
+const normalizeFrontendTemplateField = (value: unknown, index: number, usedKeys: Set<string>): FormFieldDefinition | null => {
   const record = isPlainRecord(value) ? value : {};
   const label = optionalStringFromRecord(record, 'label') || optionalStringFromRecord(record, 'name') || `Field ${index + 1}`;
-  const key = normalizeFieldKey(optionalStringFromRecord(record, 'key') || optionalStringFromRecord(record, 'id') || label) || `field_${index + 1}`;
+  const key = getUniqueFrontendTemplateFieldKey(
+    usedKeys,
+    optionalStringFromRecord(record, 'key') || optionalStringFromRecord(record, 'id') || label,
+    index,
+  );
   const type = normalizeFrontendFieldType(record.type);
   const field: FormFieldDefinition = {
     key,
@@ -5771,10 +5789,11 @@ const normalizeFrontendTemplateField = (value: unknown, index: number): FormFiel
 
 const frontendTemplateFieldsFromContent = (content: Record<string, unknown> | undefined): FormFieldDefinition[] => {
   const fieldsInput = content?.fields || content?.formFields || content?.schema;
+  const usedKeys = new Set<string>();
 
   if (Array.isArray(fieldsInput)) {
     return fieldsInput
-      .map((field, index) => normalizeFrontendTemplateField(field, index))
+      .map((field, index) => normalizeFrontendTemplateField(field, index, usedKeys))
       .filter((field): field is FormFieldDefinition => Boolean(field));
   }
 
@@ -5783,6 +5802,7 @@ const frontendTemplateFieldsFromContent = (content: Record<string, unknown> | un
       .map(([key, value], index) => normalizeFrontendTemplateField(
         isPlainRecord(value) ? { key, ...value } : { key, label: key, type: value },
         index,
+        usedKeys,
       ))
       .filter((field): field is FormFieldDefinition => Boolean(field));
   }

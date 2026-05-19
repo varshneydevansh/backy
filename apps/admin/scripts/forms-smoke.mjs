@@ -228,6 +228,10 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(
     source.includes('frontendTemplateValidationRequiresField') &&
       source.includes('frontendTemplateValidationRequiresField(record.validation)') &&
+      source.includes('getUniqueFrontendTemplateFieldKey') &&
+      source.includes('usedKeys.add(candidate)') &&
+      source.includes('const usedKeys = new Set<string>()') &&
+      source.includes('normalizeFrontendTemplateField(field, index, usedKeys)') &&
       source.includes('const validation = normalizeValidationRules({') &&
       source.includes("validation: Array.isArray(record.validation)") &&
       source.includes("const ruleRecord = isPlainRecord(rule) ? rule : null") &&
