@@ -500,6 +500,7 @@ function assertAdminPageContentValidationSource() {
   assert(liveManageOverlay.includes('expectedUpdatedAt'), 'live management overlay must preserve optimistic conflict checks');
   assert(liveManageOverlay.includes('data-backy-live-management-overlay="page"'), 'live management overlay must expose a stable test hook');
   assert(liveManageOverlay.includes('data-backy-live-element-list="page"'), 'live management overlay must expose rendered element inspection');
+  assert(liveManageOverlay.includes('contentElementTargets') && liveManageOverlay.includes("source: 'content'"), 'live management overlay must include content-backed element targets for hidden element recovery');
   assert(liveManageOverlay.includes('data-backy-live-inline-editor="page"'), 'live management overlay must expose inline element text editing');
   assert(liveManageOverlay.includes('data-backy-live-link-editor="page"'), 'live management overlay must expose inline link/button destination editing');
   assert(liveManageOverlay.includes('data-backy-live-image-editor="page"'), 'live management overlay must expose inline image metadata editing');

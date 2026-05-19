@@ -18,6 +18,8 @@ interface ManagedElementTarget {
   id: string;
   type: string;
   label: string;
+  source: 'rendered' | 'content';
+  visible: boolean;
 }
 
 interface LivePageManagementOverlayProps {
@@ -113,6 +115,49 @@ const elementLabel = (element: HTMLElement): string => {
   const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
   const textPreview = text.length > 0 ? ` - ${text.slice(0, 32)}${text.length > 32 ? '...' : ''}` : '';
   return `${type}${textPreview || ` - ${id.slice(0, 10)}`}`;
+};
+
+const contentElementLabel = (element: Record<string, unknown>): string => {
+  const id = typeof element.id === 'string' ? element.id : '';
+  const type = typeof element.type === 'string' ? element.type : 'element';
+  const props = isRecord(element.props) ? element.props : {};
+  const value = props.content ?? props.label ?? props.text ?? props.alt ?? props.title ?? props.src;
+  const text = stripMarkup(slatePlainText(value)).replace(/\s+/g, ' ').trim();
+  const textPreview = text.length > 0 ? ` - ${text.slice(0, 32)}${text.length > 32 ? '...' : ''}` : '';
+  return `${type}${textPreview || ` - ${id.slice(0, 10)}`}`;
+};
+
+const contentElementTargets = (content: Record<string, unknown> | undefined): ManagedElementTarget[] => {
+  const roots = [
+    ...(Array.isArray(content?.elements) ? content?.elements || [] : []),
+    ...(isRecord(content?.contentDocument) && Array.isArray(content.contentDocument.elements)
+      ? content.contentDocument.elements
+      : []),
+  ];
+  const seen = new Set<string>();
+  const targets: ManagedElementTarget[] = [];
+
+  const visit = (items: unknown[]) => {
+    items.forEach((item) => {
+      if (!isRecord(item)) return;
+      if (typeof item.id === 'string' && !seen.has(item.id)) {
+        seen.add(item.id);
+        targets.push({
+          id: item.id,
+          type: typeof item.type === 'string' ? item.type : 'element',
+          label: contentElementLabel(item),
+          source: 'content',
+          visible: item.visible !== false,
+        });
+      }
+      if (Array.isArray(item.children)) {
+        visit(item.children);
+      }
+    });
+  };
+
+  visit(roots);
+  return targets;
 };
 
 const findRenderedElement = (elementId: string): HTMLElement | null => (
@@ -580,7 +625,7 @@ export function LivePageManagementOverlay({
 
     const collectTargets = () => {
       const seen = new Set<string>();
-      const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-backy-element-id], [data-element-id]'))
+      const renderedTargets = Array.from(document.querySelectorAll<HTMLElement>('[data-backy-element-id], [data-element-id]'))
         .map((element) => {
           const id = element.dataset.backyElementId || element.dataset.elementId || '';
           const type = element.dataset.backyElementType || element.dataset.elementType || 'element';
@@ -589,11 +634,13 @@ export function LivePageManagementOverlay({
             return null;
           }
           seen.add(id);
-          return { id, type, label: elementLabel(element) };
+          return { id, type, label: elementLabel(element), source: 'rendered' as const, visible: true };
         })
-        .filter((target): target is ManagedElementTarget => Boolean(target));
+        .filter((target): target is NonNullable<typeof target> => Boolean(target));
+      const contentTargets = contentElementTargets(page.content)
+        .filter((target) => !seen.has(target.id));
 
-      setElementTargets(targets);
+      setElementTargets([...renderedTargets, ...contentTargets]);
     };
 
     collectTargets();
@@ -1157,7 +1204,9 @@ export function LivePageManagementOverlay({
                       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
                         {target.label}
                       </span>
-                      <span style={{ flex: '0 0 auto', fontSize: 11, color: '#64748b' }}>{target.type}</span>
+                      <span style={{ flex: '0 0 auto', fontSize: 11, color: target.visible ? '#64748b' : '#b45309' }}>
+                        {target.visible ? (target.source === 'rendered' ? target.type : 'content') : 'hidden'}
+                      </span>
                     </button>
                   )) : (
                     <span style={{ color: '#64748b', fontSize: 12, padding: '5px 6px' }}>No editable rendered elements found.</span>
