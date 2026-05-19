@@ -243,8 +243,21 @@ const buildEmbedMetadata = (
       submitUrl: input.submitUrl,
       sectionSlug: input.sectionSlug,
       fieldKeys: form.fields.map((field) => field.key),
+      fields: cloneJson(form.fields) as unknown as BackyJsonValue,
+      audience: form.audience,
+      isActive: form.isActive !== false,
+      notificationEmail: form.notificationEmail || null,
+      notificationWebhook: form.notificationWebhook || null,
+      enableHoneypot: form.enableHoneypot !== false,
+      enableCaptcha: form.enableCaptcha === true,
       successMessage: form.successMessage || null,
       successRedirectUrl: form.successRedirectUrl || null,
+      contactShare: form.contactShare?.enabled
+        ? (cloneJson(form.contactShare) as BackyJsonValue)
+        : null,
+      collectionTarget: form.collectionTarget?.enabled
+        ? (cloneJson(form.collectionTarget) as BackyJsonValue)
+        : null,
     },
   };
 };

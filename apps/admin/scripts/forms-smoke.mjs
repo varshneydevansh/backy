@@ -173,7 +173,11 @@ const assertFormsPersistenceCertificationSource = () => {
       embedBlockRouteSource.includes('notificationEmail: form.notificationEmail || ""') &&
       embedBlockRouteSource.includes('notificationWebhook: form.notificationWebhook || ""') &&
       embedBlockRouteSource.includes('enableHoneypot: form.enableHoneypot !== false') &&
-      embedBlockRouteSource.includes('enableCaptcha: form.enableCaptcha === true'),
+      embedBlockRouteSource.includes('enableCaptcha: form.enableCaptcha === true') &&
+      embedBlockRouteSource.includes('fields: cloneJson(form.fields) as unknown as BackyJsonValue') &&
+      embedBlockRouteSource.includes('notificationEmail: form.notificationEmail || null') &&
+      embedBlockRouteSource.includes('contactShare: form.contactShare?.enabled') &&
+      embedBlockRouteSource.includes('collectionTarget: form.collectionTarget?.enabled'),
     'Forms template and embed-block handoffs must emit flattened canvas props for contact and collection routing',
   );
   assert(
@@ -2084,6 +2088,11 @@ const createEmbedBlockInUi = async (client, formId) => {
       }
       assert(created.metadata?.frontendDesignTemplateId, `Embed frontend design metadata missing: ${JSON.stringify(created.metadata)}`);
       assert(created.metadata?.formEmbedBlock?.definitionUrl?.includes(`/forms/${formId}/definition`), `Definition URL missing from embed metadata: ${JSON.stringify(created.metadata)}`);
+      assert(Array.isArray(created.metadata?.formEmbedBlock?.fields) && created.metadata.formEmbedBlock.fields.length === embedProps.fields.length, `Embed metadata form schema missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.formEmbedBlock?.notificationEmail === embedProps.notificationEmail, `Embed metadata notification email mismatch: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.formEmbedBlock?.enableHoneypot === embedProps.enableHoneypot, `Embed metadata honeypot mismatch: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.formEmbedBlock?.contactShare?.enabled === embedProps.contactShare?.enabled, `Embed metadata contact-share mismatch: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.formEmbedBlock?.collectionTarget?.enabled === embedProps.collectionTarget?.enabled, `Embed metadata collection target mismatch: ${JSON.stringify(created.metadata)}`);
       return created;
     }
 
