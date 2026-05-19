@@ -550,6 +550,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Terms starter pages now seed explicit tablet/mobile responsive overrides for legal metadata cards, terms overview sections, commerce/service acceptance lists, and support contact CTAs so terms pages remain readable and actionable across breakpoints.
   - Cookie-policy starter pages now seed explicit tablet/mobile responsive overrides for consent metadata cards, cookie category sections, retention/processor lists, and preferences CTAs so consent pages remain readable and actionable across breakpoints.
   - Accessibility-statement starter pages now seed explicit tablet/mobile responsive overrides for standards metadata, support feature cards, review/remediation lists, and feedback CTAs so accessibility pages remain readable and actionable across breakpoints.
+  - Refund-policy starter pages now seed explicit tablet/mobile responsive overrides for return-window metadata, refund rule cards, eligibility checklists, and return request CTAs so commerce policy pages remain readable and actionable across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves

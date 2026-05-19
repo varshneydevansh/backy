@@ -1559,6 +1559,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
     'Accessibility statement page starter must seed explicit tablet/mobile responsive overrides for support and feedback sections.',
   );
+  assert(
+    source.includes("id: 'refund-policy-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 590 }") &&
+      source.includes("id: 'refund-policy-window-card'") &&
+      source.includes("mobile: { x: 24, y: 388, width: 327, height: 150 }") &&
+      source.includes("id: 'refund-policy-rules-section'") &&
+      source.includes("tablet: { y: 460, width: 768, height: 1120 }") &&
+      source.includes("id: `refund-policy-rule-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 }") &&
+      source.includes("id: 'refund-policy-actions-section'") &&
+      source.includes("mobile: { y: 1750, width: 375, height: 680 }") &&
+      source.includes("id: 'refund-policy-eligibility-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 308 }") &&
+      source.includes("id: 'refund-policy-contact-card'") &&
+      source.includes("tablet: { x: 54, y: 350, width: 660, height: 190 }"),
+    'Refund policy page starter must seed explicit tablet/mobile responsive overrides for commerce policy sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

@@ -7233,24 +7233,40 @@ function buildTemplateElements(input: {
                 height: 320,
                 dataBindings: [{ source: 'commerce', mode: 'refund-policy', fields: ['returnWindowDays', 'refundMethods', 'exchangeAllowed', 'supportEmail'] }],
                 props: { backgroundColor: '#ecfdf5', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 460 },
+                    mobile: { width: 375, height: 590 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'refund-policy-kicker',
                         width: 240,
                         height: 28,
                         props: { content: 'Refunds and returns', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'refund-policy-heading',
                         width: 660,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#064e3b' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'refund-policy-copy',
                         width: 610,
                         height: 64,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#065f46' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 790, 86, {
                         id: 'refund-policy-window-card',
@@ -7258,6 +7274,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'commerce', mode: 'refund-window', fields: ['returnWindowDays', 'refundMethod', 'exchangeAllowed'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a7f3d0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 310, width: 330, height: 130 },
+                            mobile: { x: 24, y: 388, width: 327, height: 150 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'refund-policy-window-label',
@@ -7277,6 +7297,10 @@ function buildTemplateElements(input: {
                                 width: 230,
                                 height: 32,
                                 props: { content: 'Bind this from commerce policy settings or order support workflows.', fontSize: 13, lineHeight: 1.35, color: '#047857' },
+                                responsive: {
+                                    tablet: { width: 260 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -7288,12 +7312,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'commerce', mode: 'refund-rules', fields: ['eligibility', 'refundMethods', 'exchangeRules', 'ineligibleItems'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 460, width: 768, height: 1120 },
+                    mobile: { y: 590, width: 375, height: 1160 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'refund-policy-rules-heading',
                         width: 470,
                         height: 42,
                         props: { content: 'Policy rules', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 470 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Return eligibility', body: 'Explain the condition, receipt, order number, and timeline requirements customers must meet before starting a return.' },
@@ -7305,6 +7337,10 @@ function buildTemplateElements(input: {
                         height: 290,
                         dataBindings: [{ source: 'commerce', mode: 'refund-rule', index }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#d1fae5', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 324, width: 660, height: 286 },
+                            mobile: { x: 24, y: 112 + index * 330, width: 327, height: 300 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: `refund-policy-rule-card-title-${index}`,
@@ -7312,6 +7348,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { content: rule.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#064e3b' },
                                 dataBindings: [{ source: 'commerce', mode: 'refund-rule', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 320 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: `refund-policy-rule-card-copy-${index}`,
@@ -7319,12 +7359,20 @@ function buildTemplateElements(input: {
                                 height: 124,
                                 props: { content: rule.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
                                 dataBindings: [{ source: 'commerce', mode: 'refund-rule', index, field: 'body', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500, height: 104 },
+                                    mobile: { width: 268, height: 132 },
+                                },
                             }),
                             createCanvasElement('text', 24, 232, {
                                 id: `refund-policy-rule-card-note-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: 'Editable commerce policy', fontSize: 13, fontWeight: '800', color: '#047857' },
+                                responsive: {
+                                    tablet: { y: 228 },
+                                    mobile: { y: 252 },
+                                },
                             }),
                         ],
                     })),
@@ -7336,6 +7384,10 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'commerce', mode: 'refund-actions', fields: ['returnUrl', 'supportEmail', 'orderLookupRequired', 'refundMethod'] }],
                 props: { backgroundColor: '#f0fdf4', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 620 },
+                    mobile: { y: 1750, width: 375, height: 680 },
+                },
                 children: [
                     createCanvasElement('box', 74, 62, {
                         id: 'refund-policy-eligibility-card',
@@ -7343,18 +7395,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'commerce', mode: 'refund-eligibility', fields: ['orderNumber', 'productCondition', 'photosRequired', 'labelProvider'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 250 },
+                            mobile: { x: 24, y: 46, width: 327, height: 308 },
+                        },
                         children: [
                             createCanvasElement('heading', 28, 26, {
                                 id: 'refund-policy-eligibility-heading',
                                 width: 360,
                                 height: 34,
                                 props: { content: 'Before customers start', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64, props: { fontSize: 24 } },
+                                },
                             }),
                             ...['Order number', 'Product condition', 'Photos if needed', 'Return label steps'].map((step, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
                                 id: `refund-policy-eligibility-item-${index}`,
                                 width: 220,
                                 height: 24,
                                 props: { content: step, fontSize: 15, fontWeight: '800', color: '#065f46' },
+                                responsive: {
+                                    tablet: { x: 30 + (index % 2) * 300, y: 92 + Math.floor(index / 2) * 48, width: 240 },
+                                    mobile: { x: 28, y: 104 + index * 44, width: 240 },
+                                },
                             })),
                         ],
                     }),
@@ -7364,6 +7427,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'commerce', mode: 'refund-contact', fields: ['returnUrl', 'supportEmail', 'orderLookupUrl'] }],
                         props: { backgroundColor: '#064e3b', borderRadius: 8 },
+                        responsive: {
+                            tablet: { x: 54, y: 350, width: 660, height: 190 },
+                            mobile: { x: 24, y: 410, width: 327, height: 214 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 26, {
                                 id: 'refund-policy-contact-heading',
@@ -7376,12 +7443,20 @@ function buildTemplateElements(input: {
                                 width: 250,
                                 height: 46,
                                 props: { content: 'Bind this action to a return portal, order lookup, form, or support workflow.', fontSize: 14, lineHeight: 1.45, color: '#d1fae5' },
+                                responsive: {
+                                    tablet: { width: 420 },
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('button', 26, 138, {
                                 id: 'refund-policy-contact-button',
                                 width: 144,
                                 height: 40,
                                 props: { label: 'Start return', backgroundColor: '#d1fae5', color: '#064e3b', borderRadius: 8, fontWeight: '800', action: 'refund.request.open' },
+                                responsive: {
+                                    tablet: { x: 470, y: 112 },
+                                    mobile: { x: 26, y: 150 },
+                                },
                             }),
                         ],
                     }),
