@@ -505,6 +505,7 @@ function assertAdminPageContentValidationSource() {
   assert(liveManageOverlay.includes('data-backy-live-link-editor="page"'), 'live management overlay must expose inline link/button destination editing');
   assert(liveManageOverlay.includes('data-backy-live-image-editor="page"'), 'live management overlay must expose inline image metadata editing');
   assert(liveManageOverlay.includes('data-backy-live-layout-editor="page"'), 'live management overlay must expose inline layout editing');
+  assert(liveManageOverlay.includes('inlineLayoutName'), 'live management overlay must expose selected element layer name editing');
   assert(liveManageOverlay.includes('inlineLayoutVisible'), 'live management overlay must expose selected element visibility editing');
   assert(liveManageOverlay.includes('inlineLayoutLocked') && liveManageOverlay.includes('selectedElementLocked'), 'live management overlay must expose and honor selected element locking');
   assert(liveManageOverlay.includes('data-backy-live-appearance-editor="page"'), 'live management overlay must expose inline appearance editing');

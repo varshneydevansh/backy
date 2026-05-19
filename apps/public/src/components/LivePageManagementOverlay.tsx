@@ -64,6 +64,7 @@ type InlineAppearanceFields = {
   opacity: string;
 };
 type InlineLayoutFields = {
+  name: string;
   x: string;
   y: string;
   width: string;
@@ -121,6 +122,9 @@ const elementLabel = (element: HTMLElement): string => {
 const contentElementLabel = (element: Record<string, unknown>): string => {
   const id = typeof element.id === 'string' ? element.id : '';
   const type = typeof element.type === 'string' ? element.type : 'element';
+  if (typeof element.name === 'string' && element.name.trim().length > 0) {
+    return element.name.trim();
+  }
   const props = isRecord(element.props) ? element.props : {};
   const value = props.content ?? props.label ?? props.text ?? props.alt ?? props.title ?? props.src;
   const text = stripMarkup(slatePlainText(value)).replace(/\s+/g, ' ').trim();
@@ -312,6 +316,7 @@ const appearanceFieldsFromElement = (element: Record<string, unknown> | null): I
 };
 
 const layoutFieldsFromElement = (element: Record<string, unknown> | null): InlineLayoutFields => ({
+  name: typeof element?.name === 'string' ? element.name : '',
   x: numberField(element, 'x'),
   y: numberField(element, 'y'),
   width: numberField(element, 'width'),
@@ -486,6 +491,7 @@ const updateElementLayout = (
   }
 
   const patch: Record<string, unknown> = {
+    name: input.name.trim(),
     x: numericPatchValue(input.x, 'X', true),
     y: numericPatchValue(input.y, 'Y', true),
     width,
@@ -552,6 +558,7 @@ export function LivePageManagementOverlay({
   const [inlineAppearanceBoxShadow, setInlineAppearanceBoxShadow] = useState('');
   const [inlineAppearanceOpacity, setInlineAppearanceOpacity] = useState('');
   const [inlineAppearanceSaving, setInlineAppearanceSaving] = useState(false);
+  const [inlineLayoutName, setInlineLayoutName] = useState('');
   const [inlineLayoutX, setInlineLayoutX] = useState('');
   const [inlineLayoutY, setInlineLayoutY] = useState('');
   const [inlineLayoutWidth, setInlineLayoutWidth] = useState('');
@@ -629,6 +636,7 @@ export function LivePageManagementOverlay({
 
     const collectTargets = () => {
       const seen = new Set<string>();
+      const contentTargetsById = new Map(contentElementTargets(page.content).map((target) => [target.id, target]));
       const renderedTargets = Array.from(document.querySelectorAll<HTMLElement>('[data-backy-element-id], [data-element-id]'))
         .map((element) => {
           const id = element.dataset.backyElementId || element.dataset.elementId || '';
@@ -638,10 +646,10 @@ export function LivePageManagementOverlay({
             return null;
           }
           seen.add(id);
-          return { id, type, label: elementLabel(element), source: 'rendered' as const, visible: true };
+          return { id, type, label: contentTargetsById.get(id)?.label || elementLabel(element), source: 'rendered' as const, visible: true };
         })
         .filter((target): target is NonNullable<typeof target> => Boolean(target));
-      const contentTargets = contentElementTargets(page.content)
+      const contentTargets = Array.from(contentTargetsById.values())
         .filter((target) => !seen.has(target.id));
 
       setElementTargets([...renderedTargets, ...contentTargets]);
@@ -679,6 +687,7 @@ export function LivePageManagementOverlay({
       setInlineAppearanceMargin('');
       setInlineAppearanceBoxShadow('');
       setInlineAppearanceOpacity('');
+      setInlineLayoutName('');
       setInlineLayoutX('');
       setInlineLayoutY('');
       setInlineLayoutWidth('');
@@ -743,6 +752,7 @@ export function LivePageManagementOverlay({
     setInlineAppearanceBoxShadow(appearanceFields.boxShadow);
     setInlineAppearanceOpacity(appearanceFields.opacity);
     const layoutFields = layoutFieldsFromElement(selectedContentElement);
+    setInlineLayoutName(layoutFields.name);
     setInlineLayoutX(layoutFields.x);
     setInlineLayoutY(layoutFields.y);
     setInlineLayoutWidth(layoutFields.width);
@@ -1027,6 +1037,7 @@ export function LivePageManagementOverlay({
     let nextContent: Record<string, unknown> | null = null;
     try {
       nextContent = updateElementLayout(page.content, selectedElementId, {
+        name: inlineLayoutName,
         x: inlineLayoutX,
         y: inlineLayoutY,
         width: inlineLayoutWidth,
@@ -1413,6 +1424,15 @@ export function LivePageManagementOverlay({
                       Unlock this element to edit content or appearance.
                     </span>
                   ) : null}
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Layer name
+                    <input
+                      value={inlineLayoutName}
+                      onChange={(event) => setInlineLayoutName(event.target.value)}
+                      placeholder="Hero headline"
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                    />
+                  </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
                       X
