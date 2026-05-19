@@ -104,6 +104,45 @@ const statusFromInput = (
     ? value
     : undefined;
 
+const hasBodyKey = (body: Record<string, unknown>, key: string) =>
+  Object.prototype.hasOwnProperty.call(body, key);
+
+const postStatusValidationError = (
+  body: Record<string, unknown>,
+  requestId: string,
+) => {
+  if (
+    hasBodyKey(body, "status") &&
+    body.status !== undefined &&
+    !statusFromInput(body.status)
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_BLOG_STATUS",
+      "Invalid blog post status. Use draft, published, scheduled, or archived.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "scheduledAt") &&
+    body.scheduledAt !== undefined &&
+    body.scheduledAt !== null &&
+    (typeof body.scheduledAt !== "string" ||
+      (body.scheduledAt.trim().length > 0 &&
+        Number.isNaN(Date.parse(body.scheduledAt))))
+  ) {
+    return errorResponse(
+      400,
+      "SCHEDULED_AT_INVALID",
+      "scheduledAt must be a valid date-time string.",
+      requestId,
+    );
+  }
+
+  return null;
+};
+
 const stringArrayFromInput = (value: unknown): string[] | undefined =>
   Array.isArray(value)
     ? value.filter(
@@ -152,6 +191,62 @@ const contentDocumentFromInput = (
         ? rawContent.customCSS
         : undefined,
   });
+};
+
+const postContentValidationError = (
+  rawContent: unknown,
+  requestId: string,
+) => {
+  if (
+    rawContent === undefined ||
+    typeof rawContent === "string" ||
+    Array.isArray(rawContent) ||
+    isBackyContentDocument(rawContent)
+  ) {
+    return null;
+  }
+
+  if (!isRecord(rawContent)) {
+    return errorResponse(
+      400,
+      "INVALID_BLOG_CONTENT",
+      "Blog post content must be a content object, content document, element array, or legacy string.",
+      requestId,
+    );
+  }
+
+  if (rawContent.elements !== undefined && !Array.isArray(rawContent.elements)) {
+    return errorResponse(
+      400,
+      "INVALID_BLOG_CONTENT_ELEMENTS",
+      "Blog post content elements must be an array.",
+      requestId,
+    );
+  }
+
+  if (rawContent.canvasSize !== undefined) {
+    if (!isRecord(rawContent.canvasSize)) {
+      return errorResponse(
+        400,
+        "INVALID_BLOG_CANVAS_SIZE",
+        "Blog post canvasSize must include positive numeric width and height.",
+        requestId,
+      );
+    }
+
+    const width = Number(rawContent.canvasSize.width);
+    const height = Number(rawContent.canvasSize.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return errorResponse(
+        400,
+        "INVALID_BLOG_CANVAS_SIZE",
+        "Blog post canvasSize must include positive numeric width and height.",
+        requestId,
+      );
+    }
+  }
+
+  return null;
 };
 
 const adminPostFromRepositoryPost = (post: BackyPost) => {
@@ -346,6 +441,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const statusValidationError = postStatusValidationError(body, requestId);
+      if (statusValidationError) {
+        return statusValidationError;
+      }
+      const contentValidationError = postContentValidationError(
+        body.content,
+        requestId,
+      );
+      if (contentValidationError) {
+        return contentValidationError;
+      }
       const expectedUpdatedAt =
         typeof body.expectedUpdatedAt === "string"
           ? body.expectedUpdatedAt.trim()
@@ -519,6 +625,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const statusValidationError = postStatusValidationError(body, requestId);
+    if (statusValidationError) {
+      return statusValidationError;
+    }
+    const contentValidationError = postContentValidationError(
+      body.content,
+      requestId,
+    );
+    if (contentValidationError) {
+      return contentValidationError;
+    }
     const expectedUpdatedAt =
       typeof body.expectedUpdatedAt === "string"
         ? body.expectedUpdatedAt.trim()

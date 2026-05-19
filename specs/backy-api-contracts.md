@@ -631,6 +631,8 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `POST /api/admin/sites/:siteId/blog`
   - Body: `{ title, slug?, excerpt?, status?, content?, meta?, featuredImageId?, authorId?, categoryIds?, tagIds?, scheduledAt? }`
   - Validates required title, slug format, and per-site slug conflicts.
+  - Invalid explicit editor content payloads return `400` errors instead of being saved as an empty/default canvas: `INVALID_BLOG_CONTENT`, `INVALID_BLOG_CONTENT_ELEMENTS`, or `INVALID_BLOG_CANVAS_SIZE`.
+  - Invalid explicit blog workflow payloads return `400` errors instead of falling back to draft/no schedule: `INVALID_BLOG_STATUS` or `SCHEDULED_AT_INVALID`.
 
 - `GET /api/admin/sites/:siteId/blog/:postId`
   - Returns full editable post payload.
@@ -642,6 +644,8 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 
 - `PATCH /api/admin/sites/:siteId/blog/:postId`
   - Body supports partial updates for title, slug, excerpt, status, content, SEO meta, featured image, author, categories, tags, and schedule.
+  - Invalid explicit editor content payloads return `400` errors instead of being saved as an empty/default canvas: `INVALID_BLOG_CONTENT`, `INVALID_BLOG_CONTENT_ELEMENTS`, or `INVALID_BLOG_CANVAS_SIZE`.
+  - Invalid explicit blog workflow payloads return `400` errors instead of preserving the previous workflow state: `INVALID_BLOG_STATUS` or `SCHEDULED_AT_INVALID`.
 
 - `DELETE /api/admin/sites/:siteId/blog/:postId`
   - Deletes the post from the runtime adapter.

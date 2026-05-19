@@ -108,6 +108,17 @@ const statusFromInput = (
     ? value
     : "draft";
 
+const hasBodyKey = (body: Record<string, unknown>, key: string) =>
+  Object.prototype.hasOwnProperty.call(body, key);
+
+const isPostStatusInput = (
+  value: unknown,
+): value is "draft" | "published" | "scheduled" | "archived" =>
+  value === "draft" ||
+  value === "published" ||
+  value === "scheduled" ||
+  value === "archived";
+
 const stringArrayFromInput = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter(
@@ -156,6 +167,98 @@ const contentDocumentFromInput = (
         ? rawContent.customCSS
         : undefined,
   });
+};
+
+const postContentValidationError = (
+  rawContent: unknown,
+  requestId: string,
+) => {
+  if (
+    rawContent === undefined ||
+    typeof rawContent === "string" ||
+    Array.isArray(rawContent) ||
+    isBackyContentDocument(rawContent)
+  ) {
+    return null;
+  }
+
+  if (!isRecord(rawContent)) {
+    return errorResponse(
+      400,
+      "INVALID_BLOG_CONTENT",
+      "Blog post content must be a content object, content document, element array, or legacy string.",
+      requestId,
+    );
+  }
+
+  if (rawContent.elements !== undefined && !Array.isArray(rawContent.elements)) {
+    return errorResponse(
+      400,
+      "INVALID_BLOG_CONTENT_ELEMENTS",
+      "Blog post content elements must be an array.",
+      requestId,
+    );
+  }
+
+  if (rawContent.canvasSize !== undefined) {
+    if (!isRecord(rawContent.canvasSize)) {
+      return errorResponse(
+        400,
+        "INVALID_BLOG_CANVAS_SIZE",
+        "Blog post canvasSize must include positive numeric width and height.",
+        requestId,
+      );
+    }
+
+    const width = Number(rawContent.canvasSize.width);
+    const height = Number(rawContent.canvasSize.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return errorResponse(
+        400,
+        "INVALID_BLOG_CANVAS_SIZE",
+        "Blog post canvasSize must include positive numeric width and height.",
+        requestId,
+      );
+    }
+  }
+
+  return null;
+};
+
+const postStatusValidationError = (
+  body: Record<string, unknown>,
+  requestId: string,
+) => {
+  if (
+    hasBodyKey(body, "status") &&
+    body.status !== undefined &&
+    !isPostStatusInput(body.status)
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_BLOG_STATUS",
+      "Invalid blog post status. Use draft, published, scheduled, or archived.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "scheduledAt") &&
+    body.scheduledAt !== undefined &&
+    body.scheduledAt !== null &&
+    (typeof body.scheduledAt !== "string" ||
+      (body.scheduledAt.trim().length > 0 &&
+        Number.isNaN(Date.parse(body.scheduledAt))))
+  ) {
+    return errorResponse(
+      400,
+      "SCHEDULED_AT_INVALID",
+      "scheduledAt must be a valid date-time string.",
+      requestId,
+    );
+  }
+
+  return null;
 };
 
 const adminPostFromRepositoryPost = (post: BackyPost) => {
@@ -348,6 +451,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const statusValidationError = postStatusValidationError(body, requestId);
+      if (statusValidationError) {
+        return statusValidationError;
+      }
       const title = typeof body.title === "string" ? body.title.trim() : "";
       const slug = normalizeSlug(body.slug || title);
       const status = statusFromInput(body.status);
@@ -404,6 +511,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const createBody = seeded.body;
+      const contentValidationError = postContentValidationError(
+        createBody.content,
+        requestId,
+      );
+      if (contentValidationError) {
+        return contentValidationError;
+      }
       const scheduledAt = normalizeScheduledAtInput(createBody.scheduledAt);
       const scheduleValidation = validateScheduledContentStatus(
         status,
@@ -495,6 +609,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const statusValidationError = postStatusValidationError(body, requestId);
+    if (statusValidationError) {
+      return statusValidationError;
+    }
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const slug = normalizeSlug(body.slug || title);
     const status = statusFromInput(body.status);
@@ -552,6 +670,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const scheduledAt = normalizeScheduledAtInput(seeded.body.scheduledAt);
+    const contentValidationError = postContentValidationError(
+      seeded.body.content,
+      requestId,
+    );
+    if (contentValidationError) {
+      return contentValidationError;
+    }
     const scheduleValidation = validateScheduledContentStatus(
       status,
       scheduledAt,
