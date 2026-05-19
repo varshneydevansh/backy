@@ -968,7 +968,7 @@ function FormsRoute() {
       schemaVersion: 'backy.frontend-form-template.v1',
       template,
       form: buildTemplateManifest(blueprint),
-      settings: buildFrontendFormTemplateSettings(template, frontendDesign),
+      settings: buildFrontendFormTemplateSettings(template, frontendDesign, blueprint.frontendFieldKeyMap),
     })),
   }), [activeSite?.name, activeSite?.slug, activeSiteId, frontendDesign, frontendTemplateBlueprints]);
   const formsHandoff = useMemo(() => ({
@@ -1389,7 +1389,7 @@ function FormsRoute() {
         moderationMode: blueprint.moderationMode,
         contactShare: blueprint.contactShare,
         collectionTarget: blueprint.collectionTarget,
-        settings: buildFrontendFormTemplateSettings(template, frontendDesign),
+        settings: buildFrontendFormTemplateSettings(template, frontendDesign, blueprint.frontendFieldKeyMap),
       });
       setForms((current) => [created, ...current.filter((form) => form.id !== created.id)]);
       setInboxByForm((current) => ({
@@ -3155,7 +3155,7 @@ function FormsRoute() {
               {frontendTemplateBlueprints.length > 0 ? (
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {frontendTemplateBlueprints.map(({ template, blueprint }) => {
-                    const settings = buildFrontendFormTemplateSettings(template, frontendDesign);
+                    const settings = buildFrontendFormTemplateSettings(template, frontendDesign, blueprint.frontendFieldKeyMap);
                     const collectionBackedTemplateUnavailable = Boolean(blueprint.collectionTarget?.enabled && !canUseCollectionTargets);
                     const createFrontendTemplateTitle = !canCreateForms
                       ? createPermissionTitle
@@ -5983,11 +5983,13 @@ const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate
 const buildFrontendFormTemplateSettings = (
   template: SiteFrontendDesignTemplate,
   frontendDesign: SiteFrontendDesignContract | null,
+  frontendFieldKeyMap?: Record<string, string>,
 ): Record<string, unknown> => ({
   frontendDesignTemplateId: template.id,
   frontendDesignTemplateName: template.name,
   frontendDesignSource: frontendDesign?.source,
   frontendDesignBindingHints: template.bindingHints || [],
+  ...(frontendFieldKeyMap ? { frontendFieldKeyMap } : {}),
   ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
   ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
   ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),

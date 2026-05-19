@@ -237,6 +237,9 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('frontendFieldKeyMap?: Record<string, string>') &&
       source.includes('frontendFieldKeyMap: frontendTemplateFieldKeyMapFromAliases(fieldKeyAliases)') &&
       source.includes('frontendFieldKeyMap: template.frontendFieldKeyMap') &&
+      source.includes('buildFrontendFormTemplateSettings(template, frontendDesign, blueprint.frontendFieldKeyMap)') &&
+      source.includes('frontendFieldKeyMap?: Record<string, string>,') &&
+      source.includes('...(frontendFieldKeyMap ? { frontendFieldKeyMap } : {})') &&
       source.includes('addFrontendTemplateFieldKeyAlias(fieldKeyAliases, field.label, field.key)') &&
       source.includes('return fieldKeyAliases.get(trimmed) || fieldKeyAliases.get(normalizeFieldKey(trimmed))') &&
       source.includes('const fieldKeyAliases = fields.length > 0') &&
@@ -1179,6 +1182,11 @@ const assertFrontendTemplateForm = async (formId) => {
   assert(form?.settings?.frontendDesignChrome?.header?.component === 'SmokeFormsHeader', `Frontend chrome snapshot missing: ${JSON.stringify(form?.settings)}`);
   assert(form?.settings?.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(form?.settings)}`);
   assert(Array.isArray(form?.settings?.frontendDesignBindingHints) && form.settings.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(form?.settings)}`);
+  assert(
+    form?.settings?.frontendFieldKeyMap?.['Full name'] === 'full_name' &&
+      form.settings.frontendFieldKeyMap?.project_budget === 'project_budget',
+    `Frontend field key map was not stored: ${JSON.stringify(form?.settings)}`,
+  );
   assert(form?.fields?.some((field) => field.key === 'project_budget' && field.type === 'select' && field.options?.includes('$25k+')), `Frontend fields did not persist: ${JSON.stringify(form?.fields)}`);
   assert(
     form?.contactShare?.enabled === true &&
