@@ -26,6 +26,7 @@ const sdkSource = read('../../../packages/sdk-js/src/index.ts');
 const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../../../packages/sdk-js/scripts/generated-contract-types.ts');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
+const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const rootPackage = read('../../../package.json');
 const publicPackage = read('../package.json');
 const templateRegistrySmoke = read('template-registry-smoke.ts');
@@ -40,6 +41,24 @@ const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-
 assert(
   manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
   'Frontend manifest must advertise public site discovery for custom frontends.',
+);
+
+assert(
+  manifestRoute.includes('getCommentReportReasons') &&
+    manifestRoute.includes('buildManifestCommentDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.comments-discovery.v1'") &&
+    manifestRoute.includes("publicListStatus: 'approved'") &&
+    manifestRoute.includes("honeypotField: 'website'") &&
+    manifestRoute.includes("timingField: 'startedAt'") &&
+    manifestRoute.includes('comments: buildManifestCommentDiscovery(input.site.id, input.site.settings)') &&
+    manifestRoute.includes('comments: buildManifestCommentDiscovery(site.id, site.settings)') &&
+    frontendManifestSchema.includes('"comments"') &&
+    frontendManifestSchema.includes('"backy.comments-discovery.v1"') &&
+    frontendManifestSchema.includes('"reportUrlTemplate"') &&
+    sdkSource.includes('BackyManifestCommentsModule') &&
+    sdkSmoke.includes('manifest() missing comments discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestCommentsDiscovery'),
+  'Frontend manifest and SDK must expose structured comments discovery for custom frontend moderation/report UIs.',
 );
 
 assert(

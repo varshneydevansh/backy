@@ -740,6 +740,62 @@
                 "required": ["id", "active", "fields", "submitUrl"]
               }
             },
+            "comments": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.comments-discovery.v1" },
+                "enabled": { "type": "boolean" },
+                "moderationMode": { "enum": ["manual", "auto-approve"] },
+                "allowGuests": { "type": "boolean" },
+                "allowReplies": { "type": "boolean" },
+                "defaultSort": { "enum": ["newest", "oldest"] },
+                "statuses": {
+                  "type": "array",
+                  "items": { "enum": ["pending", "approved", "rejected", "spam", "blocked"] }
+                },
+                "publicListStatus": { "const": "approved" },
+                "reportReasons": { "type": "array", "items": { "type": "string" } },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string", "minLength": 1 },
+                    "pageComments": { "type": "string", "minLength": 1 },
+                    "pageComment": { "type": "string", "minLength": 1 },
+                    "blogComments": { "type": "string", "minLength": 1 },
+                    "blogComment": { "type": "string", "minLength": 1 },
+                    "reportReasons": { "type": "string", "minLength": 1 },
+                    "report": { "type": "string", "minLength": 1 },
+                    "blocklist": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["list", "pageComments", "pageComment", "blogComments", "blogComment", "reportReasons", "report", "blocklist"]
+                },
+                "reporting": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "reasons": { "type": "array", "items": { "type": "string" } },
+                    "reportUrlTemplate": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["enabled", "reasons", "reportUrlTemplate"]
+                },
+                "spamProtection": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "captchaEnabled": { "type": "boolean" },
+                    "captchaProvider": { "enum": ["turnstile", "hcaptcha", "recaptcha", "mock"] },
+                    "blockedTermCount": { "type": "number", "minimum": 0 },
+                    "honeypotField": { "type": "string", "minLength": 1 },
+                    "timingField": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["captchaEnabled", "captchaProvider", "blockedTermCount", "honeypotField", "timingField"]
+                }
+              },
+              "required": ["schemaVersion", "enabled", "moderationMode", "allowGuests", "allowReplies", "defaultSort", "statuses", "publicListStatus", "reportReasons", "endpoints", "reporting", "spamProtection"]
+            },
             "reusableSections": {
               "type": "object",
               "additionalProperties": true,
@@ -974,7 +1030,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "pages", "blog", "collections", "forms", "reusableSections", "media"]
+          "required": ["routing", "pages", "blog", "collections", "forms", "comments", "reusableSections", "media"]
         },
         "admin": {
           "type": "object",

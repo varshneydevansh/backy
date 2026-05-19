@@ -862,6 +862,39 @@ const manifest = {
         },
       },
     ],
+    comments: {
+      schemaVersion: "backy.comments-discovery.v1",
+      enabled: true,
+      moderationMode: "manual",
+      allowGuests: true,
+      allowReplies: true,
+      defaultSort: "newest",
+      statuses: ["pending", "approved", "rejected", "spam", "blocked"],
+      publicListStatus: "approved",
+      reportReasons: ["spam", "harassment", "abuse", "other"],
+      endpoints: {
+        list: "/api/sites/site_demo/comments",
+        pageComments: "/api/sites/site_demo/pages/{pageId}/comments",
+        pageComment: "/api/sites/site_demo/pages/{pageId}/comments/{commentId}",
+        blogComments: "/api/sites/site_demo/blog/{postId}/comments",
+        blogComment: "/api/sites/site_demo/blog/{postId}/comments/{commentId}",
+        reportReasons: "/api/sites/site_demo/comments/report-reasons",
+        report: "/api/sites/site_demo/comments/{commentId}/report",
+        blocklist: "/api/sites/site_demo/comments/blocklist",
+      },
+      reporting: {
+        enabled: true,
+        reasons: ["spam", "harassment", "abuse", "other"],
+        reportUrlTemplate: "/api/sites/site_demo/comments/{commentId}/report",
+      },
+      spamProtection: {
+        captchaEnabled: false,
+        captchaProvider: "mock",
+        blockedTermCount: 0,
+        honeypotField: "website",
+        timingField: "startedAt",
+      },
+    },
     reusableSections: {
       count: 1,
       listUrl: "/api/sites/site_demo/reusable-sections",
@@ -3180,6 +3213,9 @@ const invalidManifestLocaleStrategy = { ...manifest, delivery: { ...manifest.del
 // @ts-expect-error generated manifest comment moderation modes are documented public values.
 const invalidGeneratedManifestCommentPolicy = { ...manifest, site: { ...manifest.site, commentPolicy: { ...manifest.site.commentPolicy, moderationMode: "ai-review", }, }, } satisfies GeneratedBackyFrontendManifest;
 
+// @ts-expect-error generated manifest comment discovery uses a versioned schema marker.
+const invalidGeneratedManifestCommentsDiscovery = { ...manifest, modules: { ...manifest.modules, comments: { ...manifest.modules.comments, schemaVersion: "backy.comments-discovery.v0", }, }, } satisfies GeneratedBackyFrontendManifest;
+
 const invalidGeneratedManifestSchemas = {
   ...manifest,
   contract: {
@@ -3731,6 +3767,7 @@ void invalidRenderNavigationTarget;
 void invalidGeneratedFrontendDesignContract;
 void invalidManifestLocaleStrategy;
 void invalidGeneratedManifestCommentPolicy;
+void invalidGeneratedManifestCommentsDiscovery;
 void invalidGeneratedManifestSchemas;
 void invalidGeneratedManifestCapability;
 void invalidGeneratedManifestEndpoint;

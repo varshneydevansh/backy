@@ -1841,6 +1841,44 @@ export interface BackyManifestMediaModule {
   [key: string]: unknown;
 }
 
+export interface BackyManifestCommentsModule {
+  schemaVersion: "backy.comments-discovery.v1";
+  enabled: boolean;
+  moderationMode: "manual" | "auto-approve";
+  allowGuests: boolean;
+  allowReplies: boolean;
+  defaultSort: "newest" | "oldest";
+  statuses: Array<"pending" | "approved" | "rejected" | "spam" | "blocked">;
+  publicListStatus: "approved";
+  reportReasons: string[];
+  endpoints: {
+    list: string;
+    pageComments: string;
+    pageComment: string;
+    blogComments: string;
+    blogComment: string;
+    reportReasons: string;
+    report: string;
+    blocklist: string;
+    [key: string]: unknown;
+  };
+  reporting: {
+    enabled: boolean;
+    reasons: string[];
+    reportUrlTemplate: string;
+    [key: string]: unknown;
+  };
+  spamProtection: {
+    captchaEnabled: boolean;
+    captchaProvider: "turnstile" | "hcaptcha" | "recaptcha" | "mock";
+    blockedTermCount: number;
+    honeypotField: string;
+    timingField: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifest {
   schemaVersion: string;
   site: BackySiteSummary;
@@ -1855,6 +1893,7 @@ export interface BackyFrontendManifest {
     collections?: BackyManifestCollectionSchema[];
     reusableSections?: BackyManifestReusableSectionsModule;
     forms?: BackyManifestFormDefinition[];
+    comments?: BackyManifestCommentsModule;
     media?: BackyManifestMediaModule;
     commerce?: BackyCommerceStorefrontContract;
     interactiveComponents?: BackyInteractiveComponentsContract;

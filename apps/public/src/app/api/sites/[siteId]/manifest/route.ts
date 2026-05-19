@@ -9,6 +9,7 @@ import type { BackyBlogAuthor, BackyBlogCategory, BackyBlogTag, BackyCollection,
 import {
   getAdminSettings,
   getBlogPosts,
+  getCommentReportReasons,
   getMediaList,
   getPageSummary,
   getSiteByIdOrSlug,
@@ -517,6 +518,48 @@ const blogFeedDiscovery = (site: Pick<Site, 'id' | 'name'>) => [
   },
 ];
 
+const buildManifestCommentDiscovery = (
+  siteId: string,
+  settings: SiteSettings | null | undefined,
+) => {
+  const policy = normalizeSiteCommentPolicy(settings?.commentPolicy);
+  const reportReasons = getCommentReportReasons();
+
+  return {
+    schemaVersion: 'backy.comments-discovery.v1',
+    enabled: policy.enabled,
+    moderationMode: policy.moderationMode,
+    allowGuests: policy.allowGuests,
+    allowReplies: policy.allowReplies,
+    defaultSort: policy.sort,
+    statuses: ['pending', 'approved', 'rejected', 'spam', 'blocked'],
+    publicListStatus: 'approved',
+    reportReasons,
+    endpoints: {
+      list: `/api/sites/${siteId}/comments`,
+      pageComments: `/api/sites/${siteId}/pages/{pageId}/comments`,
+      pageComment: `/api/sites/${siteId}/pages/{pageId}/comments/{commentId}`,
+      blogComments: `/api/sites/${siteId}/blog/{postId}/comments`,
+      blogComment: `/api/sites/${siteId}/blog/{postId}/comments/{commentId}`,
+      reportReasons: `/api/sites/${siteId}/comments/report-reasons`,
+      report: `/api/sites/${siteId}/comments/{commentId}/report`,
+      blocklist: `/api/sites/${siteId}/comments/blocklist`,
+    },
+    reporting: {
+      enabled: policy.enableReports,
+      reasons: reportReasons,
+      reportUrlTemplate: `/api/sites/${siteId}/comments/{commentId}/report`,
+    },
+    spamProtection: {
+      captchaEnabled: policy.enableCaptcha,
+      captchaProvider: policy.captchaProvider,
+      blockedTermCount: policy.blockedTerms.length,
+      honeypotField: 'website',
+      timingField: 'startedAt',
+    },
+  };
+};
+
 const buildRepositoryManifest = (
   input: {
     requestId: string;
@@ -767,6 +810,7 @@ const buildRepositoryManifest = (
           collectionTarget: form.collectionTarget || null,
           frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
         })),
+        comments: buildManifestCommentDiscovery(input.site.id, input.site.settings),
         media: {
           count: input.media.length,
           publicCount: input.media.length,
@@ -1104,6 +1148,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             collectionTarget: form.collectionTarget || null,
             frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
           })),
+          comments: buildManifestCommentDiscovery(site.id, site.settings),
           media: {
             count: media.pagination.total,
             publicCount: media.pagination.total,
