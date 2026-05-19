@@ -8715,24 +8715,40 @@ function buildTemplateElements(input: {
                 height: 340,
                 dataBindings: [{ source: 'faq', mode: 'overview', fields: ['questions', 'categories', 'searchUrl', 'contactUrl'] }],
                 props: { backgroundColor: '#eff6ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 500 },
+                    mobile: { width: 375, height: 620 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'faq-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Questions', fontSize: 13, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 98, {
                         id: 'faq-heading',
                         width: 620,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 520, height: 92, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 132, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 212, {
                         id: 'faq-intro-copy',
                         width: 610,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 204, width: 520, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 236, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('input', 752, 118, {
                         id: 'faq-search-input',
@@ -8740,12 +8756,20 @@ function buildTemplateElements(input: {
                         height: 58,
                         dataBindings: [{ source: 'faq', mode: 'search', fields: ['query', 'categories'] }],
                         props: { label: 'Search FAQ', name: 'faq_search', placeholder: 'Search questions or topics' },
+                        responsive: {
+                            tablet: { x: 54, y: 330, width: 460, height: 58 },
+                            mobile: { x: 24, y: 388, width: 327, height: 58 },
+                        },
                     }),
                     createCanvasElement('button', 752, 202, {
                         id: 'faq-search-button',
                         width: 142,
                         height: 48,
                         props: { label: 'Search', backgroundColor: '#1d4ed8', color: '#ffffff', borderRadius: 8, fontSize: 15, fontWeight: '800', action: 'faq.search' },
+                        responsive: {
+                            tablet: { x: 536, y: 336, width: 142, height: 48 },
+                            mobile: { x: 24, y: 474, width: 327, height: 52 },
+                        },
                     }),
                 ],
             }),
@@ -8755,6 +8779,10 @@ function buildTemplateElements(input: {
                 height: 470,
                 dataBindings: [{ source: 'faq', mode: 'questions', fields: ['questions', 'categories', 'answers'], limit: 10 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 500, width: 768, height: 860 },
+                    mobile: { y: 620, width: 375, height: 1110 },
+                },
                 children: [
                     createCanvasElement('box', 74, 60, {
                         id: 'faq-category-filter',
@@ -8762,12 +8790,20 @@ function buildTemplateElements(input: {
                         height: 300,
                         dataBindings: [{ source: 'faq', mode: 'categories', fields: ['name', 'slug', 'questionCount'] }],
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#dbeafe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 150 },
+                            mobile: { x: 24, y: 46, width: 327, height: 254 },
+                        },
                         children: [
                             createCanvasElement('heading', 22, 24, {
                                 id: 'faq-category-heading',
                                 width: 190,
                                 height: 28,
                                 props: { content: 'Categories', level: 'h2', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 240 },
+                                    mobile: { width: 220 },
+                                },
                             }),
                             ...['Account', 'Orders', 'Content', 'Billing'].map((item, index) => createCanvasElement('button', 22, 74 + index * 48, {
                                 id: `faq-category-chip-${index}`,
@@ -8775,6 +8811,10 @@ function buildTemplateElements(input: {
                                 height: 34,
                                 props: { label: item, backgroundColor: index === 0 ? '#1d4ed8' : '#ffffff', color: index === 0 ? '#ffffff' : '#1e3a8a', borderRadius: 8, fontSize: 13, fontWeight: '800', action: 'faq.filter.category' },
                                 dataBindings: [{ source: 'faq', mode: 'category', index, field: 'name', targetPath: 'props.label' }],
+                                responsive: {
+                                    tablet: { x: 22 + (index % 4) * 150, y: 78, width: 132, height: 40 },
+                                    mobile: { x: 22, y: 72 + index * 42, width: 180, height: 36 },
+                                },
                             })),
                         ],
                     }),
@@ -8784,12 +8824,20 @@ function buildTemplateElements(input: {
                         height: 300,
                         dataBindings: [{ source: 'faq', mode: 'question-list', limit: 8 }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 250, width: 660, height: 500 },
+                            mobile: { x: 24, y: 350, width: 327, height: 620 },
+                        },
                         children: questions.map((item, index) => createCanvasElement('box', 20, 20 + index * 88, {
                             id: `faq-question-item-${index}`,
                             width: 650,
                             height: 74,
                             dataBindings: [{ source: 'faq', mode: 'question', index }],
                             props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                            responsive: {
+                                tablet: { width: 620, height: 118, y: 20 + index * 146 },
+                                mobile: { x: 18, y: 18 + index * 190, width: 291, height: 174 },
+                            },
                             children: [
                                 createCanvasElement('text', 18, 14, {
                                     id: `faq-question-title-${index}`,
@@ -8797,6 +8845,10 @@ function buildTemplateElements(input: {
                                     height: 24,
                                     props: { content: item.question, fontSize: 15, fontWeight: '800', color: '#111827' },
                                     dataBindings: [{ source: 'faq', mode: 'question', index, field: 'question', targetPath: 'props.content' }],
+                                    responsive: {
+                                        tablet: { width: 500, height: 24 },
+                                        mobile: { width: 226, height: 46 },
+                                    },
                                 }),
                                 createCanvasElement('paragraph', 18, 42, {
                                     id: `faq-question-answer-${index}`,
@@ -8804,12 +8856,20 @@ function buildTemplateElements(input: {
                                     height: 22,
                                     props: { content: item.answer, fontSize: 13, lineHeight: 1.35, color: '#64748b' },
                                     dataBindings: [{ source: 'faq', mode: 'question', index, field: 'answer', targetPath: 'props.content' }],
+                                    responsive: {
+                                        tablet: { y: 48, width: 500, height: 44 },
+                                        mobile: { y: 72, width: 226, height: 68 },
+                                    },
                                 }),
                                 createCanvasElement('button', 590, 18, {
                                     id: `faq-question-toggle-${index}`,
                                     width: 36,
                                     height: 36,
                                     props: { label: '+', backgroundColor: '#dbeafe', color: '#1e3a8a', borderRadius: 8, fontSize: 18, fontWeight: '800', action: 'faq.toggle' },
+                                    responsive: {
+                                        tablet: { x: 558, y: 18, width: 40, height: 40 },
+                                        mobile: { x: 236, y: 18, width: 40, height: 40 },
+                                    },
                                 }),
                             ],
                         })),
@@ -8822,24 +8882,39 @@ function buildTemplateElements(input: {
                 height: 260,
                 dataBindings: [{ source: 'faq', mode: 'support', fields: ['contactUrl', 'helpCenterUrl', 'supportEmail'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1360, width: 768, height: 460 },
+                    mobile: { y: 1730, width: 375, height: 560 },
+                },
                 children: [
                     createCanvasElement('box', 74, 58, {
                         id: 'faq-support-card',
                         width: 520,
                         height: 150,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 150 },
+                            mobile: { x: 24, y: 46, width: 327, height: 204 },
+                        },
                         children: [
                             createCanvasElement('heading', 26, 26, {
                                 id: 'faq-support-heading',
                                 width: 300,
                                 height: 32,
                                 props: { content: 'Need a human answer?', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64, props: { fontSize: 24 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 26, 76, {
                                 id: 'faq-support-copy',
                                 width: 390,
                                 height: 44,
                                 props: { content: 'Route unanswered questions to your support form, help center, or account workspace with the visitor context attached.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 500 },
+                                    mobile: { y: 104, width: 270, height: 76 },
+                                },
                             }),
                         ],
                     }),
@@ -8849,6 +8924,10 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'faq', mode: 'contact', fields: ['contactUrl', 'supportEmail'] }],
                         props: { backgroundColor: '#1e3a8a', borderRadius: 8, borderColor: '#1e3a8a', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 250, width: 660, height: 150 },
+                            mobile: { x: 24, y: 292, width: 327, height: 190 },
+                        },
                         children: [
                             createCanvasElement('text', 26, 24, {
                                 id: 'faq-contact-label',
@@ -8862,6 +8941,10 @@ function buildTemplateElements(input: {
                                 height: 42,
                                 props: { label: 'Contact support', backgroundColor: '#ffffff', color: '#1e3a8a', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'faq.contact.open' },
                                 dataBindings: [{ source: 'faq', mode: 'contact', field: 'contactUrl', targetPath: 'props.href' }],
+                                responsive: {
+                                    tablet: { width: 170, height: 44 },
+                                    mobile: { width: 180, height: 48 },
+                                },
                             }),
                         ],
                     }),

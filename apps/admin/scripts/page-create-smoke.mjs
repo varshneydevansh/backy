@@ -1669,6 +1669,27 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { y: 206, width: 180, height: 48 }"),
     'Help center page starter must seed explicit tablet/mobile responsive overrides for support search, categories, FAQ, and escalation sections.',
   );
+  assert(
+    source.includes("id: 'faq-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 620 }") &&
+      source.includes("id: 'faq-search-input'") &&
+      source.includes("mobile: { x: 24, y: 388, width: 327, height: 58 }") &&
+      source.includes("id: 'faq-question-section'") &&
+      source.includes("tablet: { y: 500, width: 768, height: 860 }") &&
+      source.includes("id: 'faq-category-filter'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 254 }") &&
+      source.includes("id: `faq-category-chip-${index}`") &&
+      source.includes("tablet: { x: 22 + (index % 4) * 150, y: 78, width: 132, height: 40 }") &&
+      source.includes("id: 'faq-question-list'") &&
+      source.includes("mobile: { x: 24, y: 350, width: 327, height: 620 }") &&
+      source.includes("id: `faq-question-item-${index}`") &&
+      source.includes("mobile: { x: 18, y: 18 + index * 190, width: 291, height: 174 }") &&
+      source.includes("id: 'faq-support-section'") &&
+      source.includes("mobile: { y: 1730, width: 375, height: 560 }") &&
+      source.includes("id: 'faq-contact-card'") &&
+      source.includes("tablet: { x: 54, y: 250, width: 660, height: 150 }"),
+    'FAQ page starter must seed explicit tablet/mobile responsive overrides for search, category filters, question rows, and support sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
