@@ -77,6 +77,21 @@ const parseModerationMode = (value: unknown): FormDefinition['moderationMode'] =
   value === 'auto-approve' ? 'auto-approve' : 'manual'
 );
 
+const hasOwn = (body: Record<string, unknown>, key: string): boolean => (
+  Object.prototype.hasOwnProperty.call(body, key)
+);
+
+const parseBooleanControl = (
+  body: Record<string, unknown>,
+  key: string,
+  fallback: boolean,
+): { value: boolean; invalid?: true } => {
+  if (!hasOwn(body, key)) return { value: fallback };
+  return typeof body[key] === 'boolean'
+    ? { value: body[key] }
+    : { value: fallback, invalid: true };
+};
+
 const invalidAudienceResponse = (requestId: string) => errorResponse(
   400,
   'INVALID_ADMIN_FORM_AUDIENCE',
@@ -91,9 +106,16 @@ const invalidModerationModeResponse = (requestId: string) => errorResponse(
   requestId,
 );
 
+const invalidBooleanControlResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_ADMIN_FORM_BOOLEAN_CONTROL',
+  'Form boolean controls must be true or false when provided.',
+  requestId,
+);
+
 const formConfigurationValidationError = (body: Record<string, unknown>, requestId: string) => {
   if (
-    Object.prototype.hasOwnProperty.call(body, 'audience') &&
+    hasOwn(body, 'audience') &&
     body.audience !== 'public' &&
     body.audience !== 'authenticated' &&
     body.audience !== 'adminOnly'
@@ -102,11 +124,17 @@ const formConfigurationValidationError = (body: Record<string, unknown>, request
   }
 
   if (
-    Object.prototype.hasOwnProperty.call(body, 'moderationMode') &&
+    hasOwn(body, 'moderationMode') &&
     body.moderationMode !== 'manual' &&
     body.moderationMode !== 'auto-approve'
   ) {
     return invalidModerationModeResponse(requestId);
+  }
+
+  for (const key of ['isActive', 'enableHoneypot', 'enableCaptcha']) {
+    if (hasOwn(body, key) && typeof body[key] !== 'boolean') {
+      return invalidBooleanControlResponse(requestId);
+    }
   }
 
   return null;
@@ -184,14 +212,14 @@ const normalizeCreateInput = (siteId: string, body: Record<string, unknown>) => 
     title: textValue(body.title || body.name),
     description: textValue(body.description) || null,
     audience: parseAudience(body.audience),
-    isActive: body.isActive !== false,
+    isActive: parseBooleanControl(body, 'isActive', true).value,
     fields: parseFormFields(body.fields) || [],
     notificationEmail: textValue(body.notificationEmail) || null,
     notificationWebhook: textValue(body.notificationWebhook) || null,
     successRedirectUrl: textValue(body.successRedirectUrl) || null,
     successMessage: textValue(body.successMessage) || 'Submission received.',
-    enableHoneypot: body.enableHoneypot !== false,
-    enableCaptcha: body.enableCaptcha === true,
+    enableHoneypot: parseBooleanControl(body, 'enableHoneypot', true).value,
+    enableCaptcha: parseBooleanControl(body, 'enableCaptcha', false).value,
     spamSettings,
     consentSettings,
     moderationMode: parseModerationMode(body.moderationMode),

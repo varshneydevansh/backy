@@ -616,7 +616,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
   - Returns `{ success, requestId, data: { forms, total, pagination, persistenceCertification } }` with legacy top-level `forms`, `total`, and `persistenceCertification` for compatibility. `data.persistenceCertification` uses `schemaVersion: "backy.forms-persistence-certification.v1"` and exposes only non-secret gate metadata for `npm run test:forms-postgres --workspace @backy/db`, `npm run ci:forms-postgres`, `.github/workflows/forms-postgres-contract.yml`, `BACKY_DATABASE_URL`/`DATABASE_URL`, `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true`, target guard env vars, and the disposable migrated Supabase/Postgres requirement.
 - `GET /api/admin/sites/:siteId/forms/:formId`
 - `PATCH /api/admin/sites/:siteId/forms/:formId`
-  - Admin form create/update rejects invalid explicit `audience` or `moderationMode` values with `400 INVALID_ADMIN_FORM_AUDIENCE` or `400 INVALID_ADMIN_FORM_MODERATION_MODE` instead of defaulting them to public/manual.
+  - Admin form create/update rejects invalid explicit `audience`, `moderationMode`, or boolean control values with `400 INVALID_ADMIN_FORM_AUDIENCE`, `INVALID_ADMIN_FORM_MODERATION_MODE`, or `INVALID_ADMIN_FORM_BOOLEAN_CONTROL` instead of defaulting them; boolean controls include `isActive`, `enableHoneypot`, and `enableCaptcha`.
 - `POST /api/admin/sites/:siteId/forms/:formId/clone`
 - `GET /api/admin/sites/:siteId/forms/:formId/submissions`
 - `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/review`

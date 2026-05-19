@@ -48,6 +48,20 @@ const parseModerationMode = (value: unknown): FormDefinition['moderationMode'] |
   value === 'manual' || value === 'auto-approve' ? value : undefined
 );
 
+const hasOwn = (body: Record<string, unknown>, key: string): boolean => (
+  Object.prototype.hasOwnProperty.call(body, key)
+);
+
+const parseBooleanControl = (
+  body: Record<string, unknown>,
+  key: string,
+): { value?: boolean; invalid?: true } => {
+  if (!hasOwn(body, key)) return {};
+  return typeof body[key] === 'boolean'
+    ? { value: body[key] }
+    : { invalid: true };
+};
+
 const invalidAudienceResponse = (requestId: string) => errorResponse(
   400,
   'INVALID_ADMIN_FORM_AUDIENCE',
@@ -62,9 +76,16 @@ const invalidModerationModeResponse = (requestId: string) => errorResponse(
   requestId,
 );
 
+const invalidBooleanControlResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_ADMIN_FORM_BOOLEAN_CONTROL',
+  'Form boolean controls must be true or false when provided.',
+  requestId,
+);
+
 const formConfigurationValidationError = (body: Record<string, unknown>, requestId: string) => {
   if (
-    Object.prototype.hasOwnProperty.call(body, 'audience') &&
+    hasOwn(body, 'audience') &&
     body.audience !== 'public' &&
     body.audience !== 'authenticated' &&
     body.audience !== 'adminOnly'
@@ -73,11 +94,17 @@ const formConfigurationValidationError = (body: Record<string, unknown>, request
   }
 
   if (
-    Object.prototype.hasOwnProperty.call(body, 'moderationMode') &&
+    hasOwn(body, 'moderationMode') &&
     body.moderationMode !== 'manual' &&
     body.moderationMode !== 'auto-approve'
   ) {
     return invalidModerationModeResponse(requestId);
+  }
+
+  for (const key of ['isActive', 'enableHoneypot', 'enableCaptcha']) {
+    if (hasOwn(body, key) && typeof body[key] !== 'boolean') {
+      return invalidBooleanControlResponse(requestId);
+    }
   }
 
   return null;
@@ -129,6 +156,9 @@ const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinit
   const settings = parseRecord<Record<string, unknown>>(body.settings) || {};
   const spamSettings = parseRecord<FormDefinition['spamSettings'] & Record<string, unknown>>(body.spamSettings);
   const consentSettings = parseRecord<FormDefinition['consentSettings'] & Record<string, unknown>>(body.consentSettings);
+  const isActive = parseBooleanControl(body, 'isActive');
+  const enableHoneypot = parseBooleanControl(body, 'enableHoneypot');
+  const enableCaptcha = parseBooleanControl(body, 'enableCaptcha');
 
   if ('pageId' in body) input.pageId = nullableTextValue(body.pageId);
   if ('postId' in body) input.postId = nullableTextValue(body.postId);
@@ -136,14 +166,14 @@ const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinit
   if ('title' in body) input.title = nullableTextValue(body.title);
   if ('description' in body) input.description = nullableTextValue(body.description);
   if ('audience' in body) input.audience = parseAudience(body.audience) || 'public';
-  if ('isActive' in body) input.isActive = body.isActive !== false;
+  if (isActive.value !== undefined) input.isActive = isActive.value;
   if ('fields' in body) input.fields = parseFormFields(body.fields) || [];
   if ('notificationEmail' in body) input.notificationEmail = nullableTextValue(body.notificationEmail);
   if ('notificationWebhook' in body) input.notificationWebhook = nullableTextValue(body.notificationWebhook);
   if ('successRedirectUrl' in body) input.successRedirectUrl = nullableTextValue(body.successRedirectUrl);
   if ('successMessage' in body) input.successMessage = nullableTextValue(body.successMessage);
-  if ('enableHoneypot' in body) input.enableHoneypot = body.enableHoneypot !== false;
-  if ('enableCaptcha' in body) input.enableCaptcha = body.enableCaptcha === true;
+  if (enableHoneypot.value !== undefined) input.enableHoneypot = enableHoneypot.value;
+  if (enableCaptcha.value !== undefined) input.enableCaptcha = enableCaptcha.value;
   if ('spamSettings' in body) input.spamSettings = spamSettings;
   if ('consentSettings' in body) input.consentSettings = consentSettings;
   if ('moderationMode' in body) input.moderationMode = parseModerationMode(body.moderationMode) || 'manual';

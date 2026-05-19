@@ -481,10 +481,14 @@ function assertAdminPageContentValidationSource() {
   assert(publicFormContactDetailRoute.includes('statusProvided'), 'form contact detail route must distinguish missing status from invalid status values');
   assert(adminFormsRoute.includes("'INVALID_ADMIN_FORM_AUDIENCE'"), 'admin form create route must reject invalid audience values');
   assert(adminFormsRoute.includes("'INVALID_ADMIN_FORM_MODERATION_MODE'"), 'admin form create route must reject invalid moderation mode values');
+  assert(adminFormsRoute.includes("'INVALID_ADMIN_FORM_BOOLEAN_CONTROL'"), 'admin form create route must reject invalid boolean controls');
   assert(adminFormsRoute.includes('formConfigurationValidationError'), 'admin form create route must validate explicit configuration values before defaulting');
+  assert(adminFormsRoute.includes('parseBooleanControl'), 'admin form create route must parse boolean controls strictly');
   assert(adminFormDetailRoute.includes("'INVALID_ADMIN_FORM_AUDIENCE'"), 'admin form update route must reject invalid audience values');
   assert(adminFormDetailRoute.includes("'INVALID_ADMIN_FORM_MODERATION_MODE'"), 'admin form update route must reject invalid moderation mode values');
+  assert(adminFormDetailRoute.includes("'INVALID_ADMIN_FORM_BOOLEAN_CONTROL'"), 'admin form update route must reject invalid boolean controls');
   assert(adminFormDetailRoute.includes('formConfigurationValidationError'), 'admin form update route must validate explicit configuration values before defaulting');
+  assert(adminFormDetailRoute.includes('parseBooleanControl'), 'admin form update route must parse boolean controls strictly');
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_STATUS'"), 'admin form submissions route must reject invalid status filters');
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_LIMIT'"), 'admin form submissions route must reject invalid limit filters');
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_OFFSET'"), 'admin form submissions route must reject invalid offset filters');
@@ -568,6 +572,7 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_FORM_CONTACT_OFFSET') &&
       apiContracts.includes('INVALID_ADMIN_FORM_AUDIENCE') &&
       apiContracts.includes('INVALID_ADMIN_FORM_MODERATION_MODE') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_BOOLEAN_CONTROL') &&
       apiContracts.includes('INVALID_ADMIN_FORM_SUBMISSION_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_FORM_SUBMISSION_LIMIT') &&
       apiContracts.includes('INVALID_ADMIN_FORM_SUBMISSION_OFFSET') &&
