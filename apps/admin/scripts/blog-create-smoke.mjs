@@ -31,6 +31,13 @@ const assertBlogCreateSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog create route must use the shared EmptyState component');
   assert(source.includes('title="No blog templates captured yet"'), 'Blog create frontend template panel must keep the empty template title visible');
   assert(source.includes('Save a frontend design contract with blog post templates to seed this article from the connected custom frontend.'), 'Blog create frontend template empty state must explain how templates are captured');
+  assert(
+    source.includes('getScheduledBlogPostDateError') &&
+      source.includes('Date.parse(scheduledAt)') &&
+      source.includes('scheduledAtMs <= Date.now()') &&
+      source.includes('Choose a future publish date before scheduling.'),
+    'Blog create route must block scheduled posts with non-future publish dates before submit',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

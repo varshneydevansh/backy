@@ -83,6 +83,8 @@ interface BlogCreateAutosaveDraft {
     frontendDesignChrome?: SiteFrontendDesignContract['chrome'] | null;
 }
 
+type BlogCreationStatus = BlogCreateAutosaveDraft['status'];
+
 export const Route = createFileRoute('/blog/new')({
     validateSearch: (search: Record<string, unknown>): BlogNewSearch => ({
         siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
@@ -679,7 +681,7 @@ function NewBlogPostPage() {
     const [title, setTitle] = useState('');
     const [slug, setSlug] = useState('');
     const [excerpt, setExcerpt] = useState('');
-    const [status, setStatus] = useState<'draft' | 'published' | 'scheduled'>('draft');
+    const [status, setStatus] = useState<BlogCreationStatus>('draft');
     const [scheduledAt, setScheduledAt] = useState<string | null>(null);
     const [seoTitle, setSeoTitle] = useState('');
     const [seoDescription, setSeoDescription] = useState('');
@@ -1200,6 +1202,9 @@ function NewBlogPostPage() {
     const canonicalValid = normalizedCanonicalPath.startsWith('/');
     const effectiveSeoTitle = seoTitle.trim() || title.trim();
     const effectiveSeoDescription = seoDescription.trim() || excerpt.trim();
+    const scheduleValidationMessage = getScheduledBlogPostDateError(status, scheduledAt);
+    const hasFutureSchedule = scheduleValidationMessage === null;
+    const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
     const readinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slugValue.trim().length > 0 },
@@ -1208,7 +1213,7 @@ function NewBlogPostPage() {
         { label: 'SEO', complete: effectiveSeoTitle.length > 0 && effectiveSeoDescription.length >= 50 && canonicalValid },
         { label: 'Featured image', complete: Boolean(featuredImageId) },
         { label: 'Design', complete: canvasElements.length > 0 },
-        { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
+        { label: 'Schedule', complete: hasFutureSchedule },
     ];
     const readyCount = readinessChecks.filter((check) => check.complete).length;
     const readinessScore = Math.round((readyCount / readinessChecks.length) * 100);
@@ -1231,7 +1236,7 @@ function NewBlogPostPage() {
     const canSubmit = canCreateDraft
         && (status === 'draft' || canPublishBlog)
         && (status === 'draft' || interactivePublishReady)
-        && (status !== 'scheduled' || Boolean(scheduledAt));
+        && hasFutureSchedule;
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
     const createPayloadPreview = useMemo(() => ({
         title: title.trim() || 'Untitled post',
@@ -1397,7 +1402,7 @@ function NewBlogPostPage() {
         nextStep: 'Created posts open in the blog editor where publishing, revisions, taxonomy, SEO, and the public canvas can be refined.',
         guardrails: [
             'Backend owns duplicate slug validation per site.',
-            'Scheduled posts require a publish date before they can be created.',
+            'Scheduled posts require a future publish date before they can be created.',
             'The public frontend should render the saved canvas content for this route instead of hardcoding blog templates.',
             'New posts start with editable site chrome and article layout blocks so headers, nav, body, and footer remain controlled by Backy.',
             'Categories, tags, and author IDs are site-scoped and should be read from Backy before rendering filters or bylines.',
@@ -1772,7 +1777,7 @@ function NewBlogPostPage() {
         if (routeCheckError) return 'Backy could not verify existing blog routes for this site. Retry the route check before saving.';
         if (routeConflict) return `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`;
         if (!canonicalValid) return 'Canonical path must start with / before saving';
-        if (mode === 'save' && status === 'scheduled' && !scheduledAt) return 'Choose a publish date before scheduling';
+        if (mode === 'save' && scheduleValidationMessage) return scheduleValidationMessage;
         return 'Add a title and URL slug before saving';
     };
 
@@ -1823,6 +1828,13 @@ function NewBlogPostPage() {
         if (isCreateBusy) return;
         if (!canEditBlog || (status !== 'draft' && !canPublishBlog)) {
             setError(!canEditBlog ? editBlogDeniedMessage : publishBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
+
+        const currentScheduleValidationMessage = getScheduledBlogPostDateError(status, scheduledAt);
+        if (currentScheduleValidationMessage) {
+            setError(currentScheduleValidationMessage);
             setNotice(null);
             return;
         }
@@ -2550,6 +2562,7 @@ function NewBlogPostPage() {
                                         <input
                                             type="datetime-local"
                                             value={toDateTimeLocalValue(scheduledAt)}
+                                            min={minimumScheduledAt}
                                             onChange={(e) => {
                                                 if (isCreateBusy || !canEditBlog || !canPublishBlog) return;
 
@@ -2558,9 +2571,13 @@ function NewBlogPostPage() {
                                             }}
                                             disabled={createFormDisabled || !canPublishBlog}
                                             title={publishBlogPermissionTitle}
+                                            aria-invalid={Boolean(scheduleValidationMessage)}
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
                                         />
+                                        {scheduleValidationMessage && (
+                                            <p className="text-xs text-destructive">{scheduleValidationMessage}</p>
+                                        )}
                                     </div>
                                 )}
 
@@ -2893,6 +2910,18 @@ const normalizeCanonicalPath = (value: string) => {
     }
 
     return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+};
+
+const getScheduledBlogPostDateError = (status: BlogCreationStatus, scheduledAt: string | null): string | null => {
+    if (status !== 'scheduled') return null;
+    if (!scheduledAt) return 'Choose a publish date before scheduling.';
+
+    const scheduledAtMs = Date.parse(scheduledAt);
+    if (!Number.isFinite(scheduledAtMs) || scheduledAtMs <= Date.now()) {
+        return 'Choose a future publish date before scheduling.';
+    }
+
+    return null;
 };
 
 const isRecoverableBlogCreateDraft = (value: Partial<BlogCreateAutosaveDraft>): value is BlogCreateAutosaveDraft => (

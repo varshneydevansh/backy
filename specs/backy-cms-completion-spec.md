@@ -126,9 +126,8 @@ Legend:
 - ❌ slug generation policy, status/state machine, SEO fields, author metadata incomplete
 
 #### `/blog.new` (`blog.new.tsx`)
-- ✅ rich form/editor scaffold
-- ⚠️ fields stored in editor-local model only
-- ❌ no publication pipeline and no category/tag relations
+- ✅ rich form/editor scaffold with backend create, category/tag/author assignment, SEO, frontend-template seeding, autosave, and future-date scheduled publish validation.
+- ⚠️ continue hardening relation-based publish flow and broader external-provider certification.
 
 #### `/blog.$postId` (`blog.$postId.tsx`)
 - ✅ editor+canvas for article-like content
