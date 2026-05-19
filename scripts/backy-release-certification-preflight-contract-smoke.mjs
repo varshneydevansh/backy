@@ -387,6 +387,7 @@ includesAll(
     'npm run test:forms-postgres-preflight-contract',
     'npm run test:sdk-postgres-preflight-contract',
     'npm run test:sdk-postgres-disposable-guard',
+    'npm run test:admin-contract-source',
     'npm run test:settings-provider-certification-preflight-contract',
     'npm run test:commerce-provider-certification-preflight-contract',
     'npm run test:release-certification-doctor-contract',

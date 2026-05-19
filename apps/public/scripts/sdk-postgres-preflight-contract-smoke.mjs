@@ -292,7 +292,7 @@ assert(
 assert(
   rootPackage.includes('"test:sdk-postgres-disposable-guard": "node scripts/sdk-postgres-disposable-guard-smoke.mjs"') &&
     rootPackage.includes('"ci:sdk-postgres-smoke": "npm run test:sdk-postgres-preflight-contract && npm run test:sdk-postgres-disposable-guard && BACKY_SDK_REQUIRE_DATABASE=1 node scripts/sdk-smoke-ci.mjs"') &&
-    rootPackage.includes('npm run test:sdk-postgres-disposable-guard && npm run test:settings-provider-certification-preflight-contract') &&
+    rootPackage.includes('npm run test:sdk-postgres-disposable-guard && npm run test:admin-contract-source && npm run test:settings-provider-certification-preflight-contract') &&
     sdkPostgresWorkflow.includes('Run SDK Postgres preflight contract') &&
     sdkPostgresWorkflow.includes('npm run test:sdk-postgres-preflight-contract') &&
     sdkPostgresWorkflow.includes('DATABASE_URL') &&
