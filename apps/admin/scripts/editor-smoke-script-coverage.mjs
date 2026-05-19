@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packagePath = path.resolve(__dirname, '../package.json');
 const smokePath = path.resolve(__dirname, 'editor-drag-smoke.mjs');
+const canvasEditorPath = path.resolve(__dirname, '../src/components/editor/CanvasEditor.tsx');
 const activeEditorContextPath = path.resolve(__dirname, '../src/components/editor/ActiveEditorContext.tsx');
 const propertyPanelPath = path.resolve(__dirname, '../src/components/editor/PropertyPanel.tsx');
 const richTextFormattingPath = path.resolve(__dirname, '../src/components/editor/RichTextFormatting.tsx');
@@ -13,6 +14,7 @@ const editorPackageIndexPath = path.resolve(__dirname, '../../../packages/editor
 
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const smokeSource = fs.readFileSync(smokePath, 'utf8');
+const canvasEditorSource = fs.readFileSync(canvasEditorPath, 'utf8');
 const activeEditorContextSource = fs.readFileSync(activeEditorContextPath, 'utf8');
 const propertyPanelSource = fs.readFileSync(propertyPanelPath, 'utf8');
 const richTextFormattingSource = fs.readFileSync(richTextFormattingPath, 'utf8');
@@ -220,6 +222,21 @@ const missingResponsiveSmokeSnippets = collectMissingSnippets(smokeSource, [
   "key: 'radioMobile'",
   "label: 'Public mobile radio responsive geometry'",
 ]);
+const missingResponsiveGroupingSourceSnippets = collectMissingSnippets(canvasEditorSource, [
+  "const EDITOR_RESPONSIVE_BREAKPOINTS = ['tablet', 'mobile']",
+  'const buildResponsiveGroupChildren = (',
+  'responsiveGeometryForElement(item, breakpoint)',
+  'override.x = geometry.x - (bounds?.x ?? groupBase.x);',
+  '...(responsiveGroup.responsive ? { responsive: responsiveGroup.responsive } : {})',
+]);
+const missingDistributionSourceSnippets = collectMissingSnippets(canvasEditorSource, [
+  'const normalizeDistributedPosition = (value: number): number =>',
+  'const nextPosition = normalizeDistributedPosition(nextCenter - sizeForAxis / 2);',
+]).concat(
+  canvasEditorSource.includes('const nextPosition = snapEditorValue(nextCenter - sizeForAxis / 2);')
+    ? ['distribution still snaps each layer position to grid']
+    : [],
+);
 const missingStressSmokeSnippets = collectMissingSnippets(smokeSource, [
   'const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === \'1\';',
   'const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);',
@@ -287,6 +304,8 @@ if (
   missingTableRangeSourceSnippets.length ||
   missingTableRangeSmokeSnippets.length ||
   missingResponsiveSmokeSnippets.length ||
+  missingResponsiveGroupingSourceSnippets.length ||
+  missingDistributionSourceSnippets.length ||
   missingStressSmokeSnippets.length ||
   missingStressScriptGuards.length ||
   missingEditorMfaLoginSnippets.length ||
@@ -302,6 +321,8 @@ if (
     missingTableRangeSourceSnippets,
     missingTableRangeSmokeSnippets,
     missingResponsiveSmokeSnippets,
+    missingResponsiveGroupingSourceSnippets,
+    missingDistributionSourceSnippets,
     missingStressSmokeSnippets,
     missingStressScriptGuards,
     missingEditorMfaLoginSnippets,
@@ -320,6 +341,8 @@ console.log(JSON.stringify({
   tableRangeSourceSnippets: 42,
   tableRangeSmokeSnippets: 10,
   responsiveSmokeSnippets: 116,
+  responsiveGroupingSourceSnippets: 5,
+  distributionSourceSnippets: 2,
   stressSmokeSnippets: 9,
   stressScriptGuards: 2,
   editorMfaLoginSnippets: 9,

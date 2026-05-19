@@ -236,9 +236,18 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-inspector-layer-name"') && source.includes('handleLayerRename(selectedElement.id') && source.includes('placeholder={selectedElementTypeLabel'), 'Editor inspector must expose a selected-layer name editor');
   assert(source.includes('data-testid="editor-group-selection"') && source.includes('aria-keyshortcuts="Control+G Meta+G"'), 'Editor group action must expose Cmd/Ctrl+G through aria-keyshortcuts');
   assert(source.includes('data-testid="editor-ungroup-selection"') && source.includes('aria-keyshortcuts="Shift+Control+G Shift+Meta+G"'), 'Editor ungroup action must expose Shift+Cmd/Ctrl+G through aria-keyshortcuts');
+  assert(
+    source.includes("const EDITOR_RESPONSIVE_BREAKPOINTS = ['tablet', 'mobile']") &&
+      source.includes('const buildResponsiveGroupChildren = (') &&
+      source.includes('responsiveGeometryForElement(item, breakpoint)') &&
+      source.includes('override.x = geometry.x - (bounds?.x ?? groupBase.x)') &&
+      source.includes('...(responsiveGroup.responsive ? { responsive: responsiveGroup.responsive } : {})'),
+    'Editor grouping must preserve tablet/mobile responsive geometry when layers are moved into a group',
+  );
   assert(source.includes('data-testid="editor-align-left"') && source.includes('data-testid="editor-align-center"') && source.includes('data-testid="editor-align-bottom"'), 'Editor alignment toolbar buttons must expose stable test ids');
   assert(source.includes('data-testid="editor-inspector-align-controls"') && source.includes('data-testid="editor-inspector-align-left"') && source.includes('data-testid="editor-inspector-align-bottom"'), 'Editor inspector must expose multi-selection alignment controls');
   assert(!source.includes('? -minX') && source.includes('const centerX = minX + groupWidth / 2;') && source.includes('maxX - entry.element.width'), 'Editor multi-selection alignment must align selected layers to each other instead of moving the whole selection to the canvas edge');
+  assert(source.includes('const normalizeDistributedPosition = (value: number): number =>') && source.includes('const nextPosition = normalizeDistributedPosition(nextCenter - sizeForAxis / 2);') && !source.includes('const nextPosition = snapEditorValue(nextCenter - sizeForAxis / 2);'), 'Editor multi-selection distribution must preserve even center spacing instead of snapping every layer to the grid');
   assert(!source.includes('// Placeholder for drag analytics/hooks.'), 'Editor component-library drag start must not remain a placeholder hook');
   assert(source.includes('const [libraryDragItem, setLibraryDragItem]') && source.includes('data-library-drag-active={libraryDragItem ?') && source.includes('data-testid="editor-library-drag-status"'), 'Editor canvas must expose component-library drag status while users drag catalog items');
   assert(source.includes('const handleLibraryDragEnd') && source.includes('setLibraryDragItem(null);') && source.includes('onDragEnd={handleLibraryDragEnd}'), 'Editor canvas must clear component-library drag status after drop or cancelled drag');
@@ -1935,7 +1944,7 @@ const collectSlateElements = (value, elements = []) => {
   return elements;
 };
 
-const readEditorElementState = async (client, elementIds) => {
+const readEditorElementState = async (client, elementIds, options = {}) => {
   const entries = await Promise.all(elementIds.map(async (elementId) => {
     const box = await getElementBox(client, elementId);
     assert(box, `Missing element ${elementId} while reading editor state`);
@@ -1943,8 +1952,8 @@ const readEditorElementState = async (client, elementIds) => {
     return [
       elementId,
       {
-        x: Math.round(parseCssPixel(box.left) ?? box.x),
-        y: Math.round(parseCssPixel(box.top) ?? box.y),
+        x: Math.round(options.visual ? getCanvasVisualX(box) : parseCssPixel(box.left) ?? box.x),
+        y: Math.round(options.visual ? getCanvasVisualY(box) : parseCssPixel(box.top) ?? box.y),
         width: Math.round(parseCssPixel(box.cssWidth) ?? box.width),
         height: Math.round(parseCssPixel(box.cssHeight) ?? box.height),
       },
@@ -3067,12 +3076,16 @@ const readLayerActionState = async (client, elementId) => {
           .map((node) => node.getAttribute('data-layer-id')),
       };
     }
+    const visibilityButton = document.querySelector('[data-layer-action="visibility"][data-layer-action-id="${elementId}"]');
+    const lockButton = document.querySelector('[data-layer-action="lock"][data-layer-action-id="${elementId}"]');
     return {
       ok: true,
       hidden: row.classList.contains('hidden'),
       locked: row.classList.contains('locked'),
-      visibilityLabel: document.querySelector('[data-layer-action="visibility"][data-layer-action-id="${elementId}"]')?.getAttribute('aria-label') || '',
-      lockLabel: document.querySelector('[data-layer-action="lock"][data-layer-action-id="${elementId}"]')?.getAttribute('aria-label') || '',
+      visibilityLabel: visibilityButton?.getAttribute('aria-label') || '',
+      lockLabel: lockButton?.getAttribute('aria-label') || '',
+      visibilityDisabled: visibilityButton instanceof HTMLButtonElement ? visibilityButton.disabled : null,
+      lockDisabled: lockButton instanceof HTMLButtonElement ? lockButton.disabled : null,
     };
   })()`);
 
@@ -3087,6 +3100,7 @@ const readLayerActionState = async (client, elementId) => {
 };
 
 const setLayerHiddenState = async (client, elementId, hidden) => {
+  await waitForEditorMutationReady(client, `before setting ${elementId} hidden=${hidden}`);
   const state = await readLayerActionState(client, elementId);
   if (state.hidden === hidden) {
     return state;
@@ -3095,20 +3109,30 @@ const setLayerHiddenState = async (client, elementId, hidden) => {
   const clicked = await evaluate(client, `(() => {
     const button = document.querySelector('[data-layer-action="visibility"][data-layer-action-id="${elementId}"]');
     if (!(button instanceof HTMLButtonElement)) {
-      return false;
+      return { ok: false, reason: 'missing-button' };
+    }
+    if (button.disabled) {
+      return { ok: false, reason: 'button-disabled' };
     }
     button.click();
-    return true;
+    return { ok: true };
   })()`);
 
-  assert(clicked, `Unable to toggle visibility for layer ${elementId}`);
-  await sleep(250);
-  const nextState = await readLayerActionState(client, elementId);
+  assert(clicked?.ok, `Unable to toggle visibility for layer ${elementId}: ${JSON.stringify(clicked)}`);
+  let nextState = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    nextState = await readLayerActionState(client, elementId);
+    if (nextState.hidden === hidden) {
+      return nextState;
+    }
+    await sleep(100);
+  }
   assert(nextState.hidden === hidden, `Layer ${elementId} hidden state did not become ${hidden}: ${JSON.stringify(nextState)}`);
   return nextState;
 };
 
 const setLayerLockedState = async (client, elementId, locked) => {
+  await waitForEditorMutationReady(client, `before setting ${elementId} locked=${locked}`);
   const state = await readLayerActionState(client, elementId);
   if (state.locked === locked) {
     return state;
@@ -3117,15 +3141,24 @@ const setLayerLockedState = async (client, elementId, locked) => {
   const clicked = await evaluate(client, `(() => {
     const button = document.querySelector('[data-layer-action="lock"][data-layer-action-id="${elementId}"]');
     if (!(button instanceof HTMLButtonElement)) {
-      return false;
+      return { ok: false, reason: 'missing-button' };
+    }
+    if (button.disabled) {
+      return { ok: false, reason: 'button-disabled' };
     }
     button.click();
-    return true;
+    return { ok: true };
   })()`);
 
-  assert(clicked, `Unable to toggle lock for layer ${elementId}`);
-  await sleep(250);
-  const nextState = await readLayerActionState(client, elementId);
+  assert(clicked?.ok, `Unable to toggle lock for layer ${elementId}: ${JSON.stringify(clicked)}`);
+  let nextState = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    nextState = await readLayerActionState(client, elementId);
+    if (nextState.locked === locked) {
+      return nextState;
+    }
+    await sleep(100);
+  }
   assert(nextState.locked === locked, `Layer ${elementId} locked state did not become ${locked}: ${JSON.stringify(nextState)}`);
   return nextState;
 };
@@ -9147,7 +9180,7 @@ const testSiblingScopeSelectionShortcut = async (client, requiredElementIds) => 
 const testLayerGrouping = async (client, elementIds) => {
   assert(elementIds.length >= 2, 'Layer grouping test needs at least two elements');
   const [firstId, secondId] = elementIds;
-  const before = await readEditorElementState(client, [firstId, secondId]);
+  const before = await readEditorElementState(client, [firstId, secondId], { visual: true });
 
   await evaluate(client, `(() => {
     if (!document.querySelector('[data-layer-id="${firstId}"]')) {
@@ -9211,12 +9244,12 @@ const testLayerGrouping = async (client, elementIds) => {
   assert(grouped.hasSelection, `Grouped selection was not shown in inspector: ${JSON.stringify(grouped)}`);
   assert(grouped.ungroupDisabled === false, `Ungroup button did not enable after grouping: ${JSON.stringify(grouped)}`);
 
-  const groupedState = await readEditorElementState(client, [firstId, secondId]);
+  const groupedState = await readEditorElementState(client, [firstId, secondId], { visual: true });
   assertElementState(groupedState, before, 'grouping preserved child geometry');
 
   await pressKey(client, 'z', { ctrlKey: true });
   await sleep(250);
-  const undoGroupingState = await readEditorElementState(client, [firstId, secondId]);
+  const undoGroupingState = await readEditorElementState(client, [firstId, secondId], { visual: true });
   const undoGroupingSelection = await evaluate(client, `(() => {
     const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
       .map((node) => node.getAttribute('data-layer-id'))
@@ -9226,18 +9259,30 @@ const testLayerGrouping = async (client, elementIds) => {
       selectedLayers,
       hasMultiSelection: Boolean(multiSelection),
       inspectorText: multiSelection?.textContent || '',
+      selectedCanvasNodes: Array.from(document.querySelectorAll('[data-element-id][data-selected-ids]'))
+        .map((node) => ({
+          id: node.getAttribute('data-element-id'),
+          selectedIds: node.getAttribute('data-selected-ids'),
+        })),
     };
   })()`);
+  const undoSelectedCanvasIds = Array.from(new Set(
+    (undoGroupingSelection.selectedCanvasNodes || [])
+      .flatMap((node) => String(node.selectedIds || '').split(','))
+      .filter(Boolean),
+  ));
   assertElementState(undoGroupingState, before, 'Ctrl+Z after grouping');
   assert(
     undoGroupingSelection.hasMultiSelection &&
-      [firstId, secondId].every((id) => undoGroupingSelection.selectedLayers.includes(id)),
+      [firstId, secondId].every((id) => (
+        undoGroupingSelection.selectedLayers.includes(id) || undoSelectedCanvasIds.includes(id)
+      )),
     `Ctrl+Z after grouping did not restore sibling multi-selection: ${JSON.stringify(undoGroupingSelection)}`,
   );
 
   await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
   await sleep(250);
-  const redoGroupingState = await readEditorElementState(client, [firstId, secondId]);
+  const redoGroupingState = await readEditorElementState(client, [firstId, secondId], { visual: true });
   const redoGroupingSelection = await evaluate(client, `(() => {
     const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
     const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
@@ -9253,7 +9298,7 @@ const testLayerGrouping = async (client, elementIds) => {
 
   await pressKey(client, 'g', { ctrlKey: true, shiftKey: true });
   await sleep(250);
-  const after = await readEditorElementState(client, [firstId, secondId]);
+  const after = await readEditorElementState(client, [firstId, secondId], { visual: true });
   const ungroupedSelection = await evaluate(client, `(() => {
     const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
       .map((node) => node.getAttribute('data-layer-id'))
@@ -9289,7 +9334,7 @@ const testLayerGrouping = async (client, elementIds) => {
 
   await pressKey(client, 'g', { metaKey: true, shiftKey: true });
   await sleep(250);
-  const afterMeta = await readEditorElementState(client, [firstId, secondId]);
+  const afterMeta = await readEditorElementState(client, [firstId, secondId], { visual: true });
   const metaUngroupedSelection = await evaluate(client, `(() => {
     const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
       .map((node) => node.getAttribute('data-layer-id'))
@@ -9561,7 +9606,7 @@ const testMultiSelectionCanvasDrag = async (client, elementIds) => {
 
 const testLockedLayerExcludedFromMultiDrag = async (client, lockedId, unlockedId) => {
   await setLayerLockedState(client, lockedId, true);
-  await selectLayerIds(client, [lockedId, unlockedId]);
+  await selectLayerIds(client, [unlockedId, lockedId]);
 
   const before = await readEditorElementState(client, [lockedId, unlockedId]);
   const drag = await dragSelectionHandle(client, unlockedId, 45, 25, { selectFirst: false });

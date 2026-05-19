@@ -288,6 +288,7 @@ const normalizeEditorGridSize = (value: number): number => {
 };
 
 const EDITOR_AUTOSAVE_DELAY_MS = 5000;
+const EDITOR_RESPONSIVE_BREAKPOINTS = ['tablet', 'mobile'] as const satisfies readonly EditorBreakpoint[];
 const RESPONSIVE_GEOMETRY_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const;
 const RESPONSIVE_LAYER_STATE_FIELDS = ['visible', 'locked'] as const;
 const RESPONSIVE_LAYOUT_FIELDS = [...RESPONSIVE_GEOMETRY_FIELDS, ...RESPONSIVE_LAYER_STATE_FIELDS] as const;
@@ -844,6 +845,149 @@ const applyUpdatesForBreakpoint = (
   );
 };
 
+const finiteNumberOrFallback = (value: unknown, fallback: number): number => (
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback
+);
+
+const normalizeDistributedPosition = (value: number): number => (
+  Math.max(0, Math.round(Number.isFinite(value) ? value : 0))
+);
+
+const responsiveGeometryForElement = (
+  element: CanvasElement,
+  breakpoint: Exclude<EditorBreakpoint, 'desktop'>,
+) => {
+  const override = element.responsive?.[breakpoint];
+
+  return {
+    x: finiteNumberOrFallback(override?.x, element.x),
+    y: finiteNumberOrFallback(override?.y, element.y),
+    width: Math.max(1, finiteNumberOrFallback(override?.width, element.width)),
+    height: Math.max(1, finiteNumberOrFallback(override?.height, element.height)),
+    zIndex: finiteNumberOrFallback(override?.zIndex, element.zIndex || 1),
+  };
+};
+
+const buildResponsiveGroupChildren = (
+  selectedSiblings: CanvasElement[],
+  groupId: string,
+  groupBase: Pick<CanvasElement, 'x' | 'y' | 'width' | 'height' | 'zIndex'>,
+): {
+  children: CanvasElement[];
+  responsive?: CanvasElement['responsive'];
+} => {
+  const breakpointBounds = EDITOR_RESPONSIVE_BREAKPOINTS.reduce<Partial<Record<Exclude<EditorBreakpoint, 'desktop'>, {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    zIndex: number;
+    hasGroupGeometryOverride: boolean;
+    hasAnyChildGeometryOverride: boolean;
+  }>>>((acc, breakpoint) => {
+    const hasAnyChildGeometryOverride = selectedSiblings.some((item) => (
+      hasResponsiveOverrideGroup(item.responsive?.[breakpoint], 'layout', item)
+    ));
+    if (!hasAnyChildGeometryOverride) {
+      return acc;
+    }
+
+    const geometries = selectedSiblings.map((item) => responsiveGeometryForElement(item, breakpoint));
+    const minX = Math.min(...geometries.map((item) => item.x));
+    const minY = Math.min(...geometries.map((item) => item.y));
+    const maxX = Math.max(...geometries.map((item) => item.x + item.width));
+    const maxY = Math.max(...geometries.map((item) => item.y + item.height));
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+    const zIndex = Math.max(...geometries.map((item) => item.zIndex));
+
+    acc[breakpoint] = {
+      x: minX,
+      y: minY,
+      width,
+      height,
+      zIndex,
+      hasGroupGeometryOverride:
+        minX !== groupBase.x ||
+        minY !== groupBase.y ||
+        width !== groupBase.width ||
+        height !== groupBase.height ||
+        zIndex !== groupBase.zIndex,
+      hasAnyChildGeometryOverride,
+    };
+    return acc;
+  }, {});
+
+  const groupResponsive = EDITOR_RESPONSIVE_BREAKPOINTS.reduce<CanvasElement['responsive']>((acc, breakpoint) => {
+    const bounds = breakpointBounds[breakpoint];
+    if (!bounds?.hasGroupGeometryOverride) {
+      return acc;
+    }
+
+    const override: ResponsiveElementOverride = {};
+    if (bounds.x !== groupBase.x) override.x = bounds.x;
+    if (bounds.y !== groupBase.y) override.y = bounds.y;
+    if (bounds.width !== groupBase.width) override.width = bounds.width;
+    if (bounds.height !== groupBase.height) override.height = bounds.height;
+    if (bounds.zIndex !== groupBase.zIndex) override.zIndex = bounds.zIndex;
+
+    return setResponsiveOverride({ responsive: acc } as CanvasElement, breakpoint, override).responsive;
+  }, undefined);
+
+  return {
+    children: selectedSiblings.map((item, index) => {
+      const baseChild: CanvasElement = {
+        ...item,
+        parentId: groupId,
+        x: item.x - groupBase.x,
+        y: item.y - groupBase.y,
+        zIndex: index + 1,
+      };
+      const nextResponsive = EDITOR_RESPONSIVE_BREAKPOINTS.reduce<CanvasElement['responsive']>((acc, breakpoint) => {
+        const bounds = breakpointBounds[breakpoint];
+        const existing = item.responsive?.[breakpoint];
+        if (!bounds?.hasAnyChildGeometryOverride && !existing) {
+          return acc;
+        }
+
+        const geometry = responsiveGeometryForElement(item, breakpoint);
+        const override: ResponsiveElementOverride = { ...(existing || {}) };
+        if (bounds?.hasGroupGeometryOverride || existing?.x !== undefined) {
+          override.x = geometry.x - (bounds?.x ?? groupBase.x);
+        }
+        if (bounds?.hasGroupGeometryOverride || existing?.y !== undefined) {
+          override.y = geometry.y - (bounds?.y ?? groupBase.y);
+        }
+        if (existing?.width !== undefined || geometry.width !== item.width) {
+          override.width = geometry.width;
+        }
+        if (existing?.height !== undefined || geometry.height !== item.height) {
+          override.height = geometry.height;
+        }
+        if (existing?.zIndex !== undefined) {
+          override.zIndex = existing.zIndex;
+        }
+        if (existing?.rotation !== undefined) {
+          override.rotation = existing.rotation;
+        }
+
+        return setResponsiveOverride({ responsive: acc } as CanvasElement, breakpoint, override).responsive;
+      }, undefined);
+
+      const nextChild: CanvasElement = {
+        ...baseChild,
+        responsive: pruneResponsiveOverrides(nextResponsive),
+      };
+      if (!nextChild.responsive) {
+        delete nextChild.responsive;
+      }
+
+      return nextChild;
+    }),
+    responsive: pruneResponsiveOverrides(groupResponsive),
+  };
+};
+
 const CANVAS_SIZE_PRESETS = [
   { id: 'desktop', label: 'Desktop', width: 1200, height: 800, breakpoint: 'desktop' as const },
   { id: 'wide', label: 'Wide page', width: 1440, height: 1200 },
@@ -1128,6 +1272,8 @@ export function CanvasEditor({
   const elementsRef = useRef<CanvasElement[]>(initialElements);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectedIdRef = useRef<string | null>(null);
+  const selectedIdsRef = useRef<string[]>([]);
   const [size, setSize] = useState<CanvasSize>(initialSize || DEFAULT_CANVAS_SIZE);
   const [breakpoint, setBreakpoint] = useState<EditorBreakpoint>('desktop');
   const [rightPanel, setRightPanel] = useState<'properties' | 'layers'>('properties');
@@ -1179,6 +1325,11 @@ export function CanvasEditor({
     historyRef.current = history;
     historyIndexRef.current = historyIndex;
   }, [history, historyIndex]);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+    selectedIdsRef.current = selectedIds;
+  }, [selectedId, selectedIds]);
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1987,6 +2138,10 @@ export function CanvasEditor({
   }, [isParentPersistence, saveOwnerVersion]);
 
   useEffect(() => {
+    if (isApplyingHistoryRef.current) {
+      return;
+    }
+
     setSelectedIds((current) => current.filter((id) => !!findElementById(elements, id)));
 
     if (!selectedId) {
@@ -1999,6 +2154,10 @@ export function CanvasEditor({
   }, [elements, selectedId, findElementById]);
 
   useEffect(() => {
+    if (isApplyingHistoryRef.current) {
+      return;
+    }
+
     setSelectedIds((current) => {
       if (!selectedId) {
         return current.length ? [] : current;
@@ -2089,8 +2248,12 @@ export function CanvasEditor({
     } else {
       coalesceNextHistoryRef.current = null;
 
-      if (previousElements && historyTail && !historyElementsEqual(historyTail.elements, previousElements)) {
-        const previousSelection = resolveSelectionSnapshot(previousElements, selectedId, selectedIds);
+      if (previousElements && historyTail) {
+        const previousSelection = resolveSelectionSnapshot(
+          previousElements,
+          selectedIdRef.current,
+          selectedIdsRef.current,
+        );
         pushHistoryEntry({
           elements: previousElements,
           selectedId: previousSelection.selectedId,
@@ -2871,8 +3034,9 @@ export function CanvasEditor({
     }
 
     const selectedSet = new Set(selectedIds);
+    const currentElements = elementsRef.current;
     const entries = selectedIds
-      .map((id) => findElementEntry(elements, id))
+      .map((id) => findElementEntry(currentElements, id))
       .filter((entry): entry is { element: CanvasElement; parentId: string | null } => !!entry);
 
     if (entries.length < 2) {
@@ -2895,16 +3059,20 @@ export function CanvasEditor({
       const minY = Math.min(...selectedSiblings.map((item) => item.y));
       const maxX = Math.max(...selectedSiblings.map((item) => item.x + item.width));
       const maxY = Math.max(...selectedSiblings.map((item) => item.y + item.height));
-      const group: CanvasElement = {
-        id: groupId,
-        type: 'box',
-        name: 'Group',
-        ...(parentId ? { parentId } : {}),
+      const groupBase = {
         x: minX,
         y: minY,
         width: Math.max(1, maxX - minX),
         height: Math.max(1, maxY - minY),
         zIndex: Math.max(...selectedSiblings.map((item) => item.zIndex || 1)),
+      };
+      const responsiveGroup = buildResponsiveGroupChildren(selectedSiblings, groupId, groupBase);
+      const group: CanvasElement = {
+        id: groupId,
+        type: 'box',
+        name: 'Group',
+        ...(parentId ? { parentId } : {}),
+        ...groupBase,
         visible: true,
         props: {
           backgroundColor: 'transparent',
@@ -2913,13 +3081,8 @@ export function CanvasEditor({
           editorGroup: true,
           padding: 0,
         },
-        children: selectedSiblings.map((item, index) => ({
-          ...item,
-          parentId: groupId,
-          x: item.x - minX,
-          y: item.y - minY,
-          zIndex: index + 1,
-        })),
+        ...(responsiveGroup.responsive ? { responsive: responsiveGroup.responsive } : {}),
+        children: responsiveGroup.children,
       };
 
       let inserted = false;
@@ -2962,11 +3125,22 @@ export function CanvasEditor({
       });
     };
 
-    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), groupId, [groupId]);
+    const nextElements = updateParentChildren(currentElements);
+    updateElementsWithHistory(nextElements, groupId, [groupId]);
+    const coalesceMarker = {
+      selectedIds: [groupId],
+      elementCount: nextElements.length,
+    };
+    coalesceNextHistoryRef.current = coalesceMarker;
+    window.setTimeout(() => {
+      if (coalesceNextHistoryRef.current === coalesceMarker) {
+        coalesceNextHistoryRef.current = null;
+      }
+    }, 1000);
     setSelectedIds([groupId]);
     setSelectedId(groupId);
     setRightPanel('properties');
-  }, [editDisabledReason, elements, findElementEntry, isCanvasMutationDisabled, selectedIds, updateElementsWithHistory]);
+  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, selectedIds, updateElementsWithHistory]);
 
   const handleUngroupSelected = useCallback(() => {
     if (isCanvasMutationDisabled) {
@@ -2978,7 +3152,8 @@ export function CanvasEditor({
       return;
     }
 
-    const entry = findElementEntry(elements, selectedId);
+    const currentElements = elementsRef.current;
+    const entry = findElementEntry(currentElements, selectedId);
     if (!entry?.element.children?.length || entry.element.locked || !isEditorGroupElement(entry.element)) {
       return;
     }
@@ -3036,11 +3211,22 @@ export function CanvasEditor({
     };
 
     const nextSelectedId = expandedIds[0] ?? null;
-    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), nextSelectedId, expandedIds);
+    const nextElements = updateParentChildren(currentElements);
+    updateElementsWithHistory(nextElements, nextSelectedId, expandedIds);
+    const coalesceMarker = {
+      selectedIds: expandedIds,
+      elementCount: nextElements.length,
+    };
+    coalesceNextHistoryRef.current = coalesceMarker;
+    window.setTimeout(() => {
+      if (coalesceNextHistoryRef.current === coalesceMarker) {
+        coalesceNextHistoryRef.current = null;
+      }
+    }, 1000);
     setSelectedIds(expandedIds);
     setSelectedId(nextSelectedId);
     setRightPanel('layers');
-  }, [editDisabledReason, elements, findElementEntry, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
+  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
 
   // Get selected element
   const baseSelectedElement = selectedId ? findElementById(elements, selectedId) : null;
@@ -3702,7 +3888,7 @@ export function CanvasEditor({
       sortedEntries.forEach((entry, index) => {
         const sizeForAxis = axis === 'horizontal' ? entry.element.width : entry.element.height;
         const nextCenter = startCenter + centerStep * index;
-        const nextPosition = snapEditorValue(nextCenter - sizeForAxis / 2);
+        const nextPosition = normalizeDistributedPosition(nextCenter - sizeForAxis / 2);
 
         const currentPosition = axis === 'horizontal' ? entry.element.x : entry.element.y;
         if (Math.abs(nextPosition - currentPosition) <= 0.5) {
@@ -3720,7 +3906,7 @@ export function CanvasEditor({
 
       return didMove ? nextElements : currentElements;
     }, selectedId, selectedIds);
-  }, [findElementEntry, selectedId, selectedIds, snapEditorValue, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle drag start from component library
