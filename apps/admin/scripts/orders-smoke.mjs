@@ -131,6 +131,10 @@ const assert = (condition, message) => {
 const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   const source = fs.readFileSync(new URL('../src/routes/orders.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Orders route must use the shared EmptyState component');
+  assert(source.includes('data-testid="orders-error-state"') && source.includes('Orders workspace needs attention'), 'Orders route must expose a labelled backend error state');
+  assert(source.includes('aria-label="Retry loading orders"') && source.includes('Clear filters'), 'Orders backend error state must expose retry and filter recovery actions');
+  assert(source.includes('data-testid="orders-permission-state"') && source.includes('Order permissions could not be verified'), 'Orders route must expose a labelled permission error state');
+  assert(source.includes('to="/users"') && source.includes('Review users') && source.includes('aria-label="Retry loading order permissions"'), 'Orders permission error state must expose user-management and retry actions');
   assert(source.includes('title="No order source data yet"'), 'Orders source analytics empty state must keep the shared title visible');
   assert(source.includes('Checkout, admin-created, and provider-imported order sources will appear here after analytics records revenue by source.'), 'Orders source analytics empty state must explain when data appears');
   assert(source.includes("emptyTitle: 'No payment provider data yet'"), 'Orders payment-provider analytics empty state must keep the shared title visible');
@@ -3129,6 +3133,10 @@ const main = async () => {
   let fulfillmentProviderServer;
   let expectedProviderTotal = 93.69;
   assertOrdersBulkWorkflowHandlesPartialResults();
+  if (process.env.BACKY_ORDERS_SOURCE_ONLY === '1') {
+    return;
+  }
+
   await loginAdminApi();
   const originalSettings = await getSettings();
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
