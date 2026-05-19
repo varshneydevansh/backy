@@ -1884,6 +1884,23 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { y: 352, width: 190, height: 50 }"),
     'Member-login page starter must seed explicit tablet/mobile responsive overrides for access copy, registration prompts, and access-link form controls.',
   );
+  assert(
+    source.includes("id: 'member-account-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 1580 }") &&
+      source.includes("id: 'member-account-heading'") &&
+      source.includes("mobile: { x: 24, y: 92, width: 327, height: 156, props: { fontSize: 36 } }") &&
+      source.includes("id: 'member-account-profile-card'") &&
+      source.includes("mobile: { x: 24, y: 444, width: 327, height: 220 }") &&
+      source.includes("id: 'member-account-preferences-form'") &&
+      source.includes("tablet: { x: 54, y: 580, width: 660, height: 420 }") &&
+      source.includes("id: 'member-account-updates'") &&
+      source.includes("mobile: { y: 234, width: 279 }") &&
+      source.includes("id: 'member-account-resource-section'") &&
+      source.includes("mobile: { x: 24, y: 1180, width: 327, height: 330 }") &&
+      source.includes("id: `member-account-resource-${index}`") &&
+      source.includes("mobile: { x: 0, y: index * 104, width: 327, height: 94 }"),
+    'Member-account page starter must seed explicit tablet/mobile responsive overrides for profile, preferences, and protected resource cards.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

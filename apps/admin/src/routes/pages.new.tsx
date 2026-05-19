@@ -11183,24 +11183,40 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 720,
                 props: { backgroundColor: '#f0fdf4', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 1360 },
+                    mobile: { width: 375, height: 1580 },
+                },
                 children: [
                     createCanvasElement('text', 76, 70, {
                         id: 'member-account-kicker',
                         width: 260,
                         height: 28,
                         props: { content: 'Private member area', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 64, width: 230, height: 28 },
+                            mobile: { x: 24, y: 52, width: 210, height: 28 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 112, {
                         id: 'member-account-heading',
                         width: 560,
                         height: 112,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                        responsive: {
+                            tablet: { x: 54, y: 104, width: 540, height: 120, props: { fontSize: 46 } },
+                            mobile: { x: 24, y: 92, width: 327, height: 156, props: { fontSize: 36 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 248, {
                         id: 'member-account-copy',
                         width: 520,
                         height: 104,
                         props: { content: description, fontSize: 18, lineHeight: 1.62, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 250, width: 510, height: 104, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 276, width: 323, height: 134, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 76, 398, {
                         id: 'member-account-profile-card',
@@ -11208,18 +11224,30 @@ function buildTemplateElements(input: {
                         height: 150,
                         dataBindings: [{ source: 'member', mode: 'profile', fields: ['name', 'email', 'status'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 390, width: 660, height: 150 },
+                            mobile: { x: 24, y: 444, width: 327, height: 220 },
+                        },
                         children: [
                             createCanvasElement('heading', 22, 22, {
                                 id: 'member-account-profile-heading',
                                 width: 290,
                                 height: 34,
                                 props: { content: 'Welcome back, member', level: 'h2', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                                responsive: {
+                                    tablet: { width: 560, height: 34 },
+                                    mobile: { width: 279, height: 62, props: { fontSize: 22 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 22, 70, {
                                 id: 'member-account-profile-copy',
                                 width: 370,
                                 height: 52,
                                 props: { content: 'Bind this card to the authenticated member profile in your custom frontend.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 600, height: 52 },
+                                    mobile: { y: 102, width: 279, height: 84 },
+                                },
                             }),
                         ],
                     }),
@@ -11249,17 +11277,60 @@ function buildTemplateElements(input: {
                             borderStyle: 'solid',
                             boxShadow: '0 20px 60px rgba(22, 101, 52, 0.10)',
                         },
+                        responsive: {
+                            tablet: { x: 54, y: 580, width: 660, height: 420 },
+                            mobile: { x: 24, y: 700, width: 327, height: 440 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 28, {
                                 id: 'member-account-form-heading',
                                 width: 330,
                                 height: 36,
                                 props: { content: 'Update preferences', level: 'h2', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                                responsive: {
+                                    tablet: { width: 560, height: 36 },
+                                    mobile: { width: 279, height: 58, props: { fontSize: 22 } },
+                                },
                             }),
-                            createCanvasElement('input', 24, 90, { id: 'member-account-display-name', width: 360, height: 54, props: { label: 'Display name', name: 'display_name', placeholder: 'Ada Lovelace', required: true } }),
-                            createCanvasElement('input', 24, 162, { id: 'member-account-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
-                            createCanvasElement('select', 24, 234, { id: 'member-account-updates', width: 360, height: 54, props: { label: 'Updates', name: 'updates', options: ['Product updates', 'Billing notices', 'Community digest'], placeholder: 'Choose updates', required: false } }),
-                            createCanvasElement('button', 24, 330, { id: 'member-account-submit', width: 190, height: 50, props: { label: 'Save preferences', backgroundColor: '#047857', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                            createCanvasElement('input', 24, 90, {
+                                id: 'member-account-display-name',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Display name', name: 'display_name', placeholder: 'Ada Lovelace', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 90, width: 279 },
+                                },
+                            }),
+                            createCanvasElement('input', 24, 162, {
+                                id: 'member-account-email',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 162, width: 279 },
+                                },
+                            }),
+                            createCanvasElement('select', 24, 234, {
+                                id: 'member-account-updates',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Updates', name: 'updates', options: ['Product updates', 'Billing notices', 'Community digest'], placeholder: 'Choose updates', required: false },
+                                responsive: {
+                                    tablet: { width: 560 },
+                                    mobile: { y: 234, width: 279 },
+                                },
+                            }),
+                            createCanvasElement('button', 24, 330, {
+                                id: 'member-account-submit',
+                                width: 190,
+                                height: 50,
+                                props: { label: 'Save preferences', backgroundColor: '#047857', color: '#ffffff', borderRadius: 8, fontWeight: '700' },
+                                responsive: {
+                                    mobile: { y: 330, width: 190, height: 50 },
+                                },
+                            }),
                         ],
                     }),
                     createCanvasElement('section', 72, 590, {
@@ -11267,24 +11338,40 @@ function buildTemplateElements(input: {
                         width: 1056,
                         height: 110,
                         props: { backgroundColor: 'transparent', borderRadius: 0 },
+                        responsive: {
+                            tablet: { x: 54, y: 1040, width: 660, height: 270 },
+                            mobile: { x: 24, y: 1180, width: 327, height: 330 },
+                        },
                         children: ['Downloads', 'Orders', 'Support'].map((item, index) => createCanvasElement('box', index * 352, 0, {
                             id: `member-account-resource-${index}`,
                             width: 320,
                             height: 96,
                             dataBindings: [{ source: 'member', mode: item.toLowerCase() }],
                             props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#dcfce7', borderWidth: 1, borderStyle: 'solid' },
+                            responsive: {
+                                tablet: { x: 0, y: index * 88, width: 660, height: 78 },
+                                mobile: { x: 0, y: index * 104, width: 327, height: 94 },
+                            },
                             children: [
                                 createCanvasElement('heading', 20, 20, {
                                     id: `member-account-resource-heading-${index}`,
                                     width: 230,
                                     height: 30,
                                     props: { content: item, level: 'h3', fontSize: 20, fontWeight: '750', color: '#0f172a' },
+                                    responsive: {
+                                        tablet: { width: 560, height: 28 },
+                                        mobile: { width: 279, height: 28, props: { fontSize: 19 } },
+                                    },
                                 }),
                                 createCanvasElement('text', 20, 58, {
                                     id: `member-account-resource-copy-${index}`,
                                     width: 250,
                                     height: 24,
                                     props: { content: 'Connect to protected member data.', fontSize: 13, color: '#64748b' },
+                                    responsive: {
+                                        tablet: { y: 50, width: 560, height: 22 },
+                                        mobile: { y: 56, width: 279, height: 24 },
+                                    },
                                 }),
                             ],
                         })),
