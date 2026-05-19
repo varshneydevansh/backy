@@ -43,45 +43,45 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 ### Phase D — Core CMS composition primitives
 
-- status: partial
-- done: form/comment-related block additions and renderer coverage
-- in-progress: section/container/nav/header/footer/blog/content templates, preset libraries, reusable theme-aware block systems
+- status: ready baseline with reusable-section regression guards
+- done: reusable-section APIs, synced instances, instance refresh/detach, export/import/restore, frontend-design template registries, built-in starter page templates, collection list/detail templates, page/blog template seeding, and mobile/tablet hosted-preview coverage
+- remaining: keep reusable-section, page-create, renderer, and SDK contract smokes current as new block types and composed templates ship
 
 ### Phase E — Public API-first hardening
 
-- status: partial
-- done: comment/export/report endpoints and anti-abuse endpoints in `backy-public`
-- in-progress: consistent envelope standards across all public endpoints, canonical resolver behavior, stricter pagination/query error contracts
+- status: ready baseline with SDK/Postgres certification gate
+- done: public render, manifest, OpenAPI, generated SDK, media, forms, comments, commerce catalog/order, reusable-section, interactive component, preview, cache/header, and route-resolution contracts are locally guarded
+- remaining: run `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres service before the public manifest/OpenAPI/SDK database-mode gate can move from Partial to Ready
 
 ### Phase F — Versioning and publish workflow
 
-- status: partial
-- done: save/reload and status toggles exist in key editor flows
-- in-progress: revision history, rollback, conflict detection, scheduled publish, archive lifecycle
+- status: ready baseline with provider/database certification gates
+- done: page/blog save, publish, preview, archive, rollback panels, revision summaries, scheduled publish validation, conflict detection, reload-latest recovery, public visibility guards, and cache invalidation evidence are implemented for the current local scope
+- remaining: keep publish/rollback behavior tied to release certification and external deployment/database gates
 
 ### Phase G — Media and SEO foundation
 
-- status: partial
-- done: media browser and block render plumbing
-- in-progress: upload pipeline, MIME validation, transformations, SEO metadata + canonical/head output reliability
+- status: ready baseline with provider/deployment certification gates
+- done: central media upload/listing, folders, metadata, replacement/versioning, safety scanning, signed/private delivery, quotas, responsive transforms, font registration, provider diagnostics, SEO defaults, JSON-LD, sitemap/robots, redirects/gone routes, canonical handling, and cache revisions are implemented for the current local scope
+- remaining: certify live storage/Supabase/Vercel/provider accounts, custom-domain delivery, secret rotation execution, and cross-channel attribution beyond provider feeds
 
 ### Phase H — Analytics, audit, and governance
 
-- status: partial
-- done: events and moderation analytics with comment-specific counters and export path
-- in-progress: immutable audit model, retention policies, compliance exports, operational dashboards
+- status: ready baseline with external telemetry/provider hardening
+- done: admin audit activity, moderation analytics/export, form/contact consent and retention controls, provider evidence handoffs, cache invalidation events, workflow webhooks, and release certification summaries are implemented for the current local scope
+- remaining: expand external SOC/telemetry joins and high-volume operational tuning after live service certification
 
 ### Phase I — External frontend enablement
 
-- status: partial
-- done: public contracts stable enough for preview and comment/form consumption
-- in-progress: full contract docs, frontend bootstrap examples, typed SDK surface, webhook/extensibility docs
+- status: ready baseline with SDK/Postgres certification gate
+- done: AI frontend contract schemas/examples, frontend manifest, OpenAPI, generated SDK, render payloads, editable maps, media/forms/comments/commerce/reusable-section contracts, and custom frontend onboarding evidence are locally guarded
+- remaining: run the SDK Postgres gate against a migrated disposable database and keep new endpoints covered by manifest/OpenAPI/SDK smokes
 
 ### Phase J — Extensibility and operations
 
-- status: pending
-- done: roadmaps and implementation tracks are in place
-- in-progress: plugin hooks, processor hooks, deployment/runbook automation
+- status: ready baseline with live-provider operations gates
+- done: interactive component registry/runtime, sandboxed custom code components, bundle governance, migration/rollback tooling, site webhooks, release certification workflow, non-secret readiness doctor, provider preflight contracts, and setup runbooks are implemented for the current local scope
+- remaining: execute live Settings/Commerce provider certification and keep plugin/provider runbooks current as new integrations ship
 
 ## 2) Execution order for “asap to usable” delivery
 
