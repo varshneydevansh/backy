@@ -33,6 +33,7 @@ const publicPackage = read('../package.json');
 const templateRegistrySmoke = read('template-registry-smoke.ts');
 const apiContracts = read('../../../specs/backy-api-contracts.md');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
+const completionSpec = read('../../../specs/backy-cms-completion-spec.md');
 const adminSiteDetailPage = read('../../../apps/admin/src/routes/sites.$siteId.tsx');
 const adminFormsPage = read('../../../apps/admin/src/routes/forms.tsx');
 const adminProductsPage = read('../../../apps/admin/src/routes/products.tsx');
@@ -42,6 +43,27 @@ const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-
 assert(
   manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
   'Frontend manifest must advertise public site discovery for custom frontends.',
+);
+
+assert(
+  !completionSpec.includes('GET /api/public/sites/:siteId/media/:assetId') &&
+    !completionSpec.includes('POST /api/admin/sites/:siteId/pages/:pageId/media') &&
+    !completionSpec.includes('POST /api/admin/sites/:siteId/blog/:postId/media') &&
+    !completionSpec.includes('POST /api/public/sites/:siteId/forms/:formId/submissions') &&
+    !completionSpec.includes('PUT /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId') &&
+    !completionSpec.includes('POST /api/public/sites/:siteId/pages/:pageId/comments') &&
+    !completionSpec.includes('GET /api/public/sites/:siteId/pages?path=/...') &&
+    completionSpec.includes('POST /api/admin/sites/:siteId/media/:mediaId/bind') &&
+    completionSpec.includes('GET /api/sites/:siteId/media/:mediaId/file') &&
+    completionSpec.includes('Asset scope is `global`, `page`, or `post`; file visibility is `public` or `private`.') &&
+    completionSpec.includes('POST /api/sites/:siteId/forms/:formId/submissions') &&
+    completionSpec.includes('PATCH /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId') &&
+    completionSpec.includes('POST /api/sites/:siteId/pages/:pageId/comments') &&
+    completionSpec.includes('POST /api/sites/:siteId/blog/:postId/comments') &&
+    completionSpec.includes('PATCH /api/sites/:siteId/comments') &&
+    completionSpec.includes('GET /api/sites/:siteId/render?path=/...') &&
+    completionSpec.includes('GET /api/sites/:siteId/blog?slug=...'),
+  'Completion spec frontend interaction model must match the implemented /api/sites media, forms, comments, and render contracts.',
 );
 
 assert(

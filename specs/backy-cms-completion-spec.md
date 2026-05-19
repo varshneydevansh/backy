@@ -523,19 +523,24 @@ Rules:
 - `global` assets can be inserted into page and blog canvases.
 - Page/blog scoped assets must be visible in that context and still resolvable in public render.
 - All scopes store metadata: owner site, MIME, size, dimensions, checksum, alt text, caption, owner user, visibility.
-- Optional `scope=public` flag on media for publicly cacheable URL and `scope=private` for permissioned API access.
+- Asset scope is `global`, `page`, or `post`; file visibility is `public` or `private`.
+- Public files are cacheable through the public file endpoint; private files require signed access.
 
 Minimal API behavior (admin/public split):
 - `POST /api/admin/sites/:siteId/media`
   - multipart upload with validation + dedupe + returns asset metadata + CDN/public URL.
 - `GET /api/admin/sites/:siteId/media`
   - list/global assets with filters by type/tag/owner/usage.
-- `POST /api/admin/sites/:siteId/pages/:pageId/media`
-  - bind existing asset to page scope.
-- `POST /api/admin/sites/:siteId/blog/:postId/media`
-  - bind existing asset to blog scope.
-- `GET /api/public/sites/:siteId/media/:assetId` (safe subset fields)
-  - returns file URL + render-safe metadata for public usage.
+- `POST /api/admin/sites/:siteId/media/:mediaId/bind`
+  - bind/unbind an existing asset to a page or blog-post target with `targetType=page|post`, preserving `pageIds`, `postIds`, and binding metadata.
+- `GET /api/sites/:siteId/media?scope=global|page|post&pageId=&postId=`
+  - returns public, non-quarantined media metadata filtered by scope and usage.
+- `GET /api/sites/:siteId/media/:mediaId`
+  - returns render-safe metadata for a public, non-quarantined asset.
+- `GET /api/sites/:siteId/media/:mediaId/file`
+  - delivers the binary file with Backy contract/cache headers; private assets require a signed URL.
+- `GET /api/sites/:siteId/media/:mediaId/transform`
+  - returns prepared responsive transform metadata for renderers.
 
 ### 13.2 Form blocks and user submissions
 
@@ -546,15 +551,24 @@ Form block should send:
 - submission endpoint binding in block config.
 
 Contract:
-- `POST /api/public/sites/:siteId/forms/:formId/submissions`
+- `GET /api/sites/:siteId/forms`
+  - list active public form definitions without private submission data.
+- `GET /api/sites/:siteId/forms/:formId` and `GET /api/sites/:siteId/forms/:formId/definition`
+  - return cacheable form definition/front-end design metadata for custom form UIs.
+- `POST /api/sites/:siteId/forms/:formId/submissions`
   - accepts structured payload keyed by field keys.
-  - includes spam fields: optional honeypot + request fingerprint + captcha token.
+  - includes spam fields: optional honeypot, `startedAt`, request id/fingerprint, and captcha token aliases.
+  - returns submission status, field-level validation errors, optional collection-record/contact handoff, and delivery metadata.
 - `GET /api/admin/sites/:siteId/forms`
   - list forms + publish/active state.
 - `GET /api/admin/sites/:siteId/forms/:formId/submissions`
   - list submissions with pagination.
-- `PUT /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId`
-  - update status (`new`/`reviewed`/`closed`).
+- `PATCH /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId`
+  - update moderation status (`pending`/`approved`/`rejected`/`spam`), review metadata, admin notes, contact sharing, and collection-record linking.
+- `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/email-retry`
+  - retry failed notification email delivery.
+- `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/webhook-retry`
+  - retry failed integration webhook delivery.
 
 Frontend expectation:
 - On submit success, return `submissionId` and optional confirmation message.
@@ -566,29 +580,47 @@ Support comments for both blog and static pages:
 - Anonymous comments (if enabled).
 - Authenticated comments (if enabled by project).
 
-Contract:
-- `POST /api/public/sites/:siteId/pages/:pageId/comments` (or `/blogs/:postId/comments`)
-- `GET /api/public/sites/:siteId/pages/:pageId/comments?status=approved`
-- `POST /api/admin/sites/:siteId/moderate/comments/:commentId` (approve/reject/spam/block user)
-
 Rules:
 - default moderation = `pending`.
 - spam guard and rate-limit by IP/device.
 - threaded replies optional in phase 2.
 - public comment count API should be cache-safe.
 
+Current contract:
+- `POST /api/sites/:siteId/pages/:pageId/comments`
+- `GET /api/sites/:siteId/pages/:pageId/comments?status=approved&parentId=&parentOnly=`
+- `POST /api/sites/:siteId/blog/:postId/comments`
+- `GET /api/sites/:siteId/blog/:postId/comments?status=approved&parentId=&parentOnly=`
+- `GET /api/sites/:siteId/comments?targetType=page|post&targetId=&status=approved`
+- `PATCH /api/sites/:siteId/comments/:commentId`
+  - admin moderation and reply-thread updates.
+- `PATCH /api/sites/:siteId/comments`
+  - bulk moderation and report clearing.
+- `DELETE /api/sites/:siteId/comments/:commentId`
+  - admin deletion with reply handling.
+- `GET|POST /api/sites/:siteId/comments/:commentId/report`
+  - report reason discovery and visitor report submission.
+- `GET /api/sites/:siteId/comments/report-reasons`
+  - cache-safe report reason discovery.
+- `GET|POST|DELETE /api/sites/:siteId/comments/blocklist`
+  - admin blocklist management.
+
 Execution status (2026-02-24):
 - Anti-bot fields (`requestId`, `startedAt`, `honeypot`) are now sent from the comment renderer and checked in both page/post comment submit routes.
 - Shared store now includes comment classification with validation, timing, honeypot, duplicate and rate-limit checks.
 - Parent-thread integrity is now validated in API routes before comment creation.
-- Remaining for parity: public comment export/report pipeline, block-level spam tuning, and bulk moderation actions.
+- Report routes, report-reason discovery, site-level comment lists, blocklist management, single-comment moderation, deletion, and bulk moderation/report clearing are implemented.
+- Remaining for parity: export/report analytics depth, block-level spam tuning, and live database certification of the full moderation workflow.
 
 ### 13.4 What frontend should expect from page/blog render APIs
 
 Core public read contract:
-- `GET /api/public/sites/:siteId/pages?path=/...`
-- `GET /api/public/sites/:siteId/blog/posts?status=published&limit=&cursor=`
-- `GET /api/public/sites/:siteId/blog/posts/:slug`
+- `GET /api/sites/:siteId/render?path=/...`
+- `GET /api/sites/:siteId/pages?path=/...` or `GET /api/sites/:siteId/pages?slug=...`
+- `GET /api/sites/:siteId/blog?status=published&limit=&offset=&category=&tag=&author=`
+- `GET /api/sites/:siteId/blog?slug=...`
+- `GET /api/sites/:siteId/blog/rss`
+- `GET /api/sites/:siteId/blog/categories`, `/tags`, and `/authors`
 
 Expected response shape:
 - `content` uses shared Backy element schema.
