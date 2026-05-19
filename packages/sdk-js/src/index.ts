@@ -848,26 +848,56 @@ export interface BackyCommerceCatalogOptions extends BackyListOptions {
 
 export interface BackyCommerceLineItemInput {
   productId?: string;
+  product_id?: string;
   slug?: string;
+  productSlug?: string;
+  product_slug?: string;
+  variantId?: string;
+  variant_id?: string;
+  variantSku?: string;
+  variant_sku?: string;
+  sku?: string;
   /** Optional whole checkout quantity from 1 to 999; omitted values default to 1. */
-  quantity?: number;
+  quantity?: number | string;
+  qty?: number | string;
 }
 
-export interface BackyCommerceOrderInput {
-  customer: {
+export type BackyCommerceOrderInput = {
+  customer?: {
     name: string;
     email: string;
     phone?: string;
   };
-  items: BackyCommerceLineItemInput[];
+  items?: BackyCommerceLineItemInput[];
+  lineItems?: BackyCommerceLineItemInput[];
+  cartItems?: BackyCommerceLineItemInput[];
+  cart?: {
+    items?: BackyCommerceLineItemInput[];
+    [key: string]: unknown;
+  };
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
   shippingAddress?: string;
   billingAddress?: string;
   notes?: string;
+  discountCode?: string;
+  couponCode?: string;
+  promoCode?: string;
   paymentProvider?: string;
   paymentReference?: string;
+  payment?: {
+    provider?: string;
+    reference?: string;
+    [key: string]: unknown;
+  };
   checkoutSessionId?: string;
+  checkoutSession?: string | { id?: string; [key: string]: unknown };
   requestId?: string;
-}
+};
 
 export interface BackyCommerceOrderSummary {
   id: string;
@@ -1075,6 +1105,34 @@ export interface BackyManifestCommerceRuntimeModule {
     providerCertification: boolean;
     conditionalRequests: boolean;
     cacheableCatalog: boolean;
+    [key: string]: unknown;
+  };
+  orderRequest: {
+    schemaVersion: "backy.commerce-order-request.v1";
+    contentType: "application/json";
+    itemArrays: string[];
+    itemFields: {
+      productId: string[];
+      slug: string[];
+      variantId: string[];
+      variantSku: string[];
+      quantity: string[];
+      [key: string]: unknown;
+    };
+    customer: string[];
+    discountCode: string[];
+    payment: string[];
+    checkoutSessionId: string[];
+    quantity: {
+      default: 1;
+      minimum: 1;
+      maximum: 999;
+      [key: string]: unknown;
+    };
+    required: string[];
+    checkoutSessionStatuses: Array<
+      "requires_action" | "provider_ready" | "provider_created" | string
+    >;
     [key: string]: unknown;
   };
   cache: {

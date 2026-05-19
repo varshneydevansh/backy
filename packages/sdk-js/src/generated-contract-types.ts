@@ -880,6 +880,7 @@ export type GeneratedBackyOpenApiReusableSectionFrontendDesign = {
   chrome?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   customCss?: string;
+  fieldKeyMap?: Record<string, string>;
   bindingHints?: Array<Record<string, unknown>>;
   [key: string]: unknown;
 };
@@ -1241,6 +1242,7 @@ export type GeneratedBackyOpenApiFormDefinition = {
   enableHoneypot?: boolean;
   enableCaptcha?: boolean;
   frontendDesign?: GeneratedBackyOpenApiReusableSectionFrontendDesign;
+  frontendFieldKeyMap?: Record<string, string>;
   [key: string]: unknown;
 };
 
@@ -1329,6 +1331,7 @@ export type GeneratedBackyOpenApiFormSubmissionRequest = {
   fields?: Record<string, unknown>;
   data?: Record<string, unknown>;
   submission?: Record<string, unknown>;
+  contactShareOverride?: Record<string, unknown>;
   requestId?: string;
   pageId?: string;
   postId?: string;
@@ -1711,25 +1714,69 @@ export type GeneratedBackyOpenApiCommerceCatalogEnvelope = {
 };
 
 export type GeneratedBackyOpenApiCommerceOrderCreateRequest = {
-  customer: {
+  customer?: {
     name: string;
     email: string;
     phone?: string;
   };
-  items: Array<{
+  items?: Array<{
     productId?: string;
+    product_id?: string;
     slug?: string;
+    productSlug?: string;
+    product_slug?: string;
     variantId?: string;
+    variant_id?: string;
     variantSku?: string;
+    variant_sku?: string;
+    sku?: string;
     quantity?: number;
+    qty?: number;
   }>;
+  lineItems?: Array<{
+    productId?: string;
+    product_id?: string;
+    slug?: string;
+    productSlug?: string;
+    product_slug?: string;
+    variantId?: string;
+    variant_id?: string;
+    variantSku?: string;
+    variant_sku?: string;
+    sku?: string;
+    quantity?: number;
+    qty?: number;
+  }>;
+  cartItems?: Array<Record<string, unknown>>;
+  cart?: {
+    items?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
   shippingAddress?: string;
   billingAddress?: string;
   notes?: string;
   discountCode?: string;
+  couponCode?: string;
+  promoCode?: string;
   paymentProvider?: string;
   paymentReference?: string;
+  payment?: {
+    provider?: string;
+    reference?: string;
+    [key: string]: unknown;
+  };
   checkoutSessionId?: string;
+  checkoutSession?: string | {
+    id?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 };
 
 export type GeneratedBackyOpenApiCommerceOrderContractEnvelope = {
@@ -1759,7 +1806,7 @@ export type GeneratedBackyOpenApiCommerceOrderEnvelope = {
       provider: "manual" | "stripe";
       providerMode?: "test" | "live";
       accountId?: string | null;
-      status: "requires_action" | "provider_ready";
+      status: "requires_action" | "provider_ready" | "provider_created";
       handoffMode: "manual" | "provider";
       url?: string | null;
       successUrl: string;
@@ -3451,6 +3498,32 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           providerCertification: boolean;
           conditionalRequests: boolean;
           cacheableCatalog: boolean;
+          [key: string]: unknown;
+        };
+        orderRequest: {
+          schemaVersion: "backy.commerce-order-request.v1";
+          contentType: "application/json";
+          itemArrays: Array<"items" | "lineItems" | "cartItems" | "cart.items">;
+          itemFields: {
+            productId: Array<string>;
+            slug: Array<string>;
+            variantId: Array<string>;
+            variantSku: Array<string>;
+            quantity: Array<string>;
+            [key: string]: unknown;
+          };
+          customer: Array<string>;
+          discountCode: Array<string>;
+          payment: Array<string>;
+          checkoutSessionId: Array<string>;
+          quantity: {
+            default: 1;
+            minimum: 1;
+            maximum: 999;
+            [key: string]: unknown;
+          };
+          required: Array<string>;
+          checkoutSessionStatuses: Array<"requires_action" | "provider_ready" | "provider_created">;
           [key: string]: unknown;
         };
         cache: {

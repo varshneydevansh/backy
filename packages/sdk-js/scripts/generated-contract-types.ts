@@ -1446,6 +1446,40 @@ const manifest = {
         conditionalRequests: true,
         cacheableCatalog: true,
       },
+      orderRequest: {
+        schemaVersion: "backy.commerce-order-request.v1",
+        contentType: "application/json",
+        itemArrays: ["items", "lineItems", "cartItems", "cart.items"],
+        itemFields: {
+          productId: ["productId", "product_id"],
+          slug: ["slug", "productSlug", "product_slug"],
+          variantId: ["variantId", "variant_id"],
+          variantSku: ["variantSku", "variant_sku", "sku"],
+          quantity: ["quantity", "qty"],
+        },
+        customer: [
+          "customer.name/customer.email/customer.phone",
+          "customerName/customerEmail/customerPhone",
+          "name/email/phone",
+        ],
+        discountCode: ["discountCode", "couponCode", "promoCode"],
+        payment: [
+          "paymentProvider/paymentReference",
+          "payment.provider/payment.reference",
+        ],
+        checkoutSessionId: [
+          "checkoutSessionId",
+          "checkoutSession",
+          "checkoutSession.id",
+        ],
+        quantity: {
+          default: 1,
+          minimum: 1,
+          maximum: 999,
+        },
+        required: ["customer.name", "customer.email", "items[].productId or items[].slug"],
+        checkoutSessionStatuses: ["requires_action", "provider_ready", "provider_created"],
+      },
       cache: {
         catalog: "public-discovery",
         productDetail: "public-discovery",
@@ -2122,6 +2156,40 @@ const sdkManifestCommerceRuntime = {
     providerCertification: true,
     conditionalRequests: true,
     cacheableCatalog: true,
+  },
+  orderRequest: {
+    schemaVersion: "backy.commerce-order-request.v1",
+    contentType: "application/json",
+    itemArrays: ["items", "lineItems", "cartItems", "cart.items"],
+    itemFields: {
+      productId: ["productId", "product_id"],
+      slug: ["slug", "productSlug", "product_slug"],
+      variantId: ["variantId", "variant_id"],
+      variantSku: ["variantSku", "variant_sku", "sku"],
+      quantity: ["quantity", "qty"],
+    },
+    customer: [
+      "customer.name/customer.email/customer.phone",
+      "customerName/customerEmail/customerPhone",
+      "name/email/phone",
+    ],
+    discountCode: ["discountCode", "couponCode", "promoCode"],
+    payment: [
+      "paymentProvider/paymentReference",
+      "payment.provider/payment.reference",
+    ],
+    checkoutSessionId: [
+      "checkoutSessionId",
+      "checkoutSession",
+      "checkoutSession.id",
+    ],
+    quantity: {
+      default: 1,
+      minimum: 1,
+      maximum: 999,
+    },
+    required: ["customer.name", "customer.email", "items[].productId or items[].slug"],
+    checkoutSessionStatuses: ["requires_action", "provider_ready", "provider_created"],
   },
   cache: {
     catalog: "public-discovery",
@@ -3418,20 +3486,24 @@ const commerceCatalogEnvelope = {
 } satisfies GeneratedBackyOpenApiCommerceCatalogEnvelope;
 
 const commerceOrderCreateRequest = {
-  customer: {
-    name: "Jane Customer",
-    email: "jane@example.com",
-    phone: "+15555550100",
-  },
-  items: [
+  customerName: "Jane Customer",
+  customerEmail: "jane@example.com",
+  customerPhone: "+15555550100",
+  lineItems: [
     {
-      slug: "starter-template",
-      variantSku: "STARTER-001-STANDARD",
-      quantity: 1,
+      productSlug: "starter-template",
+      variant_sku: "STARTER-001-STANDARD",
+      qty: 1,
     },
   ],
-  discountCode: "LAUNCH",
-  paymentProvider: "stripe",
+  promoCode: "LAUNCH",
+  payment: {
+    provider: "stripe",
+    reference: "stripe:cs_demo",
+  },
+  checkoutSession: {
+    id: "cs_demo",
+  },
 } satisfies GeneratedBackyOpenApiCommerceOrderCreateRequest;
 
 const commerceOrderContractEnvelope = {
@@ -3477,7 +3549,7 @@ const commerceOrderEnvelope = {
       provider: "stripe",
       providerMode: "test",
       accountId: null,
-      status: "provider_ready",
+      status: "provider_created",
       handoffMode: "provider",
       url: "https://checkout.stripe.test/session",
       successUrl: "https://example.com/success",
@@ -4595,8 +4667,8 @@ const invalidCommerceCatalogCertification = { ...commerceCatalogEnvelope, data: 
 // @ts-expect-error commerce storefront contracts preserve the documented payment-provider handoff enum.
 const invalidCommerceStorefrontPaymentProvider = { ...commerceStorefrontContract, paymentProvider: "braintree", } satisfies GeneratedBackyOpenApiCommerceStorefrontContract;
 
-// @ts-expect-error commerce order creation requires customer identity.
-const invalidCommerceOrderCreateRequest = { items: commerceOrderCreateRequest.items, } satisfies GeneratedBackyOpenApiCommerceOrderCreateRequest;
+// @ts-expect-error commerce checkout quantities must be numeric in typed requests.
+const invalidCommerceOrderCreateRequest = { lineItems: [{ slug: "starter-template", quantity: "2" }], } satisfies GeneratedBackyOpenApiCommerceOrderCreateRequest;
 
 // @ts-expect-error commerce order contracts expose storefront provider certification through the commerce contract.
 const invalidCommerceOrderContractCertification = { ...commerceOrderContractEnvelope, data: { ...commerceOrderContractEnvelope.data, commerce: { ...commerceOrderContractEnvelope.data.commerce, providerCertification: undefined, }, }, } satisfies GeneratedBackyOpenApiCommerceOrderContractEnvelope;

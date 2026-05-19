@@ -859,6 +859,13 @@ const assertProductsApiContractsSource = () => {
     ),
     "utf8",
   );
+  const publicOrderRouteSource = fs.readFileSync(
+    new URL(
+      "../../public/src/app/api/sites/[siteId]/commerce/orders/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert(
     source.includes("import { EmptyState } from '@/components/ui/EmptyState';"),
     "Products route must use the shared EmptyState component",
@@ -947,6 +954,22 @@ const assertProductsApiContractsSource = () => {
       source.includes("exportSelectedProductsCsv") &&
       source.includes("Bulk actions will include"),
     "Products catalog must expose selected-row bulk publish, archive, delete, and selected CSV export controls",
+  );
+  assert(
+    publicOrderRouteSource.includes("firstCheckoutItemArray") &&
+      publicOrderRouteSource.includes("items.length > 0") &&
+      publicOrderRouteSource.includes("body.lineItems") &&
+      publicOrderRouteSource.includes("body.cartItems") &&
+      publicOrderRouteSource.includes("cart.items") &&
+      publicOrderRouteSource.includes("body.customerEmail") &&
+      publicOrderRouteSource.includes("body.email") &&
+      publicOrderRouteSource.includes("firstText(record.variantSku, record.variant_sku, record.sku)") &&
+      publicOrderRouteSource.includes("body.discountCode || body.couponCode || body.promoCode") &&
+      publicOrderRouteSource.includes("checkoutSession.id || body.checkoutSession") &&
+      publicOrderRouteSource.includes("schemaVersion: ORDER_CONTRACT_VERSION") &&
+      publicOrderRouteSource.includes('"lineItems"') &&
+      publicOrderRouteSource.includes('"checkoutSession.id"'),
+    "Public commerce order intake must normalize common custom storefront checkout aliases",
   );
   assert(
     source.includes('data-testid="products-provider-certification-download-button"') &&

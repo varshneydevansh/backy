@@ -1023,6 +1023,11 @@ try {
   assert(manifestCommerceRuntime.endpoints?.orderContract === manifest.data.endpoints.commerceOrders, 'manifest() commerce runtime order contract endpoint drifted');
   assert(manifestCommerceRuntime.methods?.createOrder === 'POST', 'manifest() commerce runtime create order method drifted');
   assert(manifestCommerceRuntime.capabilities?.productFilters === true, 'manifest() commerce runtime missing product filters capability');
+  assert(manifestCommerceRuntime.orderRequest?.schemaVersion === 'backy.commerce-order-request.v1', 'manifest() commerce runtime missing order request contract');
+  assert(manifestCommerceRuntime.orderRequest?.itemArrays?.includes?.('lineItems'), 'manifest() commerce runtime missing lineItems order alias');
+  assert(manifestCommerceRuntime.orderRequest?.itemFields?.quantity?.includes?.('qty'), 'manifest() commerce runtime missing quantity alias');
+  assert(manifestCommerceRuntime.orderRequest?.customer?.includes?.('customerName/customerEmail/customerPhone'), 'manifest() commerce runtime missing top-level customer aliases');
+  assert(manifestCommerceRuntime.orderRequest?.checkoutSessionStatuses?.includes?.('provider_created'), 'manifest() commerce runtime missing provider-created checkout status');
   assert(manifestCommerceRuntime.cache?.createOrder === 'private-no-store', 'manifest() commerce runtime create order cache policy drifted');
   assert(manifestCommerceRuntime.privacy?.ordersCollectionMustRemainPrivate === true, 'manifest() commerce runtime missing private order queue boundary');
   assert(manifestCommerceRuntime.filters?.queryParams?.includes?.('productType'), 'manifest() commerce runtime missing productType filter metadata');

@@ -54,7 +54,7 @@ interface CheckoutItemInput {
   slug?: string;
   variantId?: string;
   variantSku?: string;
-  quantity?: number;
+  quantity?: number | string;
 }
 
 interface CheckoutCustomerInput {
@@ -190,6 +190,19 @@ const toRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+const firstText = (...values: unknown[]): string => {
+  for (const value of values) {
+    const text = textValue(value);
+    if (text) return text;
+  }
+  return "";
+};
+
+const firstCheckoutItemArray = (...values: unknown[]): unknown[] => {
+  const arrays = values.filter(Array.isArray) as unknown[][];
+  return arrays.find((items) => items.length > 0) || arrays[0] || [];
+};
+
 const numberValue = (value: unknown, fallback = 0): number => {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -292,36 +305,60 @@ const stripeDiscountApiBaseUrl = () =>
 const normalizeCheckoutInput = (
   body: Record<string, unknown>,
 ): CheckoutOrderInput => {
-  const customer =
-    body.customer &&
-    typeof body.customer === "object" &&
-    !Array.isArray(body.customer)
-      ? (body.customer as Record<string, unknown>)
-      : {};
+  const customer = toRecord(body.customer);
+  const cart = toRecord(body.cart);
+  const payment = toRecord(body.payment);
+  const shipping = toRecord(body.shipping);
+  const billing = toRecord(body.billing);
+  const checkoutSession = toRecord(body.checkoutSession);
+  const rawItems = firstCheckoutItemArray(
+    body.items,
+    body.lineItems,
+    body.cartItems,
+    cart.items,
+  );
 
   return {
-    items: Array.isArray(body.items)
-      ? body.items.map((item) =>
-          item && typeof item === "object" && !Array.isArray(item)
-            ? (item as CheckoutItemInput)
-            : {},
-        )
-      : [],
+    items: rawItems.map((item) => {
+      const record = toRecord(item);
+      return {
+        productId: firstText(record.productId, record.product_id),
+        slug: firstText(record.slug, record.productSlug, record.product_slug),
+        variantId: firstText(record.variantId, record.variant_id),
+        variantSku: firstText(record.variantSku, record.variant_sku, record.sku),
+        quantity:
+          record.quantity !== undefined
+            ? (record.quantity as number | string)
+            : (record.qty as number | string | undefined),
+      };
+    }),
     customer: {
-      name: textValue(customer.name),
-      email: textValue(customer.email).toLowerCase(),
-      phone: textValue(customer.phone),
+      name: firstText(customer.name, body.customerName, body.name),
+      email: firstText(
+        customer.email,
+        body.customerEmail,
+        body.email,
+      ).toLowerCase(),
+      phone: firstText(customer.phone, body.customerPhone, body.phone),
     },
-    shippingAddress: textValue(body.shippingAddress),
-    billingAddress: textValue(body.billingAddress),
+    shippingAddress: firstText(
+      body.shippingAddress,
+      shipping.address,
+      shipping.line1,
+    ),
+    billingAddress: firstText(
+      body.billingAddress,
+      billing.address,
+      billing.line1,
+    ),
     notes: textValue(body.notes),
     discountCode: textValue(
       body.discountCode || body.couponCode || body.promoCode,
     ).toUpperCase(),
-    paymentProvider: textValue(body.paymentProvider),
-    paymentReference: textValue(body.paymentReference),
+    paymentProvider: firstText(body.paymentProvider, payment.provider),
+    paymentReference: firstText(body.paymentReference, payment.reference),
     checkoutSessionId: textValue(
-      body.checkoutSessionId || body.checkoutSession,
+      body.checkoutSessionId || checkoutSession.id || body.checkoutSession,
     ),
   };
 };
@@ -614,6 +651,31 @@ const orderContract = (siteId: string) => ({
       discountCode: "Optional product discount code",
       paymentProvider: "manual",
       paymentReference: "optional-provider-reference",
+    },
+    aliases: {
+      itemArrays: ["items", "lineItems", "cartItems", "cart.items"],
+      itemFields: {
+        productId: ["productId", "product_id"],
+        slug: ["slug", "productSlug", "product_slug"],
+        variantId: ["variantId", "variant_id"],
+        variantSku: ["variantSku", "variant_sku", "sku"],
+        quantity: ["quantity", "qty"],
+      },
+      customer: [
+        "customer.name/customer.email/customer.phone",
+        "customerName/customerEmail/customerPhone",
+        "name/email/phone",
+      ],
+      discountCode: ["discountCode", "couponCode", "promoCode"],
+      payment: [
+        "paymentProvider/paymentReference",
+        "payment.provider/payment.reference",
+      ],
+      checkoutSessionId: [
+        "checkoutSessionId",
+        "checkoutSession",
+        "checkoutSession.id",
+      ],
     },
   },
   creates: {

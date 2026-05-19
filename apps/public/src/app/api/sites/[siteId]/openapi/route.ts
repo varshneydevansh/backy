@@ -5882,7 +5882,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }),
             CommerceOrderCreateRequest: {
               type: "object",
-              required: ["customer", "items"],
+              additionalProperties: true,
+              description:
+                "Create a storefront order. Canonical payloads use customer and items; custom frontends may also send lineItems, cartItems, cart.items, top-level customerName/customerEmail/customerPhone or name/email/phone, couponCode/promoCode, and checkoutSession.id aliases.",
               properties: {
                 customer: {
                   type: "object",
@@ -5900,10 +5902,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     type: "object",
                     properties: {
                       productId: { type: "string" },
+                      product_id: { type: "string" },
                       slug: { type: "string" },
+                      productSlug: { type: "string" },
+                      product_slug: { type: "string" },
                       variantId: { type: "string" },
+                      variant_id: { type: "string" },
                       variantSku: { type: "string" },
+                      variant_sku: { type: "string" },
+                      sku: { type: "string" },
                       quantity: {
+                        type: "integer",
+                        minimum: 1,
+                        maximum: 999,
+                        default: 1,
+                      },
+                      qty: {
                         type: "integer",
                         minimum: 1,
                         maximum: 999,
@@ -5912,13 +5926,103 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     },
                   },
                 },
+                lineItems: {
+                  type: "array",
+                  minItems: 1,
+                  description: "Alias for items accepted by generated custom storefronts.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      productId: { type: "string" },
+                      product_id: { type: "string" },
+                      slug: { type: "string" },
+                      productSlug: { type: "string" },
+                      product_slug: { type: "string" },
+                      variantId: { type: "string" },
+                      variant_id: { type: "string" },
+                      variantSku: { type: "string" },
+                      variant_sku: { type: "string" },
+                      sku: { type: "string" },
+                      quantity: {
+                        type: "integer",
+                        minimum: 1,
+                        maximum: 999,
+                        default: 1,
+                      },
+                      qty: {
+                        type: "integer",
+                        minimum: 1,
+                        maximum: 999,
+                        default: 1,
+                      },
+                    },
+                  },
+                },
+                cartItems: {
+                  type: "array",
+                  minItems: 1,
+                  description: "Alias for items accepted by simple cart integrations.",
+                  items: { type: "object", additionalProperties: true },
+                },
+                cart: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    items: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                  },
+                },
+                customerName: { type: "string" },
+                customerEmail: { type: "string", format: "email" },
+                customerPhone: { type: "string" },
+                name: {
+                  type: "string",
+                  description: "Top-level customer name alias.",
+                },
+                email: {
+                  type: "string",
+                  format: "email",
+                  description: "Top-level customer email alias.",
+                },
+                phone: {
+                  type: "string",
+                  description: "Top-level customer phone alias.",
+                },
                 shippingAddress: { type: "string" },
                 billingAddress: { type: "string" },
                 notes: { type: "string" },
                 discountCode: { type: "string" },
+                couponCode: {
+                  type: "string",
+                  description: "Alias for discountCode.",
+                },
+                promoCode: {
+                  type: "string",
+                  description: "Alias for discountCode.",
+                },
                 paymentProvider: { type: "string" },
                 paymentReference: { type: "string" },
+                payment: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    provider: { type: "string" },
+                    reference: { type: "string" },
+                  },
+                },
                 checkoutSessionId: { type: "string" },
+                checkoutSession: {
+                  oneOf: [
+                    { type: "string" },
+                    {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: { id: { type: "string" } },
+                    },
+                  ],
+                },
               },
             },
             CommerceOrderContractEnvelope: envelopeSchema({
@@ -5990,7 +6094,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     accountId: { type: ["string", "null"] },
                     status: {
                       type: "string",
-                      enum: ["requires_action", "provider_ready"],
+                      enum: [
+                        "requires_action",
+                        "provider_ready",
+                        "provider_created",
+                      ],
                     },
                     handoffMode: {
                       type: "string",

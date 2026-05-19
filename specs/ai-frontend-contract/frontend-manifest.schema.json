@@ -1732,6 +1732,52 @@
                   },
                   "required": ["catalog", "orderIntake", "providerCheckout", "productFilters", "productFacets", "inventoryReservations", "pricingRules", "guestCheckout", "providerWebhooks", "providerCertification", "conditionalRequests", "cacheableCatalog"]
                 },
+                "orderRequest": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.commerce-order-request.v1" },
+                    "contentType": { "const": "application/json" },
+                    "itemArrays": {
+                      "type": "array",
+                      "items": { "enum": ["items", "lineItems", "cartItems", "cart.items"] },
+                      "contains": { "const": "items" }
+                    },
+                    "itemFields": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "productId": { "type": "array", "items": { "type": "string" } },
+                        "slug": { "type": "array", "items": { "type": "string" } },
+                        "variantId": { "type": "array", "items": { "type": "string" } },
+                        "variantSku": { "type": "array", "items": { "type": "string" } },
+                        "quantity": { "type": "array", "items": { "type": "string" } }
+                      },
+                      "required": ["productId", "slug", "variantId", "variantSku", "quantity"]
+                    },
+                    "customer": { "type": "array", "items": { "type": "string" } },
+                    "discountCode": { "type": "array", "items": { "type": "string" } },
+                    "payment": { "type": "array", "items": { "type": "string" } },
+                    "checkoutSessionId": { "type": "array", "items": { "type": "string" } },
+                    "quantity": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "default": { "const": 1 },
+                        "minimum": { "const": 1 },
+                        "maximum": { "const": 999 }
+                      },
+                      "required": ["default", "minimum", "maximum"]
+                    },
+                    "required": { "type": "array", "items": { "type": "string" } },
+                    "checkoutSessionStatuses": {
+                      "type": "array",
+                      "items": { "enum": ["requires_action", "provider_ready", "provider_created"] },
+                      "contains": { "const": "provider_created" }
+                    }
+                  },
+                  "required": ["schemaVersion", "contentType", "itemArrays", "itemFields", "customer", "discountCode", "payment", "checkoutSessionId", "quantity", "required", "checkoutSessionStatuses"]
+                },
                 "cache": {
                   "type": "object",
                   "additionalProperties": true,
@@ -1785,7 +1831,7 @@
                   "required": ["catalog", "settings", "orderContract", "product", "providerCertification", "productCatalogNotFound", "productNotFound", "orderQueueNotFound", "orderQueueNotPrivate", "validationError", "productOutOfStock"]
                 }
               },
-              "required": ["schemaVersion", "enabled", "mode", "currency", "paymentProvider", "catalogCollection", "ordersCollection", "endpoints", "methods", "capabilities", "cache", "privacy", "filters", "schemas"]
+              "required": ["schemaVersion", "enabled", "mode", "currency", "paymentProvider", "catalogCollection", "ordersCollection", "endpoints", "methods", "capabilities", "orderRequest", "cache", "privacy", "filters", "schemas"]
             },
             "interactiveComponents": {
               "type": "object",

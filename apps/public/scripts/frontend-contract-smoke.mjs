@@ -235,15 +235,27 @@ assert(
 assert(
   manifestRoute.includes('buildManifestCommerceDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.commerce-discovery.v1'") &&
+    manifestRoute.includes("schemaVersion: 'backy.commerce-order-request.v1'") &&
+    manifestRoute.includes("'lineItems'") &&
+    manifestRoute.includes("'customerName/customerEmail/customerPhone'") &&
+    manifestRoute.includes("'provider_created'") &&
     manifestRoute.includes("ordersCollectionMustRemainPrivate: true") &&
     manifestRoute.includes("orderQueueNotPrivate: 'ORDER_QUEUE_NOT_PRIVATE'") &&
     manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(input.site.id, commerce, productCollection, ordersCollection)') &&
     manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(site.id, commerce, productCollection, ordersCollection)') &&
     frontendManifestSchema.includes('"backy.commerce-discovery.v1"') &&
+    frontendManifestSchema.includes('"backy.commerce-order-request.v1"') &&
+    frontendManifestSchema.includes('"checkoutSessionStatuses"') &&
     frontendManifestSchema.includes('"providerSecretsNeverReturned"') &&
     frontendManifestSchema.includes('"PRODUCT_OUT_OF_STOCK"') &&
     sdkSource.includes('BackyManifestCommerceRuntimeModule') &&
+    sdkSource.includes('lineItems?: BackyCommerceLineItemInput[]') &&
+    sdkSource.includes('checkoutSession?: string | { id?: string; [key: string]: unknown }') &&
+    openApiRoute.includes('"provider_created"') &&
+    openApiRoute.includes('lineItems: {') &&
+    openApiRoute.includes('customerName: { type: "string" }') &&
     sdkSmoke.includes('manifest() missing commerce runtime discovery module') &&
+    sdkSmoke.includes('manifest() commerce runtime missing lineItems order alias') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceRuntimeDiscovery'),
   'Frontend manifest and SDK must expose structured commerce runtime discovery for custom frontend product catalog and checkout UIs.',
 );

@@ -964,6 +964,48 @@ const buildManifestCommerceDiscovery = (
     conditionalRequests: true,
     cacheableCatalog: true,
   },
+  orderRequest: {
+    schemaVersion: 'backy.commerce-order-request.v1',
+    contentType: 'application/json',
+    itemArrays: ['items', 'lineItems', 'cartItems', 'cart.items'],
+    itemFields: {
+      productId: ['productId', 'product_id'],
+      slug: ['slug', 'productSlug', 'product_slug'],
+      variantId: ['variantId', 'variant_id'],
+      variantSku: ['variantSku', 'variant_sku', 'sku'],
+      quantity: ['quantity', 'qty'],
+    },
+    customer: [
+      'customer.name/customer.email/customer.phone',
+      'customerName/customerEmail/customerPhone',
+      'name/email/phone',
+    ],
+    discountCode: ['discountCode', 'couponCode', 'promoCode'],
+    payment: [
+      'paymentProvider/paymentReference',
+      'payment.provider/payment.reference',
+    ],
+    checkoutSessionId: [
+      'checkoutSessionId',
+      'checkoutSession',
+      'checkoutSession.id',
+    ],
+    quantity: {
+      default: 1,
+      minimum: 1,
+      maximum: 999,
+    },
+    required: [
+      'customer.name',
+      'customer.email',
+      'items[].productId or items[].slug',
+    ],
+    checkoutSessionStatuses: [
+      'requires_action',
+      'provider_ready',
+      'provider_created',
+    ],
+  },
   cache: {
     catalog: 'public-discovery',
     productDetail: 'public-discovery',
