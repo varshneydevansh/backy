@@ -213,6 +213,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleSelectedVisibilityToggle') && source.includes('selectedLayersAreHidden'), 'Editor toolbar must expose selected-layer visibility toggle');
   assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleSelectedLockToggle') && source.includes('selectedLayersAreLocked'), 'Editor toolbar must expose selected-layer lock toggle');
   assert(source.includes("selectedIds.length > 1 ? 'selected layers' : 'selected layer'"), 'Editor selected-layer toolbar actions must label multi-selection states');
+  assert(source.includes('const canDeleteSelected') && source.includes('disabled={isCanvasMutationDisabled || !canDeleteSelected}'), 'Editor delete toolbar button must be disabled when selection has no unlocked deletable layers');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -8656,7 +8657,18 @@ const testDeleteEditingControls = async (client, pageId) => {
   await setLayerLockedState(client, lockedId, true);
   await selectLayerIds(client, [lockedId]);
   await scrollEditorToolbarIntoView(client, 'Delete');
-  await clickEnabledButtonByAriaLabel(client, 'Delete');
+  const lockedDeleteButtonState = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-delete-selection"]');
+    return {
+      exists: button instanceof HTMLButtonElement,
+      disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      ariaLabel: button?.getAttribute('aria-label') || '',
+    };
+  })()`);
+  assert(
+    lockedDeleteButtonState.exists && lockedDeleteButtonState.disabled === true,
+    `Delete toolbar button should be disabled for locked selection: ${JSON.stringify(lockedDeleteButtonState)}`,
+  );
   const lockedAfterToolbar = await waitForElementPresence(client, lockedId, true, 'after locked toolbar delete attempt');
 
   await blurActiveElement(client);
@@ -8683,6 +8695,7 @@ const testDeleteEditingControls = async (client, pageId) => {
     keyboardDeleted,
     keyboardUndone,
     keyboardRedone,
+    lockedDeleteButtonState,
     lockedAfterToolbar,
     lockedAfterKeyboard,
     savedStatus,

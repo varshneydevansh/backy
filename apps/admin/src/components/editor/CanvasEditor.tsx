@@ -2958,6 +2958,10 @@ export function CanvasEditor({
       !entry.element.locked &&
       entry.element.visible !== false
     ));
+  const canDeleteSelected = selectedEntries.some((entry) => (
+    entry.parentId === selectedParentId &&
+    !entry.element.locked
+  ));
   const canToggleSelectedVisibility = selectedActiveElements.length > 0
     && selectedActiveElements.every((element) => !element.locked);
   const selectedLayersAreHidden = selectedActiveElements.length > 0
@@ -4882,7 +4886,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={deleteElement}
-              disabled={isCanvasMutationDisabled || !selectedId}
+              disabled={isCanvasMutationDisabled || !canDeleteSelected}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               title="Delete (Delete)"
               aria-label="Delete"
