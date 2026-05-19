@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -267,6 +267,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Article hero', 'Post body', 'Related posts'],
     },
     {
+        id: 'team',
+        name: 'Team page',
+        desc: 'Leadership, staff profiles, role filters, departments, trust notes, and hiring CTA.',
+        detail: 'Creates a public team page ready to bind people records, roles, departments, profile media, social links, and recruiting actions.',
+        sections: ['Team hero', 'Profile cards', 'Hiring CTA'],
+    },
+    {
         id: 'about',
         name: 'About page',
         desc: 'Story, values, and team-ready content blocks.',
@@ -400,6 +407,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'article',
         description: 'A public article page ready to bind title, author, content, taxonomy, and related posts.',
     },
+    team: {
+        title: 'Team',
+        slug: 'team',
+        description: 'A public team page ready to showcase people, roles, departments, profile media, social links, and hiring or contact actions.',
+    },
     about: {
         title: 'About',
         slug: 'about',
@@ -448,6 +460,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     'help-center': 'primary',
     'blog-index': 'primary',
     'blog-post': 'primary',
+    team: 'primary',
     about: 'primary',
     contact: 'footer',
     registration: 'primary',
@@ -686,6 +699,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     'help-center': ['Home', 'Help', 'Orders', 'Contact'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     'blog-post': ['Home', 'Blog', 'Categories', 'Contact'],
+    team: ['Home', 'Team', 'About', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
@@ -867,6 +881,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { x: 16, y: 70, w: 32, h: 3, className: 'bg-slate-200' },
         { label: 'Author', x: 68, y: 52, w: 24, h: 18, className: 'border-indigo-100 bg-white' },
         { x: 68, y: 78, w: 24, h: 8, className: 'border-slate-200 bg-white' },
+    ],
+    team: [
+        { label: 'Team', x: 8, y: 14, w: 84, h: 24, className: 'border-pink-200 bg-pink-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-pink-800' },
+        { label: 'Roles', x: 64, y: 24, w: 20, h: 6, className: 'border-pink-100 bg-white' },
+        { label: 'Lead', x: 8, y: 48, w: 26, h: 28, className: 'border-pink-100 bg-white' },
+        { label: 'Design', x: 38, y: 48, w: 26, h: 28, className: 'border-pink-100 bg-white' },
+        { label: 'Careers', x: 68, y: 48, w: 24, h: 28, className: 'border-pink-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     about: [
         { label: 'Story', x: 8, y: 16, w: 42, h: 30, className: 'border-cyan-200 bg-cyan-50' },
@@ -1912,6 +1935,8 @@ function NewPageRoute() {
                 ? 'Backy blog feed placeholders'
             : formData.template === 'blog-post'
                 ? 'Backy blog post placeholders'
+            : formData.template === 'team'
+                ? 'Backy team profile placeholders'
                 : 'none',
         datasetImport: selectedDatasetContract,
         navigation: formData.navigationPlacement === 'none'
@@ -2017,7 +2042,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post', 'team'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -2067,7 +2092,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, blog post, and team templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, posts, and people profiles.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4119,6 +4144,8 @@ function buildTemplateElements(input: {
                 ? 'Track order'
             : input.template === 'blog-post'
                 ? 'Read article'
+            : input.template === 'team'
+                ? 'Meet team'
             : input.template === 'help-center'
                 ? 'Get help'
             : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
@@ -7090,6 +7117,182 @@ function buildTemplateElements(input: {
                             }),
                         ],
                     })),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'team') {
+        const profiles = [
+            { name: 'Avery Stone', role: 'Founder / Product', bio: 'Owns product direction, customer research, and roadmap decisions across the site experience.' },
+            { name: 'Mina Patel', role: 'Design systems', bio: 'Shapes reusable patterns, brand details, and accessible interface behavior for every launch.' },
+            { name: 'Noah Kim', role: 'Customer operations', bio: 'Turns customer feedback, support insights, and onboarding questions into clearer workflows.' },
+        ];
+
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'team-hero-section',
+                width: 1200,
+                height: 320,
+                dataBindings: [{ source: 'team', mode: 'overview', fields: ['people', 'roles', 'departments', 'hiringUrl'] }],
+                props: { backgroundColor: '#fdf2f8', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 56, {
+                        id: 'team-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'People', fontSize: 13, fontWeight: '800', color: '#be185d', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 92, {
+                        id: 'team-heading',
+                        width: 620,
+                        height: 84,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 194, {
+                        id: 'team-intro-copy',
+                        width: 620,
+                        height: 76,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                    }),
+                    createCanvasElement('box', 800, 88, {
+                        id: 'team-role-filter',
+                        width: 270,
+                        height: 120,
+                        dataBindings: [{ source: 'team', mode: 'filters', fields: ['roles', 'departments'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fbcfe8', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'team-role-filter-heading',
+                                width: 190,
+                                height: 28,
+                                props: { content: 'Browse by role', level: 'h3', fontSize: 20, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('text', 24, 68, {
+                                id: 'team-role-filter-copy',
+                                width: 210,
+                                height: 24,
+                                props: { content: 'Leadership / Design / Ops', fontSize: 14, color: '#be185d' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 320, {
+                id: 'team-roster-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'team', mode: 'roster', fields: ['people', 'roles', 'departments', 'profileImages', 'socialLinks'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 58, {
+                        id: 'team-roster-heading',
+                        width: 380,
+                        height: 42,
+                        props: { content: 'Team roster', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...profiles.map((profile, index) => createCanvasElement('box', 74 + index * 350, 136, {
+                        id: `team-profile-card-${index}`,
+                        width: 300,
+                        height: 330,
+                        dataBindings: [{ source: 'team', mode: 'profile', index }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#f9a8d4', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('box', 24, 24, {
+                                id: `team-profile-media-${index}`,
+                                width: 88,
+                                height: 88,
+                                dataBindings: [{ source: 'team', mode: 'profile', index, field: 'image', targetPath: 'props.media' }],
+                                props: { backgroundColor: '#fce7f3', borderRadius: 8, borderColor: '#fbcfe8', borderWidth: 1, borderStyle: 'solid' },
+                            }),
+                            createCanvasElement('heading', 24, 134, {
+                                id: `team-profile-name-${index}`,
+                                width: 230,
+                                height: 32,
+                                props: { content: profile.name, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'team', mode: 'profile', index, field: 'name', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 176, {
+                                id: `team-profile-role-${index}`,
+                                width: 230,
+                                height: 24,
+                                props: { content: profile.role, fontSize: 14, fontWeight: '800', color: '#be185d' },
+                                dataBindings: [{ source: 'team', mode: 'profile', index, field: 'role', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 218, {
+                                id: `team-profile-bio-${index}`,
+                                width: 230,
+                                height: 66,
+                                props: { content: profile.bio, fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
+                                dataBindings: [{ source: 'team', mode: 'profile', index, field: 'bio', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('button', 24, 292, {
+                                id: `team-profile-social-${index}`,
+                                width: 112,
+                                height: 38,
+                                props: { label: 'Profile link', backgroundColor: '#fdf2f8', color: '#9d174d', borderRadius: 8, fontSize: 13, fontWeight: '800', action: 'team.profile.open' },
+                                dataBindings: [{ source: 'team', mode: 'profile', index, field: 'socialLinks.primary', targetPath: 'props.href' }],
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 880, {
+                id: 'team-culture-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'team', mode: 'culture', fields: ['values', 'hiringUrl', 'contactEmail'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 64, {
+                        id: 'team-values-card',
+                        width: 500,
+                        height: 190,
+                        dataBindings: [{ source: 'team', mode: 'team-values', fields: ['values', 'operatingPrinciples', 'location'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 28, {
+                                id: 'team-values-heading',
+                                width: 300,
+                                height: 34,
+                                props: { content: 'How we work', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 28, 82, {
+                                id: 'team-values-copy',
+                                width: 400,
+                                height: 70,
+                                props: { content: 'Use this card for operating principles, locations, advisory notes, or the trust markers that help visitors understand the team.', fontSize: 15, lineHeight: 1.55, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('box', 650, 64, {
+                        id: 'team-hiring-card',
+                        width: 400,
+                        height: 190,
+                        dataBindings: [{ source: 'team', mode: 'hiring', fields: ['hiringUrl', 'openRoles', 'contactEmail'] }],
+                        props: { backgroundColor: '#831843', borderRadius: 8, borderColor: '#831843', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 26, {
+                                id: 'team-hiring-heading',
+                                width: 260,
+                                height: 34,
+                                props: { content: 'Building with us?', level: 'h2', fontSize: 26, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 28, 78, {
+                                id: 'team-hiring-copy',
+                                width: 310,
+                                height: 54,
+                                props: { content: 'Bind open roles, partner inquiries, or a recruiting form from your people data.', fontSize: 15, lineHeight: 1.45, color: '#fce7f3' },
+                            }),
+                            createCanvasElement('button', 28, 140, {
+                                id: 'team-hiring-button',
+                                width: 134,
+                                height: 40,
+                                props: { label: 'Open roles', backgroundColor: '#ffffff', color: '#831843', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'team.hiring.open' },
+                                dataBindings: [{ source: 'team', mode: 'hiring', field: 'hiringUrl', targetPath: 'props.href' }],
+                            }),
+                        ],
+                    }),
                 ],
             }),
         ]);

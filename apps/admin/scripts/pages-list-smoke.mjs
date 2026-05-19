@@ -74,8 +74,10 @@ const assertPagesListSourceContract = () => {
       source.includes("key: 'help-center'") &&
       source.includes('helpCenterPageTemplate') &&
       source.includes("key: 'blog-post'") &&
-      source.includes('blogPostPageTemplate'),
-    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, and blog starters and handoff routes',
+      source.includes('blogPostPageTemplate') &&
+      source.includes("key: 'team'") &&
+      source.includes('teamPageTemplate'),
+    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, blog, and team starters and handoff routes',
   );
 };
 
@@ -1644,6 +1646,12 @@ const main = async () => {
       ['template=blog-post'],
       { title: 'Article', slug: 'article', template: 'blog-post', homepage: false },
     );
+    const teamShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-team',
+      ['template=team'],
+      { title: 'Team', slug: 'team', template: 'team', homepage: false },
+    );
     const childHierarchy = await waitForHierarchyRow(
       client,
       hierarchyPages.childPage,
@@ -1746,6 +1754,7 @@ const main = async () => {
       orderConfirmationShortcut,
       helpCenterShortcut,
       blogPostShortcut,
+      teamShortcut,
       childHierarchy,
       parentHierarchy,
       parentTemplate,

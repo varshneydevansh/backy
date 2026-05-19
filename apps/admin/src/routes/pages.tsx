@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'team' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -482,6 +482,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create an article detail page with post body, author, taxonomy, and related-post bindings.',
     badge: 'Editorial',
     icon: Newspaper,
+  },
+  {
+    key: 'team',
+    title: 'Team',
+    detail: 'Create people profiles with roles, departments, profile links, culture notes, and hiring actions.',
+    badge: 'People',
+    icon: UserPlus,
   },
   {
     key: 'contact',
@@ -1963,6 +1970,7 @@ function PagesListView() {
       helpCenterPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       blogPostPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
+      teamPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,
     },
     export: {
       format: 'csv',
@@ -2002,6 +2010,7 @@ function PagesListView() {
         helpCenter: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
         blogPost: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-post`,
+        team: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=team`,
       },
     },
     readiness: {

@@ -770,6 +770,48 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'team',
+    title: 'Smoke Team Template',
+    slugBase: 'smoke-team-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'team',
+    navigationItem: 'Team',
+    headingId: 'team-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'team-site-header',
+      'team-site-navigation',
+      'team-site-footer',
+      'team-hero-section',
+      'team-heading',
+      'team-intro-copy',
+      'team-roster-section',
+      'team-role-filter',
+      'team-profile-card-0',
+      'team-profile-name-0',
+      'team-profile-role-0',
+      'team-profile-bio-0',
+      'team-profile-social-0',
+      'team-culture-section',
+      'team-values-card',
+      'team-hiring-card',
+      'team-hiring-button',
+    ],
+    dataBindingElementIds: [
+      'team-hero-section',
+      'team-roster-section',
+      'team-profile-card-0',
+      'team-profile-name-0',
+      'team-profile-role-0',
+      'team-profile-bio-0',
+      'team-culture-section',
+      'team-values-card',
+      'team-hiring-card',
+    ],
+  },
+  {
     template: 'about',
     title: 'Smoke About Template',
     slugBase: 'smoke-about-template',
@@ -998,8 +1040,12 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-body-section') &&
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
+      source.includes("'team'") &&
+      source.includes('team-profile-card-${index}') &&
+      source.includes('team-values-card') &&
+      source.includes('team.hiring.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, blog-post, and team starters',
   );
 };
 
@@ -1692,6 +1738,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Blog post',
       forms: 'none',
       dynamicData: 'Backy blog post placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'team',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Team page',
+      forms: 'none',
+      dynamicData: 'Backy team profile placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
