@@ -36,6 +36,10 @@ const assertChoiceOptions = (source, inputName, expected) => {
 };
 
 const workflow = read('../.github/workflows/backy-release-certification.yml');
+const formsPostgresWorkflow = read('../.github/workflows/forms-postgres-contract.yml');
+const sdkPostgresWorkflow = read('../.github/workflows/sdk-postgres-smoke.yml');
+const settingsProviderWorkflow = read('../.github/workflows/settings-provider-certification.yml');
+const commerceProviderWorkflow = read('../.github/workflows/commerce-provider-certification.yml');
 const doctor = read('./backy-release-certification-doctor.mjs');
 const doctorContract = read('./backy-release-certification-doctor-contract-smoke.mjs');
 const rootPackage = read('../package.json');
@@ -165,6 +169,56 @@ includesAll(
   ],
   'Backy release certification workflow',
 );
+
+includesAll(
+  formsPostgresWorkflow,
+  [
+    'Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence',
+    '/forms | npm run ci:forms-postgres | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source |',
+  ],
+  'Forms Postgres workflow summary',
+);
+
+includesAll(
+  sdkPostgresWorkflow,
+  [
+    'Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence',
+    'Frontend manifest/OpenAPI/SDK APIs | npm run ci:sdk-postgres-smoke | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source |',
+  ],
+  'SDK Postgres workflow summary',
+);
+
+includesAll(
+  settingsProviderWorkflow,
+  [
+    'Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence',
+    '/settings and Settings admin APIs | npm run ci:settings-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source |',
+    '/products and /orders | npm run ci:commerce-provider-certification | ${{ inputs.certify_commerce }} | npm run test:partial-gate-preflights | npm run test:admin-contract-source |',
+  ],
+  'Settings provider workflow summary',
+);
+
+includesAll(
+  commerceProviderWorkflow,
+  [
+    'Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence',
+    '/products and /orders | npm run ci:commerce-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source |',
+  ],
+  'Commerce provider workflow summary',
+);
+
+for (const [summaryWorkflow, label] of [
+  [formsPostgresWorkflow, 'Forms Postgres workflow summary'],
+  [sdkPostgresWorkflow, 'SDK Postgres workflow summary'],
+  [settingsProviderWorkflow, 'Settings provider workflow summary'],
+  [commerceProviderWorkflow, 'Commerce provider workflow summary'],
+]) {
+  excludesAll(
+    summaryWorkflow,
+    ['Partial row | Gate | Requested | Non-secret target evidence'],
+    label,
+  );
+}
 
 assert(
   /subscription_provider:[\s\S]*?options:[\s\S]*?- razorpay[\s\S]*?webhook_provider:/m.test(workflow),
