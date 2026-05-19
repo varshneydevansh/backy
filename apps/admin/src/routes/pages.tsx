@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'newsletter' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'contact' | 'newsletter' | 'survey' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -536,6 +536,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'newsletter',
     title: 'Newsletter',
     detail: 'Create an email signup page with topic preferences, consent, and contact sharing.',
+    badge: 'Forms',
+    icon: Mail,
+  },
+  {
+    key: 'survey',
+    title: 'Survey',
+    detail: 'Create rating, topic, feedback, optional contact, and consent fields for response capture.',
     badge: 'Forms',
     icon: Mail,
   },
@@ -1992,6 +1999,7 @@ function PagesListView() {
       blankPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
       contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
       newsletterPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=newsletter`,
+      surveyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=survey`,
       registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
       memberLoginPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
       memberAccountPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
@@ -2038,6 +2046,7 @@ function PagesListView() {
         blank: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
         contact: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
         newsletter: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=newsletter`,
+        survey: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=survey`,
         registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
         memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
         memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,

@@ -1142,6 +1142,38 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     formElementIds: ['newsletter-signup-form'],
   },
   {
+    template: 'survey',
+    title: 'Smoke Survey Template',
+    slugBase: 'smoke-survey-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'survey',
+    navigationItem: 'Survey',
+    headingId: 'survey-heading',
+    minRootElementCount: 4,
+    minTotalElementCount: 30,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'survey-site-header',
+      'survey-site-navigation',
+      'survey-site-footer',
+      'survey-hero-section',
+      'survey-heading',
+      'survey-copy',
+      'survey-insight-card',
+      'survey-response-form',
+      'survey-rating',
+      'survey-topic',
+      'survey-feedback',
+      'survey-email',
+      'survey-consent',
+      'survey-submit',
+      'survey-summary-section',
+      'survey-routing-card',
+      'survey-results-button',
+    ],
+    formElementIds: ['survey-response-form'],
+  },
+  {
     template: 'registration',
     title: 'Smoke Registration Template',
     slugBase: 'smoke-registration-template',
@@ -1348,8 +1380,12 @@ const assertPageCreateSourceContracts = () => {
       source.includes('newsletter-signup-form') &&
       source.includes('newsletter-consent') &&
       source.includes('newsletter.preferences.open') &&
+      source.includes("'survey'") &&
+      source.includes('survey-response-form') &&
+      source.includes('survey-rating') &&
+      source.includes('survey.results.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, careers, and newsletter starters',
+    'Page create must keep safe member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, careers, newsletter, and survey starters',
   );
 };
 
@@ -1904,6 +1940,14 @@ const assertTemplateSwitching = async (client) => {
       template: 'newsletter',
       navPlacement: 'primary',
       selectedTemplateName: 'Newsletter page',
+      forms: 'Backy form API seeded',
+      dynamicData: 'none',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'survey',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Survey page',
       forms: 'Backy form API seeded',
       dynamicData: 'none',
       siteChrome: 'editable header, navigation, and footer seeded',

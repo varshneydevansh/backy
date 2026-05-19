@@ -43,6 +43,8 @@ const assertPagesListSourceContract = () => {
       source.includes('data-testid={`pages-create-${shortcut.key}`}') &&
       source.includes("key: 'newsletter'") &&
       source.includes('newsletterPageTemplate') &&
+      source.includes("key: 'survey'") &&
+      source.includes('surveyPageTemplate') &&
       source.includes('memberLoginPageTemplate') &&
       source.includes('memberAccountPageTemplate') &&
       source.includes("key: 'product-detail'") &&
@@ -89,7 +91,7 @@ const assertPagesListSourceContract = () => {
       source.includes('teamPageTemplate') &&
       source.includes("key: 'careers'") &&
       source.includes('careersPageTemplate'),
-    'Pages list must expose the member, newsletter, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
+    'Pages list must expose the member, newsletter, survey, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
   );
 };
 
@@ -1556,6 +1558,12 @@ const main = async () => {
       ['template=newsletter'],
       { title: 'Newsletter', slug: 'newsletter', template: 'newsletter', homepage: false },
     );
+    const surveyShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-survey',
+      ['template=survey'],
+      { title: 'Survey', slug: 'survey', template: 'survey', homepage: false },
+    );
     const memberLoginShortcut = await clickEmptyCreate(
       client,
       'pages-create-member-login',
@@ -1784,6 +1792,7 @@ const main = async () => {
       },
       emptyCreate,
       newsletterShortcut,
+      surveyShortcut,
       registrationShortcut,
       memberLoginShortcut,
       memberAccountShortcut,

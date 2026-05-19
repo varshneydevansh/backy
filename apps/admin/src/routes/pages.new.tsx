@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'newsletter' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'newsletter' | 'survey' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -330,6 +330,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Signup hero', 'Preference form', 'Confirmation note'],
     },
     {
+        id: 'survey',
+        name: 'Survey page',
+        desc: 'Survey prompt, rating/select questions, optional contact capture, consent, and submission routing.',
+        detail: 'Creates a public survey page backed by Backy Forms so teams can collect structured responses without building a custom frontend first.',
+        sections: ['Survey hero', 'Question form', 'Response summary'],
+    },
+    {
         id: 'registration',
         name: 'Registration page',
         desc: 'Signup copy, member fields, consent, and submission routing.',
@@ -494,6 +501,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'newsletter',
         description: 'A public newsletter signup page ready to collect emails, consent, topics, and source attribution through Backy Forms and Contacts.',
     },
+    survey: {
+        title: 'Survey',
+        slug: 'survey',
+        description: 'A public survey page ready to collect structured responses, ratings, open feedback, optional contact details, and consent through Backy Forms.',
+    },
     registration: {
         title: 'Member registration',
         slug: 'register',
@@ -541,6 +553,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     about: 'primary',
     contact: 'footer',
     newsletter: 'primary',
+    survey: 'primary',
     registration: 'primary',
     'member-login': 'primary',
     'member-account': 'primary',
@@ -786,6 +799,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
     newsletter: ['Home', 'Newsletter', 'Blog', 'Contact'],
+    survey: ['Home', 'Survey', 'Help', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
     'member-login': ['Home', 'Login', 'Register'],
     'member-account': ['Home', 'Account', 'Support'],
@@ -1043,6 +1057,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Topics', x: 8, y: 52, w: 26, h: 22, className: 'border-amber-100 bg-white' },
         { label: 'Consent', x: 38, y: 52, w: 26, h: 22, className: 'border-amber-100 bg-white' },
         { label: 'Confirm', x: 68, y: 52, w: 24, h: 22, className: 'border-amber-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    survey: [
+        { label: 'Survey', x: 8, y: 14, w: 84, h: 28, className: 'border-purple-200 bg-purple-50' },
+        { x: 16, y: 25, w: 38, h: 5, className: 'bg-purple-800' },
+        { label: 'Rating', x: 56, y: 24, w: 28, h: 6, className: 'border-purple-100 bg-white' },
+        { label: 'Question', x: 8, y: 52, w: 26, h: 22, className: 'border-purple-100 bg-white' },
+        { label: 'Choice', x: 38, y: 52, w: 26, h: 22, className: 'border-purple-100 bg-white' },
+        { label: 'Notes', x: 68, y: 52, w: 24, h: 22, className: 'border-purple-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     registration: [
@@ -2034,7 +2057,7 @@ function NewPageRoute() {
         siteChrome: selectedFrontendTemplate
             ? 'captured from frontend design contract'
             : formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
-        forms: ['contact', 'newsletter', 'registration', 'member-login', 'member-account'].includes(formData.template) ? 'Backy form API seeded' : 'none',
+        forms: ['contact', 'newsletter', 'survey', 'registration', 'member-login', 'member-account'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
             : formData.template === 'product-detail'
@@ -2189,7 +2212,7 @@ function NewPageRoute() {
             name: selectedFrontendTemplate?.name || selectedTemplate.name,
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
-            seedsFormApi: ['contact', 'newsletter', 'registration', 'member-login', 'member-account'].includes(formData.template),
+            seedsFormApi: ['contact', 'newsletter', 'survey', 'registration', 'member-login', 'member-account'].includes(formData.template),
             seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'booking', 'portfolio', 'gallery', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
@@ -4296,6 +4319,8 @@ function buildTemplateElements(input: {
                 ? 'Track order'
             : input.template === 'newsletter'
                 ? 'Subscribe'
+            : input.template === 'survey'
+                ? 'Start survey'
             : input.template === 'faq'
                 ? 'Ask question'
             : input.template === 'testimonials'
@@ -8612,6 +8637,162 @@ function buildTemplateElements(input: {
                         width: 196,
                         height: 52,
                         props: { label: 'Manage preferences', href: '/preferences', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'newsletter.preferences.open' },
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'survey') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'survey-hero-section',
+                width: 1200,
+                height: 660,
+                props: { backgroundColor: '#f5f3ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 70, {
+                        id: 'survey-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Survey', fontSize: 13, fontWeight: '800', color: '#6d28d9', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 112, {
+                        id: 'survey-heading',
+                        width: 560,
+                        height: 112,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 250, {
+                        id: 'survey-copy',
+                        width: 520,
+                        height: 106,
+                        props: { content: description, fontSize: 18, lineHeight: 1.62, color: '#4b5563' },
+                    }),
+                    createCanvasElement('box', 76, 404, {
+                        id: 'survey-insight-card',
+                        width: 470,
+                        height: 124,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#ddd6fe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 20, {
+                                id: 'survey-insight-heading',
+                                width: 330,
+                                height: 32,
+                                props: { content: 'Structured response capture', level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 20, 60, {
+                                id: 'survey-insight-copy',
+                                width: 390,
+                                height: 50,
+                                props: { content: 'Submissions land in Backy Forms with rating, choice, notes, contact, consent, and source metadata ready for export or collection routing.', fontSize: 14, lineHeight: 1.45, color: '#5b536c' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('form', 700, 58, {
+                        id: 'survey-response-form',
+                        width: 430,
+                        height: 560,
+                        props: {
+                            formId: `form-${formSlug}-survey`,
+                            formName: `${formSlug}-survey`,
+                            formTitle: 'Survey response',
+                            formDescription: 'Public survey form generated from the page canvas.',
+                            formActive: true,
+                            formAudience: 'public',
+                            successMessage: 'Thanks. Your response has been recorded.',
+                            enableHoneypot: true,
+                            enableCaptcha: false,
+                            moderationMode: 'manual',
+                            contactShareEnabled: true,
+                            contactShareNameField: 'name',
+                            contactShareEmailField: 'email',
+                            contactShareNotesField: 'feedback',
+                            backgroundColor: '#ffffff',
+                            borderRadius: 8,
+                            borderColor: '#ddd6fe',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                            boxShadow: '0 20px 55px rgba(109, 40, 217, 0.12)',
+                        },
+                        children: [
+                            createCanvasElement('heading', 24, 26, {
+                                id: 'survey-form-heading',
+                                width: 330,
+                                height: 36,
+                                props: { content: 'Share your feedback', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('select', 24, 86, {
+                                id: 'survey-rating',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Overall rating', name: 'rating', options: ['5 - Excellent', '4 - Good', '3 - Okay', '2 - Needs work', '1 - Poor'], placeholder: 'Choose a rating', required: true },
+                            }),
+                            createCanvasElement('select', 24, 158, {
+                                id: 'survey-topic',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Topic', name: 'topic', options: ['Product', 'Support', 'Content', 'Pricing', 'Other'], placeholder: 'Choose a topic', required: true },
+                            }),
+                            createCanvasElement('textarea', 24, 230, {
+                                id: 'survey-feedback',
+                                width: 360,
+                                height: 92,
+                                props: { label: 'Feedback', name: 'feedback', placeholder: 'Tell us what worked or what should change', required: true },
+                            }),
+                            createCanvasElement('input', 24, 344, {
+                                id: 'survey-email',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Email for follow-up', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: false },
+                            }),
+                            createCanvasElement('checkbox', 24, 420, {
+                                id: 'survey-consent',
+                                width: 360,
+                                height: 48,
+                                props: { label: 'I agree that this response may be used to improve the experience.', name: 'survey_consent', required: true },
+                            }),
+                            createCanvasElement('button', 24, 492, {
+                                id: 'survey-submit',
+                                width: 180,
+                                height: 48,
+                                props: { label: 'Submit survey', backgroundColor: '#6d28d9', color: '#ffffff', borderRadius: 8, fontWeight: '800' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 660, {
+                id: 'survey-summary-section',
+                width: 1200,
+                height: 300,
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 64, {
+                        id: 'survey-routing-card',
+                        width: 510,
+                        height: 160,
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'survey-routing-heading',
+                                width: 360,
+                                height: 34,
+                                props: { content: 'Route responses', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 24, 74, {
+                                id: 'survey-routing-copy',
+                                width: 430,
+                                height: 60,
+                                props: { content: 'Use Backy Forms exports, contacts, webhooks, and collection routing to analyze survey results without exposing analytics or email-provider secrets in the page.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('button', 780, 110, {
+                        id: 'survey-results-button',
+                        width: 178,
+                        height: 52,
+                        props: { label: 'View results', href: '/forms', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'survey.results.open' },
                     }),
                 ],
             }),
