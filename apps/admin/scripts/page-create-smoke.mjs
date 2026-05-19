@@ -1765,6 +1765,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 292, width: 660, height: 190 }"),
     'Team page starter must seed explicit tablet/mobile responsive overrides for role filters, people cards, and culture sections.',
   );
+  assert(
+    source.includes("id: 'careers-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 630 }") &&
+      source.includes("id: 'careers-role-filter'") &&
+      source.includes("mobile: { x: 24, y: 420, width: 327, height: 140 }") &&
+      source.includes("id: 'careers-jobs-section'") &&
+      source.includes("tablet: { y: 500, width: 768, height: 1080 }") &&
+      source.includes("id: `careers-job-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 116 + index * 344, width: 327, height: 318 }") &&
+      source.includes("id: `careers-job-apply-${index}`") &&
+      source.includes("tablet: { y: 186, width: 124, height: 42 }") &&
+      source.includes("id: 'careers-culture-section'") &&
+      source.includes("mobile: { y: 1870, width: 375, height: 920 }") &&
+      source.includes("id: 'careers-process-card'") &&
+      source.includes("mobile: { x: 24, y: 326, width: 327, height: 230 }") &&
+      source.includes("id: 'careers-apply-card'") &&
+      source.includes("tablet: { x: 54, y: 530, width: 660, height: 210 }"),
+    'Careers page starter must seed explicit tablet/mobile responsive overrides for filters, job cards, process, and application sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

@@ -9952,24 +9952,40 @@ function buildTemplateElements(input: {
                 height: 360,
                 dataBindings: [{ source: 'careers', mode: 'overview', fields: ['openRoles', 'departments', 'locations', 'applicationUrl'] }],
                 props: { backgroundColor: '#ecfdf5', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 500 },
+                    mobile: { width: 375, height: 630 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'careers-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Careers', fontSize: 13, fontWeight: '800', color: '#047857', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 98, {
                         id: 'careers-heading',
                         width: 660,
                         height: 92,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 520, height: 92, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 142, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 212, {
                         id: 'careers-intro-copy',
                         width: 630,
                         height: 78,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#374151' },
+                        responsive: {
+                            tablet: { x: 56, y: 204, width: 520, height: 86, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 254, width: 323, height: 116, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 806, 92, {
                         id: 'careers-role-filter',
@@ -9977,18 +9993,28 @@ function buildTemplateElements(input: {
                         height: 138,
                         dataBindings: [{ source: 'careers', mode: 'filters', fields: ['departments', 'locations', 'employmentTypes'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a7f3d0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 330, width: 380, height: 130 },
+                            mobile: { x: 24, y: 420, width: 327, height: 140 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'careers-role-filter-heading',
                                 width: 190,
                                 height: 28,
                                 props: { content: 'Filter roles', level: 'h3', fontSize: 20, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 250 },
+                                },
                             }),
                             createCanvasElement('text', 24, 70, {
                                 id: 'careers-role-filter-copy',
                                 width: 210,
                                 height: 24,
                                 props: { content: 'Department / Location / Type', fontSize: 14, color: '#047857' },
+                                responsive: {
+                                    mobile: { width: 250 },
+                                },
                             }),
                         ],
                     }),
@@ -10000,12 +10026,20 @@ function buildTemplateElements(input: {
                 height: 580,
                 dataBindings: [{ source: 'careers', mode: 'jobs', fields: ['openRoles', 'departments', 'locations', 'employmentTypes', 'applicationUrl'] }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 500, width: 768, height: 1080 },
+                    mobile: { y: 630, width: 375, height: 1240 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 58, {
                         id: 'careers-jobs-heading',
                         width: 360,
                         height: 42,
                         props: { content: 'Open roles', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 360 },
+                            mobile: { x: 24, y: 46, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...jobs.map((job, index) => createCanvasElement('box', 74 + index * 350, 136, {
                         id: `careers-job-card-${index}`,
@@ -10013,6 +10047,10 @@ function buildTemplateElements(input: {
                         height: 340,
                         dataBindings: [{ source: 'careers', mode: 'job', index }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 126 + index * 292, width: 660, height: 250 },
+                            mobile: { x: 24, y: 116 + index * 344, width: 327, height: 318 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 28, {
                                 id: `careers-job-title-${index}`,
@@ -10020,6 +10058,10 @@ function buildTemplateElements(input: {
                                 height: 36,
                                 props: { content: job.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'careers', mode: 'job', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 360 },
+                                    mobile: { width: 260, height: 62 },
+                                },
                             }),
                             createCanvasElement('text', 24, 82, {
                                 id: `careers-job-meta-${index}`,
@@ -10027,6 +10069,10 @@ function buildTemplateElements(input: {
                                 height: 24,
                                 props: { content: job.meta, fontSize: 13, fontWeight: '800', color: '#047857' },
                                 dataBindings: [{ source: 'careers', mode: 'job', index, field: 'metadata', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 360 },
+                                    mobile: { y: 96, width: 260, height: 38 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 128, {
                                 id: `careers-job-summary-${index}`,
@@ -10034,6 +10080,10 @@ function buildTemplateElements(input: {
                                 height: 92,
                                 props: { content: job.summary, fontSize: 14, lineHeight: 1.5, color: '#4b5563' },
                                 dataBindings: [{ source: 'careers', mode: 'job', index, field: 'summary', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 500, height: 64 },
+                                    mobile: { y: 156, width: 270, height: 84 },
+                                },
                             }),
                             createCanvasElement('button', 24, 270, {
                                 id: `careers-job-apply-${index}`,
@@ -10041,6 +10091,10 @@ function buildTemplateElements(input: {
                                 height: 40,
                                 props: { label: 'Apply', backgroundColor: '#047857', color: '#ffffff', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'careers.application.open' },
                                 dataBindings: [{ source: 'careers', mode: 'job', index, field: 'applicationUrl', targetPath: 'props.href' }],
+                                responsive: {
+                                    tablet: { y: 186, width: 124, height: 42 },
+                                    mobile: { y: 256, width: 124, height: 42 },
+                                },
                             }),
                         ],
                     })),
@@ -10052,6 +10106,10 @@ function buildTemplateElements(input: {
                 height: 340,
                 dataBindings: [{ source: 'careers', mode: 'culture', fields: ['benefits', 'hiringProcess', 'contactEmail'] }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1580, width: 768, height: 820 },
+                    mobile: { y: 1870, width: 375, height: 920 },
+                },
                 children: [
                     createCanvasElement('box', 74, 64, {
                         id: 'careers-benefits-card',
@@ -10059,18 +10117,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'careers', mode: 'benefits', fields: ['benefits', 'workModes', 'locations'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 190 },
+                            mobile: { x: 24, y: 46, width: 327, height: 230 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 26, {
                                 id: 'careers-benefits-heading',
                                 width: 230,
                                 height: 32,
                                 props: { content: 'Benefits', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 40, props: { fontSize: 24 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: 'careers-benefits-copy',
                                 width: 250,
                                 height: 74,
                                 props: { content: 'Bind benefits, compensation notes, work modes, and office or remote expectations from careers settings.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 520 },
+                                    mobile: { y: 88, width: 270, height: 104 },
+                                },
                             }),
                         ],
                     }),
@@ -10080,18 +10149,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'careers', mode: 'hiring-process', fields: ['steps', 'timeline', 'contactEmail'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 292, width: 660, height: 190 },
+                            mobile: { x: 24, y: 326, width: 327, height: 230 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 26, {
                                 id: 'careers-process-heading',
                                 width: 240,
                                 height: 32,
                                 props: { content: 'Hiring process', level: 'h2', fontSize: 26, fontWeight: '800', color: '#111827' },
+                                responsive: {
+                                    mobile: { width: 260, height: 40, props: { fontSize: 24 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 78, {
                                 id: 'careers-process-copy',
                                 width: 250,
                                 height: 74,
                                 props: { content: 'Explain application review, interviews, trial work, offer timing, and accessibility accommodations.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 520 },
+                                    mobile: { y: 88, width: 270, height: 104 },
+                                },
                             }),
                         ],
                     }),
@@ -10101,18 +10181,29 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'careers', mode: 'application', fields: ['applicationUrl', 'contactEmail', 'talentPoolUrl'] }],
                         props: { backgroundColor: '#064e3b', borderRadius: 8, borderColor: '#064e3b', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 530, width: 660, height: 210 },
+                            mobile: { x: 24, y: 606, width: 327, height: 240 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'careers-apply-heading',
                                 width: 230,
                                 height: 32,
                                 props: { content: 'Join the talent pool', level: 'h2', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                                responsive: {
+                                    mobile: { width: 260, height: 64 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 74, {
                                 id: 'careers-apply-copy',
                                 width: 250,
                                 height: 50,
                                 props: { content: 'Route candidates to the right application form or external recruiting system.', fontSize: 14, lineHeight: 1.45, color: '#d1fae5' },
+                                responsive: {
+                                    tablet: { width: 500 },
+                                    mobile: { y: 104, width: 270, height: 68 },
+                                },
                             }),
                             createCanvasElement('button', 24, 138, {
                                 id: 'careers-apply-button',
@@ -10120,6 +10211,10 @@ function buildTemplateElements(input: {
                                 height: 40,
                                 props: { label: 'Apply now', backgroundColor: '#ffffff', color: '#064e3b', borderRadius: 8, fontSize: 14, fontWeight: '800', action: 'careers.application.open' },
                                 dataBindings: [{ source: 'careers', mode: 'application', field: 'applicationUrl', targetPath: 'props.href' }],
+                                responsive: {
+                                    tablet: { y: 142, width: 140, height: 44 },
+                                    mobile: { y: 178, width: 140, height: 44 },
+                                },
                             }),
                         ],
                     }),
