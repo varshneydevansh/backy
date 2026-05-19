@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -391,6 +391,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create a receipt, fulfillment status, account handoff, and support next-steps page.',
     badge: 'Commerce',
     icon: ShoppingBag,
+  },
+  {
+    key: 'help-center',
+    title: 'Help center',
+    detail: 'Create a searchable support page with categories, FAQs, and escalation handoff.',
+    badge: 'Support',
+    icon: Mail,
   },
   {
     key: 'blog-index',
@@ -1866,6 +1873,7 @@ function PagesListView() {
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
+      helpCenterPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
     },
     export: {
@@ -1893,6 +1901,7 @@ function PagesListView() {
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
+        helpCenter: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=help-center`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       },
     },

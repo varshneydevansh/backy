@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -176,6 +176,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Order status', 'Receipt summary', 'Next steps'],
     },
     {
+        id: 'help-center',
+        name: 'Help center',
+        desc: 'Search, support categories, FAQs, and escalation handoff.',
+        detail: 'Creates a self-service support page for products, orders, accounts, and site content.',
+        sections: ['Search hero', 'Support categories', 'FAQ answers'],
+    },
+    {
         id: 'blog-index',
         name: 'Blog index',
         desc: 'Editorial intro, featured story, and article list blocks.',
@@ -251,6 +258,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'order-confirmation',
         description: 'A post-purchase confirmation page ready to bind receipt details, fulfillment status, and support actions.',
     },
+    'help-center': {
+        title: 'Help center',
+        slug: 'help',
+        description: 'A self-service support page ready to bind help articles, FAQs, and escalation actions.',
+    },
     'blog-index': {
         title: 'Blog',
         slug: 'blog',
@@ -291,6 +303,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
+    'help-center': 'primary',
     'blog-index': 'primary',
     about: 'primary',
     contact: 'footer',
@@ -517,6 +530,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
+    'help-center': ['Home', 'Help', 'Orders', 'Contact'],
     'blog-index': ['Home', 'Blog', 'About', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
@@ -585,6 +599,14 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Next', x: 8, y: 60, w: 24, h: 18, className: 'border-green-100 bg-white' },
         { x: 38, y: 60, w: 24, h: 18, className: 'border-green-100 bg-white' },
         { x: 68, y: 60, w: 24, h: 18, className: 'border-green-100 bg-white' },
+    ],
+    'help-center': [
+        { label: 'Search', x: 8, y: 14, w: 84, h: 26, className: 'border-sky-200 bg-sky-50' },
+        { x: 18, y: 25, w: 52, h: 5, className: 'bg-sky-800' },
+        { label: 'Topics', x: 8, y: 50, w: 24, h: 20, className: 'border-sky-100 bg-white' },
+        { x: 38, y: 50, w: 24, h: 20, className: 'border-sky-100 bg-white' },
+        { x: 68, y: 50, w: 24, h: 20, className: 'border-sky-100 bg-white' },
+        { label: 'FAQ', x: 8, y: 76, w: 84, h: 8, className: 'border-slate-200 bg-white' },
     ],
     'blog-index': [
         { label: 'Feature', x: 8, y: 16, w: 84, h: 28, className: 'border-indigo-200 bg-indigo-50' },
@@ -1609,6 +1631,8 @@ function NewPageRoute() {
                     ? 'Backy checkout and order placeholders'
                     : formData.template === 'order-confirmation'
                         ? 'Backy order confirmation placeholders'
+                        : formData.template === 'help-center'
+                            ? 'Backy help center placeholders'
             : selectedDatasetCollection
                 ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
@@ -1718,7 +1742,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'cart', 'checkout', 'order-confirmation', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1768,7 +1792,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, cart, checkout, order-confirmation, and blog index templates seed dynamic data placeholders for products, carts, orders, and posts.',
+            'Storefront, product-detail, cart, checkout, order-confirmation, help-center, and blog index templates seed dynamic data placeholders for products, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3798,6 +3822,8 @@ function buildTemplateElements(input: {
             ? 'Checkout'
             : input.template === 'order-confirmation'
                 ? 'View order'
+            : input.template === 'help-center'
+                ? 'Get help'
             : ['storefront', 'product-detail'].includes(input.template) ? 'Shop now' : 'Contact',
     });
 
@@ -4603,6 +4629,164 @@ function buildTemplateElements(input: {
                             }),
                         ],
                     })),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'help-center') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'help-center-hero-section',
+                width: 1200,
+                height: 360,
+                dataBindings: [{ source: 'support', mode: 'help-center', fields: ['query', 'popularArticles', 'categories'] }],
+                props: { backgroundColor: '#eff6ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 64, {
+                        id: 'help-center-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Support center', fontSize: 13, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 104, {
+                        id: 'help-center-heading',
+                        width: 640,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 76, 220, {
+                        id: 'help-center-copy',
+                        width: 600,
+                        height: 64,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                    }),
+                    createCanvasElement('input', 720, 126, {
+                        id: 'help-center-search-input',
+                        width: 340,
+                        height: 58,
+                        props: { label: 'Search help', name: 'support_search', placeholder: 'Search orders, accounts, products, or billing' },
+                    }),
+                    createCanvasElement('button', 720, 210, {
+                        id: 'help-center-search-button',
+                        width: 150,
+                        height: 48,
+                        props: { label: 'Search', backgroundColor: '#1d4ed8', color: '#ffffff', borderRadius: 8, fontSize: 15, fontWeight: '800', action: 'support.search' },
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 360, {
+                id: 'help-center-category-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'support', mode: 'categories', limit: 6 }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 48, {
+                        id: 'help-center-category-heading',
+                        width: 380,
+                        height: 42,
+                        props: { content: 'Browse by topic', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Orders and checkout', copy: 'Payments, receipts, refunds, and fulfillment status.' },
+                        { title: 'Accounts and access', copy: 'Member login, profiles, preferences, and permissions.' },
+                        { title: 'Products and media', copy: 'Catalogs, files, downloads, and content updates.' },
+                    ].map((item, index) => createCanvasElement('box', 72 + index * 360, 122, {
+                        id: `help-center-category-card-${index}`,
+                        width: 318,
+                        height: 140,
+                        dataBindings: [{ source: 'support', mode: 'category', index }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#dbeafe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 20, {
+                                id: `help-center-category-title-${index}`,
+                                width: 230,
+                                height: 30,
+                                props: { content: item.title, level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 20, 62, {
+                                id: `help-center-category-copy-${index}`,
+                                width: 240,
+                                height: 50,
+                                props: { content: item.copy, fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 690, {
+                id: 'help-center-faq-section',
+                width: 1200,
+                height: 430,
+                dataBindings: [{ source: 'support', mode: 'faq', limit: 8 }],
+                props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 54, {
+                        id: 'help-center-faq-heading',
+                        width: 420,
+                        height: 42,
+                        props: { content: 'Frequently asked questions', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    createCanvasElement('box', 72, 124, {
+                        id: 'help-center-faq-list',
+                        width: 690,
+                        height: 250,
+                        dataBindings: [{ source: 'support', mode: 'faq-list', limit: 5 }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            'How do I track my order?',
+                            'How do I update my account email?',
+                            'Where do digital downloads appear?',
+                        ].map((item, index) => createCanvasElement('box', 20, 20 + index * 72, {
+                            id: `help-center-faq-item-${index}`,
+                            width: 650,
+                            height: 60,
+                            dataBindings: [{ source: 'support', mode: 'faq-item', index }],
+                            props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                            children: [
+                                createCanvasElement('text', 18, 18, {
+                                    id: `help-center-faq-question-${index}`,
+                                    width: 450,
+                                    height: 24,
+                                    props: { content: item, fontSize: 15, fontWeight: '800', color: '#111827' },
+                                    dataBindings: [{ source: 'support', mode: 'faq-item', index, field: 'question', targetPath: 'props.content' }],
+                                }),
+                                createCanvasElement('text', 588, 18, {
+                                    id: `help-center-faq-toggle-${index}`,
+                                    width: 22,
+                                    height: 24,
+                                    props: { content: '+', fontSize: 20, fontWeight: '800', color: '#2563eb', textAlign: 'center' },
+                                }),
+                            ],
+                        })),
+                    }),
+                    createCanvasElement('box', 820, 124, {
+                        id: 'help-center-escalation-card',
+                        width: 300,
+                        height: 250,
+                        props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'help-center-escalation-heading',
+                                width: 220,
+                                height: 34,
+                                props: { content: 'Still need help?', level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: 'help-center-escalation-copy',
+                                width: 230,
+                                height: 72,
+                                props: { content: 'Route visitors to a contact page, support inbox, or authenticated account page with context from their current order.', fontSize: 14, lineHeight: 1.5, color: '#d1d5db' },
+                            }),
+                            createCanvasElement('button', 24, 176, {
+                                id: 'help-center-contact-button',
+                                width: 150,
+                                height: 46,
+                                props: { label: 'Contact support', href: '/contact', backgroundColor: '#dbeafe', color: '#1e3a8a', borderRadius: 8, fontSize: 14, fontWeight: '800' },
+                            }),
+                        ],
+                    }),
                 ],
             }),
         ]);

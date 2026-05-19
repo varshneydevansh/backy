@@ -259,6 +259,43 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'help-center',
+    title: 'Smoke Help Center Template',
+    slugBase: 'smoke-help-center-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'help-center',
+    navigationItem: 'Help',
+    headingId: 'help-center-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'help-center-site-header',
+      'help-center-site-navigation',
+      'help-center-site-footer',
+      'help-center-hero-section',
+      'help-center-search-input',
+      'help-center-search-button',
+      'help-center-category-section',
+      'help-center-category-card-0',
+      'help-center-faq-section',
+      'help-center-faq-list',
+      'help-center-faq-item-0',
+      'help-center-faq-question-0',
+      'help-center-escalation-card',
+      'help-center-contact-button',
+    ],
+    dataBindingElementIds: [
+      'help-center-hero-section',
+      'help-center-category-section',
+      'help-center-category-card-0',
+      'help-center-faq-section',
+      'help-center-faq-list',
+      'help-center-faq-item-0',
+      'help-center-faq-question-0',
+    ],
+  },
+  {
     template: 'blog-index',
     title: 'Smoke Blog Index Template',
     slugBase: 'smoke-blog-index-template',
@@ -470,8 +507,11 @@ const assertPageCreateSourceContracts = () => {
       source.includes("'order-confirmation'") &&
       source.includes('order-confirmation-status-card') &&
       source.includes('customer-safe receipt details') &&
+      source.includes("'help-center'") &&
+      source.includes('help-center-search-input') &&
+      source.includes('help-center-contact-button') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member starters and commerce product-detail/cart/checkout/confirmation starters',
+    'Page create must keep safe member, commerce, and help-center starters',
   );
 };
 
@@ -1060,6 +1100,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Order confirmation',
       forms: 'none',
       dynamicData: 'Backy order confirmation placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'help-center',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Help center',
+      forms: 'none',
+      dynamicData: 'Backy help center placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
