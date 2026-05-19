@@ -586,6 +586,18 @@ assert(manifestComments.reportReasons?.includes?.('spam'), 'manifest() comments 
 assert(manifestComments.reporting?.reportUrlTemplate === manifest.data.endpoints.commentReport, 'manifest() comments discovery report template drifted');
 assert(manifestComments.spamProtection?.honeypotField === 'website', 'manifest() comments discovery missing honeypot field');
 assert(manifestComments.spamProtection?.timingField === 'startedAt', 'manifest() comments discovery missing timing field');
+const manifestMedia = manifest.data.modules?.media;
+assert(manifestMedia?.schemaVersion === 'backy.media-discovery.v1', 'manifest() missing media discovery module');
+assert(manifestMedia.endpoints?.list === manifest.data.endpoints.media, 'manifest() media discovery list endpoint drifted');
+assert(manifestMedia.endpoints?.fonts === manifest.data.endpoints.mediaFonts, 'manifest() media discovery font endpoint drifted');
+assert(manifestMedia.endpoints?.detail === manifest.data.endpoints.mediaDetail, 'manifest() media discovery detail endpoint drifted');
+assert(manifestMedia.endpoints?.file === manifest.data.endpoints.mediaFile, 'manifest() media discovery file endpoint drifted');
+assert(manifestMedia.endpoints?.transform === manifest.data.endpoints.mediaTransform, 'manifest() media discovery transform endpoint drifted');
+assert(manifestMedia.capabilities?.signedPrivateFiles === true, 'manifest() media discovery missing signed private file capability');
+assert(manifestMedia.capabilities?.responsiveImages === true, 'manifest() media discovery missing responsive image capability');
+assert(manifestMedia.capabilities?.editableMetadata === true, 'manifest() media discovery missing editable metadata capability');
+assert(manifestMedia.filters?.queryParams?.includes?.('folder'), 'manifest() media discovery missing folder filter');
+assert(manifestMedia.filters?.scopes?.includes?.('page') && manifestMedia.filters?.scopes?.includes?.('post'), 'manifest() media discovery missing page/post scope filters');
 assert(manifest.data.contract?.databaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', 'manifest() missing database certification schema');
 assert(manifest.data.contract?.databaseCertification?.status === 'external-database-gate', 'manifest() missing external database certification status');
 assert(manifest.data.contract?.databaseCertification?.gate?.command === 'npm run ci:sdk-postgres-smoke', 'manifest() missing SDK Postgres certification command');

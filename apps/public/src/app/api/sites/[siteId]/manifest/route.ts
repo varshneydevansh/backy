@@ -560,6 +560,47 @@ const buildManifestCommentDiscovery = (
   };
 };
 
+const buildManifestMediaDiscovery = (
+  siteId: string,
+  media: Pick<MediaItem, 'type'>[],
+  totalCount: number,
+  publicCount: number,
+) => {
+  const types = Array.from(new Set(media.map((item) => item.type))).sort();
+  const fontCount = media.filter((item) => item.type === 'font').length;
+
+  return {
+    schemaVersion: 'backy.media-discovery.v1',
+    count: totalCount,
+    publicCount,
+    fontCount,
+    types,
+    listUrl: `/api/sites/${siteId}/media`,
+    endpoints: {
+      list: `/api/sites/${siteId}/media`,
+      fonts: `/api/sites/${siteId}/media/fonts`,
+      detail: `/api/sites/${siteId}/media/{mediaId}`,
+      file: `/api/sites/${siteId}/media/{mediaId}/file`,
+      transform: `/api/sites/${siteId}/media/{mediaId}/transform?width={width}`,
+    },
+    capabilities: {
+      publicAssets: true,
+      signedPrivateFiles: true,
+      responsiveImages: true,
+      imageTransforms: true,
+      fontManifest: true,
+      references: true,
+      editableMetadata: true,
+    },
+    filters: {
+      types,
+      visibility: ['public', 'private'],
+      scopes: ['global', 'page', 'post'],
+      queryParams: ['type', 'q', 'folder', 'pageId', 'postId', 'global', 'limit', 'offset'],
+    },
+  };
+};
+
 const buildRepositoryManifest = (
   input: {
     requestId: string;
@@ -811,13 +852,7 @@ const buildRepositoryManifest = (
           frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
         })),
         comments: buildManifestCommentDiscovery(input.site.id, input.site.settings),
-        media: {
-          count: input.media.length,
-          publicCount: input.media.length,
-          fontCount: fonts.length,
-          types: Array.from(new Set(input.media.map((item) => item.type))).sort(),
-          listUrl: `/api/sites/${input.site.id}/media`,
-        },
+        media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length),
         commerce,
         interactiveComponents,
       },
@@ -1149,13 +1184,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
           })),
           comments: buildManifestCommentDiscovery(site.id, site.settings),
-          media: {
-            count: media.pagination.total,
-            publicCount: media.pagination.total,
-            fontCount: fonts.length,
-            types: Array.from(new Set(media.media.map((item) => item.type))).sort(),
-            listUrl: `/api/sites/${site.id}/media`,
-          },
+          media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total),
           commerce,
           interactiveComponents,
         },

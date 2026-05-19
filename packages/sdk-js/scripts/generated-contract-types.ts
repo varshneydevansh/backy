@@ -918,11 +918,34 @@ const manifest = {
       ],
     },
     media: {
+      schemaVersion: "backy.media-discovery.v1",
       count: 2,
       publicCount: 1,
       fontCount: 1,
       types: ["image", "font"],
       listUrl: "/api/sites/site_demo/media",
+      endpoints: {
+        list: "/api/sites/site_demo/media",
+        fonts: "/api/sites/site_demo/media/fonts",
+        detail: "/api/sites/site_demo/media/{mediaId}",
+        file: "/api/sites/site_demo/media/{mediaId}/file",
+        transform: "/api/sites/site_demo/media/{mediaId}/transform?width={width}",
+      },
+      capabilities: {
+        publicAssets: true,
+        signedPrivateFiles: true,
+        responsiveImages: true,
+        imageTransforms: true,
+        fontManifest: true,
+        references: true,
+        editableMetadata: true,
+      },
+      filters: {
+        types: ["image", "font"],
+        visibility: ["public", "private"],
+        scopes: ["global", "page", "post"],
+        queryParams: ["type", "q", "folder", "pageId", "postId", "global", "limit", "offset"],
+      },
     },
     commerce: {
       schemaVersion: "backy.commerce-settings.v1",
@@ -1308,11 +1331,34 @@ const sdkManifestForm = {
 } satisfies BackyManifestFormDefinition;
 
 const sdkManifestMedia = {
+  schemaVersion: "backy.media-discovery.v1",
   count: 4,
   publicCount: 3,
   fontCount: 1,
   types: ["font", "image"],
   listUrl: "/api/sites/site_demo/media",
+  endpoints: {
+    list: "/api/sites/site_demo/media",
+    fonts: "/api/sites/site_demo/media/fonts",
+    detail: "/api/sites/site_demo/media/{mediaId}",
+    file: "/api/sites/site_demo/media/{mediaId}/file",
+    transform: "/api/sites/site_demo/media/{mediaId}/transform?width={width}",
+  },
+  capabilities: {
+    publicAssets: true,
+    signedPrivateFiles: true,
+    responsiveImages: true,
+    imageTransforms: true,
+    fontManifest: true,
+    references: true,
+    editableMetadata: true,
+  },
+  filters: {
+    types: ["font", "image"],
+    visibility: ["public", "private"],
+    scopes: ["global", "page", "post"],
+    queryParams: ["type", "q", "folder", "pageId", "postId", "global", "limit", "offset"],
+  },
 } satisfies BackyManifestMediaModule;
 
 const sdkManifestCollection = {
@@ -3324,6 +3370,9 @@ const invalidGeneratedReusableSectionItem = {
 // @ts-expect-error generated manifest media types are string type labels.
 const invalidGeneratedManifestMediaTypes = { ...manifest.modules.media, types: [123], } satisfies GeneratedBackyFrontendManifest["modules"]["media"];
 
+// @ts-expect-error generated manifest media discovery uses a versioned schema marker.
+const invalidGeneratedManifestMediaDiscovery = { ...manifest.modules.media, schemaVersion: "backy.media-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["media"];
+
 // @ts-expect-error generated manifest commerce modes are limited to documented storefront modes.
 const invalidGeneratedManifestCommerceMode = { ...manifest.modules.commerce, mode: "marketplace", } satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
 
@@ -3787,6 +3836,7 @@ void invalidSdkManifestReusableSections;
 void invalidGeneratedReusableSectionCategory;
 void invalidGeneratedReusableSectionItem;
 void invalidGeneratedManifestMediaTypes;
+void invalidGeneratedManifestMediaDiscovery;
 void invalidGeneratedManifestCommerceMode;
 void invalidGeneratedManifestCommerceCapabilities;
 void invalidGeneratedInteractiveRegistry;

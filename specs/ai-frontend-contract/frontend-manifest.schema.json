@@ -850,14 +850,53 @@
             },
             "media": {
               "type": "object",
+              "additionalProperties": true,
               "properties": {
+                "schemaVersion": { "const": "backy.media-discovery.v1" },
                 "count": { "type": "number", "minimum": 0 },
                 "publicCount": { "type": "number", "minimum": 0 },
                 "fontCount": { "type": "number", "minimum": 0 },
                 "types": { "type": "array", "items": { "type": "string" } },
-                "listUrl": { "type": "string", "minLength": 1 }
+                "listUrl": { "type": "string", "minLength": 1 },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string", "minLength": 1 },
+                    "fonts": { "type": "string", "minLength": 1 },
+                    "detail": { "type": "string", "minLength": 1 },
+                    "file": { "type": "string", "minLength": 1 },
+                    "transform": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["list", "fonts", "detail", "file", "transform"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicAssets": { "type": "boolean" },
+                    "signedPrivateFiles": { "type": "boolean" },
+                    "responsiveImages": { "type": "boolean" },
+                    "imageTransforms": { "type": "boolean" },
+                    "fontManifest": { "type": "boolean" },
+                    "references": { "type": "boolean" },
+                    "editableMetadata": { "type": "boolean" }
+                  },
+                  "required": ["publicAssets", "signedPrivateFiles", "responsiveImages", "imageTransforms", "fontManifest", "references", "editableMetadata"]
+                },
+                "filters": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "types": { "type": "array", "items": { "type": "string" } },
+                    "visibility": { "type": "array", "items": { "enum": ["public", "private"] } },
+                    "scopes": { "type": "array", "items": { "enum": ["global", "page", "post"] } },
+                    "queryParams": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["types", "visibility", "scopes", "queryParams"]
+                }
               },
-              "required": ["count", "publicCount", "fontCount", "types", "listUrl"]
+              "required": ["schemaVersion", "count", "publicCount", "fontCount", "types", "listUrl", "endpoints", "capabilities", "filters"]
             },
             "commerce": {
               "type": "object",

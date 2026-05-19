@@ -2862,11 +2862,38 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         [key: string]: unknown;
       };
       media: {
+        schemaVersion: "backy.media-discovery.v1";
         count: number;
         publicCount: number;
         fontCount: number;
         types: Array<string>;
         listUrl: string;
+        endpoints: {
+          list: string;
+          fonts: string;
+          detail: string;
+          file: string;
+          transform: string;
+          [key: string]: unknown;
+        };
+        capabilities: {
+          publicAssets: boolean;
+          signedPrivateFiles: boolean;
+          responsiveImages: boolean;
+          imageTransforms: boolean;
+          fontManifest: boolean;
+          references: boolean;
+          editableMetadata: boolean;
+          [key: string]: unknown;
+        };
+        filters: {
+          types: Array<string>;
+          visibility: Array<"public" | "private">;
+          scopes: Array<"global" | "page" | "post">;
+          queryParams: Array<string>;
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
       };
       commerce?: {
         schemaVersion: "backy.commerce-settings.v1";

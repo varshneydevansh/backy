@@ -62,6 +62,23 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestMediaDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.media-discovery.v1'") &&
+    manifestRoute.includes("signedPrivateFiles: true") &&
+    manifestRoute.includes("responsiveImages: true") &&
+    manifestRoute.includes("editableMetadata: true") &&
+    manifestRoute.includes('media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length)') &&
+    manifestRoute.includes('media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total)') &&
+    frontendManifestSchema.includes('"backy.media-discovery.v1"') &&
+    frontendManifestSchema.includes('"signedPrivateFiles"') &&
+    frontendManifestSchema.includes('"queryParams"') &&
+    sdkSource.includes('schemaVersion: "backy.media-discovery.v1";') &&
+    sdkSmoke.includes('manifest() missing media discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery'),
+  'Frontend manifest and SDK must expose structured media discovery for custom frontend asset browsers.',
+);
+
+assert(
   publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
     publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
     publicSiteDiscoveryRoute.includes('cacheRevision') &&

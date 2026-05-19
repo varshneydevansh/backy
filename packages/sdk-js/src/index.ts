@@ -1833,11 +1833,37 @@ export interface BackyManifestFormDefinition extends BackyFormDefinition {
 }
 
 export interface BackyManifestMediaModule {
+  schemaVersion: "backy.media-discovery.v1";
   count: number;
   publicCount: number;
   fontCount: number;
   types: string[];
   listUrl: string;
+  endpoints: {
+    list: string;
+    fonts: string;
+    detail: string;
+    file: string;
+    transform: string;
+    [key: string]: unknown;
+  };
+  capabilities: {
+    publicAssets: boolean;
+    signedPrivateFiles: boolean;
+    responsiveImages: boolean;
+    imageTransforms: boolean;
+    fontManifest: boolean;
+    references: boolean;
+    editableMetadata: boolean;
+    [key: string]: unknown;
+  };
+  filters: {
+    types: string[];
+    visibility: Array<"public" | "private">;
+    scopes: Array<"global" | "page" | "post">;
+    queryParams: string[];
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
