@@ -459,6 +459,34 @@ const mediaUpdateValidationError = (
     );
   }
 
+  if (
+    hasBodyKey(body, "metadata") &&
+    body.metadata !== undefined &&
+    (body.metadata === null ||
+      typeof body.metadata !== "object" ||
+      Array.isArray(body.metadata))
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_MEDIA_METADATA",
+      "Invalid media metadata. Use a JSON object.",
+      requestId,
+    );
+  }
+
+  if (
+    hasBodyKey(body, "tags") &&
+    body.tags !== undefined &&
+    (body.tags === null || !Array.isArray(body.tags))
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_MEDIA_TAGS",
+      "Invalid media tags. Use an array of strings.",
+      requestId,
+    );
+  }
+
   return null;
 };
 

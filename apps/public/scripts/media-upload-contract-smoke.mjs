@@ -72,6 +72,12 @@ assert(
   'Media upload route must reject invalid explicit scope, visibility, scopeTargetId, and folderId multipart fields instead of silently defaulting policy metadata.',
 );
 assert(
+  mediaRoute.includes('"INVALID_MEDIA_METADATA"') &&
+    mediaRoute.includes('parsedMetadata.invalid') &&
+    mediaRoute.includes('Use a JSON object.'),
+  'Media upload route must reject invalid metadata JSON instead of silently dropping upload metadata.',
+);
+assert(
   mediaRoute.includes('"INVALID_MEDIA_TYPE"') &&
     mediaRoute.includes('"INVALID_MEDIA_VISIBILITY"') &&
     mediaRoute.includes('"INVALID_MEDIA_SCOPE"') &&
@@ -102,9 +108,11 @@ assert(
     mediaDetailRoute.includes('"INVALID_MEDIA_SCOPE"') &&
     mediaDetailRoute.includes('"INVALID_MEDIA_SCOPE_TARGET"') &&
     mediaDetailRoute.includes('"INVALID_MEDIA_FOLDER"') &&
+    mediaDetailRoute.includes('"INVALID_MEDIA_METADATA"') &&
+    mediaDetailRoute.includes('"INVALID_MEDIA_TAGS"') &&
     mediaDetailRoute.includes('mediaUpdateValidationError') &&
     mediaDetailRoute.includes('isMediaScopeInput'),
-  'Admin media detail update route must reject invalid explicit visibility, scope, scopeTargetId, and folderId payloads instead of silently keeping previous metadata.',
+  'Admin media detail update route must reject invalid explicit visibility, scope, scopeTargetId, folderId, metadata, and tags payloads instead of silently keeping previous metadata.',
 );
 assert(
   adminSignedMediaUrlRoute.includes("'INVALID_MEDIA_DISPOSITION'") &&

@@ -133,18 +133,26 @@ const toStringList = (value: FormDataEntryValue | null): string[] => {
 
 const parseMetadata = (
   value: FormDataEntryValue | null,
-): Record<string, unknown> => {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return {};
+): { metadata: Record<string, unknown>; invalid?: boolean } => {
+  if (value === null) {
+    return { metadata: {} };
+  }
+
+  if (typeof value !== "string") {
+    return { metadata: {}, invalid: true };
+  }
+
+  if (value.trim().length === 0) {
+    return { metadata: {} };
   }
 
   try {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+      ? { metadata: parsed as Record<string, unknown> }
+      : { metadata: {}, invalid: true };
   } catch {
-    return {};
+    return { metadata: {}, invalid: true };
   }
 };
 
@@ -919,7 +927,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       mediaFolder,
       storedFilename,
     });
-    const metadata = parseMetadata(formData.get("metadata"));
+    const parsedMetadata = parseMetadata(formData.get("metadata"));
+    if (parsedMetadata.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_METADATA",
+        "Invalid media metadata. Use a JSON object.",
+        requestId,
+      );
+    }
+    const metadata = parsedMetadata.metadata;
     const uploadBuffer = Buffer.from(await file.arrayBuffer());
     const binaryFingerprint = buildMediaBinaryFingerprint(uploadBuffer);
     const safetyScan = await scanMediaUploadWithProviders({

@@ -463,6 +463,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, arbitrary JSON `metadata`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
   - validates image/video/audio/document/font/other MIME categories, classifies unknown safe files as `other`, runs static upload safety checks before storage, optionally enforces HTTP scanner or ClamAV `clamd` clean verdicts through `BACKY_MEDIA_SCAN_*`, rejects active-content SVG or provider-rejected payloads with `MEDIA_SAFETY_SCAN_FAILED`, and writes assets through the active `@backy/storage` adapter
   - invalid explicit upload policy fields return `400` before storage work begins: `INVALID_MEDIA_SCOPE`, `INVALID_MEDIA_VISIBILITY`, `INVALID_MEDIA_SCOPE_TARGET`, or `INVALID_MEDIA_FOLDER`
+  - invalid upload metadata JSON returns `400 INVALID_MEDIA_METADATA` instead of silently dropping the metadata
   - stores extension metadata automatically and preserves custom upload metadata through later metadata edits
   - stores clean scan evidence under `metadata.safetyScan`, including provider scan evidence when an HTTP scanner or ClamAV adapter is configured
   - returns `{ success, requestId, data: { media } }`
@@ -495,7 +496,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `PATCH /api/admin/sites/:siteId/media/:mediaId`
   - Current implementation updates original name, folder, tags, alt text, caption, scope, scope target, visibility, page/post references, and metadata in the local runtime catalog.
-  - Invalid explicit media update payloads return `400` errors instead of silently keeping previous metadata: `INVALID_MEDIA_VISIBILITY`, `INVALID_MEDIA_SCOPE`, `INVALID_MEDIA_SCOPE_TARGET`, or `INVALID_MEDIA_FOLDER`.
+  - Invalid explicit media update payloads return `400` errors instead of silently keeping previous metadata: `INVALID_MEDIA_VISIBILITY`, `INVALID_MEDIA_SCOPE`, `INVALID_MEDIA_SCOPE_TARGET`, `INVALID_MEDIA_FOLDER`, `INVALID_MEDIA_METADATA`, or `INVALID_MEDIA_TAGS`.
   - Font media metadata can register `fontFamily`, `fontWeight`, `fontStyle`, `fontFallback`, and `fontDisplay`; `/render` exposes public font media in `assets.fonts` with `weights`, `styles`, `fallbackStack`, `display`, and `cssFamily`, and hosted page/post rendering injects matching `@font-face` rules.
 
 - `POST /api/admin/sites/:siteId/media/:mediaId`
