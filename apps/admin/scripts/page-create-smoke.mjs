@@ -307,6 +307,46 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'privacy',
+    title: 'Smoke Privacy Template',
+    slugBase: 'smoke-privacy-template',
+    expectedNavigationPlacement: 'footer',
+    chromePrefix: 'privacy',
+    navigationItem: 'Privacy',
+    headingId: 'privacy-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'privacy-site-header',
+      'privacy-site-navigation',
+      'privacy-site-footer',
+      'privacy-hero-section',
+      'privacy-effective-card',
+      'privacy-effective-date',
+      'privacy-policy-section',
+      'privacy-policy-card-0',
+      'privacy-policy-card-title-0',
+      'privacy-policy-card-copy-0',
+      'privacy-rights-section',
+      'privacy-rights-card',
+      'privacy-contact-card',
+      'privacy-contact-button',
+    ],
+    dataBindingElementIds: [
+      'privacy-hero-section',
+      'privacy-effective-card',
+      'privacy-effective-date',
+      'privacy-policy-section',
+      'privacy-policy-card-0',
+      'privacy-policy-card-title-0',
+      'privacy-policy-card-copy-0',
+      'privacy-rights-section',
+      'privacy-rights-card',
+      'privacy-contact-card',
+    ],
+  },
+  {
     template: 'cart',
     title: 'Smoke Cart Template',
     slugBase: 'smoke-cart-template',
@@ -719,6 +759,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('events-format-filter') &&
       source.includes('events-card-${index}') &&
       source.includes('events.registration.open') &&
+      source.includes("'privacy'") &&
+      source.includes('privacy-policy-card-${index}') &&
+      source.includes('privacy-rights-card') &&
+      source.includes('privacy.request.open') &&
       source.includes("'cart'") &&
       source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
@@ -735,7 +779,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, help-center, and blog-post starters',
   );
 };
 
@@ -1332,6 +1376,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Events page',
       forms: 'none',
       dynamicData: 'Backy event schedule placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'privacy',
+      navPlacement: 'footer',
+      selectedTemplateName: 'Privacy policy',
+      forms: 'none',
+      dynamicData: 'Backy legal policy placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

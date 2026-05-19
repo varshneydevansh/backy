@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -183,6 +183,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Events hero', 'Event cards', 'RSVP section'],
     },
     {
+        id: 'privacy',
+        name: 'Privacy policy',
+        desc: 'Policy summary, data-use sections, consent rights, processor notes, and contact CTA.',
+        detail: 'Creates a public privacy policy page ready to bind legal settings, data categories, retention terms, and request actions.',
+        sections: ['Policy hero', 'Data-use sections', 'Rights contact'],
+    },
+    {
         id: 'cart',
         name: 'Cart page',
         desc: 'Cart items, quantity controls, totals, and checkout handoff.',
@@ -298,6 +305,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'events',
         description: 'A public events page ready to bind event records, schedules, locations, capacity, and RSVP actions.',
     },
+    privacy: {
+        title: 'Privacy policy',
+        slug: 'privacy',
+        description: 'A public privacy policy page ready to explain data collection, retention, user rights, processors, and contact options.',
+    },
     cart: {
         title: 'Cart',
         slug: 'cart',
@@ -364,6 +376,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     services: 'primary',
     portfolio: 'primary',
     events: 'primary',
+    privacy: 'footer',
     cart: 'primary',
     checkout: 'primary',
     'order-confirmation': 'primary',
@@ -596,6 +609,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     services: ['Home', 'Services', 'Pricing', 'Contact'],
     portfolio: ['Home', 'Portfolio', 'Services', 'Contact'],
     events: ['Home', 'Events', 'Blog', 'Contact'],
+    privacy: ['Home', 'Privacy', 'Terms', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
     checkout: ['Home', 'Shop', 'Checkout', 'Support'],
     'order-confirmation': ['Home', 'Shop', 'Orders', 'Support'],
@@ -675,6 +689,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Webinar', x: 8, y: 48, w: 26, h: 28, className: 'border-lime-100 bg-white' },
         { label: 'Meetup', x: 38, y: 48, w: 26, h: 28, className: 'border-lime-100 bg-white' },
         { label: 'RSVP', x: 68, y: 48, w: 24, h: 28, className: 'border-lime-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    privacy: [
+        { label: 'Policy', x: 8, y: 14, w: 84, h: 24, className: 'border-slate-300 bg-slate-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-slate-900' },
+        { label: 'Rights', x: 64, y: 24, w: 20, h: 6, className: 'border-slate-200 bg-white' },
+        { label: 'Data', x: 8, y: 48, w: 26, h: 28, className: 'border-slate-200 bg-white' },
+        { label: 'Use', x: 38, y: 48, w: 26, h: 28, className: 'border-slate-200 bg-white' },
+        { label: 'Contact', x: 68, y: 48, w: 24, h: 28, className: 'border-slate-200 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     cart: [
@@ -1748,6 +1771,8 @@ function NewPageRoute() {
                     ? 'Backy portfolio project placeholders'
                 : formData.template === 'events'
                     ? 'Backy event schedule placeholders'
+                : formData.template === 'privacy'
+                    ? 'Backy legal policy placeholders'
                 : formData.template === 'cart'
                     ? 'Backy cart placeholders'
                 : formData.template === 'checkout'
@@ -1867,7 +1892,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -1917,7 +1942,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal policies, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -3955,6 +3980,8 @@ function buildTemplateElements(input: {
                 ? 'View work'
             : input.template === 'events'
                 ? 'RSVP'
+            : input.template === 'privacy'
+                ? 'Contact'
             : input.template === 'blog-post'
                 ? 'Read article'
             : input.template === 'help-center'
@@ -4933,6 +4960,171 @@ function buildTemplateElements(input: {
                                 width: 120,
                                 height: 34,
                                 props: { label: 'Reserve spot', backgroundColor: '#84cc16', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'events.registration.open' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'privacy') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'privacy-hero-section',
+                width: 1200,
+                height: 320,
+                dataBindings: [{ source: 'settings', mode: 'legal-policy', fields: ['privacyPolicy', 'effectiveDate', 'contactEmail', 'processors'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'privacy-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Privacy', fontSize: 13, fontWeight: '800', color: '#475569', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'privacy-heading',
+                        width: 640,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 210, {
+                        id: 'privacy-copy',
+                        width: 600,
+                        height: 64,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                    }),
+                    createCanvasElement('box', 790, 86, {
+                        id: 'privacy-effective-card',
+                        width: 300,
+                        height: 150,
+                        dataBindings: [{ source: 'settings', mode: 'legal-policy', fields: ['effectiveDate', 'version', 'jurisdiction'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'privacy-effective-label',
+                                width: 170,
+                                height: 22,
+                                props: { content: 'Effective date', fontSize: 12, fontWeight: '800', color: '#475569', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 60, {
+                                id: 'privacy-effective-date',
+                                width: 210,
+                                height: 34,
+                                props: { content: 'Updated today', level: 'h3', fontSize: 24, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'settings', mode: 'legal-policy', field: 'effectiveDate', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 104, {
+                                id: 'privacy-effective-copy',
+                                width: 220,
+                                height: 32,
+                                props: { content: 'Bind this card from Settings legal metadata.', fontSize: 13, lineHeight: 1.35, color: '#64748b' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 320, {
+                id: 'privacy-policy-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'settings', mode: 'privacy-sections', fields: ['dataCollected', 'usage', 'retention', 'processors', 'rights'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'privacy-policy-heading',
+                        width: 420,
+                        height: 42,
+                        props: { content: 'How data is handled', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Data we collect', body: 'Account details, form submissions, content edits, media metadata, and commerce/order information needed to run the site.' },
+                        { title: 'How we use data', body: 'To operate the CMS, deliver public APIs, secure sessions, process orders, send notifications, and support site owners.' },
+                        { title: 'Retention and deletion', body: 'Retention terms, export requests, deletion requests, and processor references should be bound from legal settings.' },
+                    ].map((section, index) => createCanvasElement('box', 74 + index * 350, 132, {
+                        id: `privacy-policy-card-${index}`,
+                        width: 310,
+                        height: 290,
+                        dataBindings: [{ source: 'settings', mode: 'privacy-section', index }],
+                        props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: `privacy-policy-card-title-${index}`,
+                                width: 230,
+                                height: 34,
+                                props: { content: section.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'settings', mode: 'privacy-section', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: `privacy-policy-card-copy-${index}`,
+                                width: 236,
+                                height: 120,
+                                props: { content: section.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
+                                dataBindings: [{ source: 'settings', mode: 'privacy-section', index, field: 'body', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 232, {
+                                id: `privacy-policy-card-note-${index}`,
+                                width: 210,
+                                height: 24,
+                                props: { content: 'Editable legal content', fontSize: 13, fontWeight: '800', color: '#475569' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 880, {
+                id: 'privacy-rights-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'settings', mode: 'privacy-rights', fields: ['rights', 'contactEmail', 'requestUrl', 'processors'] }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 62, {
+                        id: 'privacy-rights-card',
+                        width: 600,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'privacy-rights', fields: ['access', 'export', 'delete', 'correct'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 26, {
+                                id: 'privacy-rights-heading',
+                                width: 320,
+                                height: 34,
+                                props: { content: 'Visitor rights', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Access your data', 'Correct details', 'Request export', 'Request deletion'].map((right, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
+                                id: `privacy-right-${index}`,
+                                width: 210,
+                                height: 24,
+                                props: { content: right, fontSize: 15, fontWeight: '800', color: '#334155' },
+                            })),
+                        ],
+                    }),
+                    createCanvasElement('box', 748, 62, {
+                        id: 'privacy-contact-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'legal-contact', fields: ['contactEmail', 'requestUrl'] }],
+                        props: { backgroundColor: '#111827', borderRadius: 8 },
+                        children: [
+                            createCanvasElement('heading', 26, 26, {
+                                id: 'privacy-contact-heading',
+                                width: 220,
+                                height: 32,
+                                props: { content: 'Privacy requests', level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 26, 76, {
+                                id: 'privacy-contact-copy',
+                                width: 240,
+                                height: 46,
+                                props: { content: 'Bind the request destination to Settings or a custom frontend privacy workflow.', fontSize: 14, lineHeight: 1.45, color: '#cbd5e1' },
+                            }),
+                            createCanvasElement('button', 26, 138, {
+                                id: 'privacy-contact-button',
+                                width: 158,
+                                height: 40,
+                                props: { label: 'Contact privacy', backgroundColor: '#e2e8f0', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'privacy.request.open' },
                             }),
                         ],
                     }),

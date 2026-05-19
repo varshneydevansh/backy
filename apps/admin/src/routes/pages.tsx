@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -398,6 +398,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create event cards, schedule metadata, format filters, agenda steps, and RSVP actions.',
     badge: 'Events',
     icon: Sparkles,
+  },
+  {
+    key: 'privacy',
+    title: 'Privacy policy',
+    detail: 'Create a legal policy page with data-use sections, rights, retention, and contact actions.',
+    badge: 'Legal',
+    icon: EyeOff,
   },
   {
     key: 'cart',
@@ -1909,6 +1916,7 @@ function PagesListView() {
       servicesPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
       portfolioPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
       eventsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
+      privacyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
@@ -1942,6 +1950,7 @@ function PagesListView() {
         services: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=services`,
         portfolio: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=portfolio`,
         events: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
+        privacy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
