@@ -340,6 +340,10 @@ function assertAdminPageContentValidationSource() {
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_LIMIT'"), 'public page comments route must reject invalid limit filters');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_OFFSET'"), 'public page comments route must reject invalid offset filters');
   assert(publicPageCommentsRoute.includes('integerQueryFromInput'), 'public page comments route must parse pagination filters strictly');
+  assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_STATUS'"), 'public page comments route must reject invalid status filters');
+  assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_SORT'"), 'public page comments route must reject invalid sort filters');
+  assert(publicPageCommentsRoute.includes('statusFilter.invalid'), 'public page comments route must branch on invalid status filters');
+  assert(publicPageCommentsRoute.includes('sortFilter.invalid'), 'public page comments route must branch on invalid sort filters');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -350,6 +354,8 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_PAGE_OFFSET') &&
       apiContracts.includes('INVALID_PAGE_COMMENT_LIMIT') &&
       apiContracts.includes('INVALID_PAGE_COMMENT_OFFSET') &&
+      apiContracts.includes('INVALID_PAGE_COMMENT_STATUS') &&
+      apiContracts.includes('INVALID_PAGE_COMMENT_SORT') &&
       apiContracts.includes('INVALID_BLOG_CONTENT') &&
       apiContracts.includes('INVALID_BLOG_CONTENT_ELEMENTS') &&
       apiContracts.includes('INVALID_BLOG_CANVAS_SIZE') &&

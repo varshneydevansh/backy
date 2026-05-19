@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Comment } from '@backy-cms/core';
+import type { Comment, CommentStatus } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
@@ -26,8 +26,14 @@ interface RouteParams {
   }>;
 }
 
-function parseStatus(raw: string | null) {
-  if (!raw) return 'approved';
+type CommentStatusFilter = CommentStatus | 'all';
+type CommentSort = 'newest' | 'oldest';
+
+function parseStatus(raw: string | null): { value: CommentStatusFilter; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: 'approved' };
+  }
+
   if (
     raw === 'pending' ||
     raw === 'approved' ||
@@ -36,13 +42,22 @@ function parseStatus(raw: string | null) {
     raw === 'blocked' ||
     raw === 'all'
   ) {
-    return raw;
+    return { value: raw };
   }
-  return 'approved';
+
+  return { value: 'approved', invalid: raw };
 }
 
-function parseSort(raw: string | null) {
-  return raw === 'oldest' ? 'oldest' : 'newest';
+function parseSort(raw: string | null): { value: CommentSort; invalid?: string } {
+  if (raw === null || raw.trim() === '') {
+    return { value: 'newest' };
+  }
+
+  if (raw === 'oldest' || raw === 'newest') {
+    return { value: raw };
+  }
+
+  return { value: 'newest', invalid: raw };
 }
 
 function integerQueryFromInput(
@@ -140,10 +155,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { siteId, pageId } = await params;
     const { searchParams } = new URL(request.url);
 
-    const status = parseStatus(searchParams.get('status'));
+    const statusFilter = parseStatus(searchParams.get('status'));
+    if (statusFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_PAGE_COMMENT_STATUS',
+        'Invalid page comment status filter. Use pending, approved, rejected, spam, blocked, or all.',
+        requestId,
+      );
+    }
+    const status = statusFilter.value;
     const parentId = searchParams.get('parentId');
     const parentOnly = searchParams.get('parentOnly') === 'true' || Boolean(parentId);
-    const sort = parseSort(searchParams.get('sort'));
+    const sortFilter = parseSort(searchParams.get('sort'));
+    if (sortFilter.invalid) {
+      return errorResponse(
+        400,
+        'INVALID_PAGE_COMMENT_SORT',
+        'Invalid page comment sort. Use newest or oldest.',
+        requestId,
+      );
+    }
+    const sort = sortFilter.value;
     const commentThreadId = parseTextInput(searchParams.get('commentThreadId'));
     const limitFilter = integerQueryFromInput(searchParams.get('limit'), 20, 1, 100);
     if (limitFilter.invalid) {
