@@ -35,10 +35,12 @@ const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-dow
 const BORDER_STYLE_OPTIONS = ['', 'solid', 'dashed', 'dotted', 'double', 'none'] as const;
 const TEXT_ALIGN_OPTIONS = ['', 'left', 'center', 'right', 'justify'] as const;
 const TEXT_TRANSFORM_OPTIONS = ['', 'none', 'uppercase', 'lowercase', 'capitalize'] as const;
+const TEXT_DECORATION_OPTIONS = ['', 'none', 'underline', 'line-through', 'overline'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
 type BorderStyleOption = typeof BORDER_STYLE_OPTIONS[number];
 type TextAlignOption = typeof TEXT_ALIGN_OPTIONS[number];
 type TextTransformOption = typeof TEXT_TRANSFORM_OPTIONS[number];
+type TextDecorationOption = typeof TEXT_DECORATION_OPTIONS[number];
 type InlineAppearanceFields = {
   color: string;
   backgroundColor: string;
@@ -53,6 +55,11 @@ type InlineAppearanceFields = {
   lineHeight: string;
   textAlign: TextAlignOption;
   textTransform: TextTransformOption;
+  textDecoration: TextDecorationOption;
+  letterSpacing: string;
+  margin: string;
+  boxShadow: string;
+  opacity: string;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -210,6 +217,7 @@ const appearanceFieldsFromElement = (element: Record<string, unknown> | null): I
   const borderStyle = stringProp(props, 'borderStyle');
   const textAlign = stringProp(props, 'textAlign');
   const textTransform = stringProp(props, 'textTransform');
+  const textDecoration = stringProp(props, 'textDecoration');
   return {
     color: stringProp(props, 'color'),
     backgroundColor: stringProp(props, 'backgroundColor'),
@@ -230,6 +238,13 @@ const appearanceFieldsFromElement = (element: Record<string, unknown> | null): I
     textTransform: TEXT_TRANSFORM_OPTIONS.includes(textTransform as TextTransformOption)
       ? textTransform as TextTransformOption
       : '',
+    textDecoration: TEXT_DECORATION_OPTIONS.includes(textDecoration as TextDecorationOption)
+      ? textDecoration as TextDecorationOption
+      : '',
+    letterSpacing: lengthProp(props, 'letterSpacing'),
+    margin: lengthProp(props, 'margin'),
+    boxShadow: stringProp(props, 'boxShadow'),
+    opacity: lengthProp(props, 'opacity'),
   };
 };
 
@@ -322,6 +337,11 @@ const updateElementAppearance = (
   lineHeight: input.lineHeight.trim(),
   textAlign: input.textAlign,
   textTransform: input.textTransform,
+  textDecoration: input.textDecoration,
+  letterSpacing: input.letterSpacing.trim(),
+  margin: input.margin.trim(),
+  boxShadow: input.boxShadow.trim(),
+  opacity: input.opacity.trim(),
 });
 
 export function LivePageManagementOverlay({
@@ -365,6 +385,11 @@ export function LivePageManagementOverlay({
   const [inlineAppearanceLineHeight, setInlineAppearanceLineHeight] = useState('');
   const [inlineAppearanceTextAlign, setInlineAppearanceTextAlign] = useState<TextAlignOption>('');
   const [inlineAppearanceTextTransform, setInlineAppearanceTextTransform] = useState<TextTransformOption>('');
+  const [inlineAppearanceTextDecoration, setInlineAppearanceTextDecoration] = useState<TextDecorationOption>('');
+  const [inlineAppearanceLetterSpacing, setInlineAppearanceLetterSpacing] = useState('');
+  const [inlineAppearanceMargin, setInlineAppearanceMargin] = useState('');
+  const [inlineAppearanceBoxShadow, setInlineAppearanceBoxShadow] = useState('');
+  const [inlineAppearanceOpacity, setInlineAppearanceOpacity] = useState('');
   const [inlineAppearanceSaving, setInlineAppearanceSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
@@ -477,6 +502,11 @@ export function LivePageManagementOverlay({
       setInlineAppearanceLineHeight('');
       setInlineAppearanceTextAlign('');
       setInlineAppearanceTextTransform('');
+      setInlineAppearanceTextDecoration('');
+      setInlineAppearanceLetterSpacing('');
+      setInlineAppearanceMargin('');
+      setInlineAppearanceBoxShadow('');
+      setInlineAppearanceOpacity('');
       return;
     }
 
@@ -526,6 +556,11 @@ export function LivePageManagementOverlay({
     setInlineAppearanceLineHeight(appearanceFields.lineHeight);
     setInlineAppearanceTextAlign(appearanceFields.textAlign);
     setInlineAppearanceTextTransform(appearanceFields.textTransform);
+    setInlineAppearanceTextDecoration(appearanceFields.textDecoration);
+    setInlineAppearanceLetterSpacing(appearanceFields.letterSpacing);
+    setInlineAppearanceMargin(appearanceFields.margin);
+    setInlineAppearanceBoxShadow(appearanceFields.boxShadow);
+    setInlineAppearanceOpacity(appearanceFields.opacity);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -734,6 +769,11 @@ export function LivePageManagementOverlay({
       lineHeight: inlineAppearanceLineHeight,
       textAlign: inlineAppearanceTextAlign,
       textTransform: inlineAppearanceTextTransform,
+      textDecoration: inlineAppearanceTextDecoration,
+      letterSpacing: inlineAppearanceLetterSpacing,
+      margin: inlineAppearanceMargin,
+      boxShadow: inlineAppearanceBoxShadow,
+      opacity: inlineAppearanceOpacity,
     });
     if (!nextContent) {
       setError('Unable to update this appearance from the live overlay. Open the full editor instead.');
@@ -1259,6 +1299,58 @@ export function LivePageManagementOverlay({
                         <option key={option || 'default'} value={option}>{option || 'default'}</option>
                       ))}
                     </select>
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Decoration
+                      <select
+                        value={inlineAppearanceTextDecoration}
+                        onChange={(event) => setInlineAppearanceTextDecoration(event.target.value as TextDecorationOption)}
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                      >
+                        {TEXT_DECORATION_OPTIONS.map((option) => (
+                          <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Letter spacing
+                      <input
+                        value={inlineAppearanceLetterSpacing}
+                        onChange={(event) => setInlineAppearanceLetterSpacing(event.target.value)}
+                        placeholder="0, 0.02em, 1px"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Margin
+                      <input
+                        value={inlineAppearanceMargin}
+                        onChange={(event) => setInlineAppearanceMargin(event.target.value)}
+                        placeholder="0, 8, 8px 0"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Opacity
+                      <input
+                        value={inlineAppearanceOpacity}
+                        onChange={(event) => setInlineAppearanceOpacity(event.target.value)}
+                        placeholder="1, 0.85"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Shadow
+                    <input
+                      value={inlineAppearanceBoxShadow}
+                      onChange={(event) => setInlineAppearanceBoxShadow(event.target.value)}
+                      placeholder="0 10px 30px rgba(15,23,42,0.18)"
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                    />
                   </label>
                   <button
                     type="button"
