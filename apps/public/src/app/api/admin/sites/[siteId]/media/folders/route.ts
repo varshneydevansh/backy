@@ -59,14 +59,25 @@ const nullableString = (value: unknown): string | null | undefined => {
     : null;
 };
 
-const numberFromInput = (value: unknown): number | undefined => {
+const mediaFolderSortOrderFromInput = (
+  value: unknown,
+): { value?: number; invalid?: boolean } => {
+  if (value === undefined || value === null || value === "") {
+    return {};
+  }
+
   const parsed =
     typeof value === "number"
       ? value
       : typeof value === "string"
         ? Number(value)
         : NaN;
-  return Number.isFinite(parsed) ? parsed : undefined;
+
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return { invalid: true };
+  }
+
+  return { value: parsed };
 };
 
 const folderNameKey = (name: string) => name.trim().toLowerCase();
@@ -231,7 +242,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       );
     }
-    const sortOrder = numberFromInput(body.sortOrder);
+    const sortOrder = mediaFolderSortOrderFromInput(body.sortOrder);
+    if (sortOrder.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_FOLDER_SORT_ORDER",
+        "Media folder sortOrder must be an integer greater than or equal to 0.",
+        requestId,
+      );
+    }
 
     const folder = repositories
       ? (
@@ -239,10 +258,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             siteId: site.id,
             name,
             parentId,
-            sortOrder,
+            sortOrder: sortOrder.value,
           })
         ).item
-      : createMediaFolder(site.id, { name, parentId, sortOrder });
+      : createMediaFolder(site.id, { name, parentId, sortOrder: sortOrder.value });
     await recordAdminAudit({
       repositories,
       siteId: site.id,

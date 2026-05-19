@@ -474,11 +474,13 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `POST /api/admin/sites/:siteId/media/folders`
   - Body: `{ name, parentId?, sortOrder? }`
+  - Invalid folder `sortOrder` values return `400 INVALID_MEDIA_FOLDER_SORT_ORDER`; accepted explicit values are integers greater than or equal to `0`.
   - Creates a local runtime media folder.
   - Emits a `mediaFolder.create` admin audit log.
 
 - `PATCH /api/admin/sites/:siteId/media/folders/:folderId`
   - Updates local runtime folder name, parent, and sort order.
+  - Invalid folder `sortOrder` values return `400 INVALID_MEDIA_FOLDER_SORT_ORDER`; accepted explicit values are integers greater than or equal to `0`.
   - Emits a `mediaFolder.update` admin audit log with before/after snapshots.
 
 - `DELETE /api/admin/sites/:siteId/media/folders/:folderId`

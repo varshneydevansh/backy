@@ -61,14 +61,25 @@ const nullableString = (value: unknown): string | null | undefined => {
     : null;
 };
 
-const numberFromInput = (value: unknown): number | undefined => {
+const mediaFolderSortOrderFromInput = (
+  value: unknown,
+): { value?: number; invalid?: boolean } => {
+  if (value === undefined || value === null || value === "") {
+    return {};
+  }
+
   const parsed =
     typeof value === "number"
       ? value
       : typeof value === "string"
         ? Number(value)
         : NaN;
-  return Number.isFinite(parsed) ? parsed : undefined;
+
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return { invalid: true };
+  }
+
+  return { value: parsed };
 };
 
 const folderNameKey = (name: string) => name.trim().toLowerCase();
@@ -188,6 +199,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await parseJsonBody(request);
     const parentId = nullableString(body.parentId);
+    const sortOrder = mediaFolderSortOrderFromInput(body.sortOrder);
+    if (sortOrder.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_MEDIA_FOLDER_SORT_ORDER",
+        "Media folder sortOrder must be an integer greater than or equal to 0.",
+        requestId,
+      );
+    }
 
     if (repositories) {
       const beforeFolder = await repositories.media.getFolderById(
@@ -256,7 +276,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
               ? nextName
               : undefined,
           parentId,
-          sortOrder: numberFromInput(body.sortOrder),
+          sortOrder: sortOrder.value,
         })
       ).item;
       await recordAdminAudit({
@@ -357,7 +377,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const folder = updateMediaFolder(site.id, folderId, body);
+    const folder = updateMediaFolder(site.id, folderId, {
+      name:
+        typeof body.name === "string" && body.name.trim().length > 0
+          ? nextName
+          : undefined,
+      parentId,
+      sortOrder: sortOrder.value,
+    });
 
     if (!folder) {
       return errorResponse(

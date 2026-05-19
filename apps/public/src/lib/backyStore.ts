@@ -9878,9 +9878,9 @@ export function createMediaFolder(
     siteId,
     parentId,
     name,
-    sortOrder:
-      Number(input.sortOrder) ||
-      MEDIA_FOLDERS.filter((item) => item.siteId === siteId).length + 1,
+    sortOrder: Number.isFinite(Number(input.sortOrder))
+      ? Number(input.sortOrder)
+      : MEDIA_FOLDERS.filter((item) => item.siteId === siteId).length + 1,
     createdAt: now,
   };
 
@@ -9917,7 +9917,9 @@ export function updateMediaFolder(
     sortOrder:
       input.sortOrder === undefined
         ? current.sortOrder
-        : Number(input.sortOrder) || current.sortOrder,
+        : Number.isFinite(Number(input.sortOrder))
+          ? Number(input.sortOrder)
+          : current.sortOrder,
   };
 
   MEDIA_FOLDERS[index] = updated;

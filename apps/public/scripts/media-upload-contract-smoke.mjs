@@ -15,6 +15,8 @@ const assert = (condition, message) => {
 };
 
 const mediaRoute = read('../src/app/api/admin/sites/[siteId]/media/route.ts');
+const mediaFoldersRoute = read('../src/app/api/admin/sites/[siteId]/media/folders/route.ts');
+const mediaFolderDetailRoute = read('../src/app/api/admin/sites/[siteId]/media/folders/[folderId]/route.ts');
 const adminSignedMediaUrlRoute = read('../src/app/api/admin/sites/[siteId]/media/[mediaId]/signed-url/route.ts');
 const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
 const publicFontManifestRoute = read('../src/app/api/sites/[siteId]/media/fonts/route.ts');
@@ -67,6 +69,13 @@ assert(
     mediaRoute.includes('integerQueryFromInput') &&
     mediaRoute.includes('booleanFilterFromInput'),
   'Admin media list route must reject invalid filter and pagination values instead of silently widening or clamping the media library query.',
+);
+assert(
+  mediaFoldersRoute.includes('"INVALID_MEDIA_FOLDER_SORT_ORDER"') &&
+    mediaFoldersRoute.includes('mediaFolderSortOrderFromInput') &&
+    mediaFolderDetailRoute.includes('"INVALID_MEDIA_FOLDER_SORT_ORDER"') &&
+    mediaFolderDetailRoute.includes('mediaFolderSortOrderFromInput'),
+  'Admin media folder create/update routes must reject invalid sortOrder values instead of silently ignoring or storing unstable ordering metadata.',
 );
 assert(
   adminSignedMediaUrlRoute.includes("'INVALID_MEDIA_DISPOSITION'") &&
