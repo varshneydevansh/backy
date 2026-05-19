@@ -125,6 +125,16 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('defaultValue: field.defaultValue'),
     'Forms builder must expose default-value editing for field definitions',
   );
+  assert(
+    source.includes('patchFormDraftFieldOptions') &&
+      source.includes('applyFormFieldOptionDefaults') &&
+      source.includes('normalizeFormFieldDefaultValue') &&
+      source.includes('defaultValue: normalizeFormFieldDefaultValue(field.defaultValue, type, options)') &&
+      source.includes('field.type === \'select\' || field.type === \'radio\'') &&
+      source.includes('<option value="">No default</option>') &&
+      source.includes('onChange={(event) => patchFormDraftFieldOptions(fieldIndex, parseOptionsText(event.target.value))}'),
+    'Forms builder must keep field defaults compatible with type and option changes',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',

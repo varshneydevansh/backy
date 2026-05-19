@@ -1712,6 +1712,22 @@ function FormsRoute() {
     });
   };
 
+  const patchFormDraftFieldOptions = (fieldIndex: number, options: string[] | undefined) => {
+    if (!canEditForms) return;
+    setFormDraft((current) => {
+      if (!current) return current;
+      const currentField = current.fields[fieldIndex];
+      if (!currentField) return current;
+
+      return {
+        ...current,
+        fields: current.fields.map((field, index) => (
+          index === fieldIndex ? applyFormFieldOptionDefaults(field, options) : field
+        )),
+      };
+    });
+  };
+
   const patchFormDraftCollectionTarget = (patch: Partial<NonNullable<FormDefinition['collectionTarget']>>) => {
     if (!canEditForms) return;
     if (patch.enabled === true && !canUseCollectionTargets) return;
@@ -4249,23 +4265,39 @@ function FormsRoute() {
                                   </label>
                                   <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
                                     Default value
-                                    <input
-                                      value={field.defaultValue || ''}
-                                      onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}
-                                      placeholder={field.options?.[0] || field.placeholder || 'Optional default'}
-                                      data-testid="form-field-default-value-input"
-                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
-                                    />
+                                    {field.type === 'select' || field.type === 'radio' ? (
+                                      <select
+                                        value={field.defaultValue || ''}
+                                        onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value || undefined })}
+                                        data-testid="form-field-default-value-input"
+                                        className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                      >
+                                        <option value="">No default</option>
+                                        {(field.options || []).map((option) => (
+                                          <option key={option} value={option}>{option}</option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <input
+                                        value={field.defaultValue || ''}
+                                        onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}
+                                        placeholder={field.options?.[0] || field.placeholder || 'Optional default'}
+                                        data-testid="form-field-default-value-input"
+                                        className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                      />
+                                    )}
                                   </label>
-                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                                    Options
-                                    <input
-                                      value={(field.options || []).join(', ')}
-                                      onChange={(event) => patchFormDraftField(fieldIndex, { options: parseOptionsText(event.target.value) })}
-                                      placeholder="Option one, Option two"
-                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
-                                    />
-                                  </label>
+                                  {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') ? (
+                                    <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                      Options
+                                      <input
+                                        value={(field.options || []).join(', ')}
+                                        onChange={(event) => patchFormDraftFieldOptions(fieldIndex, parseOptionsText(event.target.value))}
+                                        placeholder="Option one, Option two"
+                                        className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                      />
+                                    </label>
+                                  ) : null}
                                 </div>
                                 <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -5367,6 +5399,85 @@ const validationTypesForFieldType = (type: FormFieldType): FormValidationRuleTyp
   return [];
 };
 
+const normalizeFormFieldType = (value: string | undefined): FormFieldType => (
+  FORM_FIELD_TYPES.includes(value as FormFieldType) ? value as FormFieldType : 'text'
+);
+
+const formFieldTypeSupportsOptions = (type: FormFieldType): boolean => (
+  type === 'select' || type === 'radio' || type === 'checkbox'
+);
+
+const normalizeFormFieldOptions = (options: string[] | undefined): string[] | undefined => {
+  const normalized = (options || []).map((option) => option.trim()).filter(Boolean);
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const findMatchingFormFieldOption = (value: string, options: string[] | undefined): string | undefined => {
+  const normalizedValue = value.trim().toLowerCase();
+  return (options || []).find((option) => option.toLowerCase() === normalizedValue);
+};
+
+const isValidFormFieldDateDefault = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map((part) => Number(part));
+  if (!year || !month || !day) return false;
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+};
+
+const isValidFormFieldTelDefault = (value: string): boolean => {
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 20 && /^[+()\d\s.-]+$/.test(value);
+};
+
+const normalizeFormFieldDefaultValue = (
+  defaultValue: string | undefined,
+  type: FormFieldType,
+  options: string[] | undefined,
+): string | undefined => {
+  const value = typeof defaultValue === 'string' ? defaultValue.trim() : '';
+  if (!value) return undefined;
+
+  if (type === 'select' || type === 'radio') {
+    return findMatchingFormFieldOption(value, options);
+  }
+
+  if (type === 'checkbox') {
+    if (options?.length) {
+      const selections = value.split(',').map((item) => item.trim()).filter(Boolean);
+      const matchedSelections = selections
+        .map((selection) => findMatchingFormFieldOption(selection, options))
+        .filter((selection): selection is string => Boolean(selection));
+      return matchedSelections.length === selections.length && matchedSelections.length > 0
+        ? matchedSelections.join(', ')
+        : undefined;
+    }
+
+    return ['true', 'on', '1', 'yes', 'false', 'off', '0', 'no'].includes(value.toLowerCase())
+      ? value
+      : undefined;
+  }
+
+  if (type === 'number') return Number.isFinite(Number(value)) ? value : undefined;
+  if (type === 'email') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? value : undefined;
+  if (type === 'date') return isValidFormFieldDateDefault(value) ? value : undefined;
+  if (type === 'tel') return isValidFormFieldTelDefault(value) ? value : undefined;
+  if (type === 'url') {
+    try {
+      const parsedUrl = new URL(value);
+      return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:' ? value : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return value;
+};
+
 const applyFormFieldTypeDefaults = (
   field: FormFieldDefinition,
   type: FormFieldType,
@@ -5375,8 +5486,8 @@ const applyFormFieldTypeDefaults = (
   const validation = (field.validation || []).filter((rule) => (
     allowedValidationTypes.has(rule.type as FormValidationRuleType)
   ));
-  const existingOptions = field.options?.map((option) => option.trim()).filter(Boolean) || [];
-  const supportsOptions = type === 'select' || type === 'radio' || type === 'checkbox';
+  const existingOptions = normalizeFormFieldOptions(field.options) || [];
+  const supportsOptions = formFieldTypeSupportsOptions(type);
   const options = supportsOptions
     ? existingOptions.length > 0
       ? existingOptions
@@ -5389,9 +5500,23 @@ const applyFormFieldTypeDefaults = (
     ...field,
     type,
     options,
+    defaultValue: normalizeFormFieldDefaultValue(field.defaultValue, type, options),
     validation: validation.length > 0 ? validation : undefined,
     placeholder: field.placeholder || FORM_FIELD_TYPE_PLACEHOLDERS[type],
     helpText: field.helpText || (type === 'file' ? 'Accepts uploaded files submitted with this form.' : undefined),
+  };
+};
+
+const applyFormFieldOptionDefaults = (
+  field: FormFieldDefinition,
+  optionsInput: string[] | undefined,
+): FormFieldDefinition => {
+  const type = normalizeFormFieldType(field.type);
+  const options = formFieldTypeSupportsOptions(type) ? normalizeFormFieldOptions(optionsInput) : undefined;
+  return {
+    ...field,
+    options,
+    defaultValue: normalizeFormFieldDefaultValue(field.defaultValue, type, options),
   };
 };
 
@@ -5446,8 +5571,7 @@ const buildFormDraftFieldPreset = (
 };
 
 const parseOptionsText = (value: string): string[] | undefined => {
-  const options = value.split(',').map((option) => option.trim()).filter(Boolean);
-  return options.length > 0 ? options : undefined;
+  return normalizeFormFieldOptions(value.split(','));
 };
 
 const parseLines = (value: string): string[] => (
@@ -5485,10 +5609,8 @@ const optionalStringListFromRecord = (record: Record<string, unknown> | undefine
 };
 
 const normalizeFrontendFieldType = (value: unknown): FormFieldDefinition['type'] => {
-  const type = typeof value === 'string' ? value.trim() : '';
-  return FORM_FIELD_TYPES.includes(type as typeof FORM_FIELD_TYPES[number])
-    ? type as FormFieldDefinition['type']
-    : 'text';
+  const type = typeof value === 'string' ? value.trim() : undefined;
+  return normalizeFormFieldType(type);
 };
 
 const normalizeFrontendTemplateField = (value: unknown, index: number): FormFieldDefinition | null => {
@@ -5503,8 +5625,14 @@ const normalizeFrontendTemplateField = (value: unknown, index: number): FormFiel
   };
   const placeholder = optionalStringFromRecord(record, 'placeholder');
   const helpText = optionalStringFromRecord(record, 'helpText') || optionalStringFromRecord(record, 'description');
-  const defaultValue = optionalStringFromRecord(record, 'defaultValue');
-  const options = optionalStringListFromRecord(record, 'options');
+  const options = formFieldTypeSupportsOptions(normalizeFormFieldType(field.type))
+    ? optionalStringListFromRecord(record, 'options')
+    : undefined;
+  const defaultValue = normalizeFormFieldDefaultValue(
+    optionalStringFromRecord(record, 'defaultValue'),
+    normalizeFormFieldType(field.type),
+    options,
+  );
 
   if (placeholder) field.placeholder = placeholder;
   if (helpText) field.helpText = helpText;
@@ -5724,17 +5852,24 @@ const buildFormUpdatePayload = (form: FormDefinition) => ({
   description: normalizeOptionalText(form.description),
   audience: form.audience,
   isActive: form.isActive,
-  fields: form.fields.map((field, index) => ({
-    key: normalizeFieldKey(field.key) || `field_${index + 1}`,
-    label: field.label.trim() || `Field ${index + 1}`,
-    type: field.type || 'text',
-    required: Boolean(field.required),
-    ...(normalizeOptionalText(field.placeholder) ? { placeholder: normalizeOptionalText(field.placeholder) || undefined } : {}),
-    ...(normalizeOptionalText(field.helpText) ? { helpText: normalizeOptionalText(field.helpText) || undefined } : {}),
-    ...(normalizeOptionalText(field.defaultValue) ? { defaultValue: normalizeOptionalText(field.defaultValue) || undefined } : {}),
-    ...(field.options && field.options.length > 0 ? { options: field.options.map((option) => option.trim()).filter(Boolean) } : {}),
-    ...(normalizeValidationRules(field) ? { validation: normalizeValidationRules(field) } : {}),
-  })),
+  fields: form.fields.map((field, index) => {
+    const type = normalizeFormFieldType(field.type);
+    const options = formFieldTypeSupportsOptions(type) ? normalizeFormFieldOptions(field.options) : undefined;
+    const defaultValue = normalizeFormFieldDefaultValue(field.defaultValue, type, options);
+    const validation = normalizeValidationRules({ ...field, type });
+
+    return {
+      key: normalizeFieldKey(field.key) || `field_${index + 1}`,
+      label: field.label.trim() || `Field ${index + 1}`,
+      type,
+      required: Boolean(field.required),
+      ...(normalizeOptionalText(field.placeholder) ? { placeholder: normalizeOptionalText(field.placeholder) || undefined } : {}),
+      ...(normalizeOptionalText(field.helpText) ? { helpText: normalizeOptionalText(field.helpText) || undefined } : {}),
+      ...(defaultValue ? { defaultValue } : {}),
+      ...(options ? { options } : {}),
+      ...(validation ? { validation } : {}),
+    };
+  }),
   notificationEmail: normalizeOptionalText(form.notificationEmail),
   notificationWebhook: normalizeOptionalText(form.notificationWebhook),
   successRedirectUrl: normalizeOptionalText(form.successRedirectUrl),
@@ -5787,9 +5922,11 @@ const buildSampleSubmissionPayload = (form: FormDefinition) => ({
 });
 
 const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown => {
-  if (field.defaultValue) return field.defaultValue;
+  const type = normalizeFormFieldType(field.type);
+  const defaultValue = normalizeFormFieldDefaultValue(field.defaultValue, type, normalizeFormFieldOptions(field.options));
+  if (defaultValue) return defaultValue;
 
-  switch (field.type) {
+  switch (type) {
     case 'email':
       return 'ada@example.com';
     case 'number':
