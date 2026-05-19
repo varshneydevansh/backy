@@ -17,6 +17,7 @@ const assert = (condition, message) => {
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const publicSiteDiscoveryRoute = read('../src/app/api/sites/route.ts');
+const publicProxy = read('../src/proxy.ts');
 const adminSitesRoute = read('../src/app/api/admin/sites/route.ts');
 const adminSiteDetailRoute = read('../src/app/api/admin/sites/[siteId]/route.ts');
 const adminFrontendDesignRoute = read('../src/app/api/admin/sites/[siteId]/frontend-design/route.ts');
@@ -41,6 +42,21 @@ const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-
 assert(
   manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
   'Frontend manifest must advertise public site discovery for custom frontends.',
+);
+
+assert(
+  publicProxy.includes('BACKY_CORS_EXPOSED_HEADERS') &&
+    publicProxy.includes('process.env.BACKY_CORS_ALLOWED_ORIGINS') &&
+    publicProxy.includes("headers.set('Access-Control-Allow-Origin', origin as string)") &&
+    publicProxy.includes("headers.set('Access-Control-Expose-Headers', BACKY_CORS_EXPOSED_HEADERS)") &&
+    publicProxy.includes("'x-backy-request-id'") &&
+    publicProxy.includes("'x-backy-contract-version'") &&
+    publicProxy.includes("'x-backy-schema-version'") &&
+    publicProxy.includes("'x-backy-cache-revision'") &&
+    publicProxy.includes("'x-backy-supported-schema-versions'") &&
+    publicProxy.includes("'ETag'") &&
+    publicProxy.includes("headers.append('Vary', 'Origin')"),
+  'Public proxy CORS must allow exact configured origins and expose Backy contract/cache/request headers to browser-based custom frontends.',
 );
 
 assert(

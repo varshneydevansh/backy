@@ -11,6 +11,20 @@ const DEFAULT_ALLOWED_ORIGINS = [
 
 const BACKY_ADMIN_CONTRACT_VERSION = 'backy.admin.v1';
 const BACKY_ADMIN_SETTINGS_SCHEMA_VERSION = 'backy.admin-settings.v1';
+const BACKY_CORS_EXPOSED_HEADERS = [
+  'ETag',
+  'x-backy-admin-contract-version',
+  'x-backy-cache-revision',
+  'x-backy-cache-scope',
+  'x-backy-contract-version',
+  'x-backy-hosted-cache-policy',
+  'x-backy-media-id',
+  'x-backy-render-surface',
+  'x-backy-request-id',
+  'x-backy-schema-version',
+  'x-backy-site-id',
+  'x-backy-supported-schema-versions',
+].join(', ');
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -102,6 +116,7 @@ const applyCorsHeaders = (headers: Headers, origin: string | null) => {
   headers.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Backy-Admin-Key, X-API-Key, X-Backy-Admin-Session');
   headers.set('Access-Control-Allow-Credentials', 'true');
+  headers.set('Access-Control-Expose-Headers', BACKY_CORS_EXPOSED_HEADERS);
   headers.set('Access-Control-Max-Age', '86400');
   headers.append('Vary', 'Origin');
 };
