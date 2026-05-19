@@ -3095,7 +3095,12 @@ export function CanvasEditor({
     && !selectedEntries[0].element.locked
     && isEditorGroupElement(selectedEntries[0].element)
     && Boolean(selectedEntries[0].element.children?.length);
-  const canAlignSelected = !!selectedElement && !selectedElement.locked;
+  const canAlignSelected = selectedEntries.length > 0
+    && selectedEntries.every((entry) => (
+      entry.parentId === selectedParentId &&
+      !entry.element.locked &&
+      entry.element.visible !== false
+    ));
   const canZOrderSelected = selectedEntries.length > 0
     && selectedSiblingLayerCount > selectedEntries.length
     && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
@@ -3578,20 +3583,41 @@ export function CanvasEditor({
         groupDeltaX = nextX - selected.x;
         groupDeltaY = nextY - selected.y;
       } else {
-        groupDeltaX = alignment === 'left'
-          ? -minX
-          : alignment === 'center'
-            ? snapEditorValue((boundsWidth - groupWidth) / 2) - minX
-            : alignment === 'right'
-              ? boundsWidth - maxX
-              : 0;
-        groupDeltaY = alignment === 'top'
-          ? -minY
-          : alignment === 'middle'
-            ? snapEditorValue((boundsHeight - groupHeight) / 2) - minY
-            : alignment === 'bottom'
-              ? boundsHeight - maxY
-              : 0;
+        const centerX = minX + groupWidth / 2;
+        const centerY = minY + groupHeight / 2;
+        let didAlign = false;
+        let nextElements = currentElements;
+
+        for (const entry of alignEntries) {
+          const nextX = alignment === 'left'
+            ? minX
+            : alignment === 'center'
+              ? centerX - entry.element.width / 2
+              : alignment === 'right'
+                ? maxX - entry.element.width
+                : entry.element.x;
+          const nextY = alignment === 'top'
+            ? minY
+            : alignment === 'middle'
+              ? centerY - entry.element.height / 2
+              : alignment === 'bottom'
+                ? maxY - entry.element.height
+                : entry.element.y;
+
+          if (Math.abs(nextX - entry.element.x) <= 0.5 && Math.abs(nextY - entry.element.y) <= 0.5) {
+            continue;
+          }
+
+          didAlign = true;
+          const result = updateElementById(nextElements, entry.element.id, (element) => ({
+            ...element,
+            x: nextX,
+            y: nextY,
+          }));
+          nextElements = result.updated ? result.elements : nextElements;
+        }
+
+        return didAlign ? nextElements : currentElements;
       }
 
       if (groupDeltaX === 0 && groupDeltaY === 0) {
@@ -5023,6 +5049,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align left"
                 aria-label="Align left"
+                data-testid="editor-align-left"
               >
                 <AlignHorizontalJustifyStart className="h-4 w-4" />
               </button>
@@ -5033,6 +5060,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align horizontal center"
                 aria-label="Align horizontal center"
+                data-testid="editor-align-center"
               >
                 <AlignHorizontalJustifyCenter className="h-4 w-4" />
               </button>
@@ -5043,6 +5071,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align right"
                 aria-label="Align right"
+                data-testid="editor-align-right"
               >
                 <AlignHorizontalJustifyEnd className="h-4 w-4" />
               </button>
@@ -5053,6 +5082,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align top"
                 aria-label="Align top"
+                data-testid="editor-align-top"
               >
                 <AlignVerticalJustifyStart className="h-4 w-4" />
               </button>
@@ -5063,6 +5093,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align vertical center"
                 aria-label="Align vertical center"
+                data-testid="editor-align-middle"
               >
                 <AlignVerticalJustifyCenter className="h-4 w-4" />
               </button>
@@ -5073,6 +5104,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align bottom"
                 aria-label="Align bottom"
+                data-testid="editor-align-bottom"
               >
                 <AlignVerticalJustifyEnd className="h-4 w-4" />
               </button>
@@ -5699,7 +5731,75 @@ export function CanvasEditor({
                           Group
                         </button>
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="mt-3 grid grid-cols-6 gap-1.5" data-testid="editor-inspector-align-controls">
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedElement('left')}
+                          disabled={isCanvasMutationDisabled || !canAlignSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Align selected layers left"
+                          aria-label="Align selected layers left"
+                          data-testid="editor-inspector-align-left"
+                        >
+                          <AlignHorizontalJustifyStart className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedElement('center')}
+                          disabled={isCanvasMutationDisabled || !canAlignSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Align selected layers center"
+                          aria-label="Align selected layers center"
+                          data-testid="editor-inspector-align-center"
+                        >
+                          <AlignHorizontalJustifyCenter className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedElement('right')}
+                          disabled={isCanvasMutationDisabled || !canAlignSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Align selected layers right"
+                          aria-label="Align selected layers right"
+                          data-testid="editor-inspector-align-right"
+                        >
+                          <AlignHorizontalJustifyEnd className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedElement('top')}
+                          disabled={isCanvasMutationDisabled || !canAlignSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Align selected layers top"
+                          aria-label="Align selected layers top"
+                          data-testid="editor-inspector-align-top"
+                        >
+                          <AlignVerticalJustifyStart className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedElement('middle')}
+                          disabled={isCanvasMutationDisabled || !canAlignSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Align selected layers middle"
+                          aria-label="Align selected layers middle"
+                          data-testid="editor-inspector-align-middle"
+                        >
+                          <AlignVerticalJustifyCenter className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedElement('bottom')}
+                          disabled={isCanvasMutationDisabled || !canAlignSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Align selected layers bottom"
+                          aria-label="Align selected layers bottom"
+                          data-testid="editor-inspector-align-bottom"
+                        >
+                          <AlignVerticalJustifyEnd className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
                         <button
                           type="button"
                           onClick={() => distributeSelectedElements('horizontal')}
