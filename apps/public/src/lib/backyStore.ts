@@ -3757,6 +3757,82 @@ function collectFormFieldsFromChildren(
   return fields;
 }
 
+function formFieldKeySet(fields: FormFieldDefinition[]): Set<string> {
+  return new Set(fields.map((field) => sanitizeString(field.key)).filter(Boolean));
+}
+
+function normalizeCanvasFormFieldReference(
+  value: string | undefined,
+  fields: FormFieldDefinition[],
+): string | undefined {
+  const key = sanitizeString(value);
+  return key && formFieldKeySet(fields).has(key) ? key : undefined;
+}
+
+function normalizeCanvasContactShare(
+  contactShare: FormDefinition["contactShare"],
+  fields: FormFieldDefinition[],
+): FormDefinition["contactShare"] {
+  if (!contactShare?.enabled) {
+    return undefined;
+  }
+
+  const nameField = normalizeCanvasFormFieldReference(contactShare.nameField, fields);
+  const emailField = normalizeCanvasFormFieldReference(contactShare.emailField, fields);
+  const phoneField = normalizeCanvasFormFieldReference(contactShare.phoneField, fields);
+  const notesField = normalizeCanvasFormFieldReference(contactShare.notesField, fields);
+
+  return {
+    enabled: true,
+    ...(nameField ? { nameField } : {}),
+    ...(emailField ? { emailField } : {}),
+    ...(phoneField ? { phoneField } : {}),
+    ...(notesField ? { notesField } : {}),
+    dedupeByEmail: Boolean(emailField) && contactShare.dedupeByEmail !== false,
+  };
+}
+
+function normalizeCanvasCollectionFieldMap(
+  fieldMap: Record<string, string> | undefined,
+  fields: FormFieldDefinition[],
+): Record<string, string> | undefined {
+  const allowedFieldKeys = formFieldKeySet(fields);
+  const normalized = Object.fromEntries(Object.entries(fieldMap || {}).flatMap(([sourceField, targetField]) => {
+    const sourceKey = sanitizeString(sourceField);
+    const targetKey = sanitizeString(targetField);
+    if (!sourceKey || !targetKey || !allowedFieldKeys.has(sourceKey)) {
+      return [];
+    }
+    return [[sourceKey, targetKey]];
+  }));
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeCanvasCollectionTarget(
+  collectionTarget: FormDefinition["collectionTarget"],
+  fields: FormFieldDefinition[],
+): FormDefinition["collectionTarget"] {
+  if (!collectionTarget?.enabled) {
+    return undefined;
+  }
+
+  const collectionId = sanitizeString(collectionTarget.collectionId);
+  if (!collectionId) {
+    return undefined;
+  }
+
+  const slugField = normalizeCanvasFormFieldReference(collectionTarget.slugField, fields);
+  const fieldMap = normalizeCanvasCollectionFieldMap(collectionTarget.fieldMap, fields);
+
+  return {
+    enabled: true,
+    collectionId,
+    ...(slugField ? { slugField } : {}),
+    ...(fieldMap ? { fieldMap } : {}),
+  };
+}
+
 function buildFormDefinitionFromCanvas(
   formElement: CanvasElement,
   context: {
@@ -3795,6 +3871,31 @@ function buildFormDefinitionFromCanvas(
   const enabledContactShare =
     props.contactShareEnabled === true ||
     sanitizeString(props.contactShareEnabled).toLowerCase() === "true";
+  const rawContactShare: FormDefinition["contactShare"] = enabledContactShare
+    ? {
+        enabled: true,
+        nameField: sanitizeString(props.contactShareNameField),
+        emailField: sanitizeString(props.contactShareEmailField),
+        phoneField: sanitizeString(props.contactSharePhoneField),
+        notesField: sanitizeString(props.contactShareNotesField),
+        dedupeByEmail:
+          props.contactShareDedupeByEmail !== false &&
+          sanitizeString(props.contactShareDedupeByEmail).toLowerCase() !==
+            "false",
+      }
+    : undefined;
+  const rawCollectionTarget: FormDefinition["collectionTarget"] =
+    props.collectionWriteEnabled === true ||
+    sanitizeString(props.collectionWriteEnabled).toLowerCase() === "true"
+      ? {
+          enabled: true,
+          collectionId: sanitizeString(
+            props.collectionWriteCollectionId || props.collectionId,
+          ),
+          slugField: sanitizeString(props.collectionWriteSlugField),
+          fieldMap: parseFieldMap(props.collectionWriteFieldMap),
+        }
+      : undefined;
 
   return {
     id: resolvedFormId,
@@ -3835,31 +3936,8 @@ function buildFormDefinitionFromCanvas(
             : undefined,
     notificationWebhook: sanitizeString(props.notificationWebhook),
     moderationMode,
-    contactShare: enabledContactShare
-      ? {
-          enabled: true,
-          nameField: sanitizeString(props.contactShareNameField),
-          emailField: sanitizeString(props.contactShareEmailField),
-          phoneField: sanitizeString(props.contactSharePhoneField),
-          notesField: sanitizeString(props.contactShareNotesField),
-          dedupeByEmail:
-            props.contactShareDedupeByEmail !== false &&
-            sanitizeString(props.contactShareDedupeByEmail).toLowerCase() !==
-              "false",
-        }
-      : undefined,
-    collectionTarget:
-      props.collectionWriteEnabled === true ||
-      sanitizeString(props.collectionWriteEnabled).toLowerCase() === "true"
-        ? {
-            enabled: true,
-            collectionId: sanitizeString(
-              props.collectionWriteCollectionId || props.collectionId,
-            ),
-            slugField: sanitizeString(props.collectionWriteSlugField),
-            fieldMap: parseFieldMap(props.collectionWriteFieldMap),
-          }
-        : undefined,
+    contactShare: normalizeCanvasContactShare(rawContactShare, fields),
+    collectionTarget: normalizeCanvasCollectionTarget(rawCollectionTarget, fields),
     createdBy: "admin",
     updatedBy: "admin",
     createdAt: nowIso,

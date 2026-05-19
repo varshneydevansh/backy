@@ -32,6 +32,7 @@ const assertFormsPersistenceCertificationSource = () => {
   const source = fs.readFileSync(new URL('../src/routes/forms.tsx', import.meta.url), 'utf8');
   const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   const embedBlockRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/forms/[formId]/embed-block/route.ts', import.meta.url), 'utf8');
+  const publicStoreSource = fs.readFileSync(new URL('../../public/src/lib/backyStore.ts', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   assert(
@@ -184,6 +185,16 @@ const assertFormsPersistenceCertificationSource = () => {
       embedBlockRouteSource.includes('contactShare: contactShare?.enabled') &&
       embedBlockRouteSource.includes('collectionTarget: collectionTarget?.enabled'),
     'Forms template and embed-block handoffs must emit flattened canvas props for contact and collection routing',
+  );
+  assert(
+    publicStoreSource.includes('normalizeCanvasContactShare') &&
+      publicStoreSource.includes('normalizeCanvasCollectionTarget') &&
+      publicStoreSource.includes('normalizeCanvasCollectionFieldMap') &&
+      publicStoreSource.includes('const rawContactShare: FormDefinition["contactShare"]') &&
+      publicStoreSource.includes('const rawCollectionTarget: FormDefinition["collectionTarget"]') &&
+      publicStoreSource.includes('contactShare: normalizeCanvasContactShare(rawContactShare, fields)') &&
+      publicStoreSource.includes('collectionTarget: normalizeCanvasCollectionTarget(rawCollectionTarget, fields)'),
+    'Canvas-derived forms must normalize contact-share and collection-write routing against collected form fields',
   );
   assert(
     source.includes('data-testid="form-field-default-value-input"') &&
