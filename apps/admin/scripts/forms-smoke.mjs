@@ -33,6 +33,11 @@ const assertFormsPersistenceCertificationSource = () => {
   const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   const embedBlockRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/forms/[formId]/embed-block/route.ts', import.meta.url), 'utf8');
   const publicStoreSource = fs.readFileSync(new URL('../../public/src/lib/backyStore.ts', import.meta.url), 'utf8');
+  const publicFormDefinitionRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/definition/route.ts', import.meta.url), 'utf8');
+  const publicFormDetailRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/route.ts', import.meta.url), 'utf8');
+  const publicManifestRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/manifest/route.ts', import.meta.url), 'utf8');
+  const publicOpenApiRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url), 'utf8');
+  const frontendDesignContractSource = fs.readFileSync(new URL('../../public/src/lib/frontendDesignContract.ts', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   assert(
@@ -261,6 +266,19 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('contactShare: contactShare?.enabled ? contactShare : undefined') &&
       source.includes('collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined'),
     'Frontend design form templates must normalize imported field validation and routing before creating backend forms',
+  );
+  assert(
+    frontendDesignContractSource.includes('frontendFormFieldKeyMapFromMetadata') &&
+      frontendDesignContractSource.includes('fieldKeyMap: stringRecord(metadata.frontendFieldKeyMap)') &&
+      publicFormDefinitionRouteSource.includes('frontendFormFieldKeyMapFromMetadata') &&
+      publicFormDefinitionRouteSource.includes('frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings)') &&
+      publicFormDetailRouteSource.includes('frontendFormFieldKeyMapFromMetadata') &&
+      publicFormDetailRouteSource.includes('frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings)') &&
+      publicManifestRouteSource.includes('frontendFormFieldKeyMapFromMetadata') &&
+      publicManifestRouteSource.includes('frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings)') &&
+      publicOpenApiRouteSource.includes('frontendFieldKeyMap:') &&
+      publicOpenApiRouteSource.includes('fieldKeyMap:'),
+    'Public form definition, detail, manifest, and OpenAPI contracts must expose frontend field key maps for custom frontend bindings',
   );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
@@ -1188,6 +1206,12 @@ const assertFrontendTemplateForm = async (formId) => {
     `Frontend field key map was not stored: ${JSON.stringify(form?.settings)}`,
   );
   assert(form?.fields?.some((field) => field.key === 'project_budget' && field.type === 'select' && field.options?.includes('$25k+')), `Frontend fields did not persist: ${JSON.stringify(form?.fields)}`);
+  const definition = await requestApi(`/api/sites/${SITE_ID}/forms/${form.id}/definition`);
+  assert(
+    definition.data?.form?.frontendFieldKeyMap?.['Full name'] === 'full_name' &&
+      definition.data.form.frontendDesign?.fieldKeyMap?.project_budget === 'project_budget',
+    `Frontend public definition did not expose field key map: ${JSON.stringify(definition).slice(0, 1000)}`,
+  );
   assert(
     form?.contactShare?.enabled === true &&
     form.contactShare.nameField === 'full_name' &&

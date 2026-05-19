@@ -447,10 +447,16 @@ export const frontendDesignProvenanceFromMetadata = (metadataInput: unknown) => 
     chrome: cloneRecord(metadata.frontendDesignChrome),
     tokens: cloneRecord(metadata.frontendDesignTokens),
     customCss: stringValue(metadata.frontendDesignCustomCss),
+    fieldKeyMap: stringRecord(metadata.frontendFieldKeyMap),
     bindingHints: Array.isArray(metadata.frontendDesignBindingHints)
       ? cloneArray(metadata.frontendDesignBindingHints.filter(isRecord))
       : [],
   };
+};
+
+export const frontendFormFieldKeyMapFromMetadata = (metadataInput: unknown): Record<string, string> | undefined => {
+  const metadata = isRecord(metadataInput) ? metadataInput : {};
+  return stringRecord(metadata.frontendFieldKeyMap);
 };
 
 const templateRequestId = (input: Record<string, unknown>): string | undefined => {

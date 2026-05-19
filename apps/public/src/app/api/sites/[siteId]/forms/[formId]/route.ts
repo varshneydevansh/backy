@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
-import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
+import {
+    frontendDesignProvenanceFromMetadata,
+    frontendFormFieldKeyMapFromMetadata,
+} from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { requirePublicFormAudienceAccess } from '@/lib/publicFormAudienceAccess';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -44,6 +47,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 const withFormFrontendDesign = <TForm extends { settings?: unknown }>(form: TForm) => ({
     ...form,
     frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
+    frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings),
 });
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {

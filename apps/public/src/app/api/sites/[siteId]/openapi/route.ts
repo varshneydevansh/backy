@@ -4333,6 +4333,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 chrome: { type: "object", additionalProperties: true },
                 tokens: { type: "object", additionalProperties: true },
                 customCss: { type: "string" },
+                fieldKeyMap: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
                 bindingHints: {
                   type: "array",
                   items: { type: "object", additionalProperties: true },
@@ -4986,6 +4990,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 enableCaptcha: { type: "boolean" },
                 frontendDesign: {
                   $ref: "#/components/schemas/ReusableSectionFrontendDesign",
+                },
+                frontendFieldKeyMap: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
                 },
               },
             },

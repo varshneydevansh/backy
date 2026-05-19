@@ -26,7 +26,10 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 import { PRODUCT_COLLECTION_SLUG, buildCommerceStorefrontContract } from '@/lib/commerceCatalog';
 import { normalizeSiteCommentPolicy } from '@/lib/commentPolicy';
-import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
+import {
+  frontendDesignProvenanceFromMetadata,
+  frontendFormFieldKeyMapFromMetadata,
+} from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
@@ -1451,6 +1454,7 @@ const buildRepositoryManifest = (
           contactsUrl: `/api/sites/${input.site.id}/forms/${form.id}/contacts`,
           collectionTarget: form.collectionTarget || null,
           frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
+          frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings),
         })),
         formsRuntime: buildManifestFormsDiscovery(input.site.id, input.forms),
         comments: buildManifestCommentDiscovery(input.site.id, input.site.settings),
