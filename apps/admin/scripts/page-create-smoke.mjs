@@ -427,6 +427,46 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'shipping-policy',
+    title: 'Smoke Shipping Policy Template',
+    slugBase: 'smoke-shipping-policy-template',
+    expectedNavigationPlacement: 'footer',
+    chromePrefix: 'shipping-policy',
+    navigationItem: 'Shipping',
+    headingId: 'shipping-policy-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'shipping-policy-site-header',
+      'shipping-policy-site-navigation',
+      'shipping-policy-site-footer',
+      'shipping-policy-hero-section',
+      'shipping-policy-timeline-card',
+      'shipping-policy-timeline-value',
+      'shipping-policy-methods-section',
+      'shipping-policy-method-card-0',
+      'shipping-policy-method-card-title-0',
+      'shipping-policy-method-card-copy-0',
+      'shipping-policy-actions-section',
+      'shipping-policy-tracking-card',
+      'shipping-policy-contact-card',
+      'shipping-policy-contact-button',
+    ],
+    dataBindingElementIds: [
+      'shipping-policy-hero-section',
+      'shipping-policy-timeline-card',
+      'shipping-policy-timeline-value',
+      'shipping-policy-methods-section',
+      'shipping-policy-method-card-0',
+      'shipping-policy-method-card-title-0',
+      'shipping-policy-method-card-copy-0',
+      'shipping-policy-actions-section',
+      'shipping-policy-tracking-card',
+      'shipping-policy-contact-card',
+    ],
+  },
+  {
     template: 'cart',
     title: 'Smoke Cart Template',
     slugBase: 'smoke-cart-template',
@@ -851,6 +891,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('refund-policy-rule-card-${index}') &&
       source.includes('refund-policy-eligibility-card') &&
       source.includes('refund.request.open') &&
+      source.includes("'shipping-policy'") &&
+      source.includes('shipping-policy-method-card-${index}') &&
+      source.includes('shipping-policy-tracking-card') &&
+      source.includes('shipping.tracking.open') &&
       source.includes("'cart'") &&
       source.includes('cart-checkout-button') &&
       source.includes("'checkout'") &&
@@ -867,7 +911,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, refund policy, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, refund policy, shipping policy, help-center, and blog-post starters',
   );
 };
 
@@ -1488,6 +1532,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Refund policy',
       forms: 'none',
       dynamicData: 'Backy refund policy placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'shipping-policy',
+      navPlacement: 'footer',
+      selectedTemplateName: 'Shipping policy',
+      forms: 'none',
+      dynamicData: 'Backy shipping policy placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

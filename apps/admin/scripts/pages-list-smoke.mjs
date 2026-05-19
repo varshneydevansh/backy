@@ -59,6 +59,8 @@ const assertPagesListSourceContract = () => {
       source.includes('termsPageTemplate') &&
       source.includes("key: 'refund-policy'") &&
       source.includes('refundPolicyPageTemplate') &&
+      source.includes("key: 'shipping-policy'") &&
+      source.includes('shippingPolicyPageTemplate') &&
       source.includes("key: 'cart'") &&
       source.includes('cartPageTemplate') &&
       source.includes("key: 'checkout'") &&
@@ -69,7 +71,7 @@ const assertPagesListSourceContract = () => {
       source.includes('helpCenterPageTemplate') &&
       source.includes("key: 'blog-post'") &&
       source.includes('blogPostPageTemplate'),
-    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, terms, refund policy, help-center, and blog starters and handoff routes',
+    'Pages list must expose the member, commerce, pricing, services, portfolio, events, privacy, terms, refund policy, shipping policy, help-center, and blog starters and handoff routes',
   );
 };
 
@@ -1590,6 +1592,12 @@ const main = async () => {
       ['template=refund-policy'],
       { title: 'Refund policy', slug: 'refund-policy', template: 'refund-policy', homepage: false },
     );
+    const shippingPolicyShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-shipping-policy',
+      ['template=shipping-policy'],
+      { title: 'Shipping policy', slug: 'shipping-policy', template: 'shipping-policy', homepage: false },
+    );
     const cartShortcut = await clickEmptyCreate(
       client,
       'pages-create-cart',
@@ -1714,6 +1722,7 @@ const main = async () => {
       privacyShortcut,
       termsShortcut,
       refundPolicyShortcut,
+      shippingPolicyShortcut,
       cartShortcut,
       checkoutShortcut,
       orderConfirmationShortcut,

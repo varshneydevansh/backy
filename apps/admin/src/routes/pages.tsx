@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'refund-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -417,6 +417,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     key: 'refund-policy',
     title: 'Refund policy',
     detail: 'Create return windows, refund rules, exchange options, ineligible items, and support actions.',
+    badge: 'Commerce',
+    icon: ShoppingBag,
+  },
+  {
+    key: 'shipping-policy',
+    title: 'Shipping policy',
+    detail: 'Create delivery timelines, shipping methods, rates, tracking, pickup, and international rules.',
     badge: 'Commerce',
     icon: ShoppingBag,
   },
@@ -1933,6 +1940,7 @@ function PagesListView() {
       privacyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
       termsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,
       refundPolicyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=refund-policy`,
+      shippingPolicyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=shipping-policy`,
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
       checkoutPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
       orderConfirmationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
@@ -1969,6 +1977,7 @@ function PagesListView() {
         privacy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
         terms: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,
         refundPolicy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=refund-policy`,
+        shippingPolicy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=shipping-policy`,
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
         checkout: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=checkout`,
         orderConfirmation: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=order-confirmation`,
