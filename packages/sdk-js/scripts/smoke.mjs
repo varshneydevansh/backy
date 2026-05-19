@@ -895,6 +895,17 @@ if (collections.data.collections.length > 0) {
 
 const reusableSections = await client.reusableSections();
 assert(Array.isArray(reusableSections.data.sections), 'reusableSections() missing sections array');
+const manifestReusableSectionsRuntime = manifest.data.modules?.reusableSectionsRuntime;
+assert(manifestReusableSectionsRuntime?.schemaVersion === 'backy.reusable-sections-discovery.v1', 'manifest() missing reusable sections runtime discovery module');
+assert(manifestReusableSectionsRuntime.endpoints?.list === manifest.data.endpoints.reusableSections, 'manifest() reusable sections runtime list endpoint drifted');
+assert(manifestReusableSectionsRuntime.endpoints?.detail === manifest.data.endpoints.reusableSectionDetail, 'manifest() reusable sections runtime detail endpoint drifted');
+assert(manifestReusableSectionsRuntime.methods?.list === 'GET', 'manifest() reusable sections runtime list method drifted');
+assert(manifestReusableSectionsRuntime.capabilities?.canvasContent === true, 'manifest() reusable sections runtime missing canvas content capability');
+assert(manifestReusableSectionsRuntime.capabilities?.cacheableSections === true, 'manifest() reusable sections runtime missing cacheable sections capability');
+assert(manifestReusableSectionsRuntime.cache?.detail === 'public-discovery', 'manifest() reusable sections runtime detail cache policy drifted');
+assert(manifestReusableSectionsRuntime.privacy?.publicReadsOnlyIncludeActiveSections === true, 'manifest() reusable sections runtime missing active-only privacy boundary');
+assert(manifestReusableSectionsRuntime.filters?.queryParams?.includes?.('tag'), 'manifest() reusable sections runtime missing tag filter metadata');
+assert(manifestReusableSectionsRuntime.schemas?.section === 'backy.reusable-section.v1', 'manifest() reusable sections runtime section schema drifted');
 const cachedReusableSections = await client.reusableSectionsCached();
 assert(cachedReusableSections.notModified === false, 'reusableSectionsCached() first request should return a body');
 assert(Array.isArray(cachedReusableSections.body.data.sections), 'reusableSectionsCached() missing sections array');

@@ -15,6 +15,7 @@ import type {
   BackyManifestRedirectRule,
   BackyManifestReusableSection,
   BackyManifestReusableSectionsModule,
+  BackyManifestReusableSectionsRuntimeModule,
   BackyManifestRoutingModule,
   BackyManifestRouteFrontendDesign,
   BackyManifestRoutePattern,
@@ -1105,6 +1106,52 @@ const manifest = {
         },
       ],
     },
+    reusableSectionsRuntime: {
+      schemaVersion: "backy.reusable-sections-discovery.v1",
+      count: 1,
+      activeCount: 1,
+      categories: ["marketing"],
+      tags: ["hero"],
+      elementCount: 3,
+      endpoints: {
+        list: "/api/sites/site_demo/reusable-sections",
+        detail: "/api/sites/site_demo/reusable-sections/{sectionId}",
+      },
+      methods: {
+        list: "GET",
+        detail: "GET",
+      },
+      capabilities: {
+        publicSections: true,
+        activeOnlyPublicReads: true,
+        categoryFilters: true,
+        tagFilters: true,
+        searchFilters: true,
+        canvasContent: true,
+        frontendDesignTemplates: false,
+        conditionalRequests: true,
+        cacheableSections: true,
+      },
+      cache: {
+        list: "public-discovery",
+        detail: "public-discovery",
+      },
+      privacy: {
+        publicReadsOnlyIncludeActiveSections: true,
+        sectionContentIsPublicTemplateData: true,
+        adminMetadataIsNotRequiredForRendering: true,
+      },
+      filters: {
+        queryParams: ["category", "tag", "search"],
+        categories: ["marketing"],
+        tags: ["hero"],
+      },
+      schemas: {
+        section: "backy.reusable-section.v1",
+        content: "backy.content.v1",
+        notFound: "REUSABLE_SECTION_NOT_FOUND",
+      },
+    },
     media: {
       schemaVersion: "backy.media-discovery.v1",
       count: 2,
@@ -1503,6 +1550,53 @@ const sdkManifestReusableSections = {
   tags: ["hero", "landing"],
   items: [sdkManifestReusableSection],
 } satisfies BackyManifestReusableSectionsModule;
+
+const sdkManifestReusableSectionsRuntime = {
+  schemaVersion: "backy.reusable-sections-discovery.v1",
+  count: 1,
+  activeCount: 1,
+  categories: ["marketing"],
+  tags: ["hero", "landing"],
+  elementCount: 3,
+  endpoints: {
+    list: "/api/sites/site_demo/reusable-sections",
+    detail: "/api/sites/site_demo/reusable-sections/{sectionId}",
+  },
+  methods: {
+    list: "GET",
+    detail: "GET",
+  },
+  capabilities: {
+    publicSections: true,
+    activeOnlyPublicReads: true,
+    categoryFilters: true,
+    tagFilters: true,
+    searchFilters: true,
+    canvasContent: true,
+    frontendDesignTemplates: true,
+    conditionalRequests: true,
+    cacheableSections: true,
+  },
+  cache: {
+    list: "public-discovery",
+    detail: "public-discovery",
+  },
+  privacy: {
+    publicReadsOnlyIncludeActiveSections: true,
+    sectionContentIsPublicTemplateData: true,
+    adminMetadataIsNotRequiredForRendering: true,
+  },
+  filters: {
+    queryParams: ["category", "tag", "search"],
+    categories: ["marketing"],
+    tags: ["hero", "landing"],
+  },
+  schemas: {
+    section: "backy.reusable-section.v1",
+    content: "backy.content.v1",
+    notFound: "REUSABLE_SECTION_NOT_FOUND",
+  },
+} satisfies BackyManifestReusableSectionsRuntimeModule;
 
 const sdkManifestForm = {
   id: "form_contact",
@@ -3733,6 +3827,9 @@ const invalidSdkManifestReusableSection = { ...sdkManifestReusableSection, detai
 // @ts-expect-error manifest reusable-section modules include a concrete item array.
 const invalidSdkManifestReusableSections = { ...sdkManifestReusableSections, items: undefined, } satisfies BackyManifestReusableSectionsModule;
 
+// @ts-expect-error manifest reusable-section runtime modules require cache policy metadata.
+const invalidSdkManifestReusableSectionsRuntime = { ...sdkManifestReusableSectionsRuntime, cache: undefined, } satisfies BackyManifestReusableSectionsRuntimeModule;
+
 // @ts-expect-error generated manifest reusable-section categories are string filter labels.
 const invalidGeneratedReusableSectionCategory = { ...manifest.modules.reusableSections, categories: [123], } satisfies GeneratedBackyFrontendManifest["modules"]["reusableSections"];
 
@@ -3741,6 +3838,12 @@ const invalidGeneratedReusableSectionItem = {
   // @ts-expect-error generated manifest reusable-section item tags are string labels.
   tags: [123],
 } satisfies GeneratedBackyFrontendManifest["modules"]["reusableSections"]["items"][number];
+
+const invalidGeneratedReusableSectionsRuntimeDiscovery = {
+  ...manifest.modules.reusableSectionsRuntime,
+  // @ts-expect-error generated manifest reusable-sections discovery uses a versioned schema marker.
+  schemaVersion: "backy.reusable-sections-discovery.v0",
+} satisfies GeneratedBackyFrontendManifest["modules"]["reusableSectionsRuntime"];
 
 // @ts-expect-error generated manifest media types are string type labels.
 const invalidGeneratedManifestMediaTypes = { ...manifest.modules.media, types: [123], } satisfies GeneratedBackyFrontendManifest["modules"]["media"];
@@ -4198,6 +4301,7 @@ void sdkManifestBlogAuthor;
 void sdkManifestBlog;
 void sdkManifestReusableSection;
 void sdkManifestReusableSections;
+void sdkManifestReusableSectionsRuntime;
 void sdkManifestForm;
 void sdkManifestFormsRuntime;
 void sdkManifestCollectionsRuntime;
@@ -4239,8 +4343,10 @@ void invalidSdkManifestBlogTag;
 void invalidSdkManifestBlog;
 void invalidSdkManifestReusableSection;
 void invalidSdkManifestReusableSections;
+void invalidSdkManifestReusableSectionsRuntime;
 void invalidGeneratedReusableSectionCategory;
 void invalidGeneratedReusableSectionItem;
+void invalidGeneratedReusableSectionsRuntimeDiscovery;
 void invalidGeneratedManifestMediaTypes;
 void invalidGeneratedManifestMediaDiscovery;
 void invalidGeneratedManifestThemeDiscovery;

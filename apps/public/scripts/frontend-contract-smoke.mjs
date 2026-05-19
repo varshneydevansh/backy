@@ -145,6 +145,22 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestReusableSectionsDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.reusable-sections-discovery.v1'") &&
+    manifestRoute.includes("publicReadsOnlyIncludeActiveSections: true") &&
+    manifestRoute.includes("section: 'backy.reusable-section.v1'") &&
+    manifestRoute.includes('reusableSectionsRuntime: buildManifestReusableSectionsDiscovery(input.site.id, input.reusableSections)') &&
+    manifestRoute.includes('reusableSectionsRuntime: buildManifestReusableSectionsDiscovery(site.id, reusableSections)') &&
+    frontendManifestSchema.includes('"backy.reusable-sections-discovery.v1"') &&
+    frontendManifestSchema.includes('"cacheableSections"') &&
+    frontendManifestSchema.includes('"REUSABLE_SECTION_NOT_FOUND"') &&
+    sdkSource.includes('BackyManifestReusableSectionsRuntimeModule') &&
+    sdkSmoke.includes('manifest() missing reusable sections runtime discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedReusableSectionsRuntimeDiscovery'),
+  'Frontend manifest and SDK must expose structured reusable-section runtime discovery for custom frontend section browsers.',
+);
+
+assert(
   publicSiteDiscoveryRoute.includes('latestDiscoveryCacheRevision') &&
     publicSiteDiscoveryRoute.includes("scope: 'discovery'") &&
     publicSiteDiscoveryRoute.includes('cacheRevision') &&

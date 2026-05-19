@@ -66,6 +66,17 @@ type ManifestCollectionDiscoverySource = {
   metadata?: unknown;
 };
 
+type ManifestReusableSectionDiscoverySource = {
+  status?: string;
+  category?: string | null;
+  tags?: string[];
+  content?: {
+    elements?: unknown[];
+    canvasSize?: unknown;
+  } | null;
+  metadata?: Record<string, unknown>;
+};
+
 type ManifestAdminDiscovery = {
   auth: {
     authenticated: boolean;
@@ -818,6 +829,66 @@ const buildManifestCollectionsDiscovery = (
   };
 };
 
+const buildManifestReusableSectionsDiscovery = (
+  siteId: string,
+  sections: ManifestReusableSectionDiscoverySource[],
+) => {
+  const categories = Array.from(new Set(sections.map((section) => section.category).filter((category): category is string => (
+    typeof category === 'string' && category.length > 0
+  )))).sort();
+  const tags = Array.from(new Set(sections.flatMap((section) => section.tags || []))).sort();
+  const elementCount = sections.reduce((total, section) => (
+    total + (Array.isArray(section.content?.elements) ? section.content.elements.length : 0)
+  ), 0);
+
+  return {
+    schemaVersion: 'backy.reusable-sections-discovery.v1',
+    count: sections.length,
+    activeCount: sections.filter((section) => section.status === 'active').length,
+    categories,
+    tags,
+    elementCount,
+    endpoints: {
+      list: `/api/sites/${siteId}/reusable-sections`,
+      detail: `/api/sites/${siteId}/reusable-sections/{sectionId}`,
+    },
+    methods: {
+      list: 'GET',
+      detail: 'GET',
+    },
+    capabilities: {
+      publicSections: true,
+      activeOnlyPublicReads: true,
+      categoryFilters: true,
+      tagFilters: true,
+      searchFilters: true,
+      canvasContent: true,
+      frontendDesignTemplates: sections.some((section) => Boolean(reusableSectionFrontendDesign(section))),
+      conditionalRequests: true,
+      cacheableSections: true,
+    },
+    cache: {
+      list: 'public-discovery',
+      detail: 'public-discovery',
+    },
+    privacy: {
+      publicReadsOnlyIncludeActiveSections: true,
+      sectionContentIsPublicTemplateData: true,
+      adminMetadataIsNotRequiredForRendering: true,
+    },
+    filters: {
+      queryParams: ['category', 'tag', 'search'],
+      categories,
+      tags,
+    },
+    schemas: {
+      section: 'backy.reusable-section.v1',
+      content: 'backy.content.v1',
+      notFound: 'REUSABLE_SECTION_NOT_FOUND',
+    },
+  };
+};
+
 const buildRepositoryManifest = (
   input: {
     requestId: string;
@@ -1055,6 +1126,7 @@ const buildRepositoryManifest = (
             frontendDesign: reusableSectionFrontendDesign(section),
           })),
         },
+        reusableSectionsRuntime: buildManifestReusableSectionsDiscovery(input.site.id, input.reusableSections),
         forms: input.forms.map((form) => ({
           id: form.id,
           title: form.title,
@@ -1391,6 +1463,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               frontendDesign: reusableSectionFrontendDesign(section),
             })),
           },
+          reusableSectionsRuntime: buildManifestReusableSectionsDiscovery(site.id, reusableSections),
           forms: forms.map((form) => ({
             id: form.id,
             title: form.title,

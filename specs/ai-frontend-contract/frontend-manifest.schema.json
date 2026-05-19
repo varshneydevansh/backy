@@ -1187,6 +1187,92 @@
               },
               "required": ["count", "listUrl", "categories", "tags", "items"]
             },
+            "reusableSectionsRuntime": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.reusable-sections-discovery.v1" },
+                "count": { "type": "number", "minimum": 0 },
+                "activeCount": { "type": "number", "minimum": 0 },
+                "categories": { "type": "array", "items": { "type": "string" } },
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "elementCount": { "type": "number", "minimum": 0 },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string", "minLength": 1 },
+                    "detail": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["list", "detail"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "const": "GET" },
+                    "detail": { "const": "GET" }
+                  },
+                  "required": ["list", "detail"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicSections": { "type": "boolean" },
+                    "activeOnlyPublicReads": { "type": "boolean" },
+                    "categoryFilters": { "type": "boolean" },
+                    "tagFilters": { "type": "boolean" },
+                    "searchFilters": { "type": "boolean" },
+                    "canvasContent": { "type": "boolean" },
+                    "frontendDesignTemplates": { "type": "boolean" },
+                    "conditionalRequests": { "type": "boolean" },
+                    "cacheableSections": { "type": "boolean" }
+                  },
+                  "required": ["publicSections", "activeOnlyPublicReads", "categoryFilters", "tagFilters", "searchFilters", "canvasContent", "frontendDesignTemplates", "conditionalRequests", "cacheableSections"]
+                },
+                "cache": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string" },
+                    "detail": { "type": "string" }
+                  },
+                  "required": ["list", "detail"]
+                },
+                "privacy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicReadsOnlyIncludeActiveSections": { "type": "boolean" },
+                    "sectionContentIsPublicTemplateData": { "type": "boolean" },
+                    "adminMetadataIsNotRequiredForRendering": { "type": "boolean" }
+                  },
+                  "required": ["publicReadsOnlyIncludeActiveSections", "sectionContentIsPublicTemplateData", "adminMetadataIsNotRequiredForRendering"]
+                },
+                "filters": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "queryParams": { "type": "array", "items": { "type": "string" } },
+                    "categories": { "type": "array", "items": { "type": "string" } },
+                    "tags": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "required": ["queryParams", "categories", "tags"]
+                },
+                "schemas": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "section": { "const": "backy.reusable-section.v1" },
+                    "content": { "const": "backy.content.v1" },
+                    "notFound": { "const": "REUSABLE_SECTION_NOT_FOUND" }
+                  },
+                  "required": ["section", "content", "notFound"]
+                }
+              },
+              "required": ["schemaVersion", "count", "activeCount", "categories", "tags", "elementCount", "endpoints", "methods", "capabilities", "cache", "privacy", "filters", "schemas"]
+            },
             "media": {
               "type": "object",
               "additionalProperties": true,
@@ -1408,7 +1494,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "media"]
+          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "reusableSectionsRuntime", "media"]
         },
         "admin": {
           "type": "object",

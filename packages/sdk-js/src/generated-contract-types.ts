@@ -3077,6 +3077,60 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         }>;
         [key: string]: unknown;
       };
+      reusableSectionsRuntime: {
+        schemaVersion: "backy.reusable-sections-discovery.v1";
+        count: number;
+        activeCount: number;
+        categories: Array<string>;
+        tags: Array<string>;
+        elementCount: number;
+        endpoints: {
+          list: string;
+          detail: string;
+          [key: string]: unknown;
+        };
+        methods: {
+          list: "GET";
+          detail: "GET";
+          [key: string]: unknown;
+        };
+        capabilities: {
+          publicSections: boolean;
+          activeOnlyPublicReads: boolean;
+          categoryFilters: boolean;
+          tagFilters: boolean;
+          searchFilters: boolean;
+          canvasContent: boolean;
+          frontendDesignTemplates: boolean;
+          conditionalRequests: boolean;
+          cacheableSections: boolean;
+          [key: string]: unknown;
+        };
+        cache: {
+          list: string;
+          detail: string;
+          [key: string]: unknown;
+        };
+        privacy: {
+          publicReadsOnlyIncludeActiveSections: boolean;
+          sectionContentIsPublicTemplateData: boolean;
+          adminMetadataIsNotRequiredForRendering: boolean;
+          [key: string]: unknown;
+        };
+        filters: {
+          queryParams: Array<string>;
+          categories: Array<string>;
+          tags: Array<string>;
+          [key: string]: unknown;
+        };
+        schemas: {
+          section: "backy.reusable-section.v1";
+          content: "backy.content.v1";
+          notFound: "REUSABLE_SECTION_NOT_FOUND";
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
       media: {
         schemaVersion: "backy.media-discovery.v1";
         count: number;
