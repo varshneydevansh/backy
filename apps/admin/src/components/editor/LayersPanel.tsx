@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { ArrowDown, ArrowUp, CornerUpLeft, MoveRight } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, CornerUpLeft, MoveRight } from 'lucide-react';
 import type { CanvasElement } from '../../types/editor';
 
 // ==========================================================================
@@ -43,11 +43,14 @@ interface LayerItemProps {
     isLocked: boolean;
     isFocusable: boolean;
     isDragTarget: boolean;
+    hasChildren: boolean;
+    isExpanded: boolean;
     canReorder: boolean;
     canAcceptChildren: boolean;
     selectedIds: string[];
     onSelect: (id: string, multiSelect: boolean, rangeSelect: boolean) => void;
     onKeyboardNavigate: (id: string, key: string, multiSelect: boolean, rangeSelect: boolean) => void;
+    onToggleExpanded: (id: string) => void;
     onDragStart: (id: string) => void;
     onDragOver: (id: string) => void;
     onDrop: (id: string) => void;
@@ -161,11 +164,14 @@ function LayerItem({
     isLocked,
     isFocusable,
     isDragTarget,
+    hasChildren,
+    isExpanded,
     canReorder,
     canAcceptChildren,
     selectedIds,
     onSelect,
     onKeyboardNavigate,
+    onToggleExpanded,
     onDragStart,
     onDragOver,
     onDrop,
@@ -205,6 +211,16 @@ function LayerItem({
             return;
         }
 
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && hasChildren) {
+            const shouldCollapse = e.key === 'ArrowLeft' && isExpanded;
+            const shouldExpand = e.key === 'ArrowRight' && !isExpanded;
+            if (shouldCollapse || shouldExpand) {
+                e.preventDefault();
+                onToggleExpanded(element.id);
+            }
+            return;
+        }
+
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End') {
             e.preventDefault();
             onKeyboardNavigate(element.id, e.key, e.metaKey || e.ctrlKey, e.shiftKey);
@@ -227,7 +243,7 @@ function LayerItem({
             tabIndex={disabled || !isFocusable ? -1 : 0}
             aria-selected={isSelected}
             aria-level={depth + 1}
-            aria-expanded={element.children?.length ? true : undefined}
+            aria-expanded={hasChildren ? isExpanded : undefined}
             data-layer-id={element.id}
             data-layer-depth={depth}
             data-layer-selected={isSelected ? 'true' : 'false'}
@@ -266,6 +282,39 @@ function LayerItem({
             }}
             onDragEnd={onDragEnd}
         >
+            <button
+                type="button"
+                tabIndex={-1}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (disabled || !hasChildren) {
+                        return;
+                    }
+                    onToggleExpanded(element.id);
+                }}
+                disabled={disabled || !hasChildren}
+                data-layer-action="toggle-expand"
+                data-layer-action-id={element.id}
+                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${layerName}`}
+                style={{
+                    ...iconButtonStyle(!disabled && hasChildren),
+                    width: '20px',
+                    height: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: hasChildren ? 1 : 0.35,
+                    cursor: !disabled && hasChildren ? 'pointer' : 'default',
+                }}
+                title={hasChildren ? (isExpanded ? 'Collapse layer' : 'Expand layer') : 'No child layers'}
+            >
+                {hasChildren ? (
+                    isExpanded ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />
+                ) : (
+                    <span aria-hidden="true" style={{ width: '14px', height: '14px' }} />
+                )}
+            </button>
+
             {/* Drag handle */}
             <span style={{ cursor: !disabled && canReorder ? 'grab' : 'default', color: '#9ca3af', opacity: !disabled && canReorder ? 1 : 0.35 }}>
                 <DragIcon />
@@ -499,19 +548,21 @@ export function LayersPanel({
     const [dragTargetId, setDragTargetId] = useState<string | null>(null);
     const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
     const [focusedLayerId, setFocusedLayerId] = useState<string | null>(null);
+    const [collapsedLayerIds, setCollapsedLayerIds] = useState<string[]>([]);
+    const collapsedLayerIdSet = useMemo(() => new Set(collapsedLayerIds), [collapsedLayerIds]);
     const renderedLayerIds = useMemo(() => {
         const ids: string[] = [];
         const collect = (items: CanvasElement[]) => {
             [...items].reverse().forEach((element) => {
                 ids.push(element.id);
-                if (element.children?.length) {
+                if (element.children?.length && !collapsedLayerIdSet.has(element.id)) {
                     collect(element.children);
                 }
             });
         };
         collect(elements);
         return ids;
-    }, [elements]);
+    }, [collapsedLayerIdSet, elements]);
 
     const handleSelect = useCallback(
         (id: string, multiSelect: boolean, rangeSelect: boolean) => {
@@ -560,6 +611,14 @@ export function LayersPanel({
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-layer-id]'))
             .find((candidate) => candidate.getAttribute('data-layer-id') === id);
         row?.focus();
+    }, []);
+
+    const handleToggleExpanded = useCallback((id: string) => {
+        setCollapsedLayerIds((current) => (
+            current.includes(id)
+                ? current.filter((collapsedId) => collapsedId !== id)
+                : [...current, id]
+        ));
     }, []);
 
     const handleKeyboardNavigate = useCallback(
@@ -648,6 +707,8 @@ export function LayersPanel({
 
     const renderLayerItems = (items: CanvasElement[], depth = 0) => (
         [...items].reverse().map((element) => {
+            const hasChildren = Boolean(element.children?.length);
+            const isExpanded = !collapsedLayerIdSet.has(element.id);
             return (
                 <React.Fragment key={element.id}>
                     <LayerItem
@@ -657,12 +718,15 @@ export function LayersPanel({
                         isLocked={element.locked === true}
                         isFocusable={!disabled && element.id === (focusedLayerId || selectedIds[0] || renderedLayerIds[0])}
                         isDragTarget={dragTargetId === element.id}
+                        hasChildren={hasChildren}
+                        isExpanded={isExpanded}
                         canReorder={!disabled && element.locked !== true}
                         canAcceptChildren={CHILD_ACCEPTING_TYPES.has(element.type)}
                         selectedIds={selectedIds}
                         disabled={disabled}
                         onSelect={handleSelect}
                         onKeyboardNavigate={handleKeyboardNavigate}
+                        onToggleExpanded={handleToggleExpanded}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop}
@@ -675,7 +739,7 @@ export function LayersPanel({
                         onDuplicate={onDuplicate}
                         depth={depth}
                     />
-                    {element.children?.length ? renderLayerItems(element.children, depth + 1) : null}
+                    {hasChildren && isExpanded ? renderLayerItems(element.children || [], depth + 1) : null}
                 </React.Fragment>
             );
         })

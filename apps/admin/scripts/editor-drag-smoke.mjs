@@ -226,6 +226,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');
   assert(layersPanelSource.includes('const handleKeyboardNavigate') && layersPanelSource.includes("key === 'ArrowUp'") && layersPanelSource.includes("key === 'Home'"), 'Editor layers panel must support keyboard navigation through rendered layer rows');
   assert(layersPanelSource.includes('focusedLayerId') && layersPanelSource.includes('isFocusable') && layersPanelSource.includes('disabled || !isFocusable ? -1 : 0'), 'Editor layers panel must use roving focus so only the active row is tabbable');
+  assert(layersPanelSource.includes('collapsedLayerIds') && layersPanelSource.includes('data-layer-action="toggle-expand"') && layersPanelSource.includes('aria-expanded={hasChildren ? isExpanded : undefined}'), 'Editor layers panel must expose collapsible nested layer rows');
+  assert(layersPanelSource.includes("e.key === 'ArrowLeft' || e.key === 'ArrowRight'") && layersPanelSource.includes('onToggleExpanded(element.id)'), 'Editor layers panel must support keyboard collapse and expand for nested rows');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10018,6 +10020,75 @@ const testLayersPanelControls = async (client, pageId) => {
     initialTree.byId['smoke-child-button'].depth > initialTree.byId['smoke-box'].depth,
     `Layers panel did not show nested child depth: ${JSON.stringify(initialTree)}`,
   );
+  const collapsedTreeClick = await clickLayerAction(client, 'toggle-expand', 'smoke-box');
+  const collapsedTree = await evaluate(client, `(() => {
+    const parent = document.querySelector('[data-layer-id="smoke-box"]');
+    const child = document.querySelector('[data-layer-id="smoke-child-button"]');
+    return {
+      parentExpanded: parent?.getAttribute('aria-expanded') || '',
+      childVisible: Boolean(child),
+      actionLabel: document.querySelector('[data-layer-action="toggle-expand"][data-layer-action-id="smoke-box"]')?.getAttribute('aria-label') || '',
+    };
+  })()`);
+  assert(
+    collapsedTree.parentExpanded === 'false' && collapsedTree.childVisible === false && /Expand/i.test(collapsedTree.actionLabel),
+    `Layers panel collapse control did not hide nested child rows: ${JSON.stringify({ collapsedTreeClick, collapsedTree })}`,
+  );
+  const expandedTreeClick = await clickLayerAction(client, 'toggle-expand', 'smoke-box');
+  const expandedTree = await evaluate(client, `(() => {
+    const parent = document.querySelector('[data-layer-id="smoke-box"]');
+    const child = document.querySelector('[data-layer-id="smoke-child-button"]');
+    return {
+      parentExpanded: parent?.getAttribute('aria-expanded') || '',
+      childVisible: Boolean(child),
+      childDepth: child instanceof HTMLElement ? Number(child.getAttribute('data-layer-depth') || 0) : null,
+      parentDepth: parent instanceof HTMLElement ? Number(parent.getAttribute('data-layer-depth') || 0) : null,
+      actionLabel: document.querySelector('[data-layer-action="toggle-expand"][data-layer-action-id="smoke-box"]')?.getAttribute('aria-label') || '',
+    };
+  })()`);
+  assert(
+    expandedTree.parentExpanded === 'true' &&
+      expandedTree.childVisible === true &&
+      expandedTree.childDepth > expandedTree.parentDepth &&
+      /Collapse/i.test(expandedTree.actionLabel),
+    `Layers panel expand control did not restore nested child rows: ${JSON.stringify({ expandedTreeClick, expandedTree })}`,
+  );
+  const keyboardTreeCollapseExpand = await evaluate(client, `(async () => {
+    const parent = document.querySelector('[data-layer-id="smoke-box"]');
+    if (!(parent instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-parent-row' };
+    }
+
+    parent.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const collapsedParent = document.querySelector('[data-layer-id="smoke-box"]');
+    const afterCollapse = {
+      parentExpanded: collapsedParent?.getAttribute('aria-expanded') || '',
+      childVisible: Boolean(document.querySelector('[data-layer-id="smoke-child-button"]')),
+    };
+    if (!(collapsedParent instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-parent-after-collapse', afterCollapse };
+    }
+    collapsedParent.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const expandedParent = document.querySelector('[data-layer-id="smoke-box"]');
+    return {
+      ok: true,
+      afterCollapse,
+      afterExpand: {
+        parentExpanded: expandedParent?.getAttribute('aria-expanded') || '',
+        childVisible: Boolean(document.querySelector('[data-layer-id="smoke-child-button"]')),
+      },
+    };
+  })()`);
+  assert(
+    keyboardTreeCollapseExpand?.ok &&
+      keyboardTreeCollapseExpand.afterCollapse.parentExpanded === 'false' &&
+      keyboardTreeCollapseExpand.afterCollapse.childVisible === false &&
+      keyboardTreeCollapseExpand.afterExpand.parentExpanded === 'true' &&
+      keyboardTreeCollapseExpand.afterExpand.childVisible === true,
+    `Layers panel keyboard collapse/expand did not toggle nested rows: ${JSON.stringify(keyboardTreeCollapseExpand)}`,
+  );
 
   const multiSelected = await selectLayerIds(client, ['smoke-heading', 'smoke-image']);
   assert(
@@ -10263,6 +10334,11 @@ const testLayersPanelControls = async (client, pageId) => {
     rangeSelected,
     selectedRowActions,
     unselectedRowActions,
+    collapsedTreeClick,
+    collapsedTree,
+    expandedTreeClick,
+    expandedTree,
+    keyboardTreeCollapseExpand,
     keyboardRowSelection,
     keyboardRowNavigation,
     reorder,
