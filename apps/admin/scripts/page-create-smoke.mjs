@@ -1110,6 +1110,38 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     formElementIds: ['contact-form-card'],
   },
   {
+    template: 'newsletter',
+    title: 'Smoke Newsletter Template',
+    slugBase: 'smoke-newsletter-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'newsletter',
+    navigationItem: 'Newsletter',
+    headingId: 'newsletter-heading',
+    minRootElementCount: 4,
+    minTotalElementCount: 28,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'newsletter-site-header',
+      'newsletter-site-navigation',
+      'newsletter-site-footer',
+      'newsletter-hero-section',
+      'newsletter-heading',
+      'newsletter-copy',
+      'newsletter-proof-card',
+      'newsletter-signup-form',
+      'newsletter-first-name',
+      'newsletter-email',
+      'newsletter-topic',
+      'newsletter-consent',
+      'newsletter-source',
+      'newsletter-submit',
+      'newsletter-confirmation-section',
+      'newsletter-confirmation-card',
+      'newsletter-manage-preferences-button',
+    ],
+    formElementIds: ['newsletter-signup-form'],
+  },
+  {
     template: 'registration',
     title: 'Smoke Registration Template',
     slugBase: 'smoke-registration-template',
@@ -1312,8 +1344,12 @@ const assertPageCreateSourceContracts = () => {
       source.includes('careers-job-card-${index}') &&
       source.includes('careers-benefits-card') &&
       source.includes('careers.application.open') &&
+      source.includes("'newsletter'") &&
+      source.includes('newsletter-signup-form') &&
+      source.includes('newsletter-consent') &&
+      source.includes('newsletter.preferences.open') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, and careers starters',
+    'Page create must keep safe member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, careers, and newsletter starters',
   );
 };
 
@@ -1860,6 +1896,14 @@ const assertTemplateSwitching = async (client) => {
       template: 'contact',
       navPlacement: 'footer',
       selectedTemplateName: 'Contact page',
+      forms: 'Backy form API seeded',
+      dynamicData: 'none',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'newsletter',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Newsletter page',
       forms: 'Backy form API seeded',
       dynamicData: 'none',
       siteChrome: 'editable header, navigation, and footer seeded',

@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'newsletter' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -323,6 +323,13 @@ const TEMPLATE_OPTIONS: Array<{
         sections: ['Intro', 'Form', 'Response note'],
     },
     {
+        id: 'newsletter',
+        name: 'Newsletter page',
+        desc: 'Email signup, preference fields, consent, lead magnet copy, and form routing.',
+        detail: 'Creates a public newsletter signup page backed by Backy Forms and Contacts without needing a custom frontend first.',
+        sections: ['Signup hero', 'Preference form', 'Confirmation note'],
+    },
+    {
         id: 'registration',
         name: 'Registration page',
         desc: 'Signup copy, member fields, consent, and submission routing.',
@@ -482,6 +489,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'contact',
         description: 'A public contact page with editable copy and a Backy form connected to submissions.',
     },
+    newsletter: {
+        title: 'Newsletter',
+        slug: 'newsletter',
+        description: 'A public newsletter signup page ready to collect emails, consent, topics, and source attribution through Backy Forms and Contacts.',
+    },
     registration: {
         title: 'Member registration',
         slug: 'register',
@@ -528,6 +540,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     careers: 'primary',
     about: 'primary',
     contact: 'footer',
+    newsletter: 'primary',
     registration: 'primary',
     'member-login': 'primary',
     'member-account': 'primary',
@@ -772,6 +785,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     careers: ['Home', 'Careers', 'Team', 'Contact'],
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
+    newsletter: ['Home', 'Newsletter', 'Blog', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
     'member-login': ['Home', 'Login', 'Register'],
     'member-account': ['Home', 'Account', 'Support'],
@@ -1021,6 +1035,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { x: 54, y: 28, w: 32, h: 6, className: 'bg-white' },
         { x: 54, y: 40, w: 32, h: 6, className: 'bg-white' },
         { x: 54, y: 58, w: 20, h: 7, className: 'bg-emerald-600' },
+    ],
+    newsletter: [
+        { label: 'Subscribe', x: 8, y: 14, w: 84, h: 28, className: 'border-amber-200 bg-amber-50' },
+        { x: 16, y: 25, w: 38, h: 5, className: 'bg-amber-800' },
+        { label: 'Email', x: 56, y: 24, w: 28, h: 6, className: 'border-amber-100 bg-white' },
+        { label: 'Topics', x: 8, y: 52, w: 26, h: 22, className: 'border-amber-100 bg-white' },
+        { label: 'Consent', x: 38, y: 52, w: 26, h: 22, className: 'border-amber-100 bg-white' },
+        { label: 'Confirm', x: 68, y: 52, w: 24, h: 22, className: 'border-amber-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     registration: [
         { label: 'Signup', x: 8, y: 16, w: 40, h: 34, className: 'border-violet-200 bg-violet-50' },
@@ -2011,7 +2034,7 @@ function NewPageRoute() {
         siteChrome: selectedFrontendTemplate
             ? 'captured from frontend design contract'
             : formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
-        forms: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template) ? 'Backy form API seeded' : 'none',
+        forms: ['contact', 'newsletter', 'registration', 'member-login', 'member-account'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
             : formData.template === 'product-detail'
@@ -2166,7 +2189,7 @@ function NewPageRoute() {
             name: selectedFrontendTemplate?.name || selectedTemplate.name,
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
-            seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
+            seedsFormApi: ['contact', 'newsletter', 'registration', 'member-login', 'member-account'].includes(formData.template),
             seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'booking', 'portfolio', 'gallery', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
@@ -4271,6 +4294,8 @@ function buildTemplateElements(input: {
                 ? 'Start return'
             : input.template === 'shipping-policy'
                 ? 'Track order'
+            : input.template === 'newsletter'
+                ? 'Subscribe'
             : input.template === 'faq'
                 ? 'Ask question'
             : input.template === 'testimonials'
@@ -8442,6 +8467,152 @@ function buildTemplateElements(input: {
                     createCanvasElement('input', 24, 104, { id: 'contact-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
                     createCanvasElement('textarea', 24, 180, { id: 'contact-message', width: 360, height: 110, props: { label: 'Message', name: 'message', placeholder: 'Tell us what you need', required: true } }),
                     createCanvasElement('button', 24, 326, { id: 'contact-submit', width: 170, height: 48, props: { label: 'Send message', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'newsletter') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'newsletter-hero-section',
+                width: 1200,
+                height: 640,
+                props: { backgroundColor: '#fffbeb', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 70, {
+                        id: 'newsletter-kicker',
+                        width: 240,
+                        height: 28,
+                        props: { content: 'Newsletter', fontSize: 13, fontWeight: '800', color: '#b45309', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 112, {
+                        id: 'newsletter-heading',
+                        width: 560,
+                        height: 112,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 250, {
+                        id: 'newsletter-copy',
+                        width: 520,
+                        height: 106,
+                        props: { content: description, fontSize: 18, lineHeight: 1.62, color: '#4b5563' },
+                    }),
+                    createCanvasElement('box', 76, 400, {
+                        id: 'newsletter-proof-card',
+                        width: 470,
+                        height: 120,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fde68a', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 20, {
+                                id: 'newsletter-proof-heading',
+                                width: 300,
+                                height: 32,
+                                props: { content: 'What subscribers receive', level: 'h3', fontSize: 19, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 20, 60, {
+                                id: 'newsletter-proof-copy',
+                                width: 390,
+                                height: 48,
+                                props: { content: 'Backy records the opt-in, chosen topics, source page, and consent state for follow-up workflows.', fontSize: 14, lineHeight: 1.45, color: '#65503c' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('form', 700, 70, {
+                        id: 'newsletter-signup-form',
+                        width: 430,
+                        height: 520,
+                        props: {
+                            formId: `form-${formSlug}-newsletter`,
+                            formName: `${formSlug}-newsletter`,
+                            formTitle: 'Newsletter signup',
+                            formDescription: 'Public newsletter signup form generated from the page canvas.',
+                            formActive: true,
+                            formAudience: 'public',
+                            successMessage: 'Subscription confirmed. Check your inbox for the next update.',
+                            enableHoneypot: true,
+                            enableCaptcha: false,
+                            moderationMode: 'auto-approve',
+                            contactShareEnabled: true,
+                            contactShareNameField: 'first_name',
+                            contactShareEmailField: 'email',
+                            contactShareNotesField: 'topics',
+                            backgroundColor: '#ffffff',
+                            borderRadius: 8,
+                            borderColor: '#fde68a',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                            boxShadow: '0 20px 55px rgba(180, 83, 9, 0.12)',
+                        },
+                        children: [
+                            createCanvasElement('heading', 24, 28, {
+                                id: 'newsletter-form-heading',
+                                width: 330,
+                                height: 36,
+                                props: { content: 'Subscribe for updates', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('input', 24, 88, { id: 'newsletter-first-name', width: 360, height: 54, props: { label: 'First name', name: 'first_name', placeholder: 'Ada', required: false } }),
+                            createCanvasElement('input', 24, 160, { id: 'newsletter-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
+                            createCanvasElement('select', 24, 232, {
+                                id: 'newsletter-topic',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'Topic', name: 'topics', options: ['Product updates', 'Guides', 'Events', 'Offers'], placeholder: 'Choose a topic', required: true },
+                            }),
+                            createCanvasElement('checkbox', 24, 312, {
+                                id: 'newsletter-consent',
+                                width: 360,
+                                height: 54,
+                                props: { label: 'I agree to receive email updates and can unsubscribe anytime.', name: 'email_consent', required: true },
+                            }),
+                            createCanvasElement('input', 24, 382, {
+                                id: 'newsletter-source',
+                                width: 360,
+                                height: 44,
+                                props: { label: 'Signup source', name: 'signup_source', placeholder: 'Website newsletter page', required: false },
+                            }),
+                            createCanvasElement('button', 24, 448, {
+                                id: 'newsletter-submit',
+                                width: 170,
+                                height: 48,
+                                props: { label: 'Subscribe', backgroundColor: '#b45309', color: '#ffffff', borderRadius: 8, fontWeight: '800' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 640, {
+                id: 'newsletter-confirmation-section',
+                width: 1200,
+                height: 280,
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 60, {
+                        id: 'newsletter-confirmation-card',
+                        width: 500,
+                        height: 150,
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: 'newsletter-confirmation-heading',
+                                width: 360,
+                                height: 34,
+                                props: { content: 'Confirmation and consent', level: 'h2', fontSize: 24, fontWeight: '800', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 24, 74, {
+                                id: 'newsletter-confirmation-copy',
+                                width: 420,
+                                height: 54,
+                                props: { content: 'Use Backy Forms moderation, contact sharing, and export hooks to route subscribers into your email provider without exposing provider secrets in the page.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('button', 780, 104, {
+                        id: 'newsletter-manage-preferences-button',
+                        width: 196,
+                        height: 52,
+                        props: { label: 'Manage preferences', href: '/preferences', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'newsletter.preferences.open' },
+                    }),
                 ],
             }),
         ]);

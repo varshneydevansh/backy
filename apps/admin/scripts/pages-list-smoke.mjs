@@ -38,9 +38,11 @@ const assertPagesListSourceContract = () => {
   assert(source.includes("'template_source'") && source.includes("'frontend_design_template_id'") && source.includes("'collection_dataset_slug'"), 'Pages CSV export must include template provenance columns');
   assert(source.includes('const templateInfo = pageTemplateInfo(page)') && source.includes('template: templateInfo') && source.includes("pageMetaString(page, 'frontendDesignTemplateId')") && source.includes("pageMetaRecord(page, 'collectionDataset')"), 'Pages handoff must expose starter, frontend-design, and dataset page provenance');
   assert(
-    source.includes("key: 'member-login'") &&
+      source.includes("key: 'member-login'") &&
       source.includes("key: 'member-account'") &&
       source.includes('data-testid={`pages-create-${shortcut.key}`}') &&
+      source.includes("key: 'newsletter'") &&
+      source.includes('newsletterPageTemplate') &&
       source.includes('memberLoginPageTemplate') &&
       source.includes('memberAccountPageTemplate') &&
       source.includes("key: 'product-detail'") &&
@@ -87,7 +89,7 @@ const assertPagesListSourceContract = () => {
       source.includes('teamPageTemplate') &&
       source.includes("key: 'careers'") &&
       source.includes('careersPageTemplate'),
-    'Pages list must expose the member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
+    'Pages list must expose the member, newsletter, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, and careers starters and handoff routes',
   );
 };
 
@@ -1548,6 +1550,12 @@ const main = async () => {
       ['template=registration'],
       { title: 'Member registration', slug: 'register', template: 'registration', homepage: false },
     );
+    const newsletterShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-newsletter',
+      ['template=newsletter'],
+      { title: 'Newsletter', slug: 'newsletter', template: 'newsletter', homepage: false },
+    );
     const memberLoginShortcut = await clickEmptyCreate(
       client,
       'pages-create-member-login',
@@ -1775,6 +1783,7 @@ const main = async () => {
         postPublish: postPublishVisual,
       },
       emptyCreate,
+      newsletterShortcut,
       registrationShortcut,
       memberLoginShortcut,
       memberAccountShortcut,
