@@ -30,6 +30,9 @@ interface LivePageManagementOverlayProps {
 const STATUS_OPTIONS: ManagedPageStatus[] = ['draft', 'published', 'scheduled', 'archived'];
 const INLINE_TEXT_ELEMENT_TYPES = new Set(['text', 'heading', 'paragraph', 'quote', 'button', 'link']);
 const INLINE_LINK_ELEMENT_TYPES = new Set(['button', 'link']);
+const INLINE_IMAGE_ELEMENT_TYPES = new Set(['image']);
+const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-down'] as const;
+type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -152,6 +155,23 @@ const inlineTargetBlankFromElement = (element: Record<string, unknown> | null): 
   return props.target === '_blank';
 };
 
+const stringProp = (props: Record<string, unknown>, key: string): string => (
+  typeof props[key] === 'string' ? props[key] : ''
+);
+
+const imageFieldsFromElement = (element: Record<string, unknown> | null) => {
+  const props = elementProps(element);
+  const objectFit = stringProp(props, 'objectFit');
+  return {
+    src: stringProp(props, 'src'),
+    alt: stringProp(props, 'alt'),
+    title: stringProp(props, 'title'),
+    objectFit: IMAGE_OBJECT_FIT_OPTIONS.includes(objectFit as ImageObjectFit)
+      ? objectFit as ImageObjectFit
+      : 'cover' as ImageObjectFit,
+  };
+};
+
 const updateElementProps = (
   content: Record<string, unknown> | undefined,
   elementId: string,
@@ -207,6 +227,22 @@ const updateElementLink = (
   rel: targetBlank ? 'noopener noreferrer' : '',
 });
 
+const updateElementImage = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  input: {
+    src: string;
+    alt: string;
+    title: string;
+    objectFit: ImageObjectFit;
+  },
+): Record<string, unknown> | null => updateElementProps(content, elementId, {
+  src: input.src,
+  alt: input.alt,
+  title: input.title,
+  objectFit: input.objectFit,
+});
+
 export function LivePageManagementOverlay({
   enabled,
   siteId,
@@ -230,6 +266,11 @@ export function LivePageManagementOverlay({
   const [inlineHref, setInlineHref] = useState('');
   const [inlineTargetBlank, setInlineTargetBlank] = useState(false);
   const [inlineLinkSaving, setInlineLinkSaving] = useState(false);
+  const [inlineImageSrc, setInlineImageSrc] = useState('');
+  const [inlineImageAlt, setInlineImageAlt] = useState('');
+  const [inlineImageTitle, setInlineImageTitle] = useState('');
+  const [inlineImageObjectFit, setInlineImageObjectFit] = useState<ImageObjectFit>('cover');
+  const [inlineImageSaving, setInlineImageSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
     if (!siteId || !pageId) return '';
@@ -324,6 +365,10 @@ export function LivePageManagementOverlay({
       setInlineText('');
       setInlineHref('');
       setInlineTargetBlank(false);
+      setInlineImageSrc('');
+      setInlineImageAlt('');
+      setInlineImageTitle('');
+      setInlineImageObjectFit('cover');
       return;
     }
 
@@ -348,11 +393,17 @@ export function LivePageManagementOverlay({
   const selectedElementType = String(selectedContentElement?.type || '');
   const selectedElementSupportsInlineText = INLINE_TEXT_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineLink = INLINE_LINK_ELEMENT_TYPES.has(selectedElementType);
+  const selectedElementSupportsInlineImage = INLINE_IMAGE_ELEMENT_TYPES.has(selectedElementType);
 
   useEffect(() => {
     setInlineText(inlineTextFromElement(selectedContentElement));
     setInlineHref(inlineHrefFromElement(selectedContentElement));
     setInlineTargetBlank(inlineTargetBlankFromElement(selectedContentElement));
+    const imageFields = imageFieldsFromElement(selectedContentElement);
+    setInlineImageSrc(imageFields.src);
+    setInlineImageAlt(imageFields.alt);
+    setInlineImageTitle(imageFields.title);
+    setInlineImageObjectFit(imageFields.objectFit);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -492,6 +543,55 @@ export function LivePageManagementOverlay({
       setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected destination.');
     } finally {
       setInlineLinkSaving(false);
+    }
+  };
+
+  const saveInlineImage = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+
+    const nextContent = updateElementImage(page.content, selectedElementId, {
+      src: inlineImageSrc.trim(),
+      alt: inlineImageAlt.trim(),
+      title: inlineImageTitle.trim(),
+      objectFit: inlineImageObjectFit,
+    });
+    if (!nextContent) {
+      setError('Unable to update this image from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineImageSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected image.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Image saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected image.');
+    } finally {
+      setInlineImageSaving(false);
     }
   };
 
@@ -737,6 +837,82 @@ export function LivePageManagementOverlay({
                     }}
                   >
                     {inlineLinkSaving ? 'Saving destination...' : 'Save destination'}
+                  </button>
+                </div>
+              ) : null}
+              {selectedElementSupportsInlineImage ? (
+                <div data-backy-live-image-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Image details
+                  </span>
+                  <input
+                    value={inlineImageSrc}
+                    onChange={(event) => setInlineImageSrc(event.target.value)}
+                    placeholder="Image URL or Backy media URL"
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      font: 'inherit',
+                      fontSize: 13,
+                      padding: '8px 9px',
+                    }}
+                  />
+                  <input
+                    value={inlineImageAlt}
+                    onChange={(event) => setInlineImageAlt(event.target.value)}
+                    placeholder="Alt text"
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      font: 'inherit',
+                      fontSize: 13,
+                      padding: '8px 9px',
+                    }}
+                  />
+                  <input
+                    value={inlineImageTitle}
+                    onChange={(event) => setInlineImageTitle(event.target.value)}
+                    placeholder="Image title"
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      font: 'inherit',
+                      fontSize: 13,
+                      padding: '8px 9px',
+                    }}
+                  />
+                  <select
+                    value={inlineImageObjectFit}
+                    onChange={(event) => setInlineImageObjectFit(event.target.value as ImageObjectFit)}
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      font: 'inherit',
+                      fontSize: 13,
+                      padding: '8px 9px',
+                      background: '#fff',
+                    }}
+                  >
+                    {IMAGE_OBJECT_FIT_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={saveInlineImage}
+                    disabled={inlineImageSaving || inlineImageSrc.trim().length === 0}
+                    style={{
+                      justifySelf: 'start',
+                      border: 0,
+                      borderRadius: 6,
+                      background: inlineImageSaving || inlineImageSrc.trim().length === 0 ? '#94a3b8' : '#2563eb',
+                      color: '#fff',
+                      cursor: inlineImageSaving || inlineImageSrc.trim().length === 0 ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      padding: '7px 10px',
+                    }}
+                  >
+                    {inlineImageSaving ? 'Saving image...' : 'Save image'}
                   </button>
                 </div>
               ) : null}
