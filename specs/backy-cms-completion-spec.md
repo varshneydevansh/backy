@@ -113,9 +113,8 @@ Legend:
 - ⚠️ continue hardening filter ergonomics and broader slug-validation/provider certification coverage.
 
 #### `/pages.new` (`pages.new.tsx`)
-- ✅ create page form shell
-- ⚠️ limited validation
-- ❌ publish workflow, template cloning, per-page settings defaults
+- ✅ create page form shell with template, navigation, SEO, dataset, autosave, and future-date scheduled publish validation.
+- ⚠️ continue hardening publish workflow and per-page settings defaults beyond current starter/template clone coverage.
 
 #### `/pages/$pageId/edit` (`pages.$pageId.edit.tsx`)
 - ✅ Drag/drop editor shell, layer selection, resize/move/history, save/publish/reload, conflict handling, responsive breakpoint state, and media/theme/font registry integration are locally guarded.

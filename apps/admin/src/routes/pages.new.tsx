@@ -540,6 +540,18 @@ const normalizedSearchJsonLd = (value: unknown): string | undefined => {
     return undefined;
 };
 
+const getScheduledPageDateError = (status: PageCreationStatus, scheduledAt: string | null): string | null => {
+    if (status !== 'scheduled') return null;
+    if (!scheduledAt) return 'Choose a publish date before creating a scheduled page.';
+
+    const scheduledAtMs = Date.parse(scheduledAt);
+    if (!Number.isFinite(scheduledAtMs) || scheduledAtMs <= Date.now()) {
+        return 'Choose a future publish date before creating a scheduled page.';
+    }
+
+    return null;
+};
+
 const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.siteId ? { siteId: input.siteId } : {}),
     ...(input.template && input.template !== 'blank' ? { template: input.template } : {}),
@@ -1215,7 +1227,9 @@ function NewPageRoute() {
         : collectionRouteConflict;
     const isCollectionRouteCheckPending = canViewCollections && collectionsLoading;
     const collectionRouteCheckError = canViewCollections ? collectionsError : null;
-    const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
+    const scheduleValidationMessage = getScheduledPageDateError(formData.status, formData.scheduledAt);
+    const hasFutureSchedule = scheduleValidationMessage === null;
+    const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
     const hasNavigationLabel = formData.navigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim());
     const hasValidParentPage = !formData.parentPageId || Boolean(selectedParentPage);
     const datasetImportReady = !formData.collectionId || Boolean(selectedDatasetCollection);
@@ -1234,7 +1248,7 @@ function NewPageRoute() {
         && !isCheckingPages
         && publishPermissionReady
         && navigationPermissionReady
-        && hasSchedule
+        && hasFutureSchedule
         && !routeConflict
         && !routeCheckError
         && !isCollectionRouteCheckPending
@@ -1265,10 +1279,10 @@ function NewPageRoute() {
         if (formData.collectionId && collectionsLoading) return 'Loading the selected collection before creating the dataset page.';
         if (formData.collectionId && !selectedDatasetCollection) return collectionsError || 'Choose an existing collection before creating this dataset page.';
         if (!hasValidParentPage) return 'Choose an existing parent page or keep this page at the top level.';
-        if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
+        if (scheduleValidationMessage) return scheduleValidationMessage;
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
+    }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -1346,9 +1360,9 @@ function NewPageRoute() {
             {
                 label: 'Publish timing',
                 detail: formData.status === 'scheduled'
-                    ? hasSchedule ? 'Scheduled publish time is set.' : 'Choose a publish date for scheduled pages.'
+                    ? scheduleValidationMessage || 'Scheduled publish time is set.'
                     : `${formData.status} pages can be saved immediately.`,
-                ready: hasSchedule,
+                ready: hasFutureSchedule,
             },
             {
                 label: 'Navigation',
@@ -1408,7 +1422,7 @@ function NewPageRoute() {
         effectiveSeoTitle.length,
         effectiveKeywords.length,
         effectiveJsonLd.length,
-        hasSchedule,
+        hasFutureSchedule,
         isCollectionRouteCheckPending,
         jsonLdResult,
         jsonLdValid,
@@ -1845,11 +1859,18 @@ function NewPageRoute() {
             return;
         }
 
+        const currentScheduleValidationMessage = getScheduledPageDateError(formData.status, formData.scheduledAt);
+        if (currentScheduleValidationMessage) {
+            setError(currentScheduleValidationMessage);
+            setNotice(null);
+            return;
+        }
+
         if (!canSubmit) {
             if (routeConflict) {
                 setError(routeConflict.message);
-            } else if (!hasSchedule) {
-                setError('Choose a publish date before creating a scheduled page');
+            } else if (scheduleValidationMessage) {
+                setError(scheduleValidationMessage);
             } else if (!hasNavigationLabel) {
                 setError('Add a navigation label or choose not to add this page to navigation.');
             } else if (!jsonLdValid) {
@@ -2838,13 +2859,18 @@ function NewPageRoute() {
                                         id="page-scheduled-at"
                                         type="datetime-local"
                                         value={toDateTimeLocalValue(formData.scheduledAt)}
+                                        min={minimumScheduledAt}
                                         onChange={(e) => updatePageDraft({
                                             scheduledAt: fromDateTimeLocalValue(e.target.value),
                                         })}
                                         disabled={isPageCreateBusy}
+                                        aria-invalid={Boolean(scheduleValidationMessage)}
                                         className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                         required
                                     />
+                                    {scheduleValidationMessage && (
+                                        <p className="mt-2 text-xs text-destructive">{scheduleValidationMessage}</p>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -246,6 +246,13 @@ const assertPageCreateSourceContracts = () => {
       source.includes("if (!selectedSite) return 'Select a target site before creating this page.';"),
     'Page create submit readiness must require a resolved target site, not just a stale siteId',
   );
+  assert(
+    source.includes('getScheduledPageDateError') &&
+      source.includes('Date.parse(scheduledAt)') &&
+      source.includes('scheduledAtMs <= Date.now()') &&
+      source.includes('Choose a future publish date before creating a scheduled page.'),
+    'Page create submit readiness must block scheduled pages with non-future publish dates before submit',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
