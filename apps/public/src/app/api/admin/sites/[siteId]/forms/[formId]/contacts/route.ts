@@ -60,6 +60,17 @@ const parseContactStatus = (value: unknown): Contact['status'] => (
     : 'new'
 );
 
+const isValidContactStatus = (value: unknown): value is Contact['status'] => (
+  value === 'new' || value === 'contacted' || value === 'qualified' || value === 'archived'
+);
+
+const invalidContactStatusResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_ADMIN_FORM_CONTACT_STATUS',
+  'Invalid admin form contact status. Use new, contacted, qualified, or archived.',
+  requestId,
+);
+
 const parseSourceValues = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
@@ -78,12 +89,16 @@ const parseContactBody = (value: unknown) => {
   const email = parseOptionalString(record.email);
   const phone = parseOptionalString(record.phone);
   const notes = parseOptionalString(record.notes);
+  const statusProvided = Object.prototype.hasOwnProperty.call(record, 'status');
+  const status = parseContactStatus(record.status);
+  const statusInvalid = statusProvided && !isValidContactStatus(record.status);
 
-  if (!name && !email && !phone) {
+  if (!name && !email && !phone && !statusProvided) {
     return null;
   }
 
   return {
+    statusInvalid,
     name: name ?? null,
     email: email ?? null,
     phone: phone ?? null,
@@ -91,7 +106,7 @@ const parseContactBody = (value: unknown) => {
     pageId: parseOptionalString(record.pageId) ?? null,
     postId: parseOptionalString(record.postId) ?? null,
     requestId: parseOptionalString(record.requestId) ?? null,
-    status: parseContactStatus(record.status),
+    status,
     sourceValues: parseSourceValues(record.sourceValues),
     upsertByEmail: record.upsertByEmail === true,
   };
@@ -209,6 +224,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { siteId, formId } = await params;
     const body = parseContactBody(await request.json().catch(() => null));
     if (!body) {
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Contact requires a name, email, or phone.', requestId);
+    }
+    if (body.statusInvalid) {
+      return invalidContactStatusResponse(requestId);
+    }
+    if (!body.name && !body.email && !body.phone) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Contact requires a name, email, or phone.', requestId);
     }
     const emailPolicy = validateOptionalContactEmail(body.email);

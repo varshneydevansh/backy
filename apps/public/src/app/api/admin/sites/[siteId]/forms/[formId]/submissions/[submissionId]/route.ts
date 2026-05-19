@@ -69,13 +69,22 @@ const parseBody = (value: unknown) => {
   }
 
   const record = value as Record<string, unknown>;
+  const statusProvided = Object.prototype.hasOwnProperty.call(record, 'status');
   return {
     status: parseStatus(record.status),
+    statusProvided,
     reviewedBy: typeof record.reviewedBy === 'string' ? record.reviewedBy : undefined,
     adminNotes: typeof record.adminNotes === 'string' ? record.adminNotes : undefined,
     contactShareOverride: parseContactShareOverride(record.contactShareOverride),
   };
 };
+
+const invalidStatusResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_ADMIN_FORM_SUBMISSION_STATUS',
+  'Invalid admin form submission status. Use pending, approved, rejected, or spam.',
+  requestId,
+);
 
 const parseShareValue = (values: Record<string, unknown>, field?: string): string | null => {
   if (!field) return null;
@@ -326,6 +335,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { siteId, formId, submissionId } = await params;
     const body = parseBody(await request.json().catch(() => null));
     if (!body?.status) {
+      if (body?.statusProvided) {
+        return invalidStatusResponse(requestId);
+      }
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', requestId);
     }
 

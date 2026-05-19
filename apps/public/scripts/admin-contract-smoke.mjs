@@ -316,8 +316,16 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/submissions/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormSubmissionDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/submissions/[submissionId]/route.ts', import.meta.url),
+    'utf8',
+  );
   const adminFormContactsRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/route.ts', import.meta.url),
+    'utf8',
+  );
+  const adminFormContactDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/route.ts', import.meta.url),
     'utf8',
   );
   const blogListRoute = fs.readFileSync(
@@ -431,10 +439,15 @@ function assertAdminPageContentValidationSource() {
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_LIMIT'"), 'admin form submissions route must reject invalid limit filters');
   assert(adminFormSubmissionsRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_OFFSET'"), 'admin form submissions route must reject invalid offset filters');
   assert(adminFormSubmissionsRoute.includes('statusFilter.invalid'), 'admin form submissions route must branch on invalid status filters');
+  assert(adminFormSubmissionDetailRoute.includes("'INVALID_ADMIN_FORM_SUBMISSION_STATUS'"), 'admin form submission detail route must reject invalid status updates');
+  assert(adminFormSubmissionDetailRoute.includes('statusProvided'), 'admin form submission detail route must distinguish missing status from invalid status values');
   assert(adminFormContactsRoute.includes("'INVALID_ADMIN_FORM_CONTACT_STATUS'"), 'admin form contacts route must reject invalid status filters');
   assert(adminFormContactsRoute.includes("'INVALID_ADMIN_FORM_CONTACT_LIMIT'"), 'admin form contacts route must reject invalid limit filters');
   assert(adminFormContactsRoute.includes("'INVALID_ADMIN_FORM_CONTACT_OFFSET'"), 'admin form contacts route must reject invalid offset filters');
   assert(adminFormContactsRoute.includes('statusFilter.invalid'), 'admin form contacts route must branch on invalid status filters');
+  assert(adminFormContactsRoute.includes('statusInvalid'), 'admin form contact create route must distinguish invalid explicit status from the default status');
+  assert(adminFormContactDetailRoute.includes("'INVALID_ADMIN_FORM_CONTACT_STATUS'"), 'admin form contact detail route must reject invalid status updates');
+  assert(adminFormContactDetailRoute.includes('statusProvided'), 'admin form contact detail route must distinguish missing status from invalid status values');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&

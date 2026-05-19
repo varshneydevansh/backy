@@ -56,6 +56,7 @@ const parseBody = (value: unknown) => {
 
   const record = value as Record<string, unknown>;
   const status = parseStatus(record.status);
+  const statusProvided = Object.prototype.hasOwnProperty.call(record, 'status');
   const name = parseNullableString(record.name);
   const email = parseNullableString(record.email);
   const phone = parseNullableString(record.phone);
@@ -69,6 +70,7 @@ const parseBody = (value: unknown) => {
 
   if (
     !status
+    && !statusProvided
     && name === undefined
     && email === undefined
     && phone === undefined
@@ -84,6 +86,7 @@ const parseBody = (value: unknown) => {
   }
 
   return {
+    statusProvided,
     ...(status ? { status } : {}),
     ...(name !== undefined ? { name } : {}),
     ...(email !== undefined ? { email } : {}),
@@ -97,6 +100,13 @@ const parseBody = (value: unknown) => {
     ...(sourceValues !== undefined ? { sourceValues } : {}),
   };
 };
+
+const invalidStatusResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_ADMIN_FORM_CONTACT_STATUS',
+  'Invalid admin form contact status. Use new, contacted, qualified, or archived.',
+  requestId,
+);
 
 const toContactUpdate = (body: NonNullable<ReturnType<typeof parseBody>>) => {
   const update: Partial<Contact> = {};
@@ -132,6 +142,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = parseBody(await request.json().catch(() => null));
     if (!body) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or notes is required.', requestId);
+    }
+    if (body.statusProvided && !body.status) {
+      return invalidStatusResponse(requestId);
     }
     const emailPolicy = body.email === undefined
       ? { ok: true as const, email: undefined }
