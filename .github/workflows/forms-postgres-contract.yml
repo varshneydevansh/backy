@@ -54,9 +54,9 @@ jobs:
           {
             echo "## Backy Forms Postgres Certification"
             echo ""
-            echo "| Partial row | Gate | Requested | Non-secret target evidence |"
-            echo "| --- | --- | --- | --- |"
-            echo "| /forms | npm run ci:forms-postgres | true | disposable confirmed: ${{ inputs.disposable_database_confirmed }}; expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
+            echo "| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            echo "| /forms | npm run ci:forms-postgres | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | disposable confirmed: ${{ inputs.disposable_database_confirmed }}; expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Require disposable Postgres or Supabase database URL

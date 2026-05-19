@@ -312,8 +312,8 @@ assert(
     sdkPostgresWorkflow.includes('npm run doctor:release-certification') &&
     sdkPostgresWorkflow.includes('Write non-secret SDK database summary') &&
     sdkPostgresWorkflow.includes('GITHUB_STEP_SUMMARY') &&
-    sdkPostgresWorkflow.includes('| Partial row | Gate | Requested | Non-secret target evidence |') &&
-    sdkPostgresWorkflow.includes('| Frontend manifest/OpenAPI/SDK APIs | npm run ci:sdk-postgres-smoke | true |') &&
+    sdkPostgresWorkflow.includes('| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |') &&
+    sdkPostgresWorkflow.includes('| Frontend manifest/OpenAPI/SDK APIs | npm run ci:sdk-postgres-smoke | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source |') &&
     sdkPostgresWorkflow.includes('disposable confirmed:') &&
     sdkPostgresWorkflow.includes('expected host configured:') &&
     sdkPostgresWorkflow.includes('expected database configured:') &&
