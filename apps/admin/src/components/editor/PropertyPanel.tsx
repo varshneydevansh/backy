@@ -87,6 +87,34 @@ const parseBooleanSetting = (value: unknown, fallback = false): boolean => {
   return fallback;
 };
 
+const EDITOR_COLOR_SWATCHES = [
+  '#000000',
+  '#ffffff',
+  '#f8fafc',
+  '#ef4444',
+  '#f97316',
+  '#facc15',
+  '#22c55e',
+  '#06b6d4',
+  '#3b82f6',
+  '#8b5cf6',
+  '#ec4899',
+  '#64748b',
+];
+
+const normalizeHexColorInputValue = (value: string): string => {
+  const trimmed = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    return `#${trimmed.slice(1).split('').map((char) => `${char}${char}`).join('')}`;
+  }
+
+  return '#000000';
+};
+
 const formatFieldMap = (value: unknown): string => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return '';
@@ -7264,24 +7292,90 @@ interface ColorInputProps {
 }
 
 function ColorInput({ value, onChange, testId }: ColorInputProps) {
+  const colorPickerValue = normalizeHexColorInputValue(value);
+  const normalizedValue = value.trim().toLowerCase();
+  const normalizedHexValue = normalizedValue.startsWith('#')
+    ? colorPickerValue.toLowerCase()
+    : normalizedValue;
+
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-8 h-8 rounded-md border cursor-pointer"
-      />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        data-testid={testId}
-        className={cn(
-          'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
-          'focus:outline-none focus:ring-2 focus:ring-ring'
-        )}
-      />
+    <div className="space-y-2" data-editor-color-input={testId}>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={colorPickerValue}
+          onChange={(e) => onChange(e.target.value)}
+          data-testid={testId ? `${testId}-picker` : undefined}
+          aria-label="Pick color"
+          className="h-8 w-8 shrink-0 cursor-pointer rounded-md border"
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          data-testid={testId}
+          aria-label="Color value"
+          className={cn(
+            'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+        />
+      </div>
+      <div
+        className="grid grid-cols-7 gap-1"
+        role="group"
+        aria-label="Quick color swatches"
+        data-testid={testId ? `${testId}-swatches` : undefined}
+      >
+        {EDITOR_COLOR_SWATCHES.map((swatch) => {
+          const isSelected = normalizedHexValue === swatch;
+          return (
+            <button
+              key={swatch}
+              type="button"
+              onClick={() => onChange(swatch)}
+              aria-label={`Use ${swatch}`}
+              aria-pressed={isSelected}
+              title={`Use ${swatch}`}
+              data-testid={testId ? `${testId}-swatch-${swatch.slice(1)}` : undefined}
+              className={cn(
+                'flex h-6 items-center justify-center rounded-md border bg-background p-0.5 transition',
+                'hover:border-primary focus:outline-none focus:ring-2 focus:ring-ring',
+                isSelected ? 'border-primary ring-1 ring-primary' : 'border-border'
+              )}
+            >
+              <span
+                className="h-full w-full rounded-[4px] border border-black/10"
+                style={{ backgroundColor: swatch }}
+              />
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => onChange('transparent')}
+          aria-label="Use transparent"
+          aria-pressed={normalizedValue === 'transparent'}
+          title="Use transparent"
+          data-testid={testId ? `${testId}-transparent` : undefined}
+          className={cn(
+            'flex h-6 items-center justify-center rounded-md border bg-background p-0.5 transition',
+            'hover:border-primary focus:outline-none focus:ring-2 focus:ring-ring',
+            normalizedValue === 'transparent' ? 'border-primary ring-1 ring-primary' : 'border-border'
+          )}
+        >
+          <span
+            className="h-full w-full rounded-[4px] border border-black/10"
+            style={{
+              backgroundColor: '#ffffff',
+              backgroundImage:
+                'linear-gradient(45deg, #cbd5e1 25%, transparent 25%), linear-gradient(-45deg, #cbd5e1 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #cbd5e1 75%), linear-gradient(-45deg, transparent 75%, #cbd5e1 75%)',
+              backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0',
+              backgroundSize: '12px 12px',
+            }}
+          />
+        </button>
+      </div>
     </div>
   );
 }

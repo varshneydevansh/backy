@@ -245,6 +245,14 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('data-testid="editor-layer-expand-all"') && layersPanelSource.includes('data-testid="editor-layer-collapse-all"') && layersPanelSource.includes('collapsibleLayerIds'), 'Editor layers panel must support bulk expand and collapse controls');
 };
 
+const assertPropertyPanelColorControlsSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  assert(source.includes('const EDITOR_COLOR_SWATCHES = ['), 'Editor property panel must define reusable quick color swatches');
+  assert(source.includes('normalizeHexColorInputValue') && source.includes('data-testid={testId ? `${testId}-picker` : undefined}'), 'Editor color inputs must keep native color pickers valid for typed CSS values');
+  assert(source.includes('data-testid={testId ? `${testId}-swatches` : undefined}') && source.includes('`${testId}-swatch-${swatch.slice(1)}`'), 'Editor color inputs must expose testable quick swatch buttons');
+  assert(source.includes("onClick={() => onChange('transparent')}") && source.includes('`${testId}-transparent`'), 'Editor color inputs must expose a transparent swatch for reset/clear styling');
+};
+
 const assertEditorInteractiveSandboxPreviewSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   assert(source.includes('AdminInteractiveSandboxPreview'), 'Editor canvas must include an admin sandbox preview component for code components');
@@ -14652,6 +14660,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   assertPageEditorFallbackIsReadOnly();
   assertCanvasEditorShortcutSource();
+  assertPropertyPanelColorControlsSource();
   assertEditorInteractiveSandboxPreviewSource();
   assertInteractiveRegistryVersionPinningSource();
   assertComponentLibraryEmptyStateSource();
