@@ -476,6 +476,17 @@ function assertAdminPageContentValidationSource() {
     new URL('../../../specs/backy-api-contracts.md', import.meta.url),
     'utf8',
   );
+  assert(
+    apiContracts.includes('repository-backed collection records in database mode') &&
+      apiContracts.includes('composite collection/record indexes') &&
+      apiContracts.includes('collection-scoped write tokens') &&
+      apiContracts.includes('SDK/Postgres database-mode gate'),
+    'API contracts must document current collection repository/index/write-token readiness and the remaining SDK/Postgres gate',
+  );
+  assert(
+    !apiContracts.includes('production completion still needs DB-backed indexes and authenticated visitor-write policies'),
+    'API contracts must not contain stale collection DB-index/visitor-write gap text',
+  );
 
   for (const [label, source] of [['page create', pageListRoute], ['page update', pageDetailRoute]]) {
     assert(source.includes('pageContentValidationError'), `${label} route must validate explicit editor content payloads`);
