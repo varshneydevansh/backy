@@ -328,6 +328,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormContactImportRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/import/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -448,6 +452,8 @@ function assertAdminPageContentValidationSource() {
   assert(adminFormContactsRoute.includes('statusInvalid'), 'admin form contact create route must distinguish invalid explicit status from the default status');
   assert(adminFormContactDetailRoute.includes("'INVALID_ADMIN_FORM_CONTACT_STATUS'"), 'admin form contact detail route must reject invalid status updates');
   assert(adminFormContactDetailRoute.includes('statusProvided'), 'admin form contact detail route must distinguish missing status from invalid status values');
+  assert(adminFormContactImportRoute.includes("'INVALID_ADMIN_FORM_CONTACT_STATUS'"), 'admin form contact import route must reject invalid status rows');
+  assert(adminFormContactImportRoute.includes('statusInvalid'), 'admin form contact import route must distinguish invalid imported status from the default status');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&

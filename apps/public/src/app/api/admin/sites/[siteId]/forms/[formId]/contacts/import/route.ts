@@ -33,11 +33,15 @@ const normalizeHeader = (value: unknown): string => (
   String(value || '').trim().replace(/[^a-zA-Z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
 );
 
-const parseStatus = (value: unknown): Contact['status'] => (
-  CONTACT_STATUSES.includes(value as Contact['status'])
-    ? value as Contact['status']
-    : 'new'
-);
+const parseStatus = (value: unknown): { value: Contact['status']; invalid?: string } => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return { value: 'new' };
+  }
+  return CONTACT_STATUSES.includes(normalized as Contact['status'])
+    ? { value: normalized as Contact['status'] }
+    : { value: 'new', invalid: normalized };
+};
 
 const parseCsvRows = (source: string): string[][] => {
   const rows: string[][] = [];
@@ -118,6 +122,7 @@ const parseContactRow = (rowData: Record<string, string>) => {
   const email = rowData.email?.trim() || null;
   const phone = rowData.phone?.trim() || null;
   const notes = rowData.notes?.trim() || null;
+  const status = parseStatus(rowData.status);
 
   if (!name && !email && !phone) {
     return null;
@@ -128,7 +133,8 @@ const parseContactRow = (rowData: Record<string, string>) => {
     email,
     phone,
     notes,
-    status: parseStatus(rowData.status?.trim()),
+    status: status.value,
+    statusInvalid: status.invalid,
     pageId: rowData.pageId?.trim() || null,
     postId: rowData.postId?.trim() || null,
     requestId: rowData.requestId?.trim() || null,
@@ -187,6 +193,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           errors.push({ row: rowNumber, email: rowData.email, message: 'Contact requires a name, email, or phone.' });
           continue;
         }
+        if (parsed.statusInvalid) {
+          skipped += 1;
+          errors.push({
+            row: rowNumber,
+            email: rowData.email,
+            code: 'INVALID_ADMIN_FORM_CONTACT_STATUS',
+            message: 'Invalid admin form contact status. Use new, contacted, qualified, or archived.',
+            details: { status: parsed.statusInvalid },
+          });
+          continue;
+        }
         const emailPolicy = validateOptionalContactEmail(parsed.email);
         if (!emailPolicy.ok) {
           skipped += 1;
@@ -202,6 +219,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ...parsed,
           email: emailPolicy.email,
         };
+        delete (contactInput as { statusInvalid?: string }).statusInvalid;
 
         const normalizedEmail = normalizeContactEmail(contactInput.email);
         const existing = upsertByEmail && normalizedEmail
@@ -263,6 +281,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         errors.push({ row: rowNumber, email: rowData.email, message: 'Contact requires a name, email, or phone.' });
         continue;
       }
+      if (parsed.statusInvalid) {
+        skipped += 1;
+        errors.push({
+          row: rowNumber,
+          email: rowData.email,
+          code: 'INVALID_ADMIN_FORM_CONTACT_STATUS',
+          message: 'Invalid admin form contact status. Use new, contacted, qualified, or archived.',
+          details: { status: parsed.statusInvalid },
+        });
+        continue;
+      }
       const emailPolicy = validateOptionalContactEmail(parsed.email);
       if (!emailPolicy.ok) {
         skipped += 1;
@@ -274,11 +303,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
         continue;
       }
+      const contactInput = { ...parsed };
+      delete (contactInput as { statusInvalid?: string }).statusInvalid;
 
       const result = createContactRecord({
         siteId: site.id,
         formId: form.id,
-        ...parsed,
+        ...contactInput,
         email: emailPolicy.email,
         sourceSubmissionId: undefined,
         sourceIpHash: null,
