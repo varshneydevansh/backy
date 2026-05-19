@@ -1230,6 +1230,7 @@ function NewPageRoute() {
 	        &&
 	        formData.title.trim()
         && formData.siteId
+        && selectedSite
         && !isCheckingPages
         && publishPermissionReady
         && navigationPermissionReady

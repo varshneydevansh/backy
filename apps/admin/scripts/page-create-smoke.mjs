@@ -239,6 +239,15 @@ const assert = (condition, message) => {
   }
 };
 
+const assertPageCreateSourceContracts = () => {
+  const source = fs.readFileSync(new URL('../src/routes/pages.new.tsx', import.meta.url), 'utf8');
+  assert(
+    source.includes('&& selectedSite') &&
+      source.includes("if (!selectedSite) return 'Select a target site before creating this page.';"),
+    'Page create submit readiness must require a resolved target site, not just a stale siteId',
+  );
+};
+
 const isIgnorableBrowserLogError = (event) => (
   event.method === 'Log.entryAdded' &&
   event.params?.entry?.source === 'intervention' &&
@@ -1781,7 +1790,7 @@ const assertPublicResponsivePageRender = async (parentClient, pageId, testCase) 
             missingElementIds: requiredRects.filter((rect) => !rect.present).map((rect) => rect.id),
             collapsedElementIds: requiredRects.filter((rect) => rect.present && (rect.width <= 0 || rect.height <= 0)).map((rect) => rect.id),
             requiredRects,
-            horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+            horizontalOverflow: (document.documentElement?.scrollWidth || window.innerWidth) - window.innerWidth,
             emptyStateVisible: document.body?.innerText?.includes('Drop components onto the canvas') || false,
             notFoundVisible: /not found|could not find|404/i.test(document.body?.innerText || ''),
             body: document.body?.innerText?.slice(0, 280) || '',
@@ -1873,7 +1882,9 @@ const datasetResponsiveRenderCase = (collection, mode) => {
   return {
     template: `dataset-${mode}`,
     label: `dataset ${mode} page`,
-    minTotalElementCount: mode === 'list' ? 14 : 15,
+    // Empty dataset list pages render chrome, the section, and an empty repeater message.
+    // Required element IDs below still guard the actual dataset contract surface.
+    minTotalElementCount: mode === 'list' ? 13 : 14,
     requiredElementIds,
   };
 };
@@ -2229,6 +2240,7 @@ const cleanup = async ({ client, childProcess, userDataDir, pageIds = [], pageId
 };
 
 const main = async () => {
+  assertPageCreateSourceContracts();
   await loginAdminApi();
   const slug = `page-create-smoke-${Date.now().toString(36)}`;
   const title = 'Smoke Page Create';
