@@ -106,27 +106,21 @@ It explicitly excludes:
 2. no reusable "post card", "post list", "article preview", or "category block" component templates are defined in the editor catalog yet.
 3. no blog page nesting/embedding model in editor UX for sections like `latest posts`, `related posts`, `tag lists`.
 
-## 4) User-visible issues currently breaking perceived maturity
+## 4) Current launch maturity risks
 
-1. Buttons with no action:
-   1. Save button in editor toolbar
-   2. Undo/redo controls
-   3. Page settings modal action
-   4. Publish/unpublish toggles in list and editor contexts
-   5. New media/blog actions where modal opens but state not persisted; form template creation and standalone form editing now persist through backend APIs, but delivery/analytics remain incomplete
-2. Labels and text not visible:
-   1. controls with only icon affordance and no accessible label
-   2. inconsistent color contrast in button state text
-   3. settings toggles without inline helper labels
-3. Form subsystem incompleteness:
-   1. block container exists in schema but canvas-bound form-builder editing still needs deeper integration
-   2. registration templates can now create standalone forms, edit fields/settings, submit publicly, and move through moderation, but delivery, consent export, advanced validation editing, and analytics remain incomplete
-4. Comment subsystem incompleteness:
-   1. no moderation and no status pipeline
-   2. no bulk moderation actions
-5. API parity gaps:
-   1. routes exist but do not persist to DB
-   2. inconsistent response envelopes between admin/public calls
+1. External certification, not local button wiring, is the active blocker:
+   1. editor save, undo/redo, page settings, publish/archive, media, blog, forms, and comment workflows are locally guarded by focused smoke suites
+   2. the remaining Forms/Contacts and public SDK risks require the disposable Supabase/Postgres service-data gates
+   3. the remaining Settings, Products, and Orders risks require live provider certification
+2. UI polish should continue as regression hardening:
+   1. keep accessibility labels, visible state text, and toggle helper copy covered as new controls ship
+   2. keep cross-browser visual checks and additional composed-template permutations as optional launch-hardening breadth
+3. Forms and comments are Ready locally with database-service certification pending:
+   1. form builder, reusable embed blocks, public submission, moderation, delivery retry, consent/retention, analytics, and contacts are implemented for the local product scope
+   2. comments include moderation queues, status pipelines, bulk actions, reporting, blocklists, replies, export, analytics, and delivery retry
+4. Public API parity is locally guarded:
+   1. public render, manifest, OpenAPI, generated SDK, media, forms, comments, commerce, reusable-section, and interactive component contracts are guarded
+   2. database-mode certification remains pending until `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` runs against a migrated disposable Supabase/Postgres service
 
 ## 5) Page-by-page completion checklist (admin)
 
