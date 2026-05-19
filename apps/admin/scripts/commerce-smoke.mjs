@@ -899,6 +899,13 @@ const assertProductsApiContractsSource = () => {
     "Products variant controls must enforce variant caps through a shared source limit",
   );
   assert(
+    source.includes("getScheduledProductDateError") &&
+      source.includes("scheduledAtMs <= Date.now()") &&
+      source.includes("Choose a future publish date before scheduling this product.") &&
+      source.includes("aria-invalid={Boolean(scheduledProductDateError)}"),
+    "Products scheduled status must block non-future publish dates before save",
+  );
+  assert(
     source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),
     "Products handoff manifest must expose API response contracts for custom frontends",
   );

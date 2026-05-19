@@ -169,6 +169,10 @@ Legend:
 - ✅ Backend-backed delivery mode, API/service keys, security policy, storage/Supabase/Vercel/notification/commerce metadata, provider diagnostics, audit history, and site-scoped settings are implemented.
 - ⚠️ Live Supabase, Vercel, storage, notification, and commerce provider certification remains required before production certification.
 
+#### `/products` (`products.tsx`)
+- ✅ Product catalog workspace covers schema setup, product records, pricing, inventory, media, variants, SEO, provider handoff, CSV import/export, and future-date scheduled product validation.
+- ⚠️ Live commerce provider certification remains required before production certification.
+
 ### 3.2 Public routes
 
 #### `/` (`apps/public/src/app/page.tsx`)

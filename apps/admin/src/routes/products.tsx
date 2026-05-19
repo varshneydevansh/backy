@@ -1400,6 +1400,8 @@ function ProductsRoute() {
     productCollection,
     products,
   ]);
+  const scheduledProductDateError = getScheduledProductDateError(formState.status, formState.scheduledAt);
+  const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -2501,14 +2503,15 @@ function ProductsRoute() {
       return;
     }
 
-    const scheduledAt = formState.status === 'scheduled'
-      ? toIsoDateTime(formState.scheduledAt)
-      : null;
-    if (formState.status === 'scheduled' && !scheduledAt) {
-      setError('Choose a publish date before scheduling this product.');
+    if (scheduledProductDateError) {
+      setError(scheduledProductDateError);
       setNotice(null);
       return;
     }
+
+    const scheduledAt = formState.status === 'scheduled'
+      ? toIsoDateTime(formState.scheduledAt)
+      : null;
 
     setIsSaving(true);
     setError(null);
@@ -5122,10 +5125,15 @@ function ProductsRoute() {
                       <input
                         type="datetime-local"
                         value={formState.scheduledAt}
+                        min={minimumScheduledAt}
                         onChange={(event) => setFormState((current) => ({ ...current, scheduledAt: event.target.value }))}
+                        aria-invalid={Boolean(scheduledProductDateError)}
                         required
                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                       />
+                      {scheduledProductDateError ? (
+                        <p className="mt-1 text-xs text-destructive">{scheduledProductDateError}</p>
+                      ) : null}
                     </Field>
                   )}
                   <div className="space-y-2 pt-6">
@@ -5161,7 +5169,7 @@ function ProductsRoute() {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={resetForm} disabled={isProductsAccessBusy || !canEditProducts}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isProductsAccessBusy || !canEditProducts || !formState.title.trim() || !formState.sku.trim() || (formState.status === 'scheduled' && !formState.scheduledAt)} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Package className="size-4" />}>
+                  <Button type="submit" variant="primary" disabled={isProductsAccessBusy || !canEditProducts || !formState.title.trim() || !formState.sku.trim() || Boolean(scheduledProductDateError)} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Package className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedProduct ? 'Save Product' : 'Create Product'}
                   </Button>
                 </div>
@@ -5710,6 +5718,22 @@ const toIsoDateTime = (value: string): string | null => {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const getScheduledProductDateError = (status: ContentStatus, scheduledAt: string): string | null => {
+  if (status !== 'scheduled') return null;
+
+  const isoDate = toIsoDateTime(scheduledAt);
+  if (!isoDate) {
+    return 'Choose a publish date before scheduling this product.';
+  }
+
+  const scheduledAtMs = Date.parse(isoDate);
+  if (!Number.isFinite(scheduledAtMs) || scheduledAtMs <= Date.now()) {
+    return 'Choose a future publish date before scheduling this product.';
+  }
+
+  return null;
 };
 
 const productToForm = (product: CollectionRecord): ProductFormState => ({
