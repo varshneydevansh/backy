@@ -2004,6 +2004,7 @@ function PagesListView() {
       blog: '/blog',
       settings: '/settings',
       blankPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+      landingPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=landing`,
       contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
       newsletterPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=newsletter`,
       surveyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=survey`,
@@ -2052,6 +2053,7 @@ function PagesListView() {
       },
       createRoutes: {
         blank: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+        landing: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=landing`,
         contact: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
         newsletter: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=newsletter`,
         survey: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=survey`,

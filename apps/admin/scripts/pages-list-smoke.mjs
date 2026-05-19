@@ -41,6 +41,12 @@ const assertPagesListSourceContract = () => {
       source.includes("key: 'member-login'") &&
       source.includes("key: 'member-account'") &&
       source.includes('data-testid={`pages-create-${shortcut.key}`}') &&
+      source.includes("key: 'landing'") &&
+      source.includes('landingPageTemplate') &&
+      source.includes("key: 'storefront'") &&
+      source.includes('storefrontPageTemplate') &&
+      source.includes("key: 'contact'") &&
+      source.includes('contactPageTemplate') &&
       source.includes("key: 'newsletter'") &&
       source.includes('newsletterPageTemplate') &&
       source.includes("key: 'survey'") &&
@@ -85,6 +91,8 @@ const assertPagesListSourceContract = () => {
       source.includes('faqPageTemplate') &&
       source.includes("key: 'testimonials'") &&
       source.includes('testimonialsPageTemplate') &&
+      source.includes("key: 'blog-index'") &&
+      source.includes('blogIndexPageTemplate') &&
       source.includes("key: 'blog-post'") &&
       source.includes('blogPostPageTemplate') &&
       source.includes("key: 'team'") &&
@@ -93,7 +101,7 @@ const assertPagesListSourceContract = () => {
       source.includes('careersPageTemplate') &&
       source.includes("key: 'about'") &&
       source.includes('aboutPageTemplate'),
-    'Pages list must expose the member, newsletter, survey, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, careers, and about starters and handoff routes',
+    'Pages list must expose the landing, contact, member, newsletter, survey, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, careers, and about starters and handoff routes',
   );
 };
 
@@ -1548,11 +1556,29 @@ const main = async () => {
       { template: 'blank', homepage: false, allowDisabled: true },
     );
     await waitForPagesEmptyState(client);
+    const landingShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-landing',
+      ['template=landing'],
+      { title: 'Landing page', slug: 'landing', template: 'landing', homepage: false },
+    );
+    const storefrontShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-storefront',
+      ['template=storefront'],
+      { title: 'Storefront', slug: 'store', template: 'storefront', homepage: false },
+    );
     const aboutShortcut = await clickEmptyCreate(
       client,
       'pages-create-about',
       ['template=about'],
       { title: 'About', slug: 'about', template: 'about', homepage: false },
+    );
+    const contactShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-contact',
+      ['template=contact'],
+      { title: 'Contact', slug: 'contact', template: 'contact', homepage: false },
     );
     const registrationShortcut = await clickEmptyCreate(
       client,
@@ -1583,6 +1609,12 @@ const main = async () => {
       'pages-create-member-account',
       ['template=member-account'],
       { title: 'Member account', slug: 'account', template: 'member-account', homepage: false },
+    );
+    const blogIndexShortcut = await clickEmptyCreate(
+      client,
+      'pages-create-blog-index',
+      ['template=blog-index'],
+      { title: 'Blog', slug: 'blog', template: 'blog-index', homepage: false },
     );
     const productDetailShortcut = await clickEmptyCreate(
       client,
@@ -1799,12 +1831,16 @@ const main = async () => {
         postPublish: postPublishVisual,
       },
       emptyCreate,
+      landingShortcut,
+      storefrontShortcut,
       aboutShortcut,
+      contactShortcut,
       newsletterShortcut,
       surveyShortcut,
       registrationShortcut,
       memberLoginShortcut,
       memberAccountShortcut,
+      blogIndexShortcut,
       productDetailShortcut,
       pricingShortcut,
       servicesShortcut,
