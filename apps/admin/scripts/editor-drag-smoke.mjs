@@ -210,6 +210,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
   assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
+  assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleLayerVisibilityToggle(selectedId)'), 'Editor toolbar must expose selected-layer visibility toggle');
+  assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleLayerLockToggle(selectedId)'), 'Editor toolbar must expose selected-layer lock toggle');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -9959,10 +9961,24 @@ const testLayersPanelControls = async (client, pageId) => {
   await setLayerHiddenState(client, 'smoke-form', true);
   const hiddenState = await readLayerActionState(client, 'smoke-form');
   assert(hiddenState.hidden === true, `Layer visibility action did not hide smoke-form: ${JSON.stringify(hiddenState)}`);
+  await selectLayerById(client, 'smoke-form');
+  await clickControlByTestId(client, 'editor-toggle-selection-visibility');
+  const toolbarVisibleState = await readLayerActionState(client, 'smoke-form');
+  assert(toolbarVisibleState.hidden === false, `Toolbar selected-layer visibility action did not show smoke-form: ${JSON.stringify(toolbarVisibleState)}`);
+  await clickControlByTestId(client, 'editor-toggle-selection-visibility');
+  const toolbarHiddenState = await readLayerActionState(client, 'smoke-form');
+  assert(toolbarHiddenState.hidden === true, `Toolbar selected-layer visibility action did not hide smoke-form: ${JSON.stringify(toolbarHiddenState)}`);
 
   await setLayerLockedState(client, 'smoke-icon', true);
   const lockedState = await readLayerActionState(client, 'smoke-icon');
   assert(lockedState.locked === true, `Layer lock action did not lock smoke-icon: ${JSON.stringify(lockedState)}`);
+  await selectLayerById(client, 'smoke-icon');
+  await clickControlByTestId(client, 'editor-toggle-selection-lock');
+  const toolbarUnlockedState = await readLayerActionState(client, 'smoke-icon');
+  assert(toolbarUnlockedState.locked === false, `Toolbar selected-layer lock action did not unlock smoke-icon: ${JSON.stringify(toolbarUnlockedState)}`);
+  await clickControlByTestId(client, 'editor-toggle-selection-lock');
+  const toolbarLockedState = await readLayerActionState(client, 'smoke-icon');
+  assert(toolbarLockedState.locked === true, `Toolbar selected-layer lock action did not lock smoke-icon: ${JSON.stringify(toolbarLockedState)}`);
 
   const duplicateClick = await clickLayerAction(client, 'duplicate', 'smoke-link');
   const selectedAfterDuplicate = await readSelectedLayerIds(client);
@@ -9997,7 +10013,11 @@ const testLayersPanelControls = async (client, pageId) => {
     multiSelected,
     reorder,
     hiddenState,
+    toolbarVisibleState,
+    toolbarHiddenState,
     lockedState,
+    toolbarUnlockedState,
+    toolbarLockedState,
     duplicateClick,
     duplicateId,
     duplicateTree,

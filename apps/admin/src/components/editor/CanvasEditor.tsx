@@ -35,6 +35,7 @@ import {
   Group,
   Hand,
   Layers,
+  Lock,
   Magnet,
   SlidersHorizontal,
   Scissors,
@@ -56,6 +57,7 @@ import {
   ZoomOut,
   Maximize2,
   Ungroup,
+  Unlock,
   X,
 } from 'lucide-react';
 import { cn, generateId } from '@/lib/utils';
@@ -4661,6 +4663,30 @@ export function CanvasEditor({
             >
               <Ungroup className="h-4 w-4" />
               <span className="hidden 2xl:inline">Ungroup</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => selectedId && handleLayerVisibilityToggle(selectedId)}
+              disabled={isCanvasMutationDisabled || !selectedId || selectedElement?.locked}
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={selectedElement?.visible === false ? 'Show selected layer' : 'Hide selected layer'}
+              aria-label={selectedElement?.visible === false ? 'Show selected layer' : 'Hide selected layer'}
+              aria-pressed={selectedElement?.visible === false}
+              data-testid="editor-toggle-selection-visibility"
+            >
+              {selectedElement?.visible === false ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => selectedId && handleLayerLockToggle(selectedId)}
+              disabled={isCanvasMutationDisabled || !selectedId}
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={selectedElement?.locked ? 'Unlock selected layer' : 'Lock selected layer'}
+              aria-label={selectedElement?.locked ? 'Unlock selected layer' : 'Lock selected layer'}
+              aria-pressed={selectedElement?.locked === true}
+              data-testid="editor-toggle-selection-lock"
+            >
+              {selectedElement?.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
             </button>
 
             <div className="w-px h-6 bg-slate-200 mx-1" />
