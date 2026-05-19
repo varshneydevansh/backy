@@ -286,7 +286,8 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes('const multiSelectionBounds = useMemo(() =>') && source.includes('data-testid="editor-multi-selection-bounds"') && source.includes('data-testid="editor-multi-selection-bounds-label"'), 'Editor canvas must render a visible multi-selection bounding frame');
   assert(source.includes('data-selection-count={multiSelectionBounds.count}') && source.includes('left: multiSelectionBounds.x') && source.includes('width: multiSelectionBounds.width'), 'Editor multi-selection bounding frame must expose count and use absolute selection geometry');
   assert(source.includes('type MarqueeSelection = {') && source.includes('const [marqueeSelection, setMarqueeSelection]') && source.includes('data-testid="editor-marquee-selection"'), 'Editor canvas must expose drag-marquee selection state and overlay');
-  assert(source.includes('collectRootMarqueeCandidates') && source.includes('elementIntersectsRect(candidate, bounds)') && source.includes('onSelectMany?.(nextSelectedIds)'), 'Editor canvas marquee selection must select intersecting unlocked root elements in bulk');
+  assert(source.includes('collectRootMarqueeCandidates') && source.includes('elementIntersectsRect(candidate, bounds)') && source.includes('onSelectMany?.(resolvedSelectedIds)'), 'Editor canvas marquee selection must select intersecting unlocked root elements in bulk');
+  assert(source.includes("mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace'") && source.includes("activeMarqueeSelection.mode === 'add'") && source.includes('data-selection-mode={marqueeSelection.mode}'), 'Editor canvas marquee selection must support additive Shift/Cmd/Ctrl marquee selection');
   assert(editorSource.includes('const handleCanvasSelectMany') && editorSource.includes('onSelectMany={handleCanvasSelectMany}'), 'Editor shell must wire canvas marquee bulk selection into selectedIds state');
 };
 

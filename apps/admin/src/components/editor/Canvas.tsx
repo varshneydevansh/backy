@@ -1475,6 +1475,7 @@ type ResizeInteraction = {
 type MarqueeSelection = {
   inputType: 'pointer' | 'mouse';
   pointerId?: number;
+  mode: 'replace' | 'add';
   startX: number;
   startY: number;
   currentX: number;
@@ -1764,6 +1765,7 @@ export function Canvas({
     const nextSelection: MarqueeSelection = {
       inputType: 'pointer',
       pointerId: event.pointerId,
+      mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace',
       startX: start.x,
       startY: start.y,
       currentX: start.x,
@@ -2138,11 +2140,14 @@ export function Canvas({
         const nextSelectedIds = collectRootMarqueeCandidates(elementsRef.current)
           .filter((candidate) => elementIntersectsRect(candidate, bounds))
           .map((candidate) => candidate.id);
+        const resolvedSelectedIds = activeMarqueeSelection.mode === 'add'
+          ? Array.from(new Set([...selectedIds, ...nextSelectedIds]))
+          : nextSelectedIds;
 
-        if (nextSelectedIds.length > 1) {
-          onSelectMany?.(nextSelectedIds);
+        if (resolvedSelectedIds.length > 1) {
+          onSelectMany?.(resolvedSelectedIds);
         } else {
-          onSelect(nextSelectedIds[0] ?? null);
+          onSelect(resolvedSelectedIds[0] ?? null);
         }
       }
       return;
@@ -2167,7 +2172,7 @@ export function Canvas({
       exitTextEditingForTransform();
       onElementsChange(elementsRef.current, { commit: true, selectedId: activeElementId });
     }
-  }, [exitTextEditingForTransform, onElementsChange, onSelect, onSelectMany, selectedId]);
+  }, [exitTextEditingForTransform, onElementsChange, onSelect, onSelectMany, selectedId, selectedIds]);
 
   useEffect(() => {
     if (isPreview || disabled) {
@@ -2588,6 +2593,7 @@ export function Canvas({
         <div
           className="pointer-events-none absolute z-[75] rounded-sm border border-sky-600 bg-sky-500/10 shadow-[0_0_0_1px_rgba(14,165,233,0.12)]"
           data-testid="editor-marquee-selection"
+          data-selection-mode={marqueeSelection.mode}
           style={getMarqueeBounds(marqueeSelection)}
         />
       )}
