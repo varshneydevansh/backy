@@ -284,6 +284,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/blog/[postId]/route.ts', import.meta.url),
     'utf8',
   );
+  const publicBlogRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/blog/route.ts', import.meta.url),
+    'utf8',
+  );
   const apiContracts = fs.readFileSync(
     new URL('../../../specs/backy-api-contracts.md', import.meta.url),
     'utf8',
@@ -314,6 +318,11 @@ function assertAdminPageContentValidationSource() {
   assert(blogListRoute.includes('"INVALID_BLOG_OFFSET"'), 'admin blog list route must reject invalid offset filters');
   assert(blogListRoute.includes('integerQueryFromInput'), 'admin blog list route must parse pagination filters strictly');
   assert(blogListRoute.includes('statusFilter.invalid'), 'admin blog list route must reject invalid status filters');
+  assert(publicBlogRoute.includes("'INVALID_BLOG_LIMIT'"), 'public blog list route must reject invalid limit filters');
+  assert(publicBlogRoute.includes("'INVALID_BLOG_OFFSET'"), 'public blog list route must reject invalid offset filters');
+  assert(publicBlogRoute.includes("'INVALID_BLOG_ARCHIVE_YEAR'"), 'public blog list route must reject invalid archive year filters');
+  assert(publicBlogRoute.includes("'INVALID_BLOG_ARCHIVE_MONTH'"), 'public blog list route must reject invalid archive month filters');
+  assert(publicBlogRoute.includes('statusFilter.invalid'), 'public blog list route must reject invalid status filters');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -326,6 +335,8 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_BLOG_STATUS') &&
       apiContracts.includes('INVALID_BLOG_LIMIT') &&
       apiContracts.includes('INVALID_BLOG_OFFSET') &&
+      apiContracts.includes('INVALID_BLOG_ARCHIVE_YEAR') &&
+      apiContracts.includes('INVALID_BLOG_ARCHIVE_MONTH') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
     'API contracts must document invalid admin page/blog editor content and status errors',
   );

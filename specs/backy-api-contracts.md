@@ -183,6 +183,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/public/sites/:siteId/blog/posts?status=published&limit=&cursor=` (optional alias)
   - Published posts list with canonical URLs.
   - Current repository route is `GET /api/sites/:siteId/blog`; response uses `{ success, requestId, data: { posts, pagination } }` while preserving legacy top-level `posts/pagination`.
+  - Invalid public blog list filters return explicit `400` errors instead of silently widening or clamping the feed: `INVALID_BLOG_STATUS`, `INVALID_BLOG_LIMIT`, `INVALID_BLOG_OFFSET`, `INVALID_BLOG_ARCHIVE_YEAR`, or `INVALID_BLOG_ARCHIVE_MONTH`.
 
 - `GET /api/sites/:siteId/blog/posts/:slug`
 - `GET /api/public/sites/:siteId/blog/posts/:slug` (optional alias)

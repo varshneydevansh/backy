@@ -41,26 +41,60 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
-    const parsed = Number.parseInt(value || '', 10);
-    if (!Number.isFinite(parsed)) {
-        return fallback;
+const parseBoundedInteger = (
+    value: string | null,
+    fallback: number,
+    min: number,
+    max?: number,
+): { value: number; invalid?: string } => {
+    if (value === null || value.trim() === '') {
+        return { value: fallback };
     }
-    return Math.max(min, Math.min(max, parsed));
+
+    const parsed = Number(value);
+    if (
+        !Number.isInteger(parsed) ||
+        parsed < min ||
+        (max !== undefined && parsed > max)
+    ) {
+        return { value: fallback, invalid: value };
+    }
+
+    return { value: parsed };
 };
 
-const parseStatusFilter = (value: string | null): 'published' | 'draft' | 'scheduled' | 'archived' | undefined => (
-    value === 'published' || value === 'draft' || value === 'scheduled' || value === 'archived' ? value : undefined
-);
+const parseStatusFilter = (
+    value: string | null,
+): { status?: 'published' | 'draft' | 'scheduled' | 'archived'; invalid?: string } => {
+    if (value === null || value.trim() === '') {
+        return {};
+    }
 
-const parseArchiveYear = (value: string | null): number | undefined => {
-    const parsed = Number.parseInt(value || '', 10);
-    return Number.isInteger(parsed) && parsed >= 1970 && parsed <= 3000 ? parsed : undefined;
+    return value === 'published' || value === 'draft' || value === 'scheduled' || value === 'archived'
+        ? { status: value }
+        : { invalid: value };
 };
 
-const parseArchiveMonth = (value: string | null): number | undefined => {
-    const parsed = Number.parseInt(value || '', 10);
-    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 12 ? parsed : undefined;
+const parseArchiveYear = (value: string | null): { value?: number; invalid?: string } => {
+    if (value === null || value.trim() === '') {
+        return {};
+    }
+
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 1970 && parsed <= 3000
+        ? { value: parsed }
+        : { invalid: value };
+};
+
+const parseArchiveMonth = (value: string | null): { value?: number; invalid?: string } => {
+    if (value === null || value.trim() === '') {
+        return {};
+    }
+
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 12
+        ? { value: parsed }
+        : { invalid: value };
 };
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
@@ -120,12 +154,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const { searchParams } = new URL(request.url);
         const slug = searchParams.get('slug');
         const previewToken = searchParams.get('previewToken');
-        const limit = parseBoundedInteger(searchParams.get('limit'), 10, 1, 100);
-        const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
-        const status = parseStatusFilter(searchParams.get('status'));
+        const limitFilter = parseBoundedInteger(searchParams.get('limit'), 10, 1, 100);
+        if (limitFilter.invalid) {
+            return errorResponse(400, 'INVALID_BLOG_LIMIT', 'Invalid blog limit. Use an integer from 1 to 100.', requestId);
+        }
+        const offsetFilter = parseBoundedInteger(searchParams.get('offset'), 0, 0);
+        if (offsetFilter.invalid) {
+            return errorResponse(400, 'INVALID_BLOG_OFFSET', 'Invalid blog offset. Use an integer greater than or equal to 0.', requestId);
+        }
+        const statusFilter = parseStatusFilter(searchParams.get('status'));
+        if (statusFilter.invalid) {
+            return errorResponse(400, 'INVALID_BLOG_STATUS', 'Invalid blog status filter. Use published, draft, scheduled, or archived.', requestId);
+        }
+        const yearFilter = parseArchiveYear(searchParams.get('year'));
+        if (yearFilter.invalid) {
+            return errorResponse(400, 'INVALID_BLOG_ARCHIVE_YEAR', 'Invalid blog archive year. Use an integer from 1970 to 3000.', requestId);
+        }
+        const monthFilter = parseArchiveMonth(searchParams.get('month'));
+        if (monthFilter.invalid) {
+            return errorResponse(400, 'INVALID_BLOG_ARCHIVE_MONTH', 'Invalid blog archive month. Use an integer from 1 to 12.', requestId);
+        }
+        const limit = limitFilter.value;
+        const offset = offsetFilter.value;
+        const status = statusFilter.status;
         const search = (searchParams.get('q') || searchParams.get('search') || '').trim();
-        const year = parseArchiveYear(searchParams.get('year'));
-        const month = parseArchiveMonth(searchParams.get('month'));
+        const year = yearFilter.value;
+        const month = monthFilter.value;
 
         if (!shouldUseDemoStoreFallback()) {
             const repositories = await getRequiredDatabaseRepositories();
