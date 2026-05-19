@@ -103,12 +103,12 @@ That aggregate command runs the Forms, SDK, admin contract source guard, Setting
 
 Current Partial-to-gate map:
 
-| Partial row | Gate | Standalone workflow or release input |
-| --- | --- | --- |
-| `/forms` | `npm run ci:forms-postgres` | Forms Postgres Contract workflow against a disposable migrated Supabase/Postgres database |
-| Frontend manifest/OpenAPI/SDK APIs | `npm run ci:sdk-postgres-smoke` | SDK Postgres Smoke workflow against the same disposable migrated Supabase/Postgres target |
-| `/settings` and Settings admin APIs | `npm run ci:settings-provider-certification` | Settings provider workflow or `certify_settings_providers` with selected storage, Vercel, notification, and provider-family inputs |
-| `/products` and `/orders` | `npm run ci:commerce-provider-certification` | Commerce provider workflow or `certify_commerce_providers` with selected payment, tax, shipping, catalog, subscription, and webhook provider inputs |
+| Partial row | Gate | Aggregate preflight | Admin source guard | Standalone workflow or release input |
+| --- | --- | --- | --- | --- |
+| `/forms` | `npm run ci:forms-postgres` | `npm run test:partial-gate-preflights` | `npm run test:admin-contract-source` | Forms Postgres Contract workflow against a disposable migrated Supabase/Postgres database |
+| Frontend manifest/OpenAPI/SDK APIs | `npm run ci:sdk-postgres-smoke` | `npm run test:partial-gate-preflights` | `npm run test:admin-contract-source` | SDK Postgres Smoke workflow against the same disposable migrated Supabase/Postgres target |
+| `/settings` and Settings admin APIs | `npm run ci:settings-provider-certification` | `npm run test:partial-gate-preflights` | `npm run test:admin-contract-source` | Settings provider workflow or `certify_settings_providers` with selected storage, Vercel, notification, and provider-family inputs |
+| `/products` and `/orders` | `npm run ci:commerce-provider-certification` | `npm run test:partial-gate-preflights` | `npm run test:admin-contract-source` | Commerce provider workflow or `certify_commerce_providers` with selected payment, tax, shipping, catalog, subscription, and webhook provider inputs |
 
 Before running the external gates, use the non-secret readiness doctor to see which database, Settings, and Commerce credential groups are configured or missing. The manual certification workflows run it with `BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1` so missing requested credential groups fail before the live database/provider gates. Its JSON also includes `partialGateMap`, the current Partial row to local gate, local preflight/guard command, aggregate preflight, admin source guard, workflow, and input-family map:
 
