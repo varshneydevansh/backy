@@ -369,7 +369,11 @@ assert(
   audit.includes('Supabase RLS, named policies, indexes, and interactive-component constraints') &&
     audit.includes('collection, reusable-section, form, contact, comment, media folder, media version, cache invalidation, and interactive component contract tables') &&
     audit.includes('media/forms/interactive-component coverage families') &&
-    audit.includes('non-secret database credential boundary'),
+    audit.includes('non-secret database credential boundary') &&
+    audit.includes('SDK certification gate wording update') &&
+    audit.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke') &&
+    audit.includes('test:sdk-postgres-disposable-guard') &&
+    audit.includes('public manifest, OpenAPI, render, media, CMS, forms, comments, events, commerce, and interactive-component service-data verification'),
   'Page completion audit must document the SDK Postgres preflight coverage.',
 );
 
