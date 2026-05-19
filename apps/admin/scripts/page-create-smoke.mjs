@@ -1797,6 +1797,21 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { width: 500, height: 42 }"),
     'About page starter must seed explicit tablet/mobile responsive overrides for story and value sections.',
   );
+  assert(
+    source.includes("id: 'contact-heading'") &&
+      source.includes("mobile: { x: 24, y: 64, width: 327, height: 100, props: { fontSize: 34 } }") &&
+      source.includes("id: 'contact-copy'") &&
+      source.includes("mobile: { x: 26, y: 190, width: 323, height: 128, props: { fontSize: 16 } }") &&
+      source.includes("id: 'contact-form-card'") &&
+      source.includes("tablet: { x: 54, y: 320, width: 660, height: 430 }") &&
+      source.includes("id: 'contact-name'") &&
+      source.includes("mobile: { width: 279 }") &&
+      source.includes("id: 'contact-message'") &&
+      source.includes("mobile: { width: 279, height: 130 }") &&
+      source.includes("id: 'contact-submit'") &&
+      source.includes("mobile: { y: 342, width: 180, height: 48 }"),
+    'Contact page starter must seed explicit tablet/mobile responsive overrides for contact copy and form fields.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

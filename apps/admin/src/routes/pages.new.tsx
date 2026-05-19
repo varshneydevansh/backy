@@ -10297,12 +10297,20 @@ function buildTemplateElements(input: {
                 width: 520,
                 height: 70,
                 props: { content: title, level: 'h1', fontSize: 46, fontWeight: '800', color: '#111827' },
+                responsive: {
+                    tablet: { x: 54, y: 72, width: 520, height: 70, props: { fontSize: 42 } },
+                    mobile: { x: 24, y: 64, width: 327, height: 100, props: { fontSize: 34 } },
+                },
             }),
             createCanvasElement('paragraph', 74, 158, {
                 id: 'contact-copy',
                 width: 500,
                 height: 100,
                 props: { content: description, fontSize: 18, lineHeight: 1.6, color: '#475569' },
+                responsive: {
+                    tablet: { x: 56, y: 166, width: 500, height: 100, props: { fontSize: 16 } },
+                    mobile: { x: 26, y: 190, width: 323, height: 128, props: { fontSize: 16 } },
+                },
             }),
             createCanvasElement('form', 680, 72, {
                 id: 'contact-form-card',
@@ -10328,11 +10336,50 @@ function buildTemplateElements(input: {
                     borderWidth: 1,
                     borderStyle: 'solid',
                 },
+                responsive: {
+                    tablet: { x: 54, y: 320, width: 660, height: 430 },
+                    mobile: { x: 24, y: 370, width: 327, height: 460 },
+                },
                 children: [
-                    createCanvasElement('input', 24, 30, { id: 'contact-name', width: 360, height: 54, props: { label: 'Name', name: 'name', placeholder: 'Your name', required: true } }),
-                    createCanvasElement('input', 24, 104, { id: 'contact-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
-                    createCanvasElement('textarea', 24, 180, { id: 'contact-message', width: 360, height: 110, props: { label: 'Message', name: 'message', placeholder: 'Tell us what you need', required: true } }),
-                    createCanvasElement('button', 24, 326, { id: 'contact-submit', width: 170, height: 48, props: { label: 'Send message', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                    createCanvasElement('input', 24, 30, {
+                        id: 'contact-name',
+                        width: 360,
+                        height: 54,
+                        props: { label: 'Name', name: 'name', placeholder: 'Your name', required: true },
+                        responsive: {
+                            tablet: { width: 560 },
+                            mobile: { width: 279 },
+                        },
+                    }),
+                    createCanvasElement('input', 24, 104, {
+                        id: 'contact-email',
+                        width: 360,
+                        height: 54,
+                        props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                        responsive: {
+                            tablet: { width: 560 },
+                            mobile: { width: 279 },
+                        },
+                    }),
+                    createCanvasElement('textarea', 24, 180, {
+                        id: 'contact-message',
+                        width: 360,
+                        height: 110,
+                        props: { label: 'Message', name: 'message', placeholder: 'Tell us what you need', required: true },
+                        responsive: {
+                            tablet: { width: 560, height: 110 },
+                            mobile: { width: 279, height: 130 },
+                        },
+                    }),
+                    createCanvasElement('button', 24, 326, {
+                        id: 'contact-submit',
+                        width: 170,
+                        height: 48,
+                        props: { label: 'Send message', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '700' },
+                        responsive: {
+                            mobile: { y: 342, width: 180, height: 48 },
+                        },
+                    }),
                 ],
             }),
         ]);
