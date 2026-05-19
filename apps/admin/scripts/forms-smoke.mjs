@@ -66,6 +66,14 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('Change the submission search or status filter to review more entries for this form.'), 'Forms submission filter empty state must explain filter recovery');
   assert(source.includes('cloneForm,') && source.includes('handleCloneSelectedForm') && source.includes('data-testid="form-clone-button"'), 'Forms page must expose a selected-form clone action');
   assert(source.includes('setIsCloningForm(true)') && source.includes("isActive: false") && source.includes('cloned as an inactive form.'), 'Forms clone action must create inactive clones with busy and notice states');
+  assert(
+    source.includes('duplicateFormDraftField') &&
+      source.includes('getUniqueFormDraftFieldKey') &&
+      source.includes('data-testid="form-field-duplicate-button"') &&
+      source.includes("label: `${field.label || 'Field'} copy`") &&
+      source.includes('validation: field.validation ? field.validation.map((rule) => ({ ...rule })) : undefined'),
+    'Forms builder must expose duplicate field controls that preserve field configuration with a unique key',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',

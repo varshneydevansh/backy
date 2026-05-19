@@ -1674,18 +1674,40 @@ function FormsRoute() {
     setFormDraft((current) => {
       if (!current) return current;
       const nextNumber = current.fields.length + 1;
+      const nextKey = getUniqueFormDraftFieldKey(current.fields, `field_${nextNumber}`);
       return {
         ...current,
         fields: [
           ...current.fields,
           {
-            key: `field_${nextNumber}`,
+            key: nextKey,
             label: `Field ${nextNumber}`,
             type: 'text',
             required: false,
           },
         ],
       };
+    });
+  };
+
+  const duplicateFormDraftField = (fieldIndex: number) => {
+    if (!canEditForms) return;
+    setFormDraft((current) => {
+      if (!current) return current;
+      const field = current.fields[fieldIndex];
+      if (!field) return current;
+
+      const duplicateKey = getUniqueFormDraftFieldKey(current.fields, `${field.key || 'field'}_copy`);
+      const duplicateField: FormFieldDefinition = {
+        ...field,
+        key: duplicateKey,
+        label: `${field.label || 'Field'} copy`,
+        options: field.options ? [...field.options] : undefined,
+        validation: field.validation ? field.validation.map((rule) => ({ ...rule })) : undefined,
+      };
+      const fields = [...current.fields];
+      fields.splice(fieldIndex + 1, 0, duplicateField);
+      return { ...current, fields };
     });
   };
 
@@ -4009,6 +4031,18 @@ function FormsRoute() {
                                     <Button
                                       size="sm"
                                       variant="outline"
+                                      onClick={() => duplicateFormDraftField(fieldIndex)}
+                                      disabled={!canEditForms}
+                                      title={!canEditForms ? editPermissionTitle : undefined}
+                                      iconStart={<Copy className="size-4" />}
+                                      aria-label={`Duplicate ${field.label}`}
+                                      data-testid="form-field-duplicate-button"
+                                    >
+                                      Duplicate
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
                                       onClick={() => moveFormDraftField(fieldIndex, -1)}
                                       disabled={fieldIndex === 0}
                                       aria-label={`Move ${field.label} up`}
@@ -5057,6 +5091,20 @@ const normalizeFieldKey = (value: string): string => (
     .replace(/[\s-]+/g, '_')
     .replace(/^_+|_+$/g, '')
 );
+
+const getUniqueFormDraftFieldKey = (fields: FormFieldDefinition[], baseKey: string): string => {
+  const usedKeys = new Set(fields.map((field) => normalizeFieldKey(field.key)).filter(Boolean));
+  const normalizedBase = normalizeFieldKey(baseKey) || `field_${fields.length + 1}`;
+  let candidate = normalizedBase;
+  let index = 2;
+
+  while (usedKeys.has(candidate)) {
+    candidate = `${normalizedBase}_${index}`;
+    index += 1;
+  }
+
+  return candidate;
+};
 
 const parseOptionsText = (value: string): string[] | undefined => {
   const options = value.split(',').map((option) => option.trim()).filter(Boolean);
