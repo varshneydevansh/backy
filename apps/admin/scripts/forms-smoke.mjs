@@ -148,6 +148,14 @@ const assertFormsPersistenceCertificationSource = () => {
     'Forms builder must persist only current contact-share field references and keep email dedupe tied to an email mapping',
   );
   assert(
+    source.includes('buildSampleContactShareOverride') &&
+      source.includes('const contactShareOverride = buildSampleContactShareOverride(form)') &&
+      source.includes('const contactShareOverride = buildSampleContactShareOverride(template)') &&
+      source.includes('const hasIdentityMapping = Boolean(contactShare?.nameField || contactShare?.emailField || contactShare?.phoneField)') &&
+      source.includes('dedupeByEmail: contactShare.dedupeByEmail'),
+    'Forms handoff sample payloads must use normalized contact-share overrides with usable identity mappings',
+  );
+  assert(
     source.includes('data-testid="form-field-default-value-input"') &&
       source.includes('onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}') &&
       source.includes('placeholder={field.options?.[0] || field.placeholder ||') &&

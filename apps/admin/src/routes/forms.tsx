@@ -6018,23 +6018,39 @@ const isConsentGranted = (value: unknown): boolean => (
   (typeof value === 'string' && ['true', '1', 'yes', 'on', 'accepted', 'agree', 'agreed'].includes(value.trim().toLowerCase()))
 );
 
-const buildSampleSubmissionPayload = (form: FormDefinition) => ({
-  values: Object.fromEntries(form.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
-  requestId: `web-${form.id}-request`,
-  startedAt: Date.now() - 8000,
-  ...(form.pageId ? { pageId: form.pageId } : {}),
-  ...(form.postId ? { postId: form.postId } : {}),
-  ...(form.contactShare?.enabled ? {
-    contactShareOverride: {
-      enabled: true,
-      nameField: form.contactShare.nameField,
-      emailField: form.contactShare.emailField,
-      phoneField: form.contactShare.phoneField,
-      notesField: form.contactShare.notesField,
-      dedupeByEmail: form.contactShare.dedupeByEmail,
-    },
-  } : {}),
-});
+const buildSampleContactShareOverride = (
+  form: Pick<FormDefinition, 'contactShare' | 'fields'>,
+): Record<string, unknown> | undefined => {
+  const contactShare = normalizeFormContactShare(form.contactShare, form.fields);
+  const hasIdentityMapping = Boolean(contactShare?.nameField || contactShare?.emailField || contactShare?.phoneField);
+  if (!contactShare?.enabled || !hasIdentityMapping) return undefined;
+
+  return {
+    enabled: true,
+    ...(contactShare.nameField ? { nameField: contactShare.nameField } : {}),
+    ...(contactShare.emailField ? { emailField: contactShare.emailField } : {}),
+    ...(contactShare.phoneField ? { phoneField: contactShare.phoneField } : {}),
+    ...(contactShare.notesField ? { notesField: contactShare.notesField } : {}),
+    dedupeByEmail: contactShare.dedupeByEmail,
+  };
+};
+
+const buildSampleSubmissionPayload = (form: FormDefinition) => {
+  const contactShareOverride = buildSampleContactShareOverride(form);
+
+  return {
+    values: Object.fromEntries(form.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
+    requestId: `web-${form.id}-request`,
+    startedAt: Date.now() - 8000,
+    ...(form.pageId ? { pageId: form.pageId } : {}),
+    ...(form.postId ? { postId: form.postId } : {}),
+    ...(contactShareOverride ? {
+      contactShareOverride: {
+        ...contactShareOverride,
+      },
+    } : {}),
+  };
+};
 
 const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown => {
   const type = normalizeFormFieldType(field.type);
@@ -6054,7 +6070,7 @@ const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown 
       return 'https://example.com';
     case 'select':
     case 'radio':
-      return field.options?.[0] || 'Option 1';
+      return normalizeFormFieldOptions(field.options)?.[0] || 'Option 1';
     case 'checkbox':
       return field.required ? true : false;
     case 'textarea':
@@ -6067,10 +6083,12 @@ const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown 
 };
 
 function buildTemplateManifest(template: FormTemplateBlueprint) {
+  const contactShareOverride = buildSampleContactShareOverride(template);
   const samplePayload = {
     values: Object.fromEntries(template.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
     requestId: `web-${template.id}-request`,
     startedAt: Date.now() - 8000,
+    ...(contactShareOverride ? { contactShareOverride } : {}),
   };
 
   return {
