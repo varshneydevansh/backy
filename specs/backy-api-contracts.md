@@ -627,6 +627,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `GET /api/admin/sites/:siteId/blog?status=&limit=&offset=`
   - Current implementation returns `{ success, requestId, data: { posts, pagination } }` and includes unpublished posts for admin use.
   - Admin blog list/detail/readiness/revision/author/taxonomy reads require `pages.view`; post/category/tag create and update plus archive/rollback require `pages.edit`; publish and preview-token creation require `pages.publish`; deletes require `pages.delete`.
+  - Invalid admin blog list filters return explicit `400` errors instead of silently widening or clamping the query: `INVALID_BLOG_STATUS`, `INVALID_BLOG_LIMIT`, or `INVALID_BLOG_OFFSET`.
 
 - `POST /api/admin/sites/:siteId/blog`
   - Body: `{ title, slug?, excerpt?, status?, content?, meta?, featuredImageId?, authorId?, categoryIds?, tagIds?, scheduledAt? }`

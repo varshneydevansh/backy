@@ -310,6 +310,10 @@ function assertAdminPageContentValidationSource() {
     assert(source.includes('postStatusValidationError'), `${label} route must validate status and schedule payloads before mutation`);
     assert(source.includes('Number.isFinite(width)') && source.includes('Number.isFinite(height)'), `${label} route must require finite canvas dimensions`);
   }
+  assert(blogListRoute.includes('"INVALID_BLOG_LIMIT"'), 'admin blog list route must reject invalid limit filters');
+  assert(blogListRoute.includes('"INVALID_BLOG_OFFSET"'), 'admin blog list route must reject invalid offset filters');
+  assert(blogListRoute.includes('integerQueryFromInput'), 'admin blog list route must parse pagination filters strictly');
+  assert(blogListRoute.includes('statusFilter.invalid'), 'admin blog list route must reject invalid status filters');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -320,6 +324,8 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_BLOG_CONTENT_ELEMENTS') &&
       apiContracts.includes('INVALID_BLOG_CANVAS_SIZE') &&
       apiContracts.includes('INVALID_BLOG_STATUS') &&
+      apiContracts.includes('INVALID_BLOG_LIMIT') &&
+      apiContracts.includes('INVALID_BLOG_OFFSET') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
     'API contracts must document invalid admin page/blog editor content and status errors',
   );

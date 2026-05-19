@@ -85,17 +85,25 @@ const normalizeSlug = (value: unknown): string =>
         .replace(/^-+|-+$/g, "")
     : "";
 
-const parseStatusFilter = (value: string | null) => {
+type BlogStatus = "draft" | "published" | "scheduled" | "archived";
+
+const parseStatusFilter = (
+  value: string | null,
+): { status?: BlogStatus; invalid?: string } => {
+  if (value === null || value.trim() === "") {
+    return {};
+  }
+
   if (
     value === "draft" ||
     value === "published" ||
     value === "scheduled" ||
     value === "archived"
   ) {
-    return value;
+    return { status: value };
   }
 
-  return undefined;
+  return { invalid: value };
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -261,6 +269,28 @@ const postStatusValidationError = (
   return null;
 };
 
+const integerQueryFromInput = (
+  value: string | null,
+  fallback: number,
+  min: number,
+  max?: number,
+): { value: number; invalid?: string } => {
+  if (value === null || value.trim() === "") {
+    return { value: fallback };
+  }
+
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < min ||
+    (max !== undefined && parsed > max)
+  ) {
+    return { value: fallback, invalid: value };
+  }
+
+  return { value: parsed };
+};
+
 const adminPostFromRepositoryPost = (post: BackyPost) => {
   const canvasSize = isRecord(post.content.metadata?.canvasSize)
     ? post.content.metadata.canvasSize
@@ -341,6 +371,44 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    const statusFilter = parseStatusFilter(searchParams.get("status"));
+    if (statusFilter.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_BLOG_STATUS",
+        "Invalid blog status filter. Use draft, published, scheduled, or archived.",
+        requestId,
+      );
+    }
+    const limitFilter = integerQueryFromInput(
+      searchParams.get("limit"),
+      50,
+      1,
+      100,
+    );
+    if (limitFilter.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_BLOG_LIMIT",
+        "Invalid blog limit. Use an integer from 1 to 100.",
+        requestId,
+      );
+    }
+    const offsetFilter = integerQueryFromInput(
+      searchParams.get("offset"),
+      0,
+      0,
+    );
+    if (offsetFilter.invalid) {
+      return errorResponse(
+        400,
+        "INVALID_BLOG_OFFSET",
+        "Invalid blog offset. Use an integer greater than or equal to 0.",
+        requestId,
+      );
+    }
+    const limit = limitFilter.value;
+    const offset = offsetFilter.value;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site =
@@ -356,15 +424,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const limit = Math.max(
-        1,
-        Math.min(100, Number(searchParams.get("limit") || 50)),
-      );
-      const offset = Math.max(0, Number(searchParams.get("offset") || 0));
       const payload = await repositories.posts.list({
         siteId: site.id,
         includeUnpublished: true,
-        status: parseStatusFilter(searchParams.get("status")) || "all",
+        status: statusFilter.status || "all",
         categoryId: searchParams.get("categoryId") || undefined,
         tagId: searchParams.get("tagId") || undefined,
         authorId: searchParams.get("authorId") || undefined,
@@ -388,15 +451,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const limit = Math.max(
-      1,
-      Math.min(100, Number(searchParams.get("limit") || 50)),
-    );
-    const offset = Math.max(0, Number(searchParams.get("offset") || 0));
-    const status = parseStatusFilter(searchParams.get("status"));
     const payload = getBlogPosts(site.id, {
       includeUnpublished: true,
-      status,
+      status: statusFilter.status,
       categoryId: searchParams.get("categoryId") || undefined,
       categorySlug: searchParams.get("categorySlug") || undefined,
       tagId: searchParams.get("tagId") || undefined,
