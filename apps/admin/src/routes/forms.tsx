@@ -5730,6 +5730,11 @@ const normalizeFrontendFieldType = (value: unknown): FormFieldType => {
   return normalizeFormFieldType(type);
 };
 
+interface FrontendTemplateFieldsImport {
+  fields: FormFieldDefinition[];
+  fieldKeyAliases: Map<string, string>;
+}
+
 const getUniqueFrontendTemplateFieldKey = (usedKeys: Set<string>, baseKey: string, index: number): string => {
   const normalizedBase = normalizeFieldKey(baseKey) || `field_${index + 1}`;
   let candidate = normalizedBase;
@@ -5744,12 +5749,36 @@ const getUniqueFrontendTemplateFieldKey = (usedKeys: Set<string>, baseKey: strin
   return candidate;
 };
 
-const normalizeFrontendTemplateField = (value: unknown, index: number, usedKeys: Set<string>): FormFieldDefinition | null => {
+const addFrontendTemplateFieldKeyAlias = (
+  fieldKeyAliases: Map<string, string>,
+  value: string | undefined,
+  normalizedKey: string,
+) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return;
+
+  [trimmed, normalizeFieldKey(trimmed)].filter(Boolean).forEach((alias) => {
+    if (!fieldKeyAliases.has(alias)) {
+      fieldKeyAliases.set(alias, normalizedKey);
+    }
+  });
+};
+
+const normalizeFrontendTemplateField = (
+  value: unknown,
+  index: number,
+  usedKeys: Set<string>,
+  fieldKeyAliases: Map<string, string>,
+  sourceKey?: string,
+): FormFieldDefinition | null => {
   const record = isPlainRecord(value) ? value : {};
   const label = optionalStringFromRecord(record, 'label') || optionalStringFromRecord(record, 'name') || `Field ${index + 1}`;
+  const recordKey = optionalStringFromRecord(record, 'key');
+  const recordId = optionalStringFromRecord(record, 'id');
+  const recordName = optionalStringFromRecord(record, 'name');
   const key = getUniqueFrontendTemplateFieldKey(
     usedKeys,
-    optionalStringFromRecord(record, 'key') || optionalStringFromRecord(record, 'id') || label,
+    recordKey || recordId || sourceKey || label,
     index,
   );
   const type = normalizeFrontendFieldType(record.type);
@@ -5784,30 +5813,39 @@ const normalizeFrontendTemplateField = (value: unknown, index: number, usedKeys:
   if (options) field.options = options;
   if (validation) field.validation = validation;
 
+  [sourceKey, recordKey, recordId, recordName, label].forEach((alias) => {
+    addFrontendTemplateFieldKeyAlias(fieldKeyAliases, alias, key);
+  });
+
   return field;
 };
 
-const frontendTemplateFieldsFromContent = (content: Record<string, unknown> | undefined): FormFieldDefinition[] => {
+const frontendTemplateFieldsFromContent = (content: Record<string, unknown> | undefined): FrontendTemplateFieldsImport => {
   const fieldsInput = content?.fields || content?.formFields || content?.schema;
   const usedKeys = new Set<string>();
+  const fieldKeyAliases = new Map<string, string>();
 
   if (Array.isArray(fieldsInput)) {
-    return fieldsInput
-      .map((field, index) => normalizeFrontendTemplateField(field, index, usedKeys))
+    const fields = fieldsInput
+      .map((field, index) => normalizeFrontendTemplateField(field, index, usedKeys, fieldKeyAliases))
       .filter((field): field is FormFieldDefinition => Boolean(field));
+    return { fields, fieldKeyAliases };
   }
 
   if (isPlainRecord(fieldsInput)) {
-    return Object.entries(fieldsInput)
+    const fields = Object.entries(fieldsInput)
       .map(([key, value], index) => normalizeFrontendTemplateField(
         isPlainRecord(value) ? { key, ...value } : { key, label: key, type: value },
         index,
         usedKeys,
+        fieldKeyAliases,
+        key,
       ))
       .filter((field): field is FormFieldDefinition => Boolean(field));
+    return { fields, fieldKeyAliases };
   }
 
-  return [];
+  return { fields: [], fieldKeyAliases };
 };
 
 const defaultFrontendTemplateFields = (): FormFieldDefinition[] => [
@@ -5816,20 +5854,47 @@ const defaultFrontendTemplateFields = (): FormFieldDefinition[] => [
   { key: 'message', label: 'Message', type: 'textarea', required: false, placeholder: 'How can we help?' },
 ];
 
+const remapFrontendTemplateFieldReference = (
+  value: string | undefined,
+  fieldKeyAliases: Map<string, string>,
+): string | undefined => {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return fieldKeyAliases.get(trimmed) || fieldKeyAliases.get(normalizeFieldKey(trimmed)) || trimmed;
+};
+
+const remapFrontendTemplateFieldMap = (
+  value: unknown,
+  fieldKeyAliases: Map<string, string>,
+): Record<string, string> | undefined => {
+  if (!isPlainRecord(value)) return undefined;
+
+  const entries = Object.entries(value).flatMap(([sourceField, targetField]) => {
+    if (typeof targetField !== 'string') return [];
+
+    const remappedSource = remapFrontendTemplateFieldReference(sourceField, fieldKeyAliases);
+    const normalizedTarget = targetField.trim();
+    return remappedSource && normalizedTarget ? [[remappedSource, normalizedTarget]] : [];
+  });
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
+
 const inferFrontendTemplateContactShare = (
   fields: FormFieldDefinition[],
+  fieldKeyAliases: Map<string, string>,
   content: Record<string, unknown> | undefined,
 ): FormDefinition['contactShare'] => {
   const configured = isPlainRecord(content?.contactShare) ? content.contactShare : undefined;
   if (configured?.enabled === false) return { enabled: false };
 
-  const nameField = optionalStringFromRecord(configured, 'nameField')
+  const nameField = remapFrontendTemplateFieldReference(optionalStringFromRecord(configured, 'nameField'), fieldKeyAliases)
     || fields.find((field) => ['name', 'full_name', 'fullName'].includes(field.key))?.key;
-  const emailField = optionalStringFromRecord(configured, 'emailField')
+  const emailField = remapFrontendTemplateFieldReference(optionalStringFromRecord(configured, 'emailField'), fieldKeyAliases)
     || fields.find((field) => field.type === 'email' || field.key.includes('email'))?.key;
-  const phoneField = optionalStringFromRecord(configured, 'phoneField')
+  const phoneField = remapFrontendTemplateFieldReference(optionalStringFromRecord(configured, 'phoneField'), fieldKeyAliases)
     || fields.find((field) => field.type === 'tel' || field.key.includes('phone'))?.key;
-  const notesField = optionalStringFromRecord(configured, 'notesField')
+  const notesField = remapFrontendTemplateFieldReference(optionalStringFromRecord(configured, 'notesField'), fieldKeyAliases)
     || fields.find((field) => field.type === 'textarea' || ['message', 'notes'].includes(field.key))?.key;
 
   if (!emailField && !phoneField) {
@@ -5848,6 +5913,7 @@ const inferFrontendTemplateContactShare = (
 
 const inferFrontendTemplateCollectionTarget = (
   fields: FormFieldDefinition[],
+  fieldKeyAliases: Map<string, string>,
   content: Record<string, unknown> | undefined,
 ): FormDefinition['collectionTarget'] => {
   const configured = isPlainRecord(content?.collectionTarget) ? content.collectionTarget : undefined;
@@ -5857,23 +5923,22 @@ const inferFrontendTemplateCollectionTarget = (
   return normalizeFormCollectionTarget({
     enabled: true,
     collectionId,
-    fieldMap: isPlainRecord(configured.fieldMap)
-      ? Object.fromEntries(Object.entries(configured.fieldMap).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
-      : undefined,
-    slugField: optionalStringFromRecord(configured, 'slugField'),
+    fieldMap: remapFrontendTemplateFieldMap(configured.fieldMap, fieldKeyAliases),
+    slugField: remapFrontendTemplateFieldReference(optionalStringFromRecord(configured, 'slugField'), fieldKeyAliases),
   }, fields);
 };
 
 const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate): FormTemplateBlueprint => {
   const content = isPlainRecord(template.content) ? template.content : undefined;
-  const fields = frontendTemplateFieldsFromContent(content);
+  const fieldImport = frontendTemplateFieldsFromContent(content);
+  const fields = fieldImport.fields;
   const normalizedFields = fields.length > 0 ? fields : defaultFrontendTemplateFields();
   const pageTemplate = optionalStringFromRecord(content, 'pageTemplate');
   const contactShare = normalizeFormContactShare(
-    inferFrontendTemplateContactShare(normalizedFields, content),
+    inferFrontendTemplateContactShare(normalizedFields, fieldImport.fieldKeyAliases, content),
     normalizedFields,
   );
-  const collectionTarget = inferFrontendTemplateCollectionTarget(normalizedFields, content);
+  const collectionTarget = inferFrontendTemplateCollectionTarget(normalizedFields, fieldImport.fieldKeyAliases, content);
 
   return {
     id: `frontend-${normalizeFieldKey(template.id) || 'form'}`,

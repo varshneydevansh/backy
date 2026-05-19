@@ -229,9 +229,16 @@ const assertFormsPersistenceCertificationSource = () => {
     source.includes('frontendTemplateValidationRequiresField') &&
       source.includes('frontendTemplateValidationRequiresField(record.validation)') &&
       source.includes('getUniqueFrontendTemplateFieldKey') &&
+      source.includes('FrontendTemplateFieldsImport') &&
+      source.includes('addFrontendTemplateFieldKeyAlias') &&
+      source.includes('fieldKeyAliases.set(alias, normalizedKey)') &&
       source.includes('usedKeys.add(candidate)') &&
       source.includes('const usedKeys = new Set<string>()') &&
-      source.includes('normalizeFrontendTemplateField(field, index, usedKeys)') &&
+      source.includes('const fieldKeyAliases = new Map<string, string>()') &&
+      source.includes('normalizeFrontendTemplateField(field, index, usedKeys, fieldKeyAliases)') &&
+      source.includes('remapFrontendTemplateFieldReference') &&
+      source.includes('remapFrontendTemplateFieldMap') &&
+      source.includes('fieldMap: remapFrontendTemplateFieldMap(configured.fieldMap, fieldKeyAliases)') &&
       source.includes('const validation = normalizeValidationRules({') &&
       source.includes("validation: Array.isArray(record.validation)") &&
       source.includes("const ruleRecord = isPlainRecord(rule) ? rule : null") &&
@@ -239,7 +246,7 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("definition.valueMode === 'number'") &&
       source.includes('const contactShare = normalizeFormContactShare(') &&
       source.includes('return normalizeFormCollectionTarget({') &&
-      source.includes('inferFrontendTemplateCollectionTarget(normalizedFields, content)') &&
+      source.includes('inferFrontendTemplateCollectionTarget(normalizedFields, fieldImport.fieldKeyAliases, content)') &&
       source.includes('contactShare: contactShare?.enabled ? contactShare : undefined') &&
       source.includes('collectionTarget: collectionTarget?.enabled ? collectionTarget : undefined'),
     'Frontend design form templates must normalize imported field validation and routing before creating backend forms',
