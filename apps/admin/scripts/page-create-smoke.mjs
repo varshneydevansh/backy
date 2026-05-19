@@ -1444,6 +1444,21 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 390, width: 660, height: 210 }"),
     'Booking page starter must seed explicit tablet/mobile responsive overrides for appointment and intake sections.',
   );
+  assert(
+    source.includes("id: 'portfolio-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 650 }") &&
+      source.includes("id: 'portfolio-featured-card'") &&
+      source.includes("mobile: { x: 24, y: 390, width: 327, height: 190 }") &&
+      source.includes("id: 'portfolio-gallery-section'") &&
+      source.includes("tablet: { y: 500, width: 768, height: 1180 }") &&
+      source.includes("id: 'portfolio-category-filter'") &&
+      source.includes("mobile: { x: 24, y: 100, width: 327, height: 108 }") &&
+      source.includes("id: `portfolio-project-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 242 + index * 338, width: 327, height: 312 }") &&
+      source.includes("id: 'portfolio-inquiry-section'") &&
+      source.includes("mobile: { y: 1910, width: 375, height: 390 }"),
+    'Portfolio page starter must seed explicit tablet/mobile responsive overrides for project gallery sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

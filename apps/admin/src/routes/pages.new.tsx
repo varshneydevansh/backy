@@ -5493,24 +5493,40 @@ function buildTemplateElements(input: {
                 height: 350,
                 dataBindings: [{ source: 'portfolio', mode: 'overview', fields: ['projects', 'categories', 'featuredProject', 'mediaAssets'] }],
                 props: { backgroundColor: '#ecfeff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 500 },
+                    mobile: { width: 375, height: 650 },
+                },
                 children: [
                     createCanvasElement('text', 74, 58, {
                         id: 'portfolio-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Portfolio', fontSize: 13, fontWeight: '800', color: '#0e7490', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 200 },
+                            mobile: { x: 24, y: 44, width: 180 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 96, {
                         id: 'portfolio-heading',
                         width: 640,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 86, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 80, width: 327, height: 124, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 214, {
                         id: 'portfolio-copy',
                         width: 580,
                         height: 70,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 198, width: 500, height: 86, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 222, width: 323, height: 112, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 760, 82, {
                         id: 'portfolio-featured-card',
@@ -5518,6 +5534,10 @@ function buildTemplateElements(input: {
                         height: 200,
                         dataBindings: [{ source: 'portfolio', mode: 'featured-project', fields: ['title', 'summary', 'coverImage', 'outcome'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#a5f3fc', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 318, width: 360, height: 156 },
+                            mobile: { x: 24, y: 390, width: 327, height: 190 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 22, {
                                 id: 'portfolio-featured-label',
@@ -5531,6 +5551,10 @@ function buildTemplateElements(input: {
                                 height: 52,
                                 props: { content: 'Selected project title', level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'portfolio', mode: 'featured-project', field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { width: 280, height: 34 },
+                                    mobile: { width: 250, height: 52 },
+                                },
                             }),
                             createCanvasElement('paragraph', 24, 120, {
                                 id: 'portfolio-featured-copy',
@@ -5538,6 +5562,10 @@ function buildTemplateElements(input: {
                                 height: 44,
                                 props: { content: 'Bind outcomes, project notes, and cover media from Backy project records.', fontSize: 13, lineHeight: 1.45, color: '#4b5563' },
                                 dataBindings: [{ source: 'portfolio', mode: 'featured-project', field: 'summary', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { y: 108, width: 280, height: 38 },
+                                    mobile: { width: 260, height: 50 },
+                                },
                             }),
                         ],
                     }),
@@ -5549,12 +5577,20 @@ function buildTemplateElements(input: {
                 height: 560,
                 dataBindings: [{ source: 'portfolio', mode: 'project-list', limit: 6 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 500, width: 768, height: 1180 },
+                    mobile: { y: 650, width: 375, height: 1260 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 52, {
                         id: 'portfolio-gallery-heading',
                         width: 420,
                         height: 42,
                         props: { content: 'Selected work', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     createCanvasElement('box', 720, 48, {
                         id: 'portfolio-category-filter',
@@ -5562,6 +5598,10 @@ function buildTemplateElements(input: {
                         height: 58,
                         dataBindings: [{ source: 'portfolio', mode: 'category-filter', fields: ['all', 'web', 'brand', 'commerce'] }],
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 112, width: 340 },
+                            mobile: { x: 24, y: 100, width: 327, height: 108 },
+                        },
                         children: [
                             createCanvasElement('button', 12, 10, {
                                 id: 'portfolio-filter-all',
@@ -5580,6 +5620,9 @@ function buildTemplateElements(input: {
                                 width: 84,
                                 height: 38,
                                 props: { label: 'Brand', backgroundColor: '#ffffff', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'portfolio.filter.brand' },
+                                responsive: {
+                                    mobile: { x: 12, y: 58, width: 84 },
+                                },
                             }),
                         ],
                     }),
@@ -5593,6 +5636,10 @@ function buildTemplateElements(input: {
                         height: 330,
                         dataBindings: [{ source: 'portfolio', mode: 'project', index }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54 + (index % 2) * 340, y: 204 + Math.floor(index / 2) * 388, width: 300, height: 336 },
+                            mobile: { x: 24, y: 242 + index * 338, width: 327, height: 312 },
+                        },
                         children: [
                             createCanvasElement('box', 18, 18, {
                                 id: `portfolio-project-media-${index}`,
@@ -5600,12 +5647,20 @@ function buildTemplateElements(input: {
                                 height: 146,
                                 dataBindings: [{ source: 'portfolio', mode: 'project', index, field: 'coverImage', targetPath: 'props.media' }],
                                 props: { backgroundColor: index === 1 ? '#cffafe' : '#e0f2fe', borderRadius: 8, borderColor: '#bae6fd', borderWidth: 1, borderStyle: 'solid' },
+                                responsive: {
+                                    tablet: { width: 264, height: 146 },
+                                    mobile: { width: 291, height: 132 },
+                                },
                                 children: [
                                     createCanvasElement('text', 82, 60, {
                                         id: `portfolio-project-media-label-${index}`,
                                         width: 110,
                                         height: 24,
                                         props: { content: 'Project media', fontSize: 13, fontWeight: '800', color: '#0e7490', textAlign: 'center' },
+                                        responsive: {
+                                            tablet: { x: 77 },
+                                            mobile: { x: 90, y: 54 },
+                                        },
                                     }),
                                 ],
                             }),
@@ -5622,12 +5677,18 @@ function buildTemplateElements(input: {
                                 height: 32,
                                 props: { content: project.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#111827' },
                                 dataBindings: [{ source: 'portfolio', mode: 'project', index, field: 'title', targetPath: 'props.content' }],
+                                responsive: {
+                                    mobile: { y: 208, width: 240 },
+                                },
                             }),
                             createCanvasElement('button', 22, 276, {
                                 id: `portfolio-project-button-${index}`,
                                 width: 132,
                                 height: 40,
                                 props: { label: 'View case', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '800', action: 'portfolio.case.open' },
+                                responsive: {
+                                    mobile: { y: 258 },
+                                },
                             }),
                         ],
                     })),
@@ -5639,24 +5700,40 @@ function buildTemplateElements(input: {
                 height: 270,
                 dataBindings: [{ source: 'portfolio', mode: 'inquiry', fields: ['contactUrl', 'services', 'availability'] }],
                 props: { backgroundColor: '#0f172a', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1680, width: 768, height: 360 },
+                    mobile: { y: 1910, width: 375, height: 390 },
+                },
                 children: [
                     createCanvasElement('heading', 74, 66, {
                         id: 'portfolio-inquiry-heading',
                         width: 520,
                         height: 44,
                         props: { content: 'Start a similar project', level: 'h2', fontSize: 36, fontWeight: '800', color: '#ffffff' },
+                        responsive: {
+                            tablet: { x: 54, y: 58, width: 500 },
+                            mobile: { x: 24, y: 46, width: 327, height: 84, props: { fontSize: 30 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 78, 132, {
                         id: 'portfolio-inquiry-copy',
                         width: 540,
                         height: 58,
                         props: { content: 'Connect this CTA to Backy Forms, services, or a custom frontend route so visitors can request project scope and share media references.', fontSize: 16, lineHeight: 1.55, color: '#cbd5e1' },
+                        responsive: {
+                            tablet: { x: 56, y: 130, width: 520, height: 70 },
+                            mobile: { x: 26, y: 150, width: 323, height: 100 },
+                        },
                     }),
                     createCanvasElement('button', 830, 104, {
                         id: 'portfolio-inquiry-button',
                         width: 178,
                         height: 52,
                         props: { label: 'Request project', backgroundColor: '#06b6d4', color: '#0f172a', borderRadius: 8, fontWeight: '800', action: 'portfolio.inquiry.open' },
+                        responsive: {
+                            tablet: { x: 54, y: 236, width: 178 },
+                            mobile: { x: 24, y: 282, width: 178 },
+                        },
                     }),
                 ],
             }),

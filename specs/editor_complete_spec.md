@@ -543,6 +543,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Pricing starter pages now seed explicit tablet/mobile responsive overrides for the pricing hero, billing toggle, stacked plan cards, comparison table, and FAQ card so commerce pricing layouts carry authored breakpoint behavior into generated pages.
   - Services starter pages now seed explicit tablet/mobile responsive overrides for service filters, stacked service cards, process steps, and the inquiry CTA so booking/service layouts are authored for narrower canvases instead of scaled from desktop.
   - Booking starter pages now seed explicit tablet/mobile responsive overrides for availability summaries, appointment cards, location filters, intake form fields, and provider handoff cards so booking flows remain editable and usable across breakpoints.
+  - Portfolio starter pages now seed explicit tablet/mobile responsive overrides for featured project cards, category filters, project media cards, and inquiry CTAs so project galleries stack predictably on narrower canvases.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 - ✅ Conflict-safe page saves
