@@ -300,8 +300,16 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts', import.meta.url),
     'utf8',
   );
+  const publicFormSubmissionDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/forms/[formId]/submissions/[submissionId]/route.ts', import.meta.url),
+    'utf8',
+  );
   const publicFormContactsRoute = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/forms/[formId]/contacts/route.ts', import.meta.url),
+    'utf8',
+  );
+  const publicFormContactDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/forms/[formId]/contacts/[contactId]/route.ts', import.meta.url),
     'utf8',
   );
   const blogListRoute = fs.readFileSync(
@@ -403,10 +411,14 @@ function assertAdminPageContentValidationSource() {
   assert(publicFormSubmissionsRoute.includes("'INVALID_FORM_SUBMISSION_LIMIT'"), 'form submissions route must reject invalid limit filters');
   assert(publicFormSubmissionsRoute.includes("'INVALID_FORM_SUBMISSION_OFFSET'"), 'form submissions route must reject invalid offset filters');
   assert(publicFormSubmissionsRoute.includes('statusFilter.invalid'), 'form submissions route must branch on invalid status filters');
+  assert(publicFormSubmissionDetailRoute.includes("'INVALID_FORM_SUBMISSION_STATUS'"), 'form submission detail route must reject invalid status updates');
+  assert(publicFormSubmissionDetailRoute.includes('statusProvided'), 'form submission detail route must distinguish missing status from invalid status values');
   assert(publicFormContactsRoute.includes("'INVALID_FORM_CONTACT_STATUS'"), 'form contacts route must reject invalid status filters');
   assert(publicFormContactsRoute.includes("'INVALID_FORM_CONTACT_LIMIT'"), 'form contacts route must reject invalid limit filters');
   assert(publicFormContactsRoute.includes("'INVALID_FORM_CONTACT_OFFSET'"), 'form contacts route must reject invalid offset filters');
   assert(publicFormContactsRoute.includes('statusFilter.invalid'), 'form contacts route must branch on invalid status filters');
+  assert(publicFormContactDetailRoute.includes("'INVALID_FORM_CONTACT_STATUS'"), 'form contact detail route must reject invalid status updates');
+  assert(publicFormContactDetailRoute.includes('statusProvided'), 'form contact detail route must distinguish missing status from invalid status values');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
