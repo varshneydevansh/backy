@@ -649,6 +649,7 @@ includesAll(
     'Release certification readiness doctor',
     'backy.release-certification-doctor.v1',
     'partialGateMap',
+    'current Partial row to local gate, local preflight/guard command, workflow, and input-family map',
     'external admin failures',
     'ci:forms-postgres',
     'ci:sdk-postgres-smoke',
@@ -660,6 +661,14 @@ includesAll(
     'Settings release schema handoff guard',
     'backy.settings-provider-certification-handoff.v1',
     '39 Ready / 6 Partial / 0 Prototype / 0 Missing',
+  ],
+  'Backy release certification audit evidence',
+);
+
+excludesAll(
+  audit,
+  [
+    'current Partial row to local gate/workflow/input-family map',
   ],
   'Backy release certification audit evidence',
 );
