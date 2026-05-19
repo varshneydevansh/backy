@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -202,6 +202,13 @@ const TEMPLATE_OPTIONS: Array<{
         desc: 'Cookie categories, consent controls, analytics notes, marketing pixels, retention, and preferences CTA.',
         detail: 'Creates a public cookie policy page ready to bind consent settings, cookie categories, retention notes, and preference-management actions.',
         sections: ['Cookie hero', 'Category sections', 'Preferences action'],
+    },
+    {
+        id: 'accessibility-statement',
+        name: 'Accessibility statement',
+        desc: 'Accessibility commitment, standards, supported features, known limitations, and feedback CTA.',
+        detail: 'Creates a public accessibility statement ready to bind site standards, assistive-technology support, limitation notes, and feedback actions.',
+        sections: ['Access hero', 'Standards sections', 'Feedback action'],
     },
     {
         id: 'refund-policy',
@@ -348,6 +355,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'cookie-policy',
         description: 'A public cookie policy page ready to explain essential, analytics, marketing, and preference cookies with consent controls.',
     },
+    'accessibility-statement': {
+        title: 'Accessibility statement',
+        slug: 'accessibility',
+        description: 'A public accessibility statement ready to explain standards, supported features, known limitations, and feedback options.',
+    },
     'refund-policy': {
         title: 'Refund policy',
         slug: 'refund-policy',
@@ -427,6 +439,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     privacy: 'footer',
     terms: 'footer',
     'cookie-policy': 'footer',
+    'accessibility-statement': 'footer',
     'refund-policy': 'footer',
     'shipping-policy': 'footer',
     cart: 'primary',
@@ -664,6 +677,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     privacy: ['Home', 'Privacy', 'Terms', 'Contact'],
     terms: ['Home', 'Terms', 'Privacy', 'Contact'],
     'cookie-policy': ['Home', 'Cookies', 'Privacy', 'Contact'],
+    'accessibility-statement': ['Home', 'Accessibility', 'Privacy', 'Contact'],
     'refund-policy': ['Home', 'Refunds', 'Terms', 'Contact'],
     'shipping-policy': ['Home', 'Shipping', 'Refunds', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
@@ -772,6 +786,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Essential', x: 8, y: 48, w: 26, h: 28, className: 'border-fuchsia-100 bg-white' },
         { label: 'Analytics', x: 38, y: 48, w: 26, h: 28, className: 'border-fuchsia-100 bg-white' },
         { label: 'Prefs', x: 68, y: 48, w: 24, h: 28, className: 'border-fuchsia-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
+    ],
+    'accessibility-statement': [
+        { label: 'Access', x: 8, y: 14, w: 84, h: 24, className: 'border-indigo-200 bg-indigo-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-indigo-800' },
+        { label: 'WCAG', x: 64, y: 24, w: 20, h: 6, className: 'border-indigo-100 bg-white' },
+        { label: 'Keyboard', x: 8, y: 48, w: 26, h: 28, className: 'border-indigo-100 bg-white' },
+        { label: 'Assistive', x: 38, y: 48, w: 26, h: 28, className: 'border-indigo-100 bg-white' },
+        { label: 'Feedback', x: 68, y: 48, w: 24, h: 28, className: 'border-indigo-100 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     'refund-policy': [
@@ -1869,6 +1892,8 @@ function NewPageRoute() {
                     ? 'Backy legal terms placeholders'
                 : formData.template === 'cookie-policy'
                     ? 'Backy cookie consent placeholders'
+                : formData.template === 'accessibility-statement'
+                    ? 'Backy accessibility statement placeholders'
                 : formData.template === 'refund-policy'
                     ? 'Backy refund policy placeholders'
                 : formData.template === 'shipping-policy'
@@ -1992,7 +2017,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -2042,7 +2067,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4086,6 +4111,8 @@ function buildTemplateElements(input: {
                 ? 'Terms'
             : input.template === 'cookie-policy'
                 ? 'Manage cookies'
+            : input.template === 'accessibility-statement'
+                ? 'Send feedback'
             : input.template === 'refund-policy'
                 ? 'Start return'
             : input.template === 'shipping-policy'
@@ -5563,6 +5590,171 @@ function buildTemplateElements(input: {
                                 width: 178,
                                 height: 40,
                                 props: { label: 'Manage cookies', backgroundColor: '#f5d0fe', color: '#701a75', borderRadius: 8, fontWeight: '800', action: 'cookies.preferences.open' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'accessibility-statement') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'accessibility-statement-hero-section',
+                width: 1200,
+                height: 320,
+                dataBindings: [{ source: 'settings', mode: 'accessibility-statement', fields: ['standard', 'conformanceLevel', 'lastReviewedAt', 'contactEmail'] }],
+                props: { backgroundColor: '#eef2ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'accessibility-statement-kicker',
+                        width: 260,
+                        height: 28,
+                        props: { content: 'Accessibility', fontSize: 13, fontWeight: '800', color: '#4338ca', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'accessibility-statement-heading',
+                        width: 680,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#312e81' },
+                    }),
+                    createCanvasElement('paragraph', 76, 210, {
+                        id: 'accessibility-statement-copy',
+                        width: 620,
+                        height: 64,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4338ca' },
+                    }),
+                    createCanvasElement('box', 790, 86, {
+                        id: 'accessibility-statement-standard-card',
+                        width: 300,
+                        height: 150,
+                        dataBindings: [{ source: 'settings', mode: 'accessibility-standard', fields: ['standard', 'conformanceLevel', 'lastReviewedAt'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#c7d2fe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'accessibility-statement-standard-label',
+                                width: 180,
+                                height: 22,
+                                props: { content: 'Target standard', fontSize: 12, fontWeight: '800', color: '#4338ca', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 60, {
+                                id: 'accessibility-statement-standard-value',
+                                width: 220,
+                                height: 34,
+                                props: { content: 'WCAG 2.2 AA', level: 'h3', fontSize: 24, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'settings', mode: 'accessibility-standard', field: 'standard', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 104, {
+                                id: 'accessibility-statement-standard-copy',
+                                width: 230,
+                                height: 32,
+                                props: { content: 'Bind standards and review dates from site accessibility settings.', fontSize: 13, lineHeight: 1.35, color: '#4338ca' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 320, {
+                id: 'accessibility-statement-support-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'settings', mode: 'accessibility-support', fields: ['keyboard', 'screenReaders', 'mediaAlternatives', 'knownLimitations'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'accessibility-statement-support-heading',
+                        width: 520,
+                        height: 42,
+                        props: { content: 'Supported accessibility features', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Keyboard and focus', body: 'Document keyboard navigation, visible focus states, skip links, form labels, and predictable page structure.' },
+                        { title: 'Assistive technology', body: 'Explain screen-reader support, semantic landmarks, alt text, captions, transcripts, and accessible embeds.' },
+                        { title: 'Known limitations', body: 'List third-party widgets, legacy content, media gaps, documents, or integrations that still need remediation.' },
+                    ].map((item, index) => createCanvasElement('box', 74 + index * 350, 132, {
+                        id: `accessibility-statement-support-card-${index}`,
+                        width: 310,
+                        height: 290,
+                        dataBindings: [{ source: 'settings', mode: 'accessibility-support-item', index }],
+                        props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e0e7ff', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: `accessibility-statement-support-card-title-${index}`,
+                                width: 238,
+                                height: 34,
+                                props: { content: item.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#312e81' },
+                                dataBindings: [{ source: 'settings', mode: 'accessibility-support-item', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: `accessibility-statement-support-card-copy-${index}`,
+                                width: 236,
+                                height: 124,
+                                props: { content: item.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
+                                dataBindings: [{ source: 'settings', mode: 'accessibility-support-item', index, field: 'body', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 232, {
+                                id: `accessibility-statement-support-card-note-${index}`,
+                                width: 220,
+                                height: 24,
+                                props: { content: 'Editable accessibility content', fontSize: 13, fontWeight: '800', color: '#4338ca' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 880, {
+                id: 'accessibility-statement-feedback-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'settings', mode: 'accessibility-feedback', fields: ['contactEmail', 'feedbackUrl', 'responseTime', 'remediationPlan'] }],
+                props: { backgroundColor: '#f5f3ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 62, {
+                        id: 'accessibility-statement-review-card',
+                        width: 600,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'accessibility-review', fields: ['lastReviewedAt', 'auditCadence', 'remediationPlan', 'owner'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#ddd6fe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 26, {
+                                id: 'accessibility-statement-review-heading',
+                                width: 360,
+                                height: 34,
+                                props: { content: 'Review and remediation', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Last review', 'Audit cadence', 'Issue owner', 'Remediation plan'].map((item, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
+                                id: `accessibility-statement-review-item-${index}`,
+                                width: 220,
+                                height: 24,
+                                props: { content: item, fontSize: 15, fontWeight: '800', color: '#4338ca' },
+                            })),
+                        ],
+                    }),
+                    createCanvasElement('box', 748, 62, {
+                        id: 'accessibility-statement-feedback-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'accessibility-feedback-action', fields: ['feedbackUrl', 'contactEmail'] }],
+                        props: { backgroundColor: '#312e81', borderRadius: 8 },
+                        children: [
+                            createCanvasElement('heading', 26, 26, {
+                                id: 'accessibility-statement-feedback-heading',
+                                width: 240,
+                                height: 32,
+                                props: { content: 'Accessibility feedback', level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 26, 76, {
+                                id: 'accessibility-statement-feedback-copy',
+                                width: 250,
+                                height: 46,
+                                props: { content: 'Bind this action to an accessibility request form, support email, or feedback workflow.', fontSize: 14, lineHeight: 1.45, color: '#e0e7ff' },
+                            }),
+                            createCanvasElement('button', 26, 138, {
+                                id: 'accessibility-statement-feedback-button',
+                                width: 156,
+                                height: 40,
+                                props: { label: 'Send feedback', backgroundColor: '#e0e7ff', color: '#312e81', borderRadius: 8, fontWeight: '800', action: 'accessibility.feedback.open' },
                             }),
                         ],
                     }),

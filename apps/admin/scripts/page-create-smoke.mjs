@@ -427,6 +427,46 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'accessibility-statement',
+    title: 'Smoke Accessibility Statement Template',
+    slugBase: 'smoke-accessibility-statement-template',
+    expectedNavigationPlacement: 'footer',
+    chromePrefix: 'accessibility-statement',
+    navigationItem: 'Accessibility',
+    headingId: 'accessibility-statement-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'accessibility-statement-site-header',
+      'accessibility-statement-site-navigation',
+      'accessibility-statement-site-footer',
+      'accessibility-statement-hero-section',
+      'accessibility-statement-standard-card',
+      'accessibility-statement-standard-value',
+      'accessibility-statement-support-section',
+      'accessibility-statement-support-card-0',
+      'accessibility-statement-support-card-title-0',
+      'accessibility-statement-support-card-copy-0',
+      'accessibility-statement-feedback-section',
+      'accessibility-statement-review-card',
+      'accessibility-statement-feedback-card',
+      'accessibility-statement-feedback-button',
+    ],
+    dataBindingElementIds: [
+      'accessibility-statement-hero-section',
+      'accessibility-statement-standard-card',
+      'accessibility-statement-standard-value',
+      'accessibility-statement-support-section',
+      'accessibility-statement-support-card-0',
+      'accessibility-statement-support-card-title-0',
+      'accessibility-statement-support-card-copy-0',
+      'accessibility-statement-feedback-section',
+      'accessibility-statement-review-card',
+      'accessibility-statement-feedback-card',
+    ],
+  },
+  {
     template: 'refund-policy',
     title: 'Smoke Refund Policy Template',
     slugBase: 'smoke-refund-policy-template',
@@ -931,6 +971,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('cookie-policy-category-card-${index}') &&
       source.includes('cookie-policy-retention-card') &&
       source.includes('cookies.preferences.open') &&
+      source.includes("'accessibility-statement'") &&
+      source.includes('accessibility-statement-support-card-${index}') &&
+      source.includes('accessibility-statement-review-card') &&
+      source.includes('accessibility.feedback.open') &&
       source.includes("'refund-policy'") &&
       source.includes('refund-policy-rule-card-${index}') &&
       source.includes('refund-policy-eligibility-card') &&
@@ -955,7 +999,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, refund policy, shipping policy, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, and blog-post starters',
   );
 };
 
@@ -1576,6 +1620,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Cookie policy',
       forms: 'none',
       dynamicData: 'Backy cookie consent placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'accessibility-statement',
+      navPlacement: 'footer',
+      selectedTemplateName: 'Accessibility statement',
+      forms: 'none',
+      dynamicData: 'Backy accessibility statement placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {
