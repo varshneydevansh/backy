@@ -863,6 +863,27 @@ const assertProductsApiContractsSource = () => {
     source.includes("import { EmptyState } from '@/components/ui/EmptyState';"),
     "Products route must use the shared EmptyState component",
   );
+  assert(
+    source.includes('data-testid="products-error-state"') &&
+      source.includes("Products workspace needs attention"),
+    "Products route must expose a labelled backend error state",
+  );
+  assert(
+    source.includes('aria-label="Retry loading products"') &&
+      source.includes("Clear filters"),
+    "Products backend error state must expose retry and filter recovery actions",
+  );
+  assert(
+    source.includes('data-testid="products-permission-state"') &&
+      source.includes("Product permissions could not be verified"),
+    "Products route must expose a labelled permission error state",
+  );
+  assert(
+    source.includes('to="/users"') &&
+      source.includes("Review users") &&
+      source.includes('aria-label="Retry loading product permissions"'),
+    "Products permission error state must expose user-management and retry actions",
+  );
   for (const emptyStateTitle of [
     'title="No private order records yet"',
     'title="No product performance yet"',
@@ -7285,6 +7306,10 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   assertProductsApiContractsSource();
+  if (process.env.BACKY_COMMERCE_SOURCE_ONLY === "1") {
+    return;
+  }
+
   await loginAdminApi();
   const suffix = Date.now().toString(36);
   const originalSettings = await getSettings();
