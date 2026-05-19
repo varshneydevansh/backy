@@ -10230,35 +10230,59 @@ function buildTemplateElements(input: {
                 width: 640,
                 height: 84,
                 props: { content: title, level: 'h1', fontSize: 48, fontWeight: '800', color: '#111827' },
+                responsive: {
+                    tablet: { x: 54, y: 72, width: 560, height: 84, props: { fontSize: 42 } },
+                    mobile: { x: 24, y: 64, width: 327, height: 116, props: { fontSize: 34 } },
+                },
             }),
             createCanvasElement('paragraph', 82, 178, {
                 id: 'about-story-copy',
                 width: 720,
                 height: 130,
                 props: { content: description, fontSize: 18, lineHeight: 1.65, color: '#374151' },
+                responsive: {
+                    tablet: { x: 56, y: 182, width: 560, height: 120, props: { fontSize: 16 } },
+                    mobile: { x: 26, y: 210, width: 323, height: 154, props: { fontSize: 16 } },
+                },
             }),
             createCanvasElement('section', 0, 360, {
                 id: 'about-values-section',
                 width: 1200,
                 height: 330,
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 340, width: 768, height: 620 },
+                    mobile: { y: 430, width: 375, height: 660 },
+                },
                 children: ['Craft', 'Clarity', 'Ownership'].map((item, index) => createCanvasElement('box', 80 + index * 330, 74, {
                     id: `about-value-${index}`,
                     width: 280,
                     height: 160,
                     props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                    responsive: {
+                        tablet: { x: 54, y: 74 + index * 166, width: 660, height: 140 },
+                        mobile: { x: 24, y: 62 + index * 180, width: 327, height: 150 },
+                    },
                     children: [
                         createCanvasElement('heading', 22, 24, {
                             id: `about-value-heading-${index}`,
                             width: 220,
                             height: 38,
                             props: { content: item, level: 'h3', fontSize: 22, fontWeight: '750', color: '#0f172a' },
+                            responsive: {
+                                tablet: { width: 300 },
+                                mobile: { width: 260 },
+                            },
                         }),
                         createCanvasElement('paragraph', 22, 76, {
                             id: `about-value-copy-${index}`,
                             width: 220,
                             height: 60,
                             props: { content: 'Write a specific value statement that explains how the team makes decisions.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                            responsive: {
+                                tablet: { width: 500, height: 42 },
+                                mobile: { width: 260, height: 56 },
+                            },
                         }),
                     ],
                 })),

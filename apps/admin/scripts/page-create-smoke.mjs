@@ -1784,6 +1784,19 @@ const assertPageCreateSourceContracts = () => {
       source.includes("tablet: { x: 54, y: 530, width: 660, height: 210 }"),
     'Careers page starter must seed explicit tablet/mobile responsive overrides for filters, job cards, process, and application sections.',
   );
+  assert(
+    source.includes("id: 'about-heading'") &&
+      source.includes("mobile: { x: 24, y: 64, width: 327, height: 116, props: { fontSize: 34 } }") &&
+      source.includes("id: 'about-story-copy'") &&
+      source.includes("mobile: { x: 26, y: 210, width: 323, height: 154, props: { fontSize: 16 } }") &&
+      source.includes("id: 'about-values-section'") &&
+      source.includes("tablet: { y: 340, width: 768, height: 620 }") &&
+      source.includes("id: `about-value-${index}`") &&
+      source.includes("mobile: { x: 24, y: 62 + index * 180, width: 327, height: 150 }") &&
+      source.includes("id: `about-value-copy-${index}`") &&
+      source.includes("tablet: { width: 500, height: 42 }"),
+    'About page starter must seed explicit tablet/mobile responsive overrides for story and value sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
