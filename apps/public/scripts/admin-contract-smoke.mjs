@@ -363,6 +363,8 @@ function assertAdminPageContentValidationSource() {
   assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_LIMIT'"), 'site comments route must reject invalid limit filters');
   assert(publicSiteCommentsRoute.includes("'INVALID_SITE_COMMENT_OFFSET'"), 'site comments route must reject invalid offset filters');
   assert(publicSiteCommentsRoute.includes('integerQueryFromInput'), 'site comments route must parse pagination filters strictly');
+  assert(publicSiteCommentsRoute.includes('statusProvided'), 'site comments route must distinguish missing moderation status from invalid status values');
+  assert(publicSiteCommentsRoute.includes('invalidSiteCommentStatusResponse'), 'site comments route must return stable invalid moderation status errors');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&

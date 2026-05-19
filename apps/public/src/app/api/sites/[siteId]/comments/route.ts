@@ -130,9 +130,11 @@ function parsePatchPayload(raw: unknown) {
     return null;
   }
 
-  const status = parseModerationStatus(typeof (raw as { status?: unknown }).status === 'string'
+  const statusRaw = typeof (raw as { status?: unknown }).status === 'string'
     ? ((raw as { status: string }).status)
-    : null);
+    : null;
+  const status = parseModerationStatus(statusRaw);
+  const statusProvided = Object.prototype.hasOwnProperty.call(raw, 'status');
 
   const commentIds = parseCommentIds(
     (raw as { commentIds?: unknown }).commentIds ?? (raw as { ids?: unknown }).ids,
@@ -159,6 +161,7 @@ function parsePatchPayload(raw: unknown) {
 
   return {
     status,
+    statusProvided,
     commentIds,
     reviewedBy: reviewedBy || undefined,
     actor: actor || undefined,
@@ -192,6 +195,13 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     },
     { status, requestId, cache: 'error' },
   )
+);
+
+const invalidSiteCommentStatusResponse = (requestId: string) => errorResponse(
+  400,
+  'INVALID_SITE_COMMENT_STATUS',
+  'Invalid site comment status. Use pending, approved, rejected, spam, or blocked.',
+  requestId,
 );
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -359,7 +369,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const payload = parsePatchPayload(await request.json().catch(() => null));
-      if (!payload || (!payload.status && !payload.clearReports) || payload.commentIds.length === 0) {
+      if (!payload) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
+      }
+      if (payload.statusProvided && !payload.status) {
+        return invalidSiteCommentStatusResponse(responseRequestId);
+      }
+      if ((!payload.status && !payload.clearReports) || payload.commentIds.length === 0) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
       }
 
@@ -446,7 +462,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const payload = parsePatchPayload(await request.json().catch(() => null));
-    if (!payload || (!payload.status && !payload.clearReports) || payload.commentIds.length === 0) {
+    if (!payload) {
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
+    }
+    if (payload.statusProvided && !payload.status) {
+      return invalidSiteCommentStatusResponse(responseRequestId);
+    }
+    if ((!payload.status && !payload.clearReports) || payload.commentIds.length === 0) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
     }
 
