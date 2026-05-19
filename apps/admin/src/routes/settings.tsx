@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Palette,
@@ -1963,8 +1963,23 @@ function SettingsPage() {
             {viewPermissionTitle || 'Your account cannot view settings.'}
           </p>
         </div>
-        <Notice tone="warning">
-          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant settings.view access.'}
+        <Notice
+          tone="warning"
+          title="Settings permissions could not be verified"
+          role="alert"
+          data-testid="settings-permission-state"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <span className="leading-6">
+              {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant settings.view access.'}
+            </span>
+            <Link
+              to="/users"
+              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+            >
+              Review users
+            </Link>
+          </div>
         </Notice>
       </div>
     );
@@ -2027,7 +2042,22 @@ function SettingsPage() {
       )}
 
       {permissionError && (
-        <Notice tone="warning">{permissionError}</Notice>
+        <Notice
+          tone="warning"
+          title="Settings permissions could not be verified"
+          role="alert"
+          data-testid="settings-rbac-permission-state"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <span className="leading-6">{permissionError}</span>
+            <Link
+              to="/users"
+              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+            >
+              Review users
+            </Link>
+          </div>
+        </Notice>
       )}
 
       {hasUnsavedChanges && activeBlockingValidationIssues.length === 0 && (

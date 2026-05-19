@@ -1,14 +1,13 @@
-import { type ReactNode } from 'react';
+import { type HTMLAttributes, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type NoticeTone = 'info' | 'success' | 'warning' | 'error';
 
-interface NoticeProps {
+interface NoticeProps extends HTMLAttributes<HTMLDivElement> {
   tone?: NoticeTone;
   title?: string;
   children: ReactNode;
-  className?: string;
 }
 
 const toneClasses: Record<NoticeTone, string> = {
@@ -25,11 +24,14 @@ const toneIcons = {
   error: AlertTriangle,
 } satisfies Record<NoticeTone, typeof Info>;
 
-export function Notice({ tone = 'info', title, children, className }: NoticeProps) {
+export function Notice({ tone = 'info', title, children, className, ...props }: NoticeProps) {
   const Icon = toneIcons[tone];
 
   return (
-    <div className={cn('flex items-start gap-3 rounded-lg border px-4 py-3 text-sm', toneClasses[tone], className)}>
+    <div
+      className={cn('flex items-start gap-3 rounded-lg border px-4 py-3 text-sm', toneClasses[tone], className)}
+      {...props}
+    >
       <Icon className="mt-0.5 size-4 flex-shrink-0" />
       <div className="min-w-0">
         {title && <p className="font-medium">{title}</p>}
