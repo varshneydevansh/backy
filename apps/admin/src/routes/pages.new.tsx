@@ -8471,36 +8471,60 @@ function buildTemplateElements(input: {
                 height: 360,
                 dataBindings: [{ source: 'support', mode: 'help-center', fields: ['query', 'popularArticles', 'categories'] }],
                 props: { backgroundColor: '#eff6ff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 520 },
+                    mobile: { width: 375, height: 650 },
+                },
                 children: [
                     createCanvasElement('text', 76, 64, {
                         id: 'help-center-kicker',
                         width: 220,
                         height: 28,
                         props: { content: 'Support center', fontSize: 13, fontWeight: '800', color: '#1d4ed8', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 104, {
                         id: 'help-center-heading',
                         width: 640,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 520, height: 92, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 142, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 220, {
                         id: 'help-center-copy',
                         width: 600,
                         height: 64,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#334155' },
+                        responsive: {
+                            tablet: { x: 56, y: 204, width: 520, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 246, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('input', 720, 126, {
                         id: 'help-center-search-input',
                         width: 340,
                         height: 58,
                         props: { label: 'Search help', name: 'support_search', placeholder: 'Search orders, accounts, products, or billing' },
+                        responsive: {
+                            tablet: { x: 54, y: 330, width: 460, height: 58 },
+                            mobile: { x: 24, y: 398, width: 327, height: 58 },
+                        },
                     }),
                     createCanvasElement('button', 720, 210, {
                         id: 'help-center-search-button',
                         width: 150,
                         height: 48,
                         props: { label: 'Search', backgroundColor: '#1d4ed8', color: '#ffffff', borderRadius: 8, fontSize: 15, fontWeight: '800', action: 'support.search' },
+                        responsive: {
+                            tablet: { x: 536, y: 336, width: 150, height: 48 },
+                            mobile: { x: 24, y: 484, width: 327, height: 52 },
+                        },
                     }),
                 ],
             }),
@@ -8510,12 +8534,20 @@ function buildTemplateElements(input: {
                 height: 330,
                 dataBindings: [{ source: 'support', mode: 'categories', limit: 6 }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 520, width: 768, height: 620 },
+                    mobile: { y: 650, width: 375, height: 670 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 48, {
                         id: 'help-center-category-heading',
                         width: 380,
                         height: 42,
                         props: { content: 'Browse by topic', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 50, width: 420 },
+                            mobile: { x: 24, y: 42, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Orders and checkout', copy: 'Payments, receipts, refunds, and fulfillment status.' },
@@ -8527,18 +8559,30 @@ function buildTemplateElements(input: {
                         height: 140,
                         dataBindings: [{ source: 'support', mode: 'category', index }],
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#dbeafe', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 120 + index * 154, width: 660, height: 130 },
+                            mobile: { x: 24, y: 112 + index * 166, width: 327, height: 144 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 20, {
                                 id: `help-center-category-title-${index}`,
                                 width: 230,
                                 height: 30,
                                 props: { content: item.title, level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 320 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 20, 62, {
                                 id: `help-center-category-copy-${index}`,
                                 width: 240,
                                 height: 50,
                                 props: { content: item.copy, fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                                responsive: {
+                                    tablet: { width: 420, height: 42 },
+                                    mobile: { width: 260, height: 56 },
+                                },
                             }),
                         ],
                     })),
@@ -8550,12 +8594,20 @@ function buildTemplateElements(input: {
                 height: 430,
                 dataBindings: [{ source: 'support', mode: 'faq', limit: 8 }],
                 props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1140, width: 768, height: 780 },
+                    mobile: { y: 1320, width: 375, height: 870 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 54, {
                         id: 'help-center-faq-heading',
                         width: 420,
                         height: 42,
                         props: { content: 'Frequently asked questions', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 480 },
+                            mobile: { x: 24, y: 46, width: 320, height: 70, props: { fontSize: 28 } },
+                        },
                     }),
                     createCanvasElement('box', 72, 124, {
                         id: 'help-center-faq-list',
@@ -8563,6 +8615,10 @@ function buildTemplateElements(input: {
                         height: 250,
                         dataBindings: [{ source: 'support', mode: 'faq-list', limit: 5 }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 124, width: 660, height: 250 },
+                            mobile: { x: 24, y: 140, width: 327, height: 318 },
+                        },
                         children: [
                             'How do I track my order?',
                             'How do I update my account email?',
@@ -8573,6 +8629,10 @@ function buildTemplateElements(input: {
                             height: 60,
                             dataBindings: [{ source: 'support', mode: 'faq-item', index }],
                             props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                            responsive: {
+                                tablet: { width: 620 },
+                                mobile: { x: 18, y: 18 + index * 96, width: 291, height: 84 },
+                            },
                             children: [
                                 createCanvasElement('text', 18, 18, {
                                     id: `help-center-faq-question-${index}`,
@@ -8580,12 +8640,20 @@ function buildTemplateElements(input: {
                                     height: 24,
                                     props: { content: item, fontSize: 15, fontWeight: '800', color: '#111827' },
                                     dataBindings: [{ source: 'support', mode: 'faq-item', index, field: 'question', targetPath: 'props.content' }],
+                                    responsive: {
+                                        tablet: { width: 500 },
+                                        mobile: { width: 226, height: 42 },
+                                    },
                                 }),
                                 createCanvasElement('text', 588, 18, {
                                     id: `help-center-faq-toggle-${index}`,
                                     width: 22,
                                     height: 24,
                                     props: { content: '+', fontSize: 20, fontWeight: '800', color: '#2563eb', textAlign: 'center' },
+                                    responsive: {
+                                        tablet: { x: 558 },
+                                        mobile: { x: 250, y: 20, width: 24 },
+                                    },
                                 }),
                             ],
                         })),
@@ -8595,6 +8663,10 @@ function buildTemplateElements(input: {
                         width: 300,
                         height: 250,
                         props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        responsive: {
+                            tablet: { x: 54, y: 430, width: 660, height: 250 },
+                            mobile: { x: 24, y: 514, width: 327, height: 280 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'help-center-escalation-heading',
@@ -8607,12 +8679,20 @@ function buildTemplateElements(input: {
                                 width: 230,
                                 height: 72,
                                 props: { content: 'Route visitors to a contact page, support inbox, or authenticated account page with context from their current order.', fontSize: 14, lineHeight: 1.5, color: '#d1d5db' },
+                                responsive: {
+                                    tablet: { width: 500, height: 64 },
+                                    mobile: { width: 270, height: 96 },
+                                },
                             }),
                             createCanvasElement('button', 24, 176, {
                                 id: 'help-center-contact-button',
                                 width: 150,
                                 height: 46,
                                 props: { label: 'Contact support', href: '/contact', backgroundColor: '#dbeafe', color: '#1e3a8a', borderRadius: 8, fontSize: 14, fontWeight: '800' },
+                                responsive: {
+                                    tablet: { y: 176, width: 170 },
+                                    mobile: { y: 206, width: 180, height: 48 },
+                                },
                             }),
                         ],
                     }),

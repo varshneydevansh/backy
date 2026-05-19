@@ -1650,6 +1650,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("mobile: { x: 20, y: 102, width: 100, height: 40 }"),
     'Order confirmation page starter must seed explicit tablet/mobile responsive overrides for receipt and post-purchase sections.',
   );
+  assert(
+    source.includes("id: 'help-center-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 650 }") &&
+      source.includes("id: 'help-center-search-input'") &&
+      source.includes("mobile: { x: 24, y: 398, width: 327, height: 58 }") &&
+      source.includes("id: 'help-center-category-section'") &&
+      source.includes("tablet: { y: 520, width: 768, height: 620 }") &&
+      source.includes("id: `help-center-category-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 112 + index * 166, width: 327, height: 144 }") &&
+      source.includes("id: 'help-center-faq-section'") &&
+      source.includes("mobile: { y: 1320, width: 375, height: 870 }") &&
+      source.includes("id: 'help-center-faq-list'") &&
+      source.includes("mobile: { x: 24, y: 140, width: 327, height: 318 }") &&
+      source.includes("id: 'help-center-escalation-card'") &&
+      source.includes("tablet: { x: 54, y: 430, width: 660, height: 250 }") &&
+      source.includes("id: 'help-center-contact-button'") &&
+      source.includes("mobile: { y: 206, width: 180, height: 48 }"),
+    'Help center page starter must seed explicit tablet/mobile responsive overrides for support search, categories, FAQ, and escalation sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
