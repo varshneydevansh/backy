@@ -1631,6 +1631,25 @@ const assertPageCreateSourceContracts = () => {
       source.includes("No card number, CVV, or raw payment secret is collected by this page starter."),
     'Checkout page starter must seed explicit tablet/mobile responsive overrides for customer, summary, and payment sections.',
   );
+  assert(
+    source.includes("id: 'order-confirmation-hero-section'") &&
+      source.includes("mobile: { width: 375, height: 610 }") &&
+      source.includes("id: 'order-confirmation-status-card'") &&
+      source.includes("mobile: { x: 24, y: 410, width: 327, height: 154 }") &&
+      source.includes("id: 'order-confirmation-receipt-section'") &&
+      source.includes("tablet: { y: 500, width: 768, height: 720 }") &&
+      source.includes("id: 'order-confirmation-receipt-card'") &&
+      source.includes("mobile: { x: 24, y: 46, width: 327, height: 318 }") &&
+      source.includes("id: 'order-confirmation-delivery-card'") &&
+      source.includes("tablet: { x: 54, y: 400, width: 660, height: 250 }") &&
+      source.includes("id: 'order-confirmation-next-section'") &&
+      source.includes("mobile: { y: 1370, width: 375, height: 720 }") &&
+      source.includes("id: `order-confirmation-next-card-${index}`") &&
+      source.includes("mobile: { x: 24, y: 114 + index * 176, width: 327, height: 154 }") &&
+      source.includes("id: `order-confirmation-next-button-${index}`") &&
+      source.includes("mobile: { x: 20, y: 102, width: 100, height: 40 }"),
+    'Order confirmation page starter must seed explicit tablet/mobile responsive overrides for receipt and post-purchase sections.',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (

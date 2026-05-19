@@ -8217,24 +8217,40 @@ function buildTemplateElements(input: {
                 height: 380,
                 dataBindings: [{ source: 'commerce', mode: 'order-confirmation', fields: ['orderId', 'status', 'customerEmail', 'total', 'createdAt'] }],
                 props: { backgroundColor: '#f0fdf4', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 500 },
+                    mobile: { width: 375, height: 610 },
+                },
                 children: [
                     createCanvasElement('text', 76, 66, {
                         id: 'order-confirmation-kicker',
                         width: 240,
                         height: 28,
                         props: { content: 'Order received', fontSize: 13, fontWeight: '800', color: '#15803d', textTransform: 'uppercase' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 220 },
+                            mobile: { x: 24, y: 44, width: 220 },
+                        },
                     }),
                     createCanvasElement('heading', 72, 106, {
                         id: 'order-confirmation-heading',
                         width: 620,
                         height: 96,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#052e16' },
+                        responsive: {
+                            tablet: { x: 54, y: 92, width: 500, height: 92, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 82, width: 327, height: 142, props: { fontSize: 34 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 222, {
                         id: 'order-confirmation-copy',
                         width: 560,
                         height: 72,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#166534' },
+                        responsive: {
+                            tablet: { x: 56, y: 204, width: 500, height: 78, props: { fontSize: 16 } },
+                            mobile: { x: 26, y: 246, width: 323, height: 104, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('box', 748, 78, {
                         id: 'order-confirmation-status-card',
@@ -8242,6 +8258,10 @@ function buildTemplateElements(input: {
                         height: 190,
                         dataBindings: [{ source: 'commerce', mode: 'order-status', fields: ['orderId', 'status', 'total'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bbf7d0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 320, width: 360, height: 150 },
+                            mobile: { x: 24, y: 410, width: 327, height: 154 },
+                        },
                         children: [
                             createCanvasElement('text', 24, 24, {
                                 id: 'order-confirmation-status-label',
@@ -8272,6 +8292,10 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 430,
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 500, width: 768, height: 720 },
+                    mobile: { y: 610, width: 375, height: 760 },
+                },
                 children: [
                     createCanvasElement('box', 72, 62, {
                         id: 'order-confirmation-receipt-card',
@@ -8279,6 +8303,10 @@ function buildTemplateElements(input: {
                         height: 300,
                         dataBindings: [{ source: 'commerce', mode: 'order-receipt', fields: ['customerEmail', 'lineItems', 'subtotal', 'shipping', 'tax', 'total'] }],
                         props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 660, height: 300 },
+                            mobile: { x: 24, y: 46, width: 327, height: 318 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'order-confirmation-receipt-heading',
@@ -8297,6 +8325,10 @@ function buildTemplateElements(input: {
                                 width: 82,
                                 height: 24,
                                 props: { content: item, fontSize: 15, fontWeight: '700', color: '#111827', textAlign: 'right' },
+                                responsive: {
+                                    tablet: { x: 540, width: 80 },
+                                    mobile: { x: 214, width: 70 },
+                                },
                             })),
                             createCanvasElement('text', 24, 226, {
                                 id: 'order-confirmation-total-label',
@@ -8310,6 +8342,10 @@ function buildTemplateElements(input: {
                                 height: 28,
                                 props: { content: '$159.44', fontSize: 18, fontWeight: '800', color: '#15803d', textAlign: 'right' },
                                 dataBindings: [{ source: 'commerce', mode: 'order-receipt', field: 'total', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { x: 526, width: 94 },
+                                    mobile: { x: 196, width: 98 },
+                                },
                             }),
                         ],
                     }),
@@ -8319,6 +8355,10 @@ function buildTemplateElements(input: {
                         height: 300,
                         dataBindings: [{ source: 'commerce', mode: 'fulfillment', fields: ['fulfillmentStatus', 'trackingNumber', 'estimatedDelivery'] }],
                         props: { backgroundColor: '#111827', borderRadius: 8, color: '#ffffff', padding: 0 },
+                        responsive: {
+                            tablet: { x: 54, y: 400, width: 660, height: 250 },
+                            mobile: { x: 24, y: 410, width: 327, height: 286 },
+                        },
                         children: [
                             createCanvasElement('heading', 24, 24, {
                                 id: 'order-confirmation-delivery-heading',
@@ -8331,6 +8371,10 @@ function buildTemplateElements(input: {
                                 width: 310,
                                 height: 80,
                                 props: { content: 'Fulfillment, tracking, and support updates can bind to the private order record while this page only shows customer-safe receipt details.', fontSize: 15, lineHeight: 1.5, color: '#d1d5db' },
+                                responsive: {
+                                    tablet: { width: 520, height: 68 },
+                                    mobile: { width: 270, height: 112 },
+                                },
                             }),
                             createCanvasElement('text', 24, 186, {
                                 id: 'order-confirmation-tracking-status',
@@ -8338,6 +8382,10 @@ function buildTemplateElements(input: {
                                 height: 26,
                                 props: { content: 'Preparing fulfillment', fontSize: 16, fontWeight: '800', color: '#bbf7d0' },
                                 dataBindings: [{ source: 'commerce', mode: 'fulfillment', field: 'fulfillmentStatus', targetPath: 'props.content' }],
+                                responsive: {
+                                    tablet: { y: 178, width: 300 },
+                                    mobile: { y: 220, width: 260 },
+                                },
                             }),
                         ],
                     }),
@@ -8349,12 +8397,20 @@ function buildTemplateElements(input: {
                 height: 300,
                 dataBindings: [{ source: 'commerce', mode: 'post-purchase-actions', fields: ['accountUrl', 'supportUrl', 'continueShoppingUrl'] }],
                 props: { backgroundColor: '#f9fafb', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 1220, width: 768, height: 620 },
+                    mobile: { y: 1370, width: 375, height: 720 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 54, {
                         id: 'order-confirmation-next-heading',
                         width: 380,
                         height: 44,
                         props: { content: 'Next steps', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 54, width: 380 },
+                            mobile: { x: 24, y: 46, width: 320, props: { fontSize: 28 } },
+                        },
                     }),
                     ...[
                         { title: 'Create an account', copy: 'Save receipt history and update profile details.', button: 'Account', href: '/account' },
@@ -8365,24 +8421,40 @@ function buildTemplateElements(input: {
                         width: 318,
                         height: 128,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54, y: 126 + index * 150, width: 660, height: 128 },
+                            mobile: { x: 24, y: 114 + index * 176, width: 327, height: 154 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 18, {
                                 id: `order-confirmation-next-title-${index}`,
                                 width: 210,
                                 height: 28,
                                 props: { content: item.title, level: 'h3', fontSize: 19, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 340 },
+                                    mobile: { width: 260 },
+                                },
                             }),
                             createCanvasElement('paragraph', 20, 54, {
                                 id: `order-confirmation-next-copy-${index}`,
                                 width: 190,
                                 height: 48,
                                 props: { content: item.copy, fontSize: 13, lineHeight: 1.4, color: '#64748b' },
+                                responsive: {
+                                    tablet: { width: 380 },
+                                    mobile: { width: 260, height: 44 },
+                                },
                             }),
                             createCanvasElement('button', 222, 48, {
                                 id: `order-confirmation-next-button-${index}`,
                                 width: 72,
                                 height: 38,
                                 props: { label: item.button, href: item.href, backgroundColor: '#dcfce7', color: '#166534', borderRadius: 8, fontSize: 13, fontWeight: '800' },
+                                responsive: {
+                                    tablet: { x: 548, y: 44, width: 86, height: 40 },
+                                    mobile: { x: 20, y: 102, width: 100, height: 40 },
+                                },
                             }),
                         ],
                     })),
