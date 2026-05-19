@@ -48,10 +48,10 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 - Keep publish/rollback provider-backed certification tied to the release certification workflow.
 - Optional expansion remains available for additional cross-browser visual-regression breadth, but no known editor-completion blocker remains in this spec slice.
 
-### Forms/comments module — **Partially complete**
+### Forms/comments module — **Ready baseline with database-service certification gate**
 **Done**
-- Form schema expansion, settings fields, submission endpoint compatibility, anti-spam signals and status tracking.
-- Comment moderation settings and basic admin UI updates in site route.
+- Form schema expansion, settings fields, submission endpoint compatibility, reusable embed blocks, advanced validation rules, anti-spam signals, consent/retention controls, delivery retry, analytics, and contact-share status tracking are implemented for the local product scope.
+- Comment moderation settings, queue/status transitions, threaded replies, reparenting, bulk actions, reporting, blocklists, notification/webhook delivery retry, analytics, export, and admin UI workflows are implemented for the local product scope.
 - Analytics endpoint added (`apps/public/src/app/api/sites/[siteId]/comments/analytics/route.ts`).
 - Block/report/export endpoints and identities exist:
   - `apps/public/src/app/api/sites/[siteId]/comments/blocks`
@@ -60,26 +60,29 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
   - `apps/public/src/app/api/sites/[siteId]/comments/[commentId]/report`
 - Export/report parity for status+request/thread/parent filters now aligned with admin and analytics calls.
 - Anti-abuse policy write path now enforces strict server-side value bounds and returns actionable validation errors.
+- `test:forms`, `test:contacts`, `test:comments`, repository coverage, and the Forms Postgres preflight guard the local implementation.
 
-**Not complete**
-- Moderation queue workflow still needs production-grade batch ergonomics and queue-level filters for high-volume ops.
-- Operator-level telemetry/risk scoring surfaces and retention controls are in Phase I.
-- Anti-abuse controls need operator presets for request/user thresholds and stronger abuse telemetry exportability.
+**Remaining certification**
+- Execute `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres` against a migrated disposable Supabase/Postgres service before the Forms/Contacts service-data gate can move from Partial to Ready.
 
-### Core composition / CMS blocks — **Partial foundation**
+### Core composition / CMS blocks — **Ready baseline with reusable-section regression guards**
 **Done**
 - Form/comment-related blocks and renderer coverage introduced.
+- Reusable-section APIs persist saved canvas section patterns, expose active sections publicly, support version history, optimistic conflict guards, export/import, restore, instance discovery, stale-source reporting, and bulk refresh of synced instances.
+- Page/blog creation can seed editable content from frontend-design template registries and preserve design provenance.
+- Built-in starter page templates, frontend-design template-backed pages, collection dataset list/detail pages, and saved reusable-section canvas content are covered in mobile/tablet hosted previews.
 
-**Not complete**
-- Reusable CMS sections/templates (header/footer/nav/article templates/blog content blocks) are incomplete.
+**Remaining certification**
+- No known local composition blocker remains in this spec slice; keep reusable-section, page-create, renderer, and SDK contract smokes in the release preflight path as new block types ship.
 
-### Public API hardening — **Partial**
+### Public API hardening — **Ready baseline with SDK/Postgres certification gate**
 **Done**
-- Form/comment compatibility and several moderation/listing paths improved.
+- Public render, manifest, OpenAPI, generated SDK, media, forms, comments, commerce catalog/order, interactive component, and frontend handoff contracts are locally guarded.
+- Public routes expose stable Backy contract/cache headers, published/preview behavior, route resolution, moderation-aware forms/comments, scoped media, reusable sections, and external-frontend-safe payloads without requiring admin internals.
+- `test:frontend-contract-types`, `test:page-renderer`, `test:public-security`, `test:sdk-postgres-preflight-contract`, and the generated SDK smoke guard the local public API surface.
 
-**Not complete**
-- Fully normalized public envelopes (`error/data/pagination`) across all endpoints.
-- Canonical path resolver and caching policy still in-progress.
+**Remaining certification**
+- Execute `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres service before the public manifest/OpenAPI/SDK database-mode gate can move from Partial to Ready.
 
 ## 2) Phase map (now + future)
 
