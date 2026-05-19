@@ -29,6 +29,7 @@ interface LivePageManagementOverlayProps {
 
 const STATUS_OPTIONS: ManagedPageStatus[] = ['draft', 'published', 'scheduled', 'archived'];
 const INLINE_TEXT_ELEMENT_TYPES = new Set(['text', 'heading', 'paragraph', 'quote', 'button', 'link']);
+const INLINE_LINK_ELEMENT_TYPES = new Set(['button', 'link']);
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -137,10 +138,24 @@ const inlineTextFromElement = (element: Record<string, unknown> | null): string 
   return stripMarkup(slatePlainText(value));
 };
 
-const updateElementText = (
+const elementProps = (element: Record<string, unknown> | null): Record<string, unknown> => (
+  isRecord(element?.props) ? element.props : {}
+);
+
+const inlineHrefFromElement = (element: Record<string, unknown> | null): string => {
+  const props = elementProps(element);
+  return typeof props.href === 'string' ? props.href : '';
+};
+
+const inlineTargetBlankFromElement = (element: Record<string, unknown> | null): boolean => {
+  const props = elementProps(element);
+  return props.target === '_blank';
+};
+
+const updateElementProps = (
   content: Record<string, unknown> | undefined,
   elementId: string,
-  nextText: string,
+  patch: Record<string, unknown>,
 ): Record<string, unknown> | null => {
   if (!content) {
     return null;
@@ -155,7 +170,7 @@ const updateElementText = (
       if (item.id === elementId) {
         item.props = {
           ...(isRecord(item.props) ? item.props : {}),
-          content: nextText,
+          ...patch,
         };
         changed = true;
       }
@@ -174,6 +189,23 @@ const updateElementText = (
 
   return changed ? nextContent : null;
 };
+
+const updateElementText = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  nextText: string,
+): Record<string, unknown> | null => updateElementProps(content, elementId, { content: nextText });
+
+const updateElementLink = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  href: string,
+  targetBlank: boolean,
+): Record<string, unknown> | null => updateElementProps(content, elementId, {
+  href,
+  target: targetBlank ? '_blank' : '_self',
+  rel: targetBlank ? 'noopener noreferrer' : '',
+});
 
 export function LivePageManagementOverlay({
   enabled,
@@ -195,6 +227,9 @@ export function LivePageManagementOverlay({
   const [selectedElementRect, setSelectedElementRect] = useState<DOMRect | null>(null);
   const [inlineText, setInlineText] = useState('');
   const [inlineTextSaving, setInlineTextSaving] = useState(false);
+  const [inlineHref, setInlineHref] = useState('');
+  const [inlineTargetBlank, setInlineTargetBlank] = useState(false);
+  const [inlineLinkSaving, setInlineLinkSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
     if (!siteId || !pageId) return '';
@@ -287,6 +322,8 @@ export function LivePageManagementOverlay({
     if (!selectedElementId) {
       setSelectedElementRect(null);
       setInlineText('');
+      setInlineHref('');
+      setInlineTargetBlank(false);
       return;
     }
 
@@ -310,9 +347,12 @@ export function LivePageManagementOverlay({
   );
   const selectedElementType = String(selectedContentElement?.type || '');
   const selectedElementSupportsInlineText = INLINE_TEXT_ELEMENT_TYPES.has(selectedElementType);
+  const selectedElementSupportsInlineLink = INLINE_LINK_ELEMENT_TYPES.has(selectedElementType);
 
   useEffect(() => {
     setInlineText(inlineTextFromElement(selectedContentElement));
+    setInlineHref(inlineHrefFromElement(selectedContentElement));
+    setInlineTargetBlank(inlineTargetBlankFromElement(selectedContentElement));
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -408,6 +448,50 @@ export function LivePageManagementOverlay({
       setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected element.');
     } finally {
       setInlineTextSaving(false);
+    }
+  };
+
+  const saveInlineLink = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+
+    const nextContent = updateElementLink(page.content, selectedElementId, inlineHref.trim(), inlineTargetBlank);
+    if (!nextContent) {
+      setError('Unable to update this destination from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineLinkSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected destination.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Destination saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected destination.');
+    } finally {
+      setInlineLinkSaving(false);
     }
   };
 
@@ -610,6 +694,50 @@ export function LivePageManagementOverlay({
                       This element type opens in the full editor for changes.
                     </span>
                   )}
+                </div>
+              ) : null}
+              {selectedElementSupportsInlineLink ? (
+                <div data-backy-live-link-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Link destination
+                  </span>
+                  <input
+                    value={inlineHref}
+                    onChange={(event) => setInlineHref(event.target.value)}
+                    placeholder="/pricing, https://..., mailto:..."
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      font: 'inherit',
+                      fontSize: 13,
+                      padding: '8px 9px',
+                    }}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={inlineTargetBlank}
+                      onChange={(event) => setInlineTargetBlank(event.target.checked)}
+                    />
+                    Open in new tab
+                  </label>
+                  <button
+                    type="button"
+                    onClick={saveInlineLink}
+                    disabled={inlineLinkSaving}
+                    style={{
+                      justifySelf: 'start',
+                      border: 0,
+                      borderRadius: 6,
+                      background: inlineLinkSaving ? '#94a3b8' : '#2563eb',
+                      color: '#fff',
+                      cursor: inlineLinkSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      padding: '7px 10px',
+                    }}
+                  >
+                    {inlineLinkSaving ? 'Saving destination...' : 'Save destination'}
+                  </button>
                 </div>
               ) : null}
               {error ? <p role="alert" style={{ margin: 0, color: '#b91c1c', fontSize: 12, lineHeight: 1.4 }}>{error}</p> : null}

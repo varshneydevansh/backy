@@ -149,6 +149,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - The endpoint is advertised by the public manifest as `endpoints.liveManagePage` and by the site-scoped OpenAPI document with `getBackyLiveManagedPage` and `updateBackyLiveManagedPage` operation ids.
   - Hosted page routes can opt into the first live management overlay with `?backyManage=1` or `?manage=1`; the client overlay silently hides for unauthenticated visitors, reads through the bridge with admin session credentials, saves title/status/homepage changes with `expectedUpdatedAt` conflict protection, and lists rendered `data-backy-element-id` targets for live inspection.
   - Simple text-like rendered elements (`text`, `heading`, `paragraph`, `quote`, `button`, `link`) can be edited inline from the overlay; the overlay patches the selected element content through the live page bridge so the admin route still enforces content validation and optimistic conflicts.
+  - `button` and `link` elements also expose inline destination controls for `href`, target, and safe `_blank` rel metadata.
   - Selecting an inspected element highlights it on the hosted page and carries `elementId` into the admin canvas editor handoff so the full editor can open with that element selected in the inspector.
 
 - `POST /api/admin/sites/:siteId/pages`
