@@ -82,9 +82,14 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
 );
 
-const parseDays = (value: string | null): number => {
-  const parsed = Number.parseInt(value || '14', 10);
-  return Number.isFinite(parsed) ? Math.max(1, Math.min(90, parsed)) : 14;
+const parseDays = (value: string | null): { value: number; invalid?: string } => {
+  if (value === null || value.trim() === '') {
+    return { value: 14 };
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 90
+    ? { value: parsed }
+    : { value: 14, invalid: value };
 };
 
 const emptyStatusCounts = () => ({
@@ -433,7 +438,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
-    const days = parseDays(searchParams.get('days'));
+    const daysFilter = parseDays(searchParams.get('days'));
+    if (daysFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_ANALYTICS_DAYS', 'Invalid forms analytics days filter. Use an integer from 1 to 90.', requestId);
+    }
+    const days = daysFilter.value;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

@@ -344,6 +344,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/contact-lists/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormsAnalyticsRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/analytics/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -475,6 +479,8 @@ function assertAdminPageContentValidationSource() {
   assert(adminContactListsRoute.includes("'INVALID_ADMIN_CONTACT_LIST_STATUS'"), 'admin contact lists route must reject invalid saved-list status filters');
   assert(adminContactListsRoute.includes("'INVALID_ADMIN_CONTACT_LIST_QUALITY'"), 'admin contact lists route must reject invalid saved-list quality filters');
   assert(adminContactListsRoute.includes('validateExplicitFilters'), 'admin contact lists route must validate explicit filters before normalizing');
+  assert(adminFormsAnalyticsRoute.includes("'INVALID_ADMIN_FORM_ANALYTICS_DAYS'"), 'admin forms analytics route must reject invalid days filters');
+  assert(adminFormsAnalyticsRoute.includes('daysFilter.invalid'), 'admin forms analytics route must branch on invalid days filters');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -520,6 +526,7 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_ADMIN_FORM_CONTACT_OFFSET') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_LIST_QUALITY') &&
+      apiContracts.includes('INVALID_ADMIN_FORM_ANALYTICS_DAYS') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
     'API contracts must document invalid page, blog, comment, and form filter/content errors',
   );
