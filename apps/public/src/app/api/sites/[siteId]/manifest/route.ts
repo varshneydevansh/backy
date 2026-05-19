@@ -259,6 +259,7 @@ const adminCapabilities = (permissions: Record<string, boolean>) => ({
 const adminEndpoints = (siteId: string) => ({
   site: `/api/admin/sites/${siteId}`,
   pages: `/api/admin/sites/${siteId}/pages`,
+  liveManagePage: `/api/sites/${siteId}/manage/pages/{pageId}`,
   blog: `/api/admin/sites/${siteId}/blog`,
   collections: `/api/admin/sites/${siteId}/collections`,
   forms: `/api/admin/sites/${siteId}/forms`,
@@ -632,6 +633,7 @@ const buildRepositoryManifest = (
         mediaFile: `/api/sites/${input.site.id}/media/{mediaId}/file`,
         mediaTransform: `/api/sites/${input.site.id}/media/{mediaId}/transform?width={width}`,
         pages: `/api/sites/${input.site.id}/pages`,
+        liveManagePage: `/api/sites/${input.site.id}/manage/pages/{pageId}`,
         blog: `/api/sites/${input.site.id}/blog`,
         blogRss: `/api/sites/${input.site.id}/blog/rss`,
         blogCategories: `/api/sites/${input.site.id}/blog/categories`,
@@ -962,6 +964,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           mediaFile: `/api/sites/${site.id}/media/{mediaId}/file`,
           mediaTransform: `/api/sites/${site.id}/media/{mediaId}/transform?width={width}`,
           pages: `/api/sites/${site.id}/pages`,
+          liveManagePage: `/api/sites/${site.id}/manage/pages/{pageId}`,
           blog: `/api/sites/${site.id}/blog`,
           blogRss: `/api/sites/${site.id}/blog/rss`,
           blogCategories: `/api/sites/${site.id}/blog/categories`,

@@ -289,6 +289,14 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/pages/route.ts', import.meta.url),
     'utf8',
   );
+  const publicLiveManagePageRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/manage/pages/[pageId]/route.ts', import.meta.url),
+    'utf8',
+  );
+  const publicManifestRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/manifest/route.ts', import.meta.url),
+    'utf8',
+  );
   const publicPageCommentsRoute = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts', import.meta.url),
     'utf8',
@@ -462,6 +470,19 @@ function assertAdminPageContentValidationSource() {
   assert(publicPagesRoute.includes("'INVALID_PAGE_LIMIT'"), 'public pages list route must reject invalid limit filters');
   assert(publicPagesRoute.includes("'INVALID_PAGE_OFFSET'"), 'public pages list route must reject invalid offset filters');
   assert(publicPagesRoute.includes('parseBoundedInteger'), 'public pages list route must parse pagination filters strictly');
+  assert(publicLiveManagePageRoute.includes("'pages.view'"), 'live manage page route must require pages.view for reads');
+  assert(publicLiveManagePageRoute.includes("'pages.edit'"), 'live manage page route must require pages.edit for mutations');
+  assert(publicLiveManagePageRoute.includes('requireAdminTeamScopeAccess'), 'live manage page route must enforce site team scope');
+  assert(publicLiveManagePageRoute.includes('FORBIDDEN_LIVE_MANAGE_SITE_SCOPE'), 'live manage page route must return a distinct live-management scope error');
+  assert(publicLiveManagePageRoute.includes('getAdminPage') && publicLiveManagePageRoute.includes('patchAdminPage'), 'live manage page route must delegate to the admin page detail behavior');
+  const publicOpenApiRouteSource = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url),
+    'utf8',
+  );
+  assert(publicOpenApiRouteSource.includes('/manage/pages/{pageId}'), 'OpenAPI route must advertise the live page management endpoint');
+  assert(publicOpenApiRouteSource.includes('PageUpdateRequest'), 'OpenAPI route must document the live page update payload');
+  assert(publicOpenApiRouteSource.includes('getBackyLiveManagedPage') && publicOpenApiRouteSource.includes('updateBackyLiveManagedPage'), 'OpenAPI route must name live page management operations');
+  assert(publicManifestRoute.includes('liveManagePage'), 'frontend manifest must advertise the live page management endpoint');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_LIMIT'"), 'public page comments route must reject invalid limit filters');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_OFFSET'"), 'public page comments route must reject invalid offset filters');
   assert(publicPageCommentsRoute.includes('parseBoundedInteger'), 'public page comments route must parse pagination filters strictly');

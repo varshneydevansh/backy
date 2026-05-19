@@ -822,6 +822,107 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             },
           },
+          [`/api/sites/${site.id}/manage/pages/{pageId}`]: {
+            get: {
+              tags: ["Live Management"],
+              summary: "Read one page for authenticated live-site management",
+              operationId: "getBackyLiveManagedPage",
+              description:
+                "Requires an admin session or admin API key with pages.view and site team-scope access.",
+              parameters: [
+                pathParameter("pageId", "Page id"),
+              ],
+              responses: {
+                "200": {
+                  description: "Authenticated page detail",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/PageEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing page permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site or page not found",
+                },
+              },
+            },
+            patch: {
+              tags: ["Live Management"],
+              summary: "Update one page from an authenticated live-site management client",
+              operationId: "updateBackyLiveManagedPage",
+              description:
+                "Requires an admin session or admin API key with pages.edit and site team-scope access. Uses the same validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery as the admin page detail endpoint.",
+              parameters: [
+                pathParameter("pageId", "Page id"),
+              ],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/PageUpdateRequest" },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Updated page detail",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/PageEnvelope" },
+                    },
+                  },
+                },
+                "400": {
+                  description: "Invalid page payload or readiness blocked",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing page permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "409": {
+                  description: "Slug or page version conflict",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           [`/api/sites/${site.id}/blog`]: {
             get: {
               tags: ["Content"],
@@ -3909,6 +4010,51 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 page: { $ref: "#/components/schemas/PageResource" },
               },
             }),
+            PageUpdateRequest: {
+              type: "object",
+              additionalProperties: true,
+              properties: {
+                expectedUpdatedAt: { type: "string", format: "date-time" },
+                title: { type: "string" },
+                slug: { type: "string" },
+                status: {
+                  type: "string",
+                  enum: ["draft", "published", "scheduled", "archived"],
+                },
+                scheduledAt: { type: ["string", "null"], format: "date-time" },
+                isHomepage: { type: "boolean" },
+                parentId: { type: ["string", "null"] },
+                meta: { type: "object", additionalProperties: true },
+                content: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/BackyContentDocument" },
+                    {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        elements: {
+                          type: "array",
+                          items: { type: "object", additionalProperties: true },
+                        },
+                        canvasSize: {
+                          type: "object",
+                          required: ["width", "height"],
+                          properties: {
+                            width: { type: "number", exclusiveMinimum: 0 },
+                            height: { type: "number", exclusiveMinimum: 0 },
+                          },
+                        },
+                        customCSS: { type: "string" },
+                      },
+                    },
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                  ],
+                },
+              },
+            },
             PageResource: {
               type: "object",
               additionalProperties: true,

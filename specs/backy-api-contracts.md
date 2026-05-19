@@ -141,6 +141,13 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
   - Successful preview-token reads record a tokenless `previewToken.use` audit event with `actorId: "public-preview"`, target, surface, path/slug metadata, and `tokenStored: false`.
 
+- `GET /api/sites/:siteId/manage/pages/:pageId`
+- `PATCH /api/sites/:siteId/manage/pages/:pageId`
+  - Authenticated live-site page management bridge for custom frontends and hosted editing surfaces.
+  - `GET` requires an admin session or admin API key with `pages.view`; `PATCH` requires `pages.edit`.
+  - Both methods enforce site team scope before delegating to the admin page detail route, so validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery match the normal admin API.
+  - The endpoint is advertised by the public manifest as `endpoints.liveManagePage` and by the site-scoped OpenAPI document with `getBackyLiveManagedPage` and `updateBackyLiveManagedPage` operation ids.
+
 - `POST /api/admin/sites/:siteId/pages`
   - Accepts top-level `frontendDesignTemplateId` or `designTemplateId` for connected frontend contracts.
   - When a matching site frontend design template exists and no explicit content is provided, Backy seeds editable canvas content from the captured template, preserves site chrome/tokens/custom CSS/binding hints in `meta.frontendDesign*`, and returns the normal admin page resource.
