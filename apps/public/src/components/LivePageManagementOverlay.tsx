@@ -33,8 +33,10 @@ const INLINE_LINK_ELEMENT_TYPES = new Set(['button', 'link']);
 const INLINE_IMAGE_ELEMENT_TYPES = new Set(['image']);
 const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-down'] as const;
 const BORDER_STYLE_OPTIONS = ['', 'solid', 'dashed', 'dotted', 'double', 'none'] as const;
+const TEXT_ALIGN_OPTIONS = ['', 'left', 'center', 'right', 'justify'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
 type BorderStyleOption = typeof BORDER_STYLE_OPTIONS[number];
+type TextAlignOption = typeof TEXT_ALIGN_OPTIONS[number];
 type InlineAppearanceFields = {
   color: string;
   backgroundColor: string;
@@ -43,6 +45,9 @@ type InlineAppearanceFields = {
   borderWidth: string;
   borderRadius: string;
   padding: string;
+  fontSize: string;
+  fontWeight: string;
+  textAlign: TextAlignOption;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -198,6 +203,7 @@ const imageFieldsFromElement = (element: Record<string, unknown> | null) => {
 const appearanceFieldsFromElement = (element: Record<string, unknown> | null): InlineAppearanceFields => {
   const props = elementProps(element);
   const borderStyle = stringProp(props, 'borderStyle');
+  const textAlign = stringProp(props, 'textAlign');
   return {
     color: stringProp(props, 'color'),
     backgroundColor: stringProp(props, 'backgroundColor'),
@@ -208,6 +214,11 @@ const appearanceFieldsFromElement = (element: Record<string, unknown> | null): I
     borderWidth: lengthProp(props, 'borderWidth'),
     borderRadius: lengthProp(props, 'borderRadius'),
     padding: lengthProp(props, 'padding'),
+    fontSize: lengthProp(props, 'fontSize'),
+    fontWeight: stringProp(props, 'fontWeight'),
+    textAlign: TEXT_ALIGN_OPTIONS.includes(textAlign as TextAlignOption)
+      ? textAlign as TextAlignOption
+      : '',
   };
 };
 
@@ -294,6 +305,9 @@ const updateElementAppearance = (
   borderWidth: input.borderWidth.trim(),
   borderRadius: input.borderRadius.trim(),
   padding: input.padding.trim(),
+  fontSize: input.fontSize.trim(),
+  fontWeight: input.fontWeight.trim(),
+  textAlign: input.textAlign,
 });
 
 export function LivePageManagementOverlay({
@@ -331,6 +345,9 @@ export function LivePageManagementOverlay({
   const [inlineAppearanceBorderWidth, setInlineAppearanceBorderWidth] = useState('');
   const [inlineAppearanceBorderRadius, setInlineAppearanceBorderRadius] = useState('');
   const [inlineAppearancePadding, setInlineAppearancePadding] = useState('');
+  const [inlineAppearanceFontSize, setInlineAppearanceFontSize] = useState('');
+  const [inlineAppearanceFontWeight, setInlineAppearanceFontWeight] = useState('');
+  const [inlineAppearanceTextAlign, setInlineAppearanceTextAlign] = useState<TextAlignOption>('');
   const [inlineAppearanceSaving, setInlineAppearanceSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
@@ -437,6 +454,9 @@ export function LivePageManagementOverlay({
       setInlineAppearanceBorderWidth('');
       setInlineAppearanceBorderRadius('');
       setInlineAppearancePadding('');
+      setInlineAppearanceFontSize('');
+      setInlineAppearanceFontWeight('');
+      setInlineAppearanceTextAlign('');
       return;
     }
 
@@ -480,6 +500,9 @@ export function LivePageManagementOverlay({
     setInlineAppearanceBorderWidth(appearanceFields.borderWidth);
     setInlineAppearanceBorderRadius(appearanceFields.borderRadius);
     setInlineAppearancePadding(appearanceFields.padding);
+    setInlineAppearanceFontSize(appearanceFields.fontSize);
+    setInlineAppearanceFontWeight(appearanceFields.fontWeight);
+    setInlineAppearanceTextAlign(appearanceFields.textAlign);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -682,6 +705,9 @@ export function LivePageManagementOverlay({
       borderWidth: inlineAppearanceBorderWidth,
       borderRadius: inlineAppearanceBorderRadius,
       padding: inlineAppearancePadding,
+      fontSize: inlineAppearanceFontSize,
+      fontWeight: inlineAppearanceFontWeight,
+      textAlign: inlineAppearanceTextAlign,
     });
     if (!nextContent) {
       setError('Unable to update this appearance from the live overlay. Open the full editor instead.');
@@ -1143,6 +1169,38 @@ export function LivePageManagementOverlay({
                       placeholder="0, 12, 12px 16px"
                       style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
                     />
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Font size
+                      <input
+                        value={inlineAppearanceFontSize}
+                        onChange={(event) => setInlineAppearanceFontSize(event.target.value)}
+                        placeholder="16, 18px, 1rem"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Font weight
+                      <input
+                        value={inlineAppearanceFontWeight}
+                        onChange={(event) => setInlineAppearanceFontWeight(event.target.value)}
+                        placeholder="400, 600, bold"
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                      />
+                    </label>
+                  </div>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Text align
+                    <select
+                      value={inlineAppearanceTextAlign}
+                      onChange={(event) => setInlineAppearanceTextAlign(event.target.value as TextAlignOption)}
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                    >
+                      {TEXT_ALIGN_OPTIONS.map((option) => (
+                        <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                      ))}
+                    </select>
                   </label>
                   <button
                     type="button"
