@@ -35,6 +35,10 @@ interface RouteParams {
 
 const CUSTOMER_COLLECTION_SLUG = 'customers';
 const CUSTOMER_PROMOTION_SOURCE_KEY = '__backyCustomerPromotion';
+const CUSTOMER_STATUSES = ['lead', 'customer', 'vip', 'inactive'] as const;
+
+type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
+type ParsedCustomerPromotionValue<TValue> = { value: TValue; invalid?: true };
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -60,6 +64,14 @@ const textValue = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const parseCustomerStatus = (value: unknown): ParsedCustomerPromotionValue<CustomerStatus> => {
+  if (value === undefined || value === null || value === '') return { value: 'lead' };
+  const status = typeof value === 'string' ? value.trim() : '';
+  return CUSTOMER_STATUSES.includes(status as CustomerStatus)
+    ? { value: status as CustomerStatus }
+    : { value: 'lead', invalid: true };
+};
+
 const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
   try {
     const body = await request.json();
@@ -75,7 +87,7 @@ const customerFields = (): BackyCollectionField[] => [
   { id: 'field-customer-name', key: 'name', label: 'Name', type: 'text', required: true },
   { id: 'field-customer-email', key: 'email', label: 'Email', type: 'email', required: true, unique: true },
   { id: 'field-customer-phone', key: 'phone', label: 'Phone', type: 'text' },
-  { id: 'field-customer-status', key: 'status', label: 'Status', type: 'select', options: ['lead', 'customer', 'vip', 'inactive'] },
+  { id: 'field-customer-status', key: 'status', label: 'Status', type: 'select', options: [...CUSTOMER_STATUSES] },
   { id: 'field-customer-source', key: 'source', label: 'Source', type: 'text' },
   { id: 'field-customer-contact-id', key: 'contactid', label: 'Contact ID', type: 'text' },
   { id: 'field-customer-form-id', key: 'formid', label: 'Form ID', type: 'text' },
@@ -142,11 +154,12 @@ const customerCollectionInput = () => ({
 const customerRecordValues = (
   contact: Contact,
   input: Record<string, unknown>,
+  customerStatus: CustomerStatus,
 ): Record<string, BackyJsonValue> => ({
   name: (textValue(input.name) || contact.name || contact.email || 'Customer') as BackyJsonValue,
   email: normalizeEmail(contact.email) as BackyJsonValue,
   phone: (textValue(input.phone) || contact.phone || '') as BackyJsonValue,
-  status: (textValue(input.customerStatus) || 'lead') as BackyJsonValue,
+  status: customerStatus as BackyJsonValue,
   source: 'contact-promotion',
   contactid: contact.id,
   formid: contact.formId,
@@ -221,6 +234,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, formId, contactId } = await params;
     const body = await parseJsonBody(request);
+    const customerStatusFilter = parseCustomerStatus(body.customerStatus);
+    if (customerStatusFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_CUSTOMER_PROMOTION_STATUS', 'customerStatus must be lead, customer, vip, or inactive.', requestId);
+    }
+    const customerStatus = customerStatusFilter.value;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -268,7 +286,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           } as BackyJsonObject,
         })).item;
       const existingRecord = await findRepositoryCustomerByEmail(customerCollection, site.id, email, repositories);
-      const values = customerRecordValues(contact, body);
+      const values = customerRecordValues(contact, body, customerStatus);
       const record = existingRecord
         ? (await repositories.collections.updateRecord(site.id, customerCollection.id, existingRecord.id, {
           values: {
@@ -379,7 +397,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       offset: 0,
     }).records;
     const existingRecord = customerRecords.find((record) => normalizeEmail(record.values.email) === email);
-    const values = customerRecordValues(contact, body);
+    const values = customerRecordValues(contact, body, customerStatus);
     const record = existingRecord
       ? updateAdminCollectionRecord(site.id, customerCollection.id, existingRecord.id, {
         values: {

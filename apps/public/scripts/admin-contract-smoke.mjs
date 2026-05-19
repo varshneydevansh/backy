@@ -368,6 +368,10 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/promote/route.ts', import.meta.url),
     'utf8',
   );
+  const adminFormContactCustomerPromotionRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/promote-customer/route.ts', import.meta.url),
+    'utf8',
+  );
   const blogListRoute = fs.readFileSync(
     new URL('../src/app/api/admin/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -525,6 +529,8 @@ function assertAdminPageContentValidationSource() {
   assert(adminFormContactPromotionRoute.includes('roleFilter.invalid'), 'admin form contact promotion route must branch on invalid role values');
   assert(adminFormContactPromotionRoute.includes('statusFilter.invalid'), 'admin form contact promotion route must branch on invalid status values');
   assert(adminFormContactPromotionRoute.includes('expiresInMinutesFilter.invalid'), 'admin form contact promotion route must branch on invalid invite expiry values');
+  assert(adminFormContactCustomerPromotionRoute.includes("'INVALID_ADMIN_CUSTOMER_PROMOTION_STATUS'"), 'admin form contact customer promotion route must reject invalid customerStatus values');
+  assert(adminFormContactCustomerPromotionRoute.includes('customerStatusFilter.invalid'), 'admin form contact customer promotion route must branch on invalid customerStatus values');
 
   assert(
     apiContracts.includes('INVALID_PAGE_CONTENT') &&
@@ -580,6 +586,7 @@ function assertAdminPageContentValidationSource() {
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_ROLE') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_STATUS') &&
       apiContracts.includes('INVALID_ADMIN_CONTACT_PROMOTION_INVITE_EXPIRY') &&
+      apiContracts.includes('INVALID_ADMIN_CUSTOMER_PROMOTION_STATUS') &&
       apiContracts.includes('SCHEDULED_AT_INVALID'),
     'API contracts must document invalid page, blog, comment, and form filter/content errors',
   );
