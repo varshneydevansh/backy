@@ -129,6 +129,22 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildManifestPagesDiscovery') &&
+    manifestRoute.includes("schemaVersion: 'backy.pages-discovery.v1'") &&
+    manifestRoute.includes("draftPreviewRequiresToken: true") &&
+    manifestRoute.includes("notFound: 'PAGE_NOT_FOUND'") &&
+    manifestRoute.includes('pagesRuntime: buildManifestPagesDiscovery(input.site.id, input.pages)') &&
+    manifestRoute.includes('pagesRuntime: buildManifestPagesDiscovery(site.id, pages)') &&
+    frontendManifestSchema.includes('"backy.pages-discovery.v1"') &&
+    frontendManifestSchema.includes('"previewTokenIsNeverReturned"') &&
+    frontendManifestSchema.includes('"INVALID_PAGE_LIMIT"') &&
+    sdkSource.includes('BackyManifestPagesRuntimeModule') &&
+    sdkSmoke.includes('manifest() missing pages runtime discovery module') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestPagesRuntimeDiscovery'),
+  'Frontend manifest and SDK must expose structured pages runtime discovery for custom frontend page routing and preview UIs.',
+);
+
+assert(
   manifestRoute.includes('buildManifestCollectionsDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.collections-discovery.v1'") &&
     manifestRoute.includes("fieldPolicyMetadata: 'metadata.visitorWritePolicy'") &&

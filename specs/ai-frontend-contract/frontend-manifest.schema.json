@@ -616,6 +616,104 @@
               },
               "required": ["count", "items"]
             },
+            "pagesRuntime": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.pages-discovery.v1" },
+                "count": { "type": "number", "minimum": 0 },
+                "publishedCount": { "type": "number", "minimum": 0 },
+                "scheduledCount": { "type": "number", "minimum": 0 },
+                "homepagePath": { "type": ["string", "null"] },
+                "paths": { "type": "array", "items": { "type": "string" } },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string", "minLength": 1 },
+                    "detail": { "type": "string", "minLength": 1 },
+                    "resolve": { "type": "string", "minLength": 1 },
+                    "render": { "type": "string", "minLength": 1 },
+                    "liveManage": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["list", "detail", "resolve", "render", "liveManage"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "const": "GET" },
+                    "detail": { "const": "GET" },
+                    "resolve": { "const": "GET" },
+                    "render": { "const": "GET" },
+                    "liveManageRead": { "const": "GET" },
+                    "liveManageUpdate": { "const": "PATCH" }
+                  },
+                  "required": ["list", "detail", "resolve", "render", "liveManageRead", "liveManageUpdate"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicList": { "type": "boolean" },
+                    "publicDetail": { "type": "boolean" },
+                    "renderPayload": { "type": "boolean" },
+                    "routeResolve": { "type": "boolean" },
+                    "seoMetadata": { "type": "boolean" },
+                    "frontendDesignProvenance": { "type": "boolean" },
+                    "previewTokens": { "type": "boolean" },
+                    "liveManagement": { "type": "boolean" },
+                    "conditionalRequests": { "type": "boolean" },
+                    "cacheablePages": { "type": "boolean" }
+                  },
+                  "required": ["publicList", "publicDetail", "renderPayload", "routeResolve", "seoMetadata", "frontendDesignProvenance", "previewTokens", "liveManagement", "conditionalRequests", "cacheablePages"]
+                },
+                "cache": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "list": { "type": "string" },
+                    "detail": { "type": "string" },
+                    "previewDetail": { "type": "string" },
+                    "render": { "type": "string" }
+                  },
+                  "required": ["list", "detail", "previewDetail", "render"]
+                },
+                "privacy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicReadsOnlyIncludePublishedOrPastScheduledPages": { "type": "boolean" },
+                    "draftPreviewRequiresToken": { "type": "boolean" },
+                    "previewTokenIsNeverReturned": { "type": "boolean" }
+                  },
+                  "required": ["publicReadsOnlyIncludePublishedOrPastScheduledPages", "draftPreviewRequiresToken", "previewTokenIsNeverReturned"]
+                },
+                "filters": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "queryParams": { "type": "array", "items": { "type": "string" } },
+                    "maxLimit": { "type": "number", "minimum": 1 }
+                  },
+                  "required": ["queryParams", "maxLimit"]
+                },
+                "schemas": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "page": { "const": "backy.page.v1" },
+                    "renderPayload": { "const": "backy.render-payload.v1" },
+                    "seo": { "const": "backy.seo-route.v1" },
+                    "notFound": { "const": "PAGE_NOT_FOUND" },
+                    "invalidLimit": { "const": "INVALID_PAGE_LIMIT" },
+                    "invalidOffset": { "const": "INVALID_PAGE_OFFSET" }
+                  },
+                  "required": ["page", "renderPayload", "seo", "notFound", "invalidLimit", "invalidOffset"]
+                }
+              },
+              "required": ["schemaVersion", "count", "publishedCount", "scheduledCount", "homepagePath", "paths", "endpoints", "methods", "capabilities", "cache", "privacy", "filters", "schemas"]
+            },
             "blog": {
               "type": "object",
               "properties": {
@@ -1494,7 +1592,7 @@
               "required": ["schemaVersion", "elementTypes", "capabilities", "registry", "sandbox", "renderContract", "dataBindingScopes", "security"]
             }
           },
-          "required": ["routing", "theme", "liveManagement", "pages", "blog", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "reusableSectionsRuntime", "media"]
+          "required": ["routing", "theme", "liveManagement", "pages", "pagesRuntime", "blog", "collections", "collectionsRuntime", "forms", "formsRuntime", "comments", "reusableSections", "reusableSectionsRuntime", "media"]
         },
         "admin": {
           "type": "object",

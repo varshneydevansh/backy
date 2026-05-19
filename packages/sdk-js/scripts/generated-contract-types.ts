@@ -11,6 +11,7 @@ import type {
   BackyManifestCollectionsRuntimeModule,
   BackyManifestLocalizedRoutePatternGroup,
   BackyManifestPageResource,
+  BackyManifestPagesRuntimeModule,
   BackyManifestPostResource,
   BackyManifestRedirectRule,
   BackyManifestReusableSection,
@@ -845,6 +846,64 @@ const manifest = {
       count: 1,
       items: [],
     },
+    pagesRuntime: {
+      schemaVersion: "backy.pages-discovery.v1",
+      count: 1,
+      publishedCount: 1,
+      scheduledCount: 0,
+      homepagePath: "/",
+      paths: ["/"],
+      endpoints: {
+        list: "/api/sites/site_demo/pages",
+        detail: "/api/sites/site_demo/pages?path={path}",
+        resolve: "/api/sites/site_demo/resolve?path={path}",
+        render: "/api/sites/site_demo/render?path={path}",
+        liveManage: "/api/sites/site_demo/manage/pages/{pageId}",
+      },
+      methods: {
+        list: "GET",
+        detail: "GET",
+        resolve: "GET",
+        render: "GET",
+        liveManageRead: "GET",
+        liveManageUpdate: "PATCH",
+      },
+      capabilities: {
+        publicList: true,
+        publicDetail: true,
+        renderPayload: true,
+        routeResolve: true,
+        seoMetadata: true,
+        frontendDesignProvenance: false,
+        previewTokens: true,
+        liveManagement: true,
+        conditionalRequests: true,
+        cacheablePages: true,
+      },
+      cache: {
+        list: "public-discovery",
+        detail: "public-discovery",
+        previewDetail: "private-no-store",
+        render: "public-discovery",
+      },
+      privacy: {
+        publicReadsOnlyIncludePublishedOrPastScheduledPages: true,
+        draftPreviewRequiresToken: true,
+        previewTokenIsNeverReturned: true,
+      },
+      filters: {
+        queryParams: ["slug", "path", "previewToken", "limit", "offset"],
+        maxLimit: 100,
+      },
+      schemas: {
+        page: "backy.page.v1",
+        renderPayload: "backy.render-payload.v1",
+        seo: "backy.seo-route.v1",
+        notFound: "PAGE_NOT_FOUND",
+        invalidLimit: "INVALID_PAGE_LIMIT",
+        invalidOffset: "INVALID_PAGE_OFFSET",
+      },
+    },
     blog: {
       count: 0,
       categories: [
@@ -1485,6 +1544,65 @@ const sdkManifestPage = {
   renderUrl: "/api/sites/site_demo/render?path=%2F",
   frontendDesign: sdkRouteFrontendDesign,
 } satisfies BackyManifestPageResource;
+
+const sdkManifestPagesRuntime = {
+  schemaVersion: "backy.pages-discovery.v1",
+  count: 1,
+  publishedCount: 1,
+  scheduledCount: 0,
+  homepagePath: "/",
+  paths: ["/"],
+  endpoints: {
+    list: "/api/sites/site_demo/pages",
+    detail: "/api/sites/site_demo/pages?path={path}",
+    resolve: "/api/sites/site_demo/resolve?path={path}",
+    render: "/api/sites/site_demo/render?path={path}",
+    liveManage: "/api/sites/site_demo/manage/pages/{pageId}",
+  },
+  methods: {
+    list: "GET",
+    detail: "GET",
+    resolve: "GET",
+    render: "GET",
+    liveManageRead: "GET",
+    liveManageUpdate: "PATCH",
+  },
+  capabilities: {
+    publicList: true,
+    publicDetail: true,
+    renderPayload: true,
+    routeResolve: true,
+    seoMetadata: true,
+    frontendDesignProvenance: true,
+    previewTokens: true,
+    liveManagement: true,
+    conditionalRequests: true,
+    cacheablePages: true,
+  },
+  cache: {
+    list: "public-discovery",
+    detail: "public-discovery",
+    previewDetail: "private-no-store",
+    render: "public-discovery",
+  },
+  privacy: {
+    publicReadsOnlyIncludePublishedOrPastScheduledPages: true,
+    draftPreviewRequiresToken: true,
+    previewTokenIsNeverReturned: true,
+  },
+  filters: {
+    queryParams: ["slug", "path", "previewToken", "limit", "offset"],
+    maxLimit: 100,
+  },
+  schemas: {
+    page: "backy.page.v1",
+    renderPayload: "backy.render-payload.v1",
+    seo: "backy.seo-route.v1",
+    notFound: "PAGE_NOT_FOUND",
+    invalidLimit: "INVALID_PAGE_LIMIT",
+    invalidOffset: "INVALID_PAGE_OFFSET",
+  },
+} satisfies BackyManifestPagesRuntimeModule;
 
 const sdkManifestPost = {
   id: "post_hello",
@@ -3806,6 +3924,15 @@ const invalidSdkRouteFrontendDesign = { ...sdkRouteFrontendDesign, templateId: u
 // @ts-expect-error manifest page entries require a hosted/render path for frontend routing.
 const invalidSdkManifestPage = { ...sdkManifestPage, path: undefined, } satisfies BackyManifestPageResource;
 
+// @ts-expect-error manifest pages runtime modules require preview privacy metadata.
+const invalidSdkManifestPagesRuntime = { ...sdkManifestPagesRuntime, privacy: undefined, } satisfies BackyManifestPagesRuntimeModule;
+
+const invalidGeneratedManifestPagesRuntimeDiscovery = {
+  ...manifest.modules.pagesRuntime,
+  // @ts-expect-error generated manifest pages discovery uses a versioned schema marker.
+  schemaVersion: "backy.pages-discovery.v0",
+} satisfies GeneratedBackyFrontendManifest["modules"]["pagesRuntime"];
+
 // @ts-expect-error manifest blog entries require a render URL for frontend hydration.
 const invalidSdkManifestPost = { ...sdkManifestPost, renderUrl: undefined, } satisfies BackyManifestPostResource;
 
@@ -4294,6 +4421,7 @@ void sdkLocaleStrategy;
 void sdkRouteFrontendDesign;
 void sdkRoutePattern;
 void sdkManifestPage;
+void sdkManifestPagesRuntime;
 void sdkManifestPost;
 void sdkManifestBlogCategory;
 void sdkManifestBlogTag;
@@ -4336,6 +4464,8 @@ void invalidSdkLocaleStrategy;
 void invalidSdkRoutePattern;
 void invalidSdkRouteFrontendDesign;
 void invalidSdkManifestPage;
+void invalidSdkManifestPagesRuntime;
+void invalidGeneratedManifestPagesRuntimeDiscovery;
 void invalidSdkManifestPost;
 void invalidGeneratedManifestBlogCategory;
 void invalidSdkManifestBlogCategory;

@@ -2709,6 +2709,72 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           [key: string]: unknown;
         }>;
       };
+      pagesRuntime: {
+        schemaVersion: "backy.pages-discovery.v1";
+        count: number;
+        publishedCount: number;
+        scheduledCount: number;
+        homepagePath: string | null;
+        paths: Array<string>;
+        endpoints: {
+          list: string;
+          detail: string;
+          resolve: string;
+          render: string;
+          liveManage: string;
+          [key: string]: unknown;
+        };
+        methods: {
+          list: "GET";
+          detail: "GET";
+          resolve: "GET";
+          render: "GET";
+          liveManageRead: "GET";
+          liveManageUpdate: "PATCH";
+          [key: string]: unknown;
+        };
+        capabilities: {
+          publicList: boolean;
+          publicDetail: boolean;
+          renderPayload: boolean;
+          routeResolve: boolean;
+          seoMetadata: boolean;
+          frontendDesignProvenance: boolean;
+          previewTokens: boolean;
+          liveManagement: boolean;
+          conditionalRequests: boolean;
+          cacheablePages: boolean;
+          [key: string]: unknown;
+        };
+        cache: {
+          list: string;
+          detail: string;
+          previewDetail: string;
+          render: string;
+          [key: string]: unknown;
+        };
+        privacy: {
+          publicReadsOnlyIncludePublishedOrPastScheduledPages: boolean;
+          draftPreviewRequiresToken: boolean;
+          previewTokenIsNeverReturned: boolean;
+          [key: string]: unknown;
+        };
+        filters: {
+          queryParams: Array<string>;
+          maxLimit: number;
+          [key: string]: unknown;
+        };
+        schemas: {
+          page: "backy.page.v1";
+          renderPayload: "backy.render-payload.v1";
+          seo: "backy.seo-route.v1";
+          notFound: "PAGE_NOT_FOUND";
+          invalidLimit: "INVALID_PAGE_LIMIT";
+          invalidOffset: "INVALID_PAGE_OFFSET";
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
       blog: {
         count: number;
         items?: Array<{

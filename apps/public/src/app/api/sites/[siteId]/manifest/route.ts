@@ -77,6 +77,13 @@ type ManifestReusableSectionDiscoverySource = {
   metadata?: Record<string, unknown>;
 };
 
+type ManifestPageDiscoverySource = {
+  slug: string;
+  status: string;
+  isHomepage: boolean;
+  meta?: unknown;
+};
+
 type ManifestAdminDiscovery = {
   auth: {
     authenticated: boolean;
@@ -690,6 +697,68 @@ const buildManifestLiveManagementDiscovery = (siteId: string) => ({
   },
 });
 
+const buildManifestPagesDiscovery = (
+  siteId: string,
+  pages: ManifestPageDiscoverySource[],
+) => ({
+  schemaVersion: 'backy.pages-discovery.v1',
+  count: pages.length,
+  publishedCount: pages.filter((page) => page.status === 'published').length,
+  scheduledCount: pages.filter((page) => page.status === 'scheduled').length,
+  homepagePath: pages.find((page) => page.isHomepage || page.slug === 'index') ? '/' : null,
+  paths: pages.map(pagePath),
+  endpoints: {
+    list: `/api/sites/${siteId}/pages`,
+    detail: `/api/sites/${siteId}/pages?path={path}`,
+    resolve: `/api/sites/${siteId}/resolve?path={path}`,
+    render: `/api/sites/${siteId}/render?path={path}`,
+    liveManage: `/api/sites/${siteId}/manage/pages/{pageId}`,
+  },
+  methods: {
+    list: 'GET',
+    detail: 'GET',
+    resolve: 'GET',
+    render: 'GET',
+    liveManageRead: 'GET',
+    liveManageUpdate: 'PATCH',
+  },
+  capabilities: {
+    publicList: true,
+    publicDetail: true,
+    renderPayload: true,
+    routeResolve: true,
+    seoMetadata: true,
+    frontendDesignProvenance: pages.some((page) => Boolean(contentFrontendDesign(page))),
+    previewTokens: true,
+    liveManagement: true,
+    conditionalRequests: true,
+    cacheablePages: true,
+  },
+  cache: {
+    list: 'public-discovery',
+    detail: 'public-discovery',
+    previewDetail: 'private-no-store',
+    render: 'public-discovery',
+  },
+  privacy: {
+    publicReadsOnlyIncludePublishedOrPastScheduledPages: true,
+    draftPreviewRequiresToken: true,
+    previewTokenIsNeverReturned: true,
+  },
+  filters: {
+    queryParams: ['slug', 'path', 'previewToken', 'limit', 'offset'],
+    maxLimit: 100,
+  },
+  schemas: {
+    page: 'backy.page.v1',
+    renderPayload: 'backy.render-payload.v1',
+    seo: 'backy.seo-route.v1',
+    notFound: 'PAGE_NOT_FOUND',
+    invalidLimit: 'INVALID_PAGE_LIMIT',
+    invalidOffset: 'INVALID_PAGE_OFFSET',
+  },
+});
+
 const buildManifestFormsDiscovery = (
   siteId: string,
   forms: FormDefinition[],
@@ -1054,6 +1123,7 @@ const buildRepositoryManifest = (
             frontendDesign: contentFrontendDesign(page),
           })),
         },
+        pagesRuntime: buildManifestPagesDiscovery(input.site.id, input.pages),
         blog: {
           count: input.posts.length,
           rssUrl: `/api/sites/${input.site.id}/blog/rss`,
@@ -1385,6 +1455,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               frontendDesign: contentFrontendDesign(page),
             })),
           },
+          pagesRuntime: buildManifestPagesDiscovery(site.id, pages),
           blog: {
             count: posts.length,
             rssUrl: `/api/sites/${site.id}/blog/rss`,
