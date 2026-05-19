@@ -91,6 +91,15 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('fieldMap[nextKey] = fieldMap[oldKey]'),
     'Forms builder must preserve contact-share and collection-write mappings when a form field key is renamed',
   );
+  assert(
+    source.includes('patchFormDraftFieldType') &&
+      source.includes('applyFormFieldTypeDefaults') &&
+      source.includes("type === 'select' || type === 'radio'") &&
+      source.includes("['Option one', 'Option two']") &&
+      source.includes('validationTypesForFieldType') &&
+      source.includes("if (type === 'number') return ['min', 'max'];"),
+    'Forms builder must normalize options and compatible validation when a field type changes',
+  );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');
   for (const label of [
     'backy.forms-persistence-certification.v1',

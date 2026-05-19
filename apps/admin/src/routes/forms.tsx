@@ -1680,6 +1680,22 @@ function FormsRoute() {
     });
   };
 
+  const patchFormDraftFieldType = (fieldIndex: number, type: FormFieldType) => {
+    if (!canEditForms) return;
+    setFormDraft((current) => {
+      if (!current) return current;
+      const currentField = current.fields[fieldIndex];
+      if (!currentField) return current;
+
+      return {
+        ...current,
+        fields: current.fields.map((field, index) => (
+          index === fieldIndex ? applyFormFieldTypeDefaults(field, type) : field
+        )),
+      };
+    });
+  };
+
   const patchFormDraftCollectionTarget = (patch: Partial<NonNullable<FormDefinition['collectionTarget']>>) => {
     if (!canEditForms) return;
     if (patch.enabled === true && !canUseCollectionTargets) return;
@@ -4056,7 +4072,7 @@ function FormsRoute() {
                                     Type
                                     <select
                                       value={field.type}
-                                      onChange={(event) => patchFormDraftField(fieldIndex, { type: event.target.value })}
+                                      onChange={(event) => patchFormDraftFieldType(fieldIndex, event.target.value as FormFieldType)}
                                       className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
                                     >
                                       {FORM_FIELD_TYPES.map((type) => (
@@ -5188,6 +5204,50 @@ const remapFormCollectionTargetFieldKey = (
     ...collectionTarget,
     slugField: remapFieldKeyReference(collectionTarget.slugField, oldKey, nextKey),
     fieldMap,
+  };
+};
+
+const FORM_FIELD_TYPE_PLACEHOLDERS: Partial<Record<FormFieldType, string>> = {
+  email: 'you@example.com',
+  tel: '+1 555 0100',
+  url: 'https://example.com',
+  textarea: 'Tell us what you need',
+  number: '1',
+};
+
+const validationTypesForFieldType = (type: FormFieldType): FormValidationRuleType[] => {
+  if (type === 'number') return ['min', 'max'];
+  if (type === 'text' || type === 'textarea' || type === 'email' || type === 'tel' || type === 'url') {
+    return ['minLength', 'maxLength', 'pattern'];
+  }
+  return [];
+};
+
+const applyFormFieldTypeDefaults = (
+  field: FormFieldDefinition,
+  type: FormFieldType,
+): FormFieldDefinition => {
+  const allowedValidationTypes = new Set(validationTypesForFieldType(type));
+  const validation = (field.validation || []).filter((rule) => (
+    allowedValidationTypes.has(rule.type as FormValidationRuleType)
+  ));
+  const existingOptions = field.options?.map((option) => option.trim()).filter(Boolean) || [];
+  const supportsOptions = type === 'select' || type === 'radio' || type === 'checkbox';
+  const options = supportsOptions
+    ? existingOptions.length > 0
+      ? existingOptions
+      : type === 'select' || type === 'radio'
+        ? ['Option one', 'Option two']
+        : undefined
+    : undefined;
+
+  return {
+    ...field,
+    type,
+    options,
+    validation: validation.length > 0 ? validation : undefined,
+    placeholder: field.placeholder || FORM_FIELD_TYPE_PLACEHOLDERS[type],
+    helpText: field.helpText || (type === 'file' ? 'Accepts uploaded files submitted with this form.' : undefined),
   };
 };
 
