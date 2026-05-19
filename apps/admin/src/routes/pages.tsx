@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, EyeOff, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus, History } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, EyeOff, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus, History, LogIn } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration' | 'member-login';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -384,6 +384,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create the member signup surface before full auth and membership wiring lands.',
     badge: 'Members',
     icon: UserPlus,
+  },
+  {
+    key: 'member-login',
+    title: 'Member login',
+    detail: 'Create an email-only member access page that avoids password form capture.',
+    badge: 'Access',
+    icon: LogIn,
   },
 ];
 
@@ -1817,6 +1824,7 @@ function PagesListView() {
       blankPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
       contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
       registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+      memberLoginPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
       storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
     },
@@ -1838,6 +1846,7 @@ function PagesListView() {
         blank: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
         contact: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
         registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+        memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
         storefront: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
         blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       },

@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration' | 'member-login';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -175,6 +175,13 @@ const TEMPLATE_OPTIONS: Array<{
         detail: 'Creates a public registration form API without needing a separate frontend first.',
         sections: ['Hero', 'Registration form', 'Consent'],
     },
+    {
+        id: 'member-login',
+        name: 'Member login',
+        desc: 'Access-link request, account copy, and registration handoff.',
+        detail: 'Seeds a safe sign-in request page without storing visitor passwords in form submissions.',
+        sections: ['Hero', 'Access form', 'Register link'],
+    },
 ];
 
 const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; description: string }> = {
@@ -209,6 +216,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'register',
         description: 'A public registration page with member fields, consent, and Backy form submission routing.',
     },
+    'member-login': {
+        title: 'Member login',
+        slug: 'login',
+        description: 'A public member access page where visitors request a secure sign-in link.',
+    },
 };
 
 const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigationPlacement> = {
@@ -219,6 +231,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     about: 'primary',
     contact: 'footer',
     registration: 'primary',
+    'member-login': 'primary',
 };
 
 const PAGE_CREATION_AREAS = [
@@ -439,6 +452,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
+    'member-login': ['Home', 'Login', 'Register'],
 };
 
 const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
@@ -494,6 +508,14 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { x: 62, y: 28, w: 24, h: 6, className: 'bg-slate-100' },
         { x: 62, y: 40, w: 24, h: 6, className: 'bg-slate-100' },
         { x: 62, y: 58, w: 18, h: 7, className: 'bg-violet-600' },
+    ],
+    'member-login': [
+        { label: 'Access', x: 8, y: 16, w: 42, h: 34, className: 'border-sky-200 bg-sky-50' },
+        { x: 14, y: 27, w: 28, h: 5, className: 'bg-sky-800' },
+        { label: 'Email', x: 56, y: 18, w: 36, h: 42, className: 'border-slate-200 bg-white' },
+        { x: 62, y: 30, w: 24, h: 6, className: 'bg-slate-100' },
+        { x: 62, y: 45, w: 18, h: 7, className: 'bg-sky-600' },
+        { label: 'Register', x: 56, y: 68, w: 36, h: 10, className: 'border-sky-100 bg-sky-50' },
     ],
 };
 
@@ -1459,7 +1481,7 @@ function NewPageRoute() {
         siteChrome: selectedFrontendTemplate
             ? 'captured from frontend design contract'
             : formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
-        forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
+        forms: ['contact', 'registration', 'member-login'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
             : selectedDatasetCollection
@@ -1570,7 +1592,7 @@ function NewPageRoute() {
             name: selectedFrontendTemplate?.name || selectedTemplate.name,
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
-            seedsFormApi: ['contact', 'registration'].includes(formData.template),
+            seedsFormApi: ['contact', 'registration', 'member-login'].includes(formData.template),
             seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
@@ -1620,7 +1642,7 @@ function NewPageRoute() {
         guardrails: [
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
-            'Contact and registration templates seed editable form blocks that connect to Backy Forms and Contacts.',
+            'Contact, registration, and member-login templates seed editable form blocks that connect to Backy Forms and Contacts.',
             'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
@@ -4071,6 +4093,100 @@ function buildTemplateElements(input: {
                             createCanvasElement('select', 24, 250, { id: 'registration-member-type', width: 360, height: 54, props: { label: 'Member type', name: 'member_type', options: ['Customer', 'Creator', 'Partner'], placeholder: 'Choose a type', required: true } }),
                             createCanvasElement('checkbox', 24, 330, { id: 'registration-consent', width: 360, height: 42, props: { label: 'I agree to be contacted about this registration.', name: 'consent', required: true } }),
                             createCanvasElement('button', 24, 414, { id: 'registration-submit', width: 190, height: 50, props: { label: 'Create account', backgroundColor: '#14532d', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'member-login') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'member-login-hero-section',
+                width: 1200,
+                height: 610,
+                props: { backgroundColor: '#eef7ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 76, 76, {
+                        id: 'member-login-kicker',
+                        width: 260,
+                        height: 28,
+                        props: { content: 'Member access', fontSize: 13, fontWeight: '800', color: '#0369a1', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 116, {
+                        id: 'member-login-heading',
+                        width: 540,
+                        height: 116,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 76, 256, {
+                        id: 'member-login-copy',
+                        width: 510,
+                        height: 112,
+                        props: { content: description, fontSize: 18, lineHeight: 1.62, color: '#334155' },
+                    }),
+                    createCanvasElement('box', 76, 410, {
+                        id: 'member-login-register-card',
+                        width: 480,
+                        height: 104,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#bae6fd', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('paragraph', 20, 18, {
+                                id: 'member-login-register-copy',
+                                width: 290,
+                                height: 58,
+                                props: { content: 'New here? Send visitors to your registration page or membership checkout.', fontSize: 14, lineHeight: 1.45, color: '#475569' },
+                            }),
+                            createCanvasElement('button', 326, 27, {
+                                id: 'member-login-register-button',
+                                width: 126,
+                                height: 46,
+                                props: { label: 'Register', href: '/register', backgroundColor: '#e0f2fe', color: '#075985', borderRadius: 8, fontWeight: '700' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('form', 700, 84, {
+                        id: 'member-login-access-form',
+                        width: 420,
+                        height: 390,
+                        props: {
+                            formId: `form-${formSlug}-member-login`,
+                            formName: `${formSlug}-member-login`,
+                            formTitle: 'Member access request',
+                            formDescription: 'Email-only member access request generated from the page canvas.',
+                            formActive: true,
+                            formAudience: 'public',
+                            successMessage: 'Check your inbox for the next access step.',
+                            enableHoneypot: true,
+                            enableCaptcha: false,
+                            moderationMode: 'auto-approve',
+                            contactShareEnabled: true,
+                            contactShareEmailField: 'email',
+                            contactShareNotesField: 'access_reason',
+                            backgroundColor: '#ffffff',
+                            borderRadius: 8,
+                            borderColor: '#bae6fd',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                            boxShadow: '0 20px 60px rgba(14, 116, 144, 0.12)',
+                        },
+                        children: [
+                            createCanvasElement('heading', 24, 28, {
+                                id: 'member-login-form-heading',
+                                width: 330,
+                                height: 36,
+                                props: { content: 'Request your access link', level: 'h2', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                            }),
+                            createCanvasElement('paragraph', 24, 76, {
+                                id: 'member-login-form-copy',
+                                width: 330,
+                                height: 58,
+                                props: { content: 'This starter never asks visitors to submit a password into Backy Forms.', fontSize: 14, lineHeight: 1.45, color: '#64748b' },
+                            }),
+                            createCanvasElement('input', 24, 158, { id: 'member-login-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
+                            createCanvasElement('input', 24, 230, { id: 'member-login-access-reason', width: 360, height: 54, props: { label: 'Access reason', name: 'access_reason', placeholder: 'Customer portal, course, community...', required: false } }),
+                            createCanvasElement('button', 24, 316, { id: 'member-login-submit', width: 190, height: 50, props: { label: 'Send access link', backgroundColor: '#0369a1', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
                         ],
                     }),
                 ],

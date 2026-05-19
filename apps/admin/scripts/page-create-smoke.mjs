@@ -219,6 +219,31 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     formElementIds: ['registration-form-card'],
   },
   {
+    template: 'member-login',
+    title: 'Smoke Member Login Template',
+    slugBase: 'smoke-member-login-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'member-login',
+    navigationItem: 'Login',
+    headingId: 'member-login-heading',
+    minRootElementCount: 3,
+    minTotalElementCount: 20,
+    minCanvasHeight: 900,
+    requiredElementIds: [
+      'member-login-site-header',
+      'member-login-site-navigation',
+      'member-login-site-footer',
+      'member-login-hero-section',
+      'member-login-access-form',
+      'member-login-email',
+      'member-login-access-reason',
+      'member-login-submit',
+      'member-login-register-card',
+      'member-login-register-button',
+    ],
+    formElementIds: ['member-login-access-form'],
+  },
+  {
     template: 'blank',
     title: 'Smoke Blank Template',
     slugBase: 'smoke-blank-template',
@@ -252,6 +277,12 @@ const assertPageCreateSourceContracts = () => {
       source.includes('scheduledAtMs <= Date.now()') &&
       source.includes('Choose a future publish date before creating a scheduled page.'),
     'Page create submit readiness must block scheduled pages with non-future publish dates before submit',
+  );
+  assert(
+    source.includes("'member-login'") &&
+      source.includes('member-login-access-form') &&
+      source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
+    'Page create must keep a safe member-login starter with an email-only access form',
   );
 };
 
@@ -830,6 +861,14 @@ const assertTemplateSwitching = async (client) => {
       template: 'registration',
       navPlacement: 'primary',
       selectedTemplateName: 'Registration page',
+      forms: 'Backy form API seeded',
+      dynamicData: 'none',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'member-login',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Member login',
       forms: 'Backy form API seeded',
       dynamicData: 'none',
       siteChrome: 'editable header, navigation, and footer seeded',
@@ -2248,6 +2287,10 @@ const cleanup = async ({ client, childProcess, userDataDir, pageIds = [], pageId
 
 const main = async () => {
   assertPageCreateSourceContracts();
+  if (process.env.BACKY_PAGE_CREATE_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'page-create-source' }));
+    return;
+  }
   await loginAdminApi();
   const slug = `page-create-smoke-${Date.now().toString(36)}`;
   const title = 'Smoke Page Create';
