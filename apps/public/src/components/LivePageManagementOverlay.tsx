@@ -68,6 +68,7 @@ type InlineLayoutFields = {
   height: string;
   zIndex: string;
   rotation: string;
+  visible: boolean;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -271,6 +272,7 @@ const layoutFieldsFromElement = (element: Record<string, unknown> | null): Inlin
   height: numberField(element, 'height'),
   zIndex: numberField(element, 'zIndex'),
   rotation: numberField(element, 'rotation'),
+  visible: element?.visible !== false,
 });
 
 const updateElementProps = (
@@ -441,6 +443,7 @@ const updateElementLayout = (
     y: numericPatchValue(input.y, 'Y', true),
     width,
     height,
+    visible: input.visible,
   };
   const zIndex = numericPatchValue(input.zIndex, 'Layer');
   const rotation = numericPatchValue(input.rotation, 'Rotation');
@@ -507,6 +510,7 @@ export function LivePageManagementOverlay({
   const [inlineLayoutHeight, setInlineLayoutHeight] = useState('');
   const [inlineLayoutZIndex, setInlineLayoutZIndex] = useState('');
   const [inlineLayoutRotation, setInlineLayoutRotation] = useState('');
+  const [inlineLayoutVisible, setInlineLayoutVisible] = useState(true);
   const [inlineLayoutSaving, setInlineLayoutSaving] = useState(false);
 
   const manageEndpoint = useMemo(() => {
@@ -630,6 +634,7 @@ export function LivePageManagementOverlay({
       setInlineLayoutHeight('');
       setInlineLayoutZIndex('');
       setInlineLayoutRotation('');
+      setInlineLayoutVisible(true);
       return;
     }
 
@@ -691,6 +696,7 @@ export function LivePageManagementOverlay({
     setInlineLayoutHeight(layoutFields.height);
     setInlineLayoutZIndex(layoutFields.zIndex);
     setInlineLayoutRotation(layoutFields.rotation);
+    setInlineLayoutVisible(layoutFields.visible);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -957,6 +963,7 @@ export function LivePageManagementOverlay({
         height: inlineLayoutHeight,
         zIndex: inlineLayoutZIndex,
         rotation: inlineLayoutRotation,
+        visible: inlineLayoutVisible,
       });
     } catch (layoutError) {
       setError(layoutError instanceof Error ? layoutError.message : 'Unable to update this layout.');
@@ -1394,6 +1401,14 @@ export function LivePageManagementOverlay({
                       />
                     </label>
                   </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={inlineLayoutVisible}
+                      onChange={(event) => setInlineLayoutVisible(event.target.checked)}
+                    />
+                    Visible on page
+                  </label>
                   <button
                     type="button"
                     onClick={saveInlineLayout}
