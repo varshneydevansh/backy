@@ -23,6 +23,7 @@ import type {
   BackyManifestRouteFrontendDesign,
   BackyManifestRoutePattern,
   BackyManifestDeliveryDiscovery,
+  BackyFrontendDatabaseCertification,
   BackyManifestFormDefinition,
   BackyManifestFormsRuntimeModule,
   BackyManifestLiveManagementModule,
@@ -349,6 +350,8 @@ const frontendDatabaseCertification = {
   secretHandling:
     "Database URLs and service credentials stay in CI/runtime environment.",
 } satisfies GeneratedBackyFrontendManifestDatabaseCertification;
+
+const convenienceFrontendDatabaseCertification = frontendDatabaseCertification satisfies BackyFrontendDatabaseCertification;
 
 const interactiveControl = {
   key: "rounds",
@@ -4661,6 +4664,7 @@ void renderNavigationLayout;
 void renderFrontendDesignContract;
 void frontendDesignProvenance;
 void renderFrontendDesign;
+void convenienceFrontendDatabaseCertification;
 void manifestNavigationItem;
 void manifestEnvelope;
 void openApi;

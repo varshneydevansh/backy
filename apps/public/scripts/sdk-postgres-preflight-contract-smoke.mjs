@@ -16,11 +16,13 @@ const assert = (condition, message) => {
 
 const sdkSmokeCi = read('../../../scripts/sdk-smoke-ci.mjs');
 const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
+const generatedSdkTypeSmoke = read('../../../packages/sdk-js/scripts/generated-contract-types.ts');
 const nextConfig = read('../next.config.js');
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
+const sdkIndex = read('../../../packages/sdk-js/src/index.ts');
 const rootPackage = read('../../../package.json');
 const sdkPostgresWorkflow = read('../../../.github/workflows/sdk-postgres-smoke.yml');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
@@ -101,6 +103,18 @@ assert(
     generatedSdkTypes.includes('readyForCertification: boolean') &&
     generatedSdkTypes.includes('"npm run test:frontend-contract-types"'),
   'Generated SDK types must export the manifest/OpenAPI database certification contract.',
+);
+
+assert(
+  sdkIndex.includes('export interface BackyFrontendDatabaseCertification') &&
+    sdkIndex.includes('schemaVersion: "backy.frontend-database-certification.v1"') &&
+    sdkIndex.includes('readyForCertification: boolean') &&
+    sdkIndex.includes('export interface BackyFrontendManifestContract') &&
+    sdkIndex.includes('databaseCertification: BackyFrontendDatabaseCertification') &&
+    sdkIndex.includes('contract: BackyFrontendManifestContract') &&
+    generatedSdkTypeSmoke.includes('convenienceFrontendDatabaseCertification') &&
+    generatedSdkTypeSmoke.includes('satisfies BackyFrontendDatabaseCertification'),
+  'SDK convenience manifest types must expose the same database certification runtime handoff as generated types.',
 );
 
 assert(

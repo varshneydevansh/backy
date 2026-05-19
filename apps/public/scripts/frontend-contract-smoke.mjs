@@ -292,9 +292,13 @@ assert(
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('readyForCertification: boolean') &&
     generatedSdkTypes.includes('"x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification') &&
+    sdkSource.includes('export interface BackyFrontendDatabaseCertification') &&
+    sdkSource.includes('databaseCertification: BackyFrontendDatabaseCertification') &&
+    sdkSource.includes('contract: BackyFrontendManifestContract') &&
     generatedSdkSmoke.includes('frontendDatabaseCertification') &&
+    generatedSdkSmoke.includes('convenienceFrontendDatabaseCertification') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestDatabaseCertification'),
-  'Frontend manifest, OpenAPI, and generated SDK types must expose the non-secret SDK Postgres certification handoff.',
+  'Frontend manifest, OpenAPI, generated SDK types, and convenience SDK manifest types must expose the non-secret SDK Postgres certification handoff.',
 );
 
 assert(

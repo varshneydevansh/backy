@@ -2442,10 +2442,54 @@ export interface BackyManifestCommentsModule {
   [key: string]: unknown;
 }
 
+export interface BackyFrontendDatabaseCertification {
+  schemaVersion: "backy.frontend-database-certification.v1";
+  status: "external-database-gate";
+  requiredFor: "production-custom-frontends";
+  gate: {
+    command: "npm run ci:sdk-postgres-smoke";
+    workflow: ".github/workflows/sdk-postgres-smoke.yml";
+    localPreflight: "npm run test:sdk-postgres-preflight-contract";
+    typeContract: "npm run test:frontend-contract-types";
+    [key: string]: unknown;
+  };
+  environment: {
+    dataMode: "database";
+    secretAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL" | string>;
+    requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true";
+    targetGuards: string[];
+    [key: string]: unknown;
+  };
+  requires: string[];
+  coverage: string[];
+  runtime: {
+    dataMode: string;
+    databaseType: string;
+    databaseUrlConfigured: boolean;
+    databaseUrlAlias: "BACKY_DATABASE_URL" | "DATABASE_URL" | null | string;
+    disposableConfirmed: boolean;
+    expectedHostConfigured: boolean;
+    expectedDatabaseConfigured: boolean;
+    readyForCertification: boolean;
+    missing: string[];
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  secretHandling: string;
+  [key: string]: unknown;
+}
+
+export interface BackyFrontendManifestContract {
+  version?: string;
+  schemas?: Record<string, string>;
+  databaseCertification: BackyFrontendDatabaseCertification;
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifest {
   schemaVersion: string;
   site: BackySiteSummary;
-  contract: Record<string, unknown>;
+  contract: BackyFrontendManifestContract;
   capabilities: Record<string, boolean>;
   endpoints: Record<string, string>;
   routePatterns: BackyManifestRoutePattern[];
