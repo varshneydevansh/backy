@@ -3013,6 +3013,12 @@ export function CanvasEditor({
     }, selectedId, selectedIds);
   }, [breakpoint, selectedActiveElements, selectedId, selectedIds, updateElementsWithHistory]);
 
+  const handleSelectParentLayer = useCallback(() => {
+    if (!selectedParentId) return;
+    setSelectedId(selectedParentId);
+    setSelectedIds([selectedParentId]);
+  }, [selectedParentId]);
+
   /**
    * Handle element selection
    */
@@ -5517,6 +5523,18 @@ export function CanvasEditor({
                           )}
                         </div>
                       </div>
+                      {selectedParentId && (
+                        <button
+                          type="button"
+                          onClick={handleSelectParentLayer}
+                          disabled={isCanvasMutationDisabled}
+                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="editor-select-parent-layer"
+                        >
+                          <ArrowLeft className="h-3.5 w-3.5" />
+                          Select parent
+                        </button>
+                      )}
                       {canUngroupSelected && (
                         <button
                           type="button"

@@ -214,6 +214,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleSelectedLockToggle') && source.includes('selectedLayersAreLocked'), 'Editor toolbar must expose selected-layer lock toggle');
   assert(source.includes("selectedIds.length > 1 ? 'selected layers' : 'selected layer'"), 'Editor selected-layer toolbar actions must label multi-selection states');
   assert(source.includes('const canDeleteSelected') && source.includes('disabled={isCanvasMutationDisabled || !canDeleteSelected}'), 'Editor delete toolbar button must be disabled when selection has no unlocked deletable layers');
+  assert(source.includes('handleSelectParentLayer') && source.includes('data-testid="editor-select-parent-layer"'), 'Editor inspector must expose a nested-layer parent selection action');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -9880,6 +9881,9 @@ const testLayerHierarchyControls = async (client) => {
       Math.abs(afterNestedState['smoke-image'].y - (beforeState['smoke-image'].y - beforeState['smoke-box'].y)) <= 1,
     `Nested image did not convert to parent-relative coordinates: ${JSON.stringify({ beforeState, afterNestedState })}`,
   );
+  await clickControlByTestId(client, 'editor-select-parent-layer');
+  const parentSelection = await readSelectedLayerIds(client);
+  assert(parentSelection.includes('smoke-box'), `Inspector parent selection action did not select smoke-box: ${JSON.stringify(parentSelection)}`);
 
   const nestedDrag = await dragElement(client, 'smoke-image', 500, 0, { skipDeltaAssert: true });
   const afterNestedDragState = await readEditorElementState(client, ['smoke-image', 'smoke-box']);
@@ -9931,6 +9935,7 @@ const testLayerHierarchyControls = async (client) => {
     restoreNestedClick,
     beforeState,
     afterNestedState,
+    parentSelection,
     afterNestedDragState,
     afterNestTree,
     afterOutdentState,
