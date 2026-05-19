@@ -358,7 +358,7 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
         },
 
         async listFolders(siteId: string): Promise<MediaFolder[]> {
-            const rows = await database.select().from(mediaFolders).where(eq(mediaFolders.siteId, siteId)).orderBy(mediaFolders.sortOrder) as MediaFolderRow[];
+            const rows = await database.select().from(mediaFolders).where(eq(mediaFolders.siteId, siteId)).orderBy(mediaFolders.sortOrder, mediaFolders.name) as MediaFolderRow[];
             return rows.map(toMediaFolder);
         },
 

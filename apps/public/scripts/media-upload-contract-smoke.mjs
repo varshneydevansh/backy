@@ -26,6 +26,7 @@ const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
 const coreTypes = read('../../../packages/core/src/types/index.ts');
 const dbSchema = read('../../../packages/db/src/schema/index.ts');
+const dbMediaRepository = read('../../../packages/db/src/repositories/media.ts');
 const backyStore = read('../src/lib/backyStore.ts');
 const sdkSource = read('../../../packages/sdk-js/src/index.ts');
 const generatedSdkSource = read('../../../packages/sdk-js/src/generated-contract-types.ts');
@@ -186,6 +187,11 @@ assert(
     (backyStore.includes('input.type === "other"') ||
       backyStore.includes("input.type === 'other'"))),
   'Demo media store must persist type other.',
+);
+assert(
+  backyStore.includes('a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)') &&
+    dbMediaRepository.includes('orderBy(mediaFolders.sortOrder, mediaFolders.name)'),
+  'Demo and DB media folder list ordering must both be deterministic by sortOrder then name.',
 );
 assert(
   hasOrderedMediaEnum(openApiRoute) >= 2,

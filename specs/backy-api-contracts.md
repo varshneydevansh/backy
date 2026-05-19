@@ -471,6 +471,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `GET /api/admin/sites/:siteId/media/folders`
   - Current implementation lists local runtime media folders.
+  - Folder lists are ordered deterministically by `sortOrder` and then folder name in both demo and database-backed runtimes.
 
 - `POST /api/admin/sites/:siteId/media/folders`
   - Body: `{ name, parentId?, sortOrder? }`
