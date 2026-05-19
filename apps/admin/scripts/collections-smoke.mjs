@@ -28,6 +28,11 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Collections route must use the shared EmptyState component for the primary no-collections state');
   assert(source.includes('title="No collections yet"'), 'Collections empty state must keep the no-collections title visible');
   assert(source.includes('reusable CMS data for pages, APIs, and custom frontends'), 'Collections empty state must explain what the first schema unlocks');
+  assert(source.includes('data-testid="collections-error-state"') && source.includes('Collections workspace needs attention'), 'Collections route must expose a labelled backend error state');
+  assert(source.includes('aria-label="Retry loading collections"') && source.includes('Clear filters'), 'Collections backend error state must expose retry and filter recovery actions');
+  assert(source.includes('data-testid="collections-permission-state"') && source.includes('Collection permissions could not be verified'), 'Collections route must expose a labelled permission error state');
+  assert(source.includes('to="/users"') && source.includes('Review users'), 'Collections permission error state must link to user access management');
+  assert(source.includes('data-testid="collections-rbac-permission-state"') && source.includes('aria-label="Retry loading collection permissions"'), 'Collections permission contract must expose a retryable permission error state');
   assert(source.includes('title="No collection activity yet"'), 'Collections audit panel must keep the empty activity title visible');
   assert(source.includes('Collection schema changes, record edits, imports, exports, and deletes will appear here for audit review.'), 'Collections audit empty state must explain which actions populate activity');
   assert(source.includes('title="No outgoing relationships"'), 'Collections relationship browser must keep the outgoing empty-state title visible');
@@ -2384,6 +2389,10 @@ const main = async () => {
 
   try {
     assertCollectionsRouteSourceContract();
+    if (process.env.BACKY_COLLECTIONS_SOURCE_ONLY === '1') {
+      return;
+    }
+
     await loginAdminApi();
     await assertCollectionBillingLimitEnforced(suffix);
     const emptyCollectionsSite = await createSite({

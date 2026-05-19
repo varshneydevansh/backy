@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -2261,6 +2261,26 @@ function CollectionsPage() {
     });
   };
 
+  const hasRecordFilters = Boolean(
+    recordFilters.search.trim()
+    || recordFilters.status
+    || recordFilters.fieldKey
+    || recordFilters.fieldValue.trim()
+    || recordFilters.sortBy !== 'updatedAt'
+    || recordFilters.sortDirection !== 'desc',
+  );
+
+  const clearRecordFilters = () => {
+    updateRecordFilters({
+      search: '',
+      status: '',
+      fieldKey: '',
+      fieldValue: '',
+      sortBy: 'updatedAt',
+      sortDirection: 'desc',
+    });
+  };
+
   const toggleRecordSelection = (recordId: string, selected: boolean) => {
     if (isCollectionsBusy) return;
 
@@ -3825,8 +3845,28 @@ function CollectionsPage() {
         title="Collections unavailable"
         description={viewPermissionTitle || 'Your account cannot view collection schemas or records.'}
       >
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant collections.view access.'}
+        <div
+          role="alert"
+          data-testid="collections-permission-state"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Collection permissions could not be verified</p>
+                <p className="mt-1 leading-6">
+                  {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant collections.view access.'}
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/users"
+              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+            >
+              Review users
+            </Link>
+          </div>
         </div>
       </PageShell>
     );
@@ -3920,15 +3960,49 @@ function CollectionsPage() {
       }
     >
       {error && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <div>{error}</div>
-          {validationDetails.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {validationDetails.map((detail) => (
-                <li key={detail}>{detail}</li>
-              ))}
-            </ul>
-          )}
+        <div
+          role="alert"
+          data-testid="collections-error-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Collections workspace needs attention</p>
+                <p className="mt-1 leading-6">{error}</p>
+                {validationDetails.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {validationDetails.map((detail) => (
+                      <li key={detail}>{detail}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {hasRecordFilters && (
+                <button
+                  type="button"
+                  onClick={clearRecordFilters}
+                  disabled={isCollectionsBusy}
+                  className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Clear filters
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void loadCollections()}
+                disabled={isCollectionsBusy || !canViewCollections}
+                title={!canViewCollections ? viewPermissionTitle : undefined}
+                aria-label="Retry loading collections"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry load
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -4282,8 +4356,29 @@ function CollectionsPage() {
               </span>
             </div>
             {permissionError && (
-              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                {permissionError}
+              <div
+                role="alert"
+                data-testid="collections-rbac-permission-state"
+                className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Collection permissions could not be verified</p>
+                      <p className="mt-1 leading-6">{permissionError}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadCollections()}
+                    disabled={isCollectionsBusy}
+                    aria-label="Retry loading collection permissions"
+                    className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Retry permissions
+                  </button>
+                </div>
               </div>
             )}
             <div className="mt-3 grid gap-2">

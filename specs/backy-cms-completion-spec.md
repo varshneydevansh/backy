@@ -443,6 +443,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/sites` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and permission retry actions.
   - `/pages` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and a user-access handoff link.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and a user-access handoff link.
+  - `/collections` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission-contract retry actions.
 - Better validation copy + inline field errors.
 - Confirm-delete patterns and action recovery paths.
 - Role-based UI filtering (hide unavailable actions instead of disabled-only).
