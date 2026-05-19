@@ -387,6 +387,46 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'cookie-policy',
+    title: 'Smoke Cookie Policy Template',
+    slugBase: 'smoke-cookie-policy-template',
+    expectedNavigationPlacement: 'footer',
+    chromePrefix: 'cookie-policy',
+    navigationItem: 'Cookies',
+    headingId: 'cookie-policy-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 38,
+    minCanvasHeight: 1300,
+    requiredElementIds: [
+      'cookie-policy-site-header',
+      'cookie-policy-site-navigation',
+      'cookie-policy-site-footer',
+      'cookie-policy-hero-section',
+      'cookie-policy-consent-card',
+      'cookie-policy-consent-value',
+      'cookie-policy-categories-section',
+      'cookie-policy-category-card-0',
+      'cookie-policy-category-card-title-0',
+      'cookie-policy-category-card-copy-0',
+      'cookie-policy-preferences-section',
+      'cookie-policy-retention-card',
+      'cookie-policy-preferences-card',
+      'cookie-policy-preferences-button',
+    ],
+    dataBindingElementIds: [
+      'cookie-policy-hero-section',
+      'cookie-policy-consent-card',
+      'cookie-policy-consent-value',
+      'cookie-policy-categories-section',
+      'cookie-policy-category-card-0',
+      'cookie-policy-category-card-title-0',
+      'cookie-policy-category-card-copy-0',
+      'cookie-policy-preferences-section',
+      'cookie-policy-retention-card',
+      'cookie-policy-preferences-card',
+    ],
+  },
+  {
     template: 'refund-policy',
     title: 'Smoke Refund Policy Template',
     slugBase: 'smoke-refund-policy-template',
@@ -887,6 +927,10 @@ const assertPageCreateSourceContracts = () => {
       source.includes('terms-policy-card-${index}') &&
       source.includes('terms-acceptance-card') &&
       source.includes('terms.contact.open') &&
+      source.includes("'cookie-policy'") &&
+      source.includes('cookie-policy-category-card-${index}') &&
+      source.includes('cookie-policy-retention-card') &&
+      source.includes('cookies.preferences.open') &&
       source.includes("'refund-policy'") &&
       source.includes('refund-policy-rule-card-${index}') &&
       source.includes('refund-policy-eligibility-card') &&
@@ -911,7 +955,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('blog-post-author-card') &&
       source.includes('blog-post-related-card-${index}') &&
       source.includes('This starter never asks visitors to submit a password into Backy Forms.'),
-    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, refund policy, shipping policy, help-center, and blog-post starters',
+    'Page create must keep safe member, commerce, pricing, services, portfolio, events, privacy, terms, cookie policy, refund policy, shipping policy, help-center, and blog-post starters',
   );
 };
 
@@ -1524,6 +1568,14 @@ const assertTemplateSwitching = async (client) => {
       selectedTemplateName: 'Terms page',
       forms: 'none',
       dynamicData: 'Backy legal terms placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'cookie-policy',
+      navPlacement: 'footer',
+      selectedTemplateName: 'Cookie policy',
+      forms: 'none',
+      dynamicData: 'Backy cookie consent placeholders',
       siteChrome: 'editable header, navigation, and footer seeded',
     },
     {

@@ -60,7 +60,7 @@ interface NewPageSearch {
     datasetMode?: PageDatasetMode;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'about' | 'contact' | 'registration' | 'member-login' | 'member-account';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
@@ -195,6 +195,13 @@ const TEMPLATE_OPTIONS: Array<{
         desc: 'Service terms, account rules, commerce conditions, acceptable use, and contact CTA.',
         detail: 'Creates a public terms and conditions page ready to bind legal settings, service terms, commerce rules, and dispute/contact actions.',
         sections: ['Terms hero', 'Policy sections', 'Contact action'],
+    },
+    {
+        id: 'cookie-policy',
+        name: 'Cookie policy',
+        desc: 'Cookie categories, consent controls, analytics notes, marketing pixels, retention, and preferences CTA.',
+        detail: 'Creates a public cookie policy page ready to bind consent settings, cookie categories, retention notes, and preference-management actions.',
+        sections: ['Cookie hero', 'Category sections', 'Preferences action'],
     },
     {
         id: 'refund-policy',
@@ -336,6 +343,11 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
         slug: 'terms',
         description: 'A public terms page ready to explain service rules, account responsibilities, commerce conditions, acceptable use, and dispute handling.',
     },
+    'cookie-policy': {
+        title: 'Cookie policy',
+        slug: 'cookie-policy',
+        description: 'A public cookie policy page ready to explain essential, analytics, marketing, and preference cookies with consent controls.',
+    },
     'refund-policy': {
         title: 'Refund policy',
         slug: 'refund-policy',
@@ -414,6 +426,7 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
     events: 'primary',
     privacy: 'footer',
     terms: 'footer',
+    'cookie-policy': 'footer',
     'refund-policy': 'footer',
     'shipping-policy': 'footer',
     cart: 'primary',
@@ -650,6 +663,7 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     events: ['Home', 'Events', 'Blog', 'Contact'],
     privacy: ['Home', 'Privacy', 'Terms', 'Contact'],
     terms: ['Home', 'Terms', 'Privacy', 'Contact'],
+    'cookie-policy': ['Home', 'Cookies', 'Privacy', 'Contact'],
     'refund-policy': ['Home', 'Refunds', 'Terms', 'Contact'],
     'shipping-policy': ['Home', 'Shipping', 'Refunds', 'Contact'],
     cart: ['Home', 'Shop', 'Cart', 'Checkout'],
@@ -750,6 +764,15 @@ const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
         { label: 'Sales', x: 38, y: 48, w: 26, h: 28, className: 'border-zinc-200 bg-white' },
         { label: 'Support', x: 68, y: 48, w: 24, h: 28, className: 'border-zinc-200 bg-white' },
         { x: 8, y: 84, w: 84, h: 6, className: 'border-zinc-200 bg-white' },
+    ],
+    'cookie-policy': [
+        { label: 'Cookies', x: 8, y: 14, w: 84, h: 24, className: 'border-fuchsia-200 bg-fuchsia-50' },
+        { x: 16, y: 24, w: 42, h: 5, className: 'bg-fuchsia-800' },
+        { label: 'Consent', x: 64, y: 24, w: 20, h: 6, className: 'border-fuchsia-100 bg-white' },
+        { label: 'Essential', x: 8, y: 48, w: 26, h: 28, className: 'border-fuchsia-100 bg-white' },
+        { label: 'Analytics', x: 38, y: 48, w: 26, h: 28, className: 'border-fuchsia-100 bg-white' },
+        { label: 'Prefs', x: 68, y: 48, w: 24, h: 28, className: 'border-fuchsia-100 bg-white' },
+        { x: 8, y: 84, w: 84, h: 6, className: 'border-slate-200 bg-white' },
     ],
     'refund-policy': [
         { label: 'Refunds', x: 8, y: 14, w: 84, h: 24, className: 'border-emerald-200 bg-emerald-50' },
@@ -1844,6 +1867,8 @@ function NewPageRoute() {
                     ? 'Backy legal policy placeholders'
                 : formData.template === 'terms'
                     ? 'Backy legal terms placeholders'
+                : formData.template === 'cookie-policy'
+                    ? 'Backy cookie consent placeholders'
                 : formData.template === 'refund-policy'
                     ? 'Backy refund policy placeholders'
                 : formData.template === 'shipping-policy'
@@ -1967,7 +1992,7 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration', 'member-login', 'member-account'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
+            seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'portfolio', 'events', 'privacy', 'terms', 'cookie-policy', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'blog-index', 'blog-post'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
@@ -2017,7 +2042,7 @@ function NewPageRoute() {
             'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact, registration, member-login, and member-account templates seed editable form blocks that connect to Backy Forms and Contacts.',
-            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, and posts.',
+            'Storefront, product-detail, pricing, services, portfolio, events, privacy, terms, cookie policy, refund policy, shipping policy, cart, checkout, order-confirmation, help-center, blog index, and blog post templates seed dynamic data placeholders for products, plans, services, projects, events, legal and commerce policy content, carts, orders, support content, and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
@@ -4059,6 +4084,8 @@ function buildTemplateElements(input: {
                 ? 'Contact'
             : input.template === 'terms'
                 ? 'Terms'
+            : input.template === 'cookie-policy'
+                ? 'Manage cookies'
             : input.template === 'refund-policy'
                 ? 'Start return'
             : input.template === 'shipping-policy'
@@ -5371,6 +5398,171 @@ function buildTemplateElements(input: {
                                 width: 146,
                                 height: 40,
                                 props: { label: 'Contact terms', backgroundColor: '#e4e4e7', color: '#111827', borderRadius: 8, fontWeight: '800', action: 'terms.contact.open' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ]);
+    }
+
+    if (input.template === 'cookie-policy') {
+        return withChrome([
+            createCanvasElement('section', 0, 0, {
+                id: 'cookie-policy-hero-section',
+                width: 1200,
+                height: 320,
+                dataBindings: [{ source: 'settings', mode: 'cookie-policy', fields: ['cookieCategories', 'consentMode', 'effectiveDate', 'preferencesUrl'] }],
+                props: { backgroundColor: '#fdf4ff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 58, {
+                        id: 'cookie-policy-kicker',
+                        width: 230,
+                        height: 28,
+                        props: { content: 'Cookies and consent', fontSize: 13, fontWeight: '800', color: '#a21caf', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 96, {
+                        id: 'cookie-policy-heading',
+                        width: 660,
+                        height: 92,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#701a75' },
+                    }),
+                    createCanvasElement('paragraph', 76, 210, {
+                        id: 'cookie-policy-copy',
+                        width: 610,
+                        height: 64,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#86198f' },
+                    }),
+                    createCanvasElement('box', 790, 86, {
+                        id: 'cookie-policy-consent-card',
+                        width: 300,
+                        height: 150,
+                        dataBindings: [{ source: 'settings', mode: 'cookie-consent', fields: ['consentMode', 'effectiveDate', 'preferencesUrl'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#f5d0fe', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 24, 24, {
+                                id: 'cookie-policy-consent-label',
+                                width: 180,
+                                height: 22,
+                                props: { content: 'Consent mode', fontSize: 12, fontWeight: '800', color: '#a21caf', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 24, 60, {
+                                id: 'cookie-policy-consent-value',
+                                width: 220,
+                                height: 34,
+                                props: { content: 'Opt-in controls', level: 'h3', fontSize: 24, fontWeight: '800', color: '#111827' },
+                                dataBindings: [{ source: 'settings', mode: 'cookie-consent', field: 'consentMode', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 104, {
+                                id: 'cookie-policy-consent-copy',
+                                width: 230,
+                                height: 32,
+                                props: { content: 'Bind consent mode and effective dates from Settings legal metadata.', fontSize: 13, lineHeight: 1.35, color: '#a21caf' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 320, {
+                id: 'cookie-policy-categories-section',
+                width: 1200,
+                height: 560,
+                dataBindings: [{ source: 'settings', mode: 'cookie-categories', fields: ['essential', 'analytics', 'marketing', 'preferences', 'retention'] }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'cookie-policy-categories-heading',
+                        width: 500,
+                        height: 42,
+                        props: { content: 'Cookie categories', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...[
+                        { title: 'Essential cookies', body: 'Explain cookies needed for security, sessions, checkout, consent storage, and core site functionality.' },
+                        { title: 'Analytics and performance', body: 'Document measurement cookies, page analytics, product insights, retention windows, and opt-out choices.' },
+                        { title: 'Marketing and preferences', body: 'List personalization, embedded media, advertising pixels, preference storage, and third-party processors.' },
+                    ].map((category, index) => createCanvasElement('box', 74 + index * 350, 132, {
+                        id: `cookie-policy-category-card-${index}`,
+                        width: 310,
+                        height: 290,
+                        dataBindings: [{ source: 'settings', mode: 'cookie-category', index }],
+                        props: { backgroundColor: '#fdf4ff', borderRadius: 8, borderColor: '#fae8ff', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 24, 24, {
+                                id: `cookie-policy-category-card-title-${index}`,
+                                width: 238,
+                                height: 34,
+                                props: { content: category.title, level: 'h3', fontSize: 22, fontWeight: '800', color: '#701a75' },
+                                dataBindings: [{ source: 'settings', mode: 'cookie-category', index, field: 'title', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('paragraph', 24, 78, {
+                                id: `cookie-policy-category-card-copy-${index}`,
+                                width: 236,
+                                height: 124,
+                                props: { content: category.body, fontSize: 14, lineHeight: 1.55, color: '#475569' },
+                                dataBindings: [{ source: 'settings', mode: 'cookie-category', index, field: 'body', targetPath: 'props.content' }],
+                            }),
+                            createCanvasElement('text', 24, 232, {
+                                id: `cookie-policy-category-card-note-${index}`,
+                                width: 220,
+                                height: 24,
+                                props: { content: 'Editable consent content', fontSize: 13, fontWeight: '800', color: '#a21caf' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+            createCanvasElement('section', 0, 880, {
+                id: 'cookie-policy-preferences-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'settings', mode: 'cookie-preferences', fields: ['preferencesUrl', 'consentCategories', 'contactEmail', 'processors'] }],
+                props: { backgroundColor: '#fdf2f8', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('box', 74, 62, {
+                        id: 'cookie-policy-retention-card',
+                        width: 600,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'cookie-retention', fields: ['retention', 'processors', 'thirdParties', 'renewalCadence'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#fbcfe8', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 28, 26, {
+                                id: 'cookie-policy-retention-heading',
+                                width: 360,
+                                height: 34,
+                                props: { content: 'Retention and processors', level: 'h2', fontSize: 28, fontWeight: '800', color: '#111827' },
+                            }),
+                            ...['Session cookies', 'Analytics retention', 'Third parties', 'Consent renewal'].map((item, index) => createCanvasElement('text', 30 + (index % 2) * 260, 86 + Math.floor(index / 2) * 42, {
+                                id: `cookie-policy-retention-item-${index}`,
+                                width: 220,
+                                height: 24,
+                                props: { content: item, fontSize: 15, fontWeight: '800', color: '#86198f' },
+                            })),
+                        ],
+                    }),
+                    createCanvasElement('box', 748, 62, {
+                        id: 'cookie-policy-preferences-card',
+                        width: 330,
+                        height: 190,
+                        dataBindings: [{ source: 'settings', mode: 'cookie-preferences-action', fields: ['preferencesUrl', 'contactEmail'] }],
+                        props: { backgroundColor: '#701a75', borderRadius: 8 },
+                        children: [
+                            createCanvasElement('heading', 26, 26, {
+                                id: 'cookie-policy-preferences-heading',
+                                width: 230,
+                                height: 32,
+                                props: { content: 'Manage preferences', level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                            }),
+                            createCanvasElement('paragraph', 26, 76, {
+                                id: 'cookie-policy-preferences-copy',
+                                width: 250,
+                                height: 46,
+                                props: { content: 'Bind this action to a consent banner, settings modal, or external preference center.', fontSize: 14, lineHeight: 1.45, color: '#f5d0fe' },
+                            }),
+                            createCanvasElement('button', 26, 138, {
+                                id: 'cookie-policy-preferences-button',
+                                width: 178,
+                                height: 40,
+                                props: { label: 'Manage cookies', backgroundColor: '#f5d0fe', color: '#701a75', borderRadius: 8, fontWeight: '800', action: 'cookies.preferences.open' },
                             }),
                         ],
                     }),

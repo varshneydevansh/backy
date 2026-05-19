@@ -314,7 +314,7 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'portfolio' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'blog-index' | 'blog-post' | 'contact' | 'registration' | 'member-login' | 'member-account';
 
 type PageRouteDiagnostic = {
   path: string;
@@ -412,6 +412,13 @@ const PAGE_CREATION_SHORTCUTS: Array<{
     detail: 'Create terms and conditions sections for service rules, commerce policies, acceptable use, and contact actions.',
     badge: 'Legal',
     icon: Archive,
+  },
+  {
+    key: 'cookie-policy',
+    title: 'Cookie policy',
+    detail: 'Create cookie categories, consent controls, retention notes, processors, and preference actions.',
+    badge: 'Legal',
+    icon: EyeOff,
   },
   {
     key: 'refund-policy',
@@ -1939,6 +1946,7 @@ function PagesListView() {
       eventsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
       privacyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
       termsPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,
+      cookiePolicyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cookie-policy`,
       refundPolicyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=refund-policy`,
       shippingPolicyPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=shipping-policy`,
       cartPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
@@ -1976,6 +1984,7 @@ function PagesListView() {
         events: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=events`,
         privacy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=privacy`,
         terms: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=terms`,
+        cookiePolicy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cookie-policy`,
         refundPolicy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=refund-policy`,
         shippingPolicy: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=shipping-policy`,
         cart: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=cart`,
