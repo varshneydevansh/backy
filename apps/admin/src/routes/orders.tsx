@@ -1230,6 +1230,29 @@ function OrdersRoute() {
     ];
   }, [commerceSettings, cronReadiness?.ready, runtimeCommerce]);
   const providerReadinessReadyCount = providerReadinessChecks.filter((check) => check.ready).length;
+  const providerRuntimeEvidence = useMemo(() => {
+    const configuredFamilies = providerReadinessChecks
+      .filter((check) => check.ready)
+      .map((check) => check.title);
+    const missingFamilies = providerReadinessChecks
+      .filter((check) => !check.ready)
+      .map((check) => check.title);
+
+    return {
+      readyCount: providerReadinessReadyCount,
+      total: providerReadinessChecks.length,
+      readinessPercent: providerReadinessChecks.length
+        ? Math.round((providerReadinessReadyCount / providerReadinessChecks.length) * 100)
+        : 0,
+      configuredFamilies,
+      missingFamilies,
+      missingRuntimeAliases: runtimeCommerce?.missing || [],
+      runtimeCommerce: runtimeCommerce || null,
+      providerAnalytics: orderAnalytics?.providerOperations || null,
+      checks: providerReadinessChecks,
+      secretHandling: 'Provider secret values are never returned; order runtime evidence reports booleans, aliases, provider families, and non-secret URLs only.',
+    };
+  }, [orderAnalytics?.providerOperations, providerReadinessChecks, providerReadinessReadyCount, runtimeCommerce]);
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -1274,6 +1297,7 @@ function OrdersRoute() {
       providerAnalytics: orderAnalytics?.providerOperations || null,
       checks: providerReadinessChecks,
     },
+    providerRuntimeEvidence,
     groups: ORDER_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
       family: group.family,
       providers: [...group.providers],
@@ -1296,6 +1320,7 @@ function OrdersRoute() {
     ordersApiReady,
     providerReadinessChecks,
     providerReadinessReadyCount,
+    providerRuntimeEvidence,
     publicBaseUrl,
     publicOrderIntakeUrl,
     runtimeCommerce,
@@ -3396,6 +3421,53 @@ function OrdersRoute() {
                     <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
                       <div className="font-medium text-foreground">Secrets</div>
                       <div className="mt-1 text-muted-foreground">Server env only</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-runtime-evidence">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium text-foreground">Runtime evidence</div>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                        providerRuntimeEvidence.missingFamilies.length === 0
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-amber-50 text-amber-700',
+                      )}>
+                        {providerRuntimeEvidence.readyCount}/{providerRuntimeEvidence.total} ready
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Configured families</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {providerRuntimeEvidence.configuredFamilies.length ? providerRuntimeEvidence.configuredFamilies.map((family) => (
+                            <span key={`orders-configured-${family}`} className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">
+                              {family}
+                            </span>
+                          )) : (
+                            <span className="text-[11px] text-muted-foreground">No provider family is fully ready yet.</span>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Missing families</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {providerRuntimeEvidence.missingFamilies.length ? providerRuntimeEvidence.missingFamilies.map((family) => (
+                            <span key={`orders-missing-${family}`} className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                              {family}
+                            </span>
+                          )) : (
+                            <span className="text-[11px] text-muted-foreground">All provider families report ready.</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {providerRuntimeEvidence.missingRuntimeAliases.length ? (
+                      <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+                        Missing runtime aliases: {providerRuntimeEvidence.missingRuntimeAliases.join(', ')}
+                      </div>
+                    ) : null}
+                    <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                      Provider secret values are never returned; runtime evidence reports booleans, aliases, provider families, and non-secret URLs only.
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
