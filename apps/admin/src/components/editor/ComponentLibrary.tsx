@@ -65,6 +65,8 @@ const getLibraryItemKey = (item: ComponentLibraryItem): string => String(item.id
 interface ComponentLibraryProps {
   /** Callback when a component is dragged */
   onDragStart?: (item: ComponentLibraryItem) => void;
+  /** Callback when a library component drag finishes or is cancelled */
+  onDragEnd?: () => void;
   reusableSections?: ReusableSection[];
   reusableSectionsLoading?: boolean;
   reusableSectionsError?: string | null;
@@ -89,6 +91,7 @@ interface ComponentLibraryProps {
  */
 export function ComponentLibrary({
   onDragStart,
+  onDragEnd,
   reusableSections = [],
   reusableSectionsLoading = false,
   reusableSectionsError = null,
@@ -349,6 +352,7 @@ export function ComponentLibrary({
                     deleteDisabledReason={deleteDisabledReason}
                     isFavorite={favoriteKeySet.has(getLibraryItemKey(item))}
                     onDragStart={() => onDragStart?.(item)}
+                    onDragEnd={() => onDragEnd?.()}
                     onAddItem={() => onAddItem?.(item)}
                     onToggleFavorite={() => toggleFavorite(item)}
                     onPreviewChange={(nextItem) => setPreviewItemKey(nextItem ? getLibraryItemKey(nextItem) : null)}
@@ -634,6 +638,7 @@ interface LibraryItemProps {
   deleteDisabledReason?: string;
   isFavorite?: boolean;
   onDragStart: () => void;
+  onDragEnd?: () => void;
   onAddItem?: () => void;
   onToggleFavorite?: () => void;
   onPreviewChange?: (item: ComponentLibraryItem | null) => void;
@@ -649,6 +654,7 @@ function LibraryItem({
   deleteDisabledReason,
   isFavorite = false,
   onDragStart,
+  onDragEnd,
   onAddItem,
   onToggleFavorite,
   onPreviewChange,
@@ -721,6 +727,7 @@ function LibraryItem({
     <div
       draggable={!disabled}
       onDragStart={handleDragStart}
+      onDragEnd={() => onDragEnd?.()}
       onMouseEnter={() => {
         if (!disabled) onPreviewChange?.(item);
       }}

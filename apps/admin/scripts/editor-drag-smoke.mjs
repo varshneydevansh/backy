@@ -208,6 +208,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
 const assertCanvasEditorShortcutSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   const layersPanelSource = fs.readFileSync(new URL('../src/components/editor/LayersPanel.tsx', import.meta.url), 'utf8');
+  const componentLibrarySource = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
   assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
@@ -235,6 +236,10 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-inspector-layer-name"') && source.includes('handleLayerRename(selectedElement.id') && source.includes('placeholder={selectedElementTypeLabel'), 'Editor inspector must expose a selected-layer name editor');
   assert(source.includes('data-testid="editor-group-selection"') && source.includes('aria-keyshortcuts="Control+G Meta+G"'), 'Editor group action must expose Cmd/Ctrl+G through aria-keyshortcuts');
   assert(source.includes('data-testid="editor-ungroup-selection"') && source.includes('aria-keyshortcuts="Shift+Control+G Shift+Meta+G"'), 'Editor ungroup action must expose Shift+Cmd/Ctrl+G through aria-keyshortcuts');
+  assert(!source.includes('// Placeholder for drag analytics/hooks.'), 'Editor component-library drag start must not remain a placeholder hook');
+  assert(source.includes('const [libraryDragItem, setLibraryDragItem]') && source.includes('data-library-drag-active={libraryDragItem ?') && source.includes('data-testid="editor-library-drag-status"'), 'Editor canvas must expose component-library drag status while users drag catalog items');
+  assert(source.includes('const handleLibraryDragEnd') && source.includes('setLibraryDragItem(null);') && source.includes('onDragEnd={handleLibraryDragEnd}'), 'Editor canvas must clear component-library drag status after drop or cancelled drag');
+  assert(componentLibrarySource.includes('onDragEnd?: () => void') && componentLibrarySource.includes('onDragEnd={() => onDragEnd?.()}'), 'Component library items must notify the editor when library drags finish');
   assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
   assert(layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') && layersPanelSource.includes('data-testid="editor-layer-search-empty"'), 'Editor layer search must reveal matching descendants and expose an empty state');
   assert(layersPanelSource.includes('data-testid="editor-layer-expand-all"') && layersPanelSource.includes('data-testid="editor-layer-collapse-all"') && layersPanelSource.includes('collapsibleLayerIds'), 'Editor layers panel must support bulk expand and collapse controls');

@@ -1064,6 +1064,7 @@ export function CanvasEditor({
     sectionId?: string;
   } | null>(null);
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
+  const [libraryDragItem, setLibraryDragItem] = useState<ComponentLibraryItem | null>(null);
 
   useEffect(() => {
     const siteId = activeSiteId;
@@ -3684,8 +3685,12 @@ export function CanvasEditor({
   /**
    * Handle drag start from component library
    */
-  const handleDragStart = useCallback((_item: ComponentLibraryItem) => {
-    // Placeholder for drag analytics/hooks.
+  const handleDragStart = useCallback((item: ComponentLibraryItem) => {
+    setLibraryDragItem(item);
+  }, []);
+
+  const handleLibraryDragEnd = useCallback(() => {
+    setLibraryDragItem(null);
   }, []);
 
   const getViewportInsertionPoint = useCallback(() => {
@@ -3961,6 +3966,7 @@ export function CanvasEditor({
   const handleCanvasDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      setLibraryDragItem(null);
       if (isCanvasMutationDisabled) {
         return;
       }
@@ -5290,6 +5296,7 @@ export function CanvasEditor({
           {!isPreview && !isCanvasFocusMode && showComponentPanel && (
             <ComponentLibrary
               onDragStart={handleDragStart}
+              onDragEnd={handleLibraryDragEnd}
               onAddItem={handleAddLibraryItem}
               reusableSections={reusableSections}
               reusableSectionsLoading={reusableSectionsLoading}
@@ -5320,6 +5327,9 @@ export function CanvasEditor({
             data-pan-active={isCanvasPanActive ? 'true' : 'false'}
             data-space-pan-active={isCanvasSpacePanning ? 'true' : 'false'}
             data-panning={isCanvasPanning ? 'true' : 'false'}
+            data-library-drag-active={libraryDragItem ? 'true' : 'false'}
+            data-library-drag-type={libraryDragItem?.type ?? undefined}
+            data-library-drag-name={libraryDragItem?.name ?? undefined}
             style={{
               backgroundColor: '#eef2f7',
               backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.18) 1px, transparent 0)',
@@ -5333,6 +5343,16 @@ export function CanvasEditor({
             }}
             onDrop={handleCanvasDrop}
           >
+            {libraryDragItem && !isPreview && !isCanvasMutationDisabled && (
+              <div
+                className="pointer-events-none absolute left-1/2 top-4 z-20 max-w-[min(360px,calc(100%-2rem))] -translate-x-1/2 rounded-full border border-primary/30 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-lg"
+                role="status"
+                aria-live="polite"
+                data-testid="editor-library-drag-status"
+              >
+                Drop {libraryDragItem.name} on the canvas
+              </div>
+            )}
             <div className="flex min-h-full min-w-max justify-center">
               <div
                 className="relative mx-auto"
