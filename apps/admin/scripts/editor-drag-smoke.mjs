@@ -225,6 +225,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
   assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');
   assert(layersPanelSource.includes('const handleKeyboardNavigate') && layersPanelSource.includes("key === 'ArrowUp'") && layersPanelSource.includes("key === 'Home'"), 'Editor layers panel must support keyboard navigation through rendered layer rows');
+  assert(layersPanelSource.includes('focusedLayerId') && layersPanelSource.includes('isFocusable') && layersPanelSource.includes('disabled || !isFocusable ? -1 : 0'), 'Editor layers panel must use roving focus so only the active row is tabbable');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -10082,14 +10083,16 @@ const testLayersPanelControls = async (client, pageId) => {
       unselectedRowActions.tabIndex === -1,
     `Hidden unselected layer row actions remained interactive: ${JSON.stringify(unselectedRowActions)}`,
   );
-  const keyboardRowSelection = await evaluate(client, `(() => {
+  const keyboardRowSelection = await evaluate(client, `(async () => {
     const tree = document.querySelector('[role="tree"][aria-label="Canvas layers"]');
     const row = document.querySelector('[data-layer-id="smoke-link"]');
     if (!(tree instanceof HTMLElement) || !(row instanceof HTMLElement)) {
       return { ok: false, reason: 'missing-tree-or-row', hasTree: Boolean(tree), hasRow: Boolean(row) };
     }
     row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     const selected = Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean);
+    const tabbableRows = Array.from(document.querySelectorAll('[role="treeitem"][data-layer-id]')).filter((candidate) => candidate instanceof HTMLElement && candidate.tabIndex === 0).map((candidate) => candidate.getAttribute('data-layer-id'));
     return {
       ok: true,
       rowRole: row.getAttribute('role'),
@@ -10097,6 +10100,7 @@ const testLayersPanelControls = async (client, pageId) => {
       tabIndex: row instanceof HTMLElement ? row.tabIndex : null,
       ariaSelected: row.getAttribute('aria-selected'),
       ariaLevel: row.getAttribute('aria-level'),
+      tabbableRows,
       selected,
     };
   })()`);
@@ -10106,6 +10110,8 @@ const testLayersPanelControls = async (client, pageId) => {
       keyboardRowSelection.treeRole === 'tree' &&
       keyboardRowSelection.tabIndex === 0 &&
       keyboardRowSelection.ariaSelected === 'true' &&
+      keyboardRowSelection.tabbableRows.length === 1 &&
+      keyboardRowSelection.tabbableRows.includes('smoke-link') &&
       keyboardRowSelection.selected.length === 1 &&
       keyboardRowSelection.selected.includes('smoke-link'),
     `Keyboard layer row selection did not select smoke-link with tree semantics: ${JSON.stringify(keyboardRowSelection)}`,
@@ -10130,6 +10136,7 @@ const testLayersPanelControls = async (client, pageId) => {
       key,
       expectedId: expected.getAttribute('data-layer-id'),
       activeId: document.activeElement?.getAttribute('data-layer-id') || '',
+      tabbableRows: Array.from(document.querySelectorAll('[role="treeitem"][data-layer-id]')).filter((candidate) => candidate instanceof HTMLElement && candidate.tabIndex === 0).map((candidate) => candidate.getAttribute('data-layer-id')),
       selected,
     };
   })()`);
@@ -10137,6 +10144,8 @@ const testLayersPanelControls = async (client, pageId) => {
     keyboardRowNavigation?.ok &&
       keyboardRowNavigation.expectedId &&
       keyboardRowNavigation.activeId === keyboardRowNavigation.expectedId &&
+      keyboardRowNavigation.tabbableRows.length === 1 &&
+      keyboardRowNavigation.tabbableRows.includes(keyboardRowNavigation.expectedId) &&
       keyboardRowNavigation.selected.length === 1 &&
       keyboardRowNavigation.selected.includes(keyboardRowNavigation.expectedId),
     `Keyboard layer row Arrow navigation did not move focus and selection: ${JSON.stringify(keyboardRowNavigation)}`,

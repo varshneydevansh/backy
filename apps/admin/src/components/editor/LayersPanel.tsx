@@ -10,7 +10,7 @@
  * - Selection & multi-select
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ArrowDown, ArrowUp, CornerUpLeft, MoveRight } from 'lucide-react';
 import type { CanvasElement } from '../../types/editor';
 
@@ -41,6 +41,7 @@ interface LayerItemProps {
     isSelected: boolean;
     isHidden: boolean;
     isLocked: boolean;
+    isFocusable: boolean;
     isDragTarget: boolean;
     canReorder: boolean;
     canAcceptChildren: boolean;
@@ -158,6 +159,7 @@ function LayerItem({
     isSelected,
     isHidden,
     isLocked,
+    isFocusable,
     isDragTarget,
     canReorder,
     canAcceptChildren,
@@ -222,7 +224,7 @@ function LayerItem({
         <div
             className={`layer-item ${isSelected ? 'selected' : ''} ${isHidden ? 'hidden' : ''} ${isLocked ? 'locked' : ''}`}
             role="treeitem"
-            tabIndex={disabled ? -1 : 0}
+            tabIndex={disabled || !isFocusable ? -1 : 0}
             aria-selected={isSelected}
             aria-level={depth + 1}
             aria-expanded={element.children?.length ? true : undefined}
@@ -496,6 +498,7 @@ export function LayersPanel({
     const [dragFromId, setDragFromId] = useState<string | null>(null);
     const [dragTargetId, setDragTargetId] = useState<string | null>(null);
     const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+    const [focusedLayerId, setFocusedLayerId] = useState<string | null>(null);
     const renderedLayerIds = useMemo(() => {
         const ids: string[] = [];
         const collect = (items: CanvasElement[]) => {
@@ -512,6 +515,7 @@ export function LayersPanel({
 
     const handleSelect = useCallback(
         (id: string, multiSelect: boolean, rangeSelect: boolean) => {
+            setFocusedLayerId(id);
             if (rangeSelect && lastSelectedId) {
                 const fromIndex = renderedLayerIds.indexOf(lastSelectedId);
                 const toIndex = renderedLayerIds.indexOf(id);
@@ -537,6 +541,20 @@ export function LayersPanel({
         },
         [lastSelectedId, renderedLayerIds, selectedIds, onSelect]
     );
+
+    useEffect(() => {
+        if (disabled || renderedLayerIds.length === 0) {
+            setFocusedLayerId(null);
+            return;
+        }
+
+        if (focusedLayerId && renderedLayerIds.includes(focusedLayerId)) {
+            return;
+        }
+
+        const selectedFocusableId = selectedIds.find((id) => renderedLayerIds.includes(id));
+        setFocusedLayerId(selectedFocusableId || renderedLayerIds[0]);
+    }, [disabled, focusedLayerId, renderedLayerIds, selectedIds]);
 
     const focusLayerRow = useCallback((id: string) => {
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-layer-id]'))
@@ -580,6 +598,7 @@ export function LayersPanel({
                 onSelect([nextId]);
             }
 
+            setFocusedLayerId(nextId);
             focusLayerRow(nextId);
         },
         [focusLayerRow, lastSelectedId, renderedLayerIds, selectedIds, onSelect]
@@ -636,6 +655,7 @@ export function LayersPanel({
                         isSelected={selectedIds.includes(element.id)}
                         isHidden={element.visible === false}
                         isLocked={element.locked === true}
+                        isFocusable={!disabled && element.id === (focusedLayerId || selectedIds[0] || renderedLayerIds[0])}
                         isDragTarget={dragTargetId === element.id}
                         canReorder={!disabled && element.locked !== true}
                         canAcceptChildren={CHILD_ACCEPTING_TYPES.has(element.type)}
