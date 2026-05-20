@@ -121,6 +121,7 @@ const assertSettingsSourceContracts = () => {
     'ci:commerce-provider-certification',
     'data-testid="settings-provider-certification"',
     'data-testid="settings-provider-runtime-evidence"',
+    'data-testid="settings-provider-certification-evidence"',
     'data-testid="settings-provider-certification-download-button"',
     'data-testid="settings-provider-certification-copy-button"',
     'data-testid="settings-provider-certification-command-builder"',
@@ -129,6 +130,8 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-provider-certification-required-aliases"',
     'providerCertification',
     'providerCertificationHandoff',
+    'scenarioEvidence',
+    'backy.settings-provider-certification-evidence.v1',
     'operatorCommandTemplate',
     'providerRuntimeEvidenceRows',
     'providerRuntimeEvidenceReadyCount',
@@ -151,6 +154,15 @@ const assertSettingsSourceContracts = () => {
     'npm run ci:commerce-provider-certification',
     'external-live-provider-gate',
     'Runtime provider evidence',
+    'Provider certification evidence',
+    'Database and Supabase',
+    'Storage and media delivery',
+    'Vercel deployment and secrets',
+    'Notification delivery',
+    'Commerce provider bridge',
+    'Public API and CORS',
+    'Interactive component sandbox',
+    'Release certification readiness',
     'Public API/CORS',
     'Needs runtime inputs',
     'Required inputs',
@@ -1814,6 +1826,12 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasProviderCertificationMatrix: Boolean(document.querySelector('[data-testid="settings-provider-certification"]')),
     hasProviderRuntimeEvidence: Boolean(document.querySelector('[data-testid="settings-provider-runtime-evidence"]')),
     hasProviderRuntimeEvidenceCopy: document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Runtime provider evidence') && document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Public API/CORS') || false,
+    hasProviderCertificationEvidence: Boolean(document.querySelector('[data-testid="settings-provider-certification-evidence"]')) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('Provider certification evidence') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('backy.settings-provider-certification-evidence.v1') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('Database and Supabase') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('Storage and media delivery') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('Public API and CORS') || false),
     hasProviderCertificationDownloadButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-download-button"]')),
     hasProviderCertificationCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-copy-button"]')),
     hasProviderCertificationCommandBuilder: Boolean(document.querySelector('[data-testid="settings-provider-certification-command-builder"]')),
@@ -1823,7 +1841,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasProviderCertificationSettings: runbookText.includes('Provider certification matrix') && runbookText.includes('npm run ci:settings-provider-certification'),
     hasProviderCertificationCommerce: runbookText.includes('npm run ci:commerce-provider-certification') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
     hasProviderCertificationFamilies: runbookText.includes('Supabase/Postgres') && runbookText.includes('Vercel env secret manager') && runbookText.includes('Resend') && runbookText.includes('Magento'),
-    hasProviderCertificationHandoffSummary: runbookText.includes('backy.settings-provider-certification-handoff.v1') && runbookText.includes('external-live-provider-gate') && runbookText.includes('npm run test:settings-provider-certification-preflight-contract') && runbookText.includes('Provider credentials stay in deployment or CI environment variables'),
+    hasProviderCertificationHandoffSummary: runbookText.includes('backy.settings-provider-certification-handoff.v1') && runbookText.includes('backy.settings-provider-certification-evidence.v1') && runbookText.includes('external-live-provider-gate') && runbookText.includes('npm run test:settings-provider-certification-preflight-contract') && runbookText.includes('Provider credentials stay in deployment or CI environment variables'),
     hasProviderCertificationRequiredInputs: runbookText.includes('Required inputs') && runbookText.includes('BACKY_DATABASE_URL or DATABASE_URL') && runbookText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID'),
     hasReleaseCertificationStorageAliases: runbookText.includes('BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('SUPABASE_SERVICE_ROLE_KEY') && runbookText.includes('AWS_ACCESS_KEY_ID'),
     hasReleaseCertificationNotificationAliases: runbookText.includes('RESEND_API_KEY') && runbookText.includes('SMTP_HOST') && runbookText.includes('SMTP_USER') && runbookText.includes('SMTP_PASSWORD') && runbookText.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
@@ -1895,6 +1913,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasProviderCertificationFamilies &&
       infrastructureState.hasProviderRuntimeEvidence &&
       infrastructureState.hasProviderRuntimeEvidenceCopy &&
+      infrastructureState.hasProviderCertificationEvidence &&
       infrastructureState.hasProviderCertificationHandoffSummary &&
       infrastructureState.hasProviderCertificationRequiredInputs &&
       infrastructureState.hasReleaseCertificationStorageAliases &&

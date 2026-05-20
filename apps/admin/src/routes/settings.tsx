@@ -599,6 +599,56 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
     evidence: 'Payment, tax, shipping, discount, catalog, subscription, refund, and webhook provider readiness for selected live families.',
   },
 ] as const;
+const SETTINGS_PROVIDER_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'database-supabase',
+    label: 'Database and Supabase',
+    expectedEvidence: ['database runtime readiness', 'Supabase project metadata', 'service-role alias readiness'],
+    nextAction: 'Configure the disposable Supabase/Postgres target and Supabase runtime aliases before running provider certification.',
+  },
+  {
+    key: 'storage-media',
+    label: 'Storage and media delivery',
+    expectedEvidence: ['storage provider readiness', 'bucket/path metadata', 'media scanner readiness'],
+    nextAction: 'Run storage provisioning and scanner checks for the selected local, Supabase, or S3-compatible provider.',
+  },
+  {
+    key: 'vercel-deployment',
+    label: 'Vercel deployment and secrets',
+    expectedEvidence: ['project id', 'team/project target', 'env secret planning evidence'],
+    nextAction: 'Attach Vercel project/team metadata and run the Settings provider certification gate with Vercel selectors.',
+  },
+  {
+    key: 'notification-delivery',
+    label: 'Notification delivery',
+    expectedEvidence: ['selected provider', 'test delivery result', 'retry/audit evidence'],
+    nextAction: 'Configure webhook, Resend, SMTP, or local-outbox delivery and capture a non-secret test notification result.',
+  },
+  {
+    key: 'commerce-provider-bridge',
+    label: 'Commerce provider bridge',
+    expectedEvidence: ['commerce provider family', 'webhook secret alias readiness', 'nested commerce gate'],
+    nextAction: 'Select commerce provider families and run the nested commerce certification gate when Settings owns commerce runtime readiness.',
+  },
+  {
+    key: 'public-api-cors',
+    label: 'Public API and CORS',
+    expectedEvidence: ['allowed origins', 'exposed Backy headers', 'custom frontend API boundary'],
+    nextAction: 'Set exact custom frontend origins through BACKY_CORS_ALLOWED_ORIGINS and verify exposed Backy contract headers.',
+  },
+  {
+    key: 'interactive-components',
+    label: 'Interactive component sandbox',
+    expectedEvidence: ['registry runtime', 'sandbox policy', 'custom-code capability state'],
+    nextAction: 'Verify interactive registry and sandbox runtime diagnostics before launching custom code components.',
+  },
+  {
+    key: 'release-certification-readiness',
+    label: 'Release certification readiness',
+    expectedEvidence: ['release doctor output', 'missing alias list', 'provider family selectors'],
+    nextAction: 'Run the release doctor with Settings provider certification required and attach the non-secret summary.',
+  },
+] as const;
 
 type SettingsCertificationStorageProvider = 'auto' | 'local' | 's3' | 'supabase';
 type SettingsCertificationNotificationProvider = 'auto' | 'webhook' | 'http-endpoint' | 'resend' | 'smtp' | 'local-outbox';
@@ -2031,6 +2081,85 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
   ]);
+  const providerCertificationScenarioEvidence = useMemo(() => {
+    const countEvidence = (...values: boolean[]) => values.filter(Boolean).length;
+    const commerceProviderConfigured = Boolean(
+      runtimeCommerce?.webhookSecretConfigured ||
+      runtimeCommerce?.stripeSecretConfigured ||
+      runtimeCommerce?.paypalAccessTokenConfigured ||
+      runtimeCommerce?.paddleApiKeyConfigured ||
+      runtimeCommerce?.squareAccessTokenConfigured ||
+      runtimeCommerce?.adyenApiKeyConfigured ||
+      runtimeCommerce?.mollieApiKeyConfigured ||
+      (runtimeCommerce?.razorpayKeyIdConfigured && runtimeCommerce?.razorpayKeySecretConfigured) ||
+      runtimeCommerce?.easyPostApiKeyConfigured ||
+      runtimeCommerce?.shippoApiKeyConfigured ||
+      runtimeCommerce?.shopifyAdminAccessTokenConfigured ||
+      runtimeCommerce?.bigCommerceAccessTokenConfigured ||
+      runtimeCommerce?.wooCommerceConsumerKeyConfigured ||
+      runtimeCommerce?.etsyAccessTokenConfigured ||
+      runtimeCommerce?.magentoAccessTokenConfigured ||
+      integrations.commerce?.webhookEventsEnabled ||
+      (integrations.commerce?.paymentProvider && integrations.commerce.paymentProvider !== 'none') ||
+      integrations.commerce?.catalogSyncProvider
+    );
+    const evidenceCounts: Record<string, number> = {
+      'database-supabase': countEvidence(
+        Boolean(runtimeDatabase?.configured),
+        Boolean(runtimeSupabase?.configured || integrations.supabase?.databaseEnabled || integrations.supabase?.authEnabled || integrations.supabase?.storageEnabled),
+      ),
+      'storage-media': countEvidence(
+        Boolean(runtimeStorage?.configured || integrations.storage?.provider || integrations.storage?.bucket || integrations.storage?.publicBaseUrl),
+        runtimeMediaScanner?.configured !== false,
+      ),
+      'vercel-deployment': countEvidence(Boolean(runtimeVercel?.configured || integrations.vercel?.projectId || integrations.vercel?.productionDomain)),
+      'notification-delivery': countEvidence(Boolean(runtimeNotifications?.productionReady || runtimeNotifications?.configured || integrations.notifications)),
+      'commerce-provider-bridge': countEvidence(commerceProviderConfigured),
+      'public-api-cors': countEvidence(Boolean(runtimePublicApi?.corsAllowedOriginsConfigured && runtimePublicApi.exposedContractHeaders?.length)),
+      'interactive-components': countEvidence(runtimeInteractiveComponents?.configured !== false),
+      'release-certification-readiness': countEvidence(providerCertificationRuntimeEvidence.localRuntimeInputsConfigured, SETTINGS_PROVIDER_CERTIFICATION_GROUPS.length > 0),
+    };
+    const scenarios = SETTINGS_PROVIDER_CERTIFICATION_SCENARIOS.map((scenario) => {
+      const evidenceCount = evidenceCounts[scenario.key] || 0;
+      return {
+        ...scenario,
+        evidenceCount,
+        status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+      };
+    });
+    const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+    return {
+      schemaVersion: 'backy.settings-provider-certification-evidence.v1',
+      status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+      requiredGate: 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:settings-provider-certification',
+      coverage: {
+        covered,
+        total: scenarios.length,
+        missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+      },
+      scenarios,
+      secretHandling: 'Settings provider certification evidence reports scenario names, counts, gates, and non-secret runtime readiness only; database URLs, provider credentials, service-role keys, Vercel tokens, notification secrets, and commerce secrets stay private.',
+    };
+  }, [
+    integrations.commerce,
+    integrations.notifications,
+    integrations.storage,
+    integrations.supabase,
+    integrations.vercel,
+    providerCertificationRuntimeEvidence.localRuntimeInputsConfigured,
+    runtimeCommerce,
+    runtimeDatabase?.configured,
+    runtimeInteractiveComponents?.configured,
+    runtimeMediaScanner?.configured,
+    runtimeNotifications?.configured,
+    runtimeNotifications?.productionReady,
+    runtimePublicApi?.corsAllowedOriginsConfigured,
+    runtimePublicApi?.exposedContractHeaders?.length,
+    runtimeStorage?.configured,
+    runtimeSupabase?.configured,
+    runtimeVercel?.configured,
+  ]);
   const providerCertificationHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.settings-provider-certification-handoff.v1',
@@ -2041,6 +2170,7 @@ function SettingsPage() {
     releasePreflight: 'npm run test:release-certification-preflight-contract',
     secretHandling: 'Provider credentials stay in deployment or CI environment variables; Settings handoff manifests only expose non-secret provider families, gate names, and readiness evidence.',
     runtimeEvidence: providerCertificationRuntimeEvidence,
+    scenarioEvidence: providerCertificationScenarioEvidence,
     metadataEvidence: {
       storage: integrations.storage || null,
       supabase: integrations.supabase || null,
@@ -2063,6 +2193,7 @@ function SettingsPage() {
     integrations.supabase,
     integrations.vercel,
     providerCertificationRuntimeEvidence,
+    providerCertificationScenarioEvidence,
   ]);
   const frontendDatabaseCertificationHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
@@ -2974,6 +3105,7 @@ function SettingsPage() {
             mediaOnly={isMediaOnlyInfrastructureEditor}
             providerCertificationControlsDisabled={isSaving || !canConfigureSettings}
             providerCertificationControlsTitle={configurePermissionTitle}
+            providerCertificationScenarioEvidence={providerCertificationScenarioEvidence}
             onCopyProviderCertificationHandoff={() => void copySettingsHandoffText(providerCertificationHandoffText, 'Provider certification handoff')}
             onDownloadProviderCertificationHandoff={downloadProviderCertificationHandoff}
             onChange={setIntegrations}
@@ -6417,6 +6549,7 @@ function InfrastructureSettings({
   mediaOnly = false,
   providerCertificationControlsDisabled = false,
   providerCertificationControlsTitle,
+  providerCertificationScenarioEvidence,
   onCopyProviderCertificationHandoff,
   onDownloadProviderCertificationHandoff,
   onChange,
@@ -6437,6 +6570,25 @@ function InfrastructureSettings({
   mediaOnly?: boolean;
   providerCertificationControlsDisabled?: boolean;
   providerCertificationControlsTitle?: string;
+  providerCertificationScenarioEvidence: {
+    schemaVersion: string;
+    status: 'ready' | 'attention';
+    requiredGate: string;
+    coverage: {
+      covered: number;
+      total: number;
+      missing: string[];
+    };
+    scenarios: Array<{
+      key: string;
+      label: string;
+      expectedEvidence: readonly string[];
+      nextAction: string;
+      evidenceCount: number;
+      status: 'covered' | 'missing';
+    }>;
+    secretHandling: string;
+  };
   onCopyProviderCertificationHandoff: () => void;
   onDownloadProviderCertificationHandoff: () => void;
   onChange: Dispatch<SetStateAction<IntegrationSettings>>;
@@ -7109,6 +7261,59 @@ function InfrastructureSettings({
               </div>
               <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
                 Runtime evidence is non-secret and mirrors the Settings admin API providerCertification.runtimeEvidence block; credential values stay in server or CI environment variables.
+              </div>
+            </div>
+            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="settings-provider-certification-evidence">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-foreground">Provider certification evidence</div>
+                  <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                    Tracks the non-secret Settings provider scenarios operators must prove before treating live infrastructure as certified.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                    {providerCertificationScenarioEvidence.schemaVersion}
+                  </span>
+                  <span className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                    providerCertificationScenarioEvidence.status === 'ready'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-amber-50 text-amber-700',
+                  )}>
+                    {providerCertificationScenarioEvidence.coverage.covered}/{providerCertificationScenarioEvidence.coverage.total} scenarios
+                  </span>
+                </div>
+              </div>
+              <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+                {providerCertificationScenarioEvidence.requiredGate}
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {providerCertificationScenarioEvidence.scenarios.map((scenario) => (
+                  <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-medium text-foreground">{scenario.label}</div>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                      )}>
+                        {scenario.status}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
+                    </div>
+                    {scenario.status === 'missing' ? (
+                      <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                    ) : null}
+                    <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                      Expected: {scenario.expectedEvidence.join(' | ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                {providerCertificationScenarioEvidence.secretHandling}
               </div>
             </div>
             <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-provider-certification-command-builder">
