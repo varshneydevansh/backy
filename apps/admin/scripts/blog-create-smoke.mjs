@@ -32,6 +32,13 @@ const assertBlogCreateSourceContract = () => {
   assert(source.includes('title="No blog templates captured yet"'), 'Blog create frontend template panel must keep the empty template title visible');
   assert(source.includes('Save a frontend design contract with blog post templates to seed this article from the connected custom frontend.'), 'Blog create frontend template empty state must explain how templates are captured');
   assert(
+    source.includes('normalizedFrontendDesignTemplateSearch') &&
+      source.includes('search.frontendDesignTemplateId') &&
+      source.includes('search.frontendTemplate') &&
+      source.includes('designTemplate: normalizedFrontendDesignTemplateSearch(search)'),
+    'Blog create route must accept designTemplate, frontendDesignTemplateId, and frontendTemplate aliases for custom frontend template handoffs',
+  );
+  assert(
     source.includes('getScheduledBlogPostDateError') &&
       source.includes('Date.parse(scheduledAt)') &&
       source.includes('scheduledAtMs <= Date.now()') &&
@@ -666,7 +673,7 @@ const assertWritingStructureTools = async (client) => {
 };
 
 const navigateToBlogCreate = async (client) => {
-  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&designTemplate=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&frontendDesignTemplateId=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => ({
@@ -1259,6 +1266,10 @@ const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
 
 const main = async () => {
   assertBlogCreateSourceContract();
+  if (process.env.BACKY_BLOG_CREATE_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'blog-create-source' }));
+    return;
+  }
   await loginAdminApi();
   const slug = `blog-create-smoke-${Date.now().toString(36)}`;
   const { childProcess, userDataDir } = launchChrome();

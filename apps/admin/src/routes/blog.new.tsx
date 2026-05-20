@@ -85,11 +85,26 @@ interface BlogCreateAutosaveDraft {
 
 type BlogCreationStatus = BlogCreateAutosaveDraft['status'];
 
+const normalizedSearchString = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+};
+
+const normalizedFrontendDesignTemplateSearch = (search: Record<string, unknown>): string | undefined => (
+    normalizedSearchString(search.designTemplate)
+    || normalizedSearchString(search.frontendDesignTemplateId)
+    || normalizedSearchString(search.frontendTemplate)
+);
+
 export const Route = createFileRoute('/blog/new')({
     validateSearch: (search: Record<string, unknown>): BlogNewSearch => ({
-        siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+        siteId: normalizedSearchString(search.siteId),
         focus: search.focus === 'canvas' ? 'canvas' : undefined,
-        designTemplate: typeof search.designTemplate === 'string' ? search.designTemplate : undefined,
+        designTemplate: normalizedFrontendDesignTemplateSearch(search),
     }),
     component: NewBlogPostPage,
 });
@@ -1170,6 +1185,10 @@ function NewBlogPostPage() {
             return;
         }
 
+        if (isCreateBusy || !canEditBlog) {
+            return;
+        }
+
         const templateCanvasApplied = hasFrontendBlogTemplateRoot(canvasElements, selectedFrontendTemplate);
         if (templateCanvasApplied) {
             appliedSearchTemplateRef.current = selectedFrontendTemplate.id;
@@ -1179,7 +1198,7 @@ function NewBlogPostPage() {
         appliedSearchTemplateRef.current = selectedFrontendTemplate.id;
         applyFrontendTemplate(selectedFrontendTemplate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canvasElements, selectedFrontendTemplate]);
+    }, [canEditBlog, canvasElements, isCreateBusy, selectedFrontendTemplate]);
 
     const adminBlogUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/blog`,

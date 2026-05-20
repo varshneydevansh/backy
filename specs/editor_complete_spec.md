@@ -479,6 +479,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ### ✅ Blog post editor flow
 - The dedicated blog edit route now exposes template provenance for frontend-design-backed posts, including template id/name, route pattern, binding count, canvas badge, and editor handoff JSON.
 - Template-backed blog posts render through the same `CanvasEditor` workspace, post-scoped media context, readiness/publish/taxonomy/comment/revision panels, and focus canvas mode as normal posts.
+- Blog create now accepts `designTemplate`, `frontendDesignTemplateId`, and `frontendTemplate` query aliases for captured frontend-design blog templates. Template canvas application waits for blog-create edit readiness, so deep-linked custom frontend templates insert their wrapper/content into the canvas instead of only selecting the panel card.
 - Covered by `npm run test:blog-editor --workspace @backy-cms/admin` and `npm run typecheck --workspace @backy-cms/admin`.
 
 ## Backend/API + Frontend topology (FOSS consumption)
@@ -530,6 +531,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
   - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
   - Site frontend design contracts now persist page/blog template registries, and admin page/blog create APIs can seed editable content plus design provenance from `frontendDesignTemplateId`.
+  - Blog-create smoke now exercises `frontendDesignTemplateId` handoff for captured frontend blog templates and verifies the selected template wrapper, autosave/recovery state, mobile override authoring, and persisted post metadata.
   - Reusable-section updates now expose optimistic conflict guards (`expectedVersion`/`expectedUpdatedAt`) and bounded version history through the admin versions endpoint.
   - Reusable-section export/import now supports JSON portability across sites, duplicate-slug protection, and upsert imports that increment version history.
   - Reusable-section restore now lets admins restore an older saved-section version with slug conflict checks and restore provenance.
