@@ -445,6 +445,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Canvas pan navigation now exposes H for persistent hand mode plus hold-Space for temporary panning, with HUD metadata and source coverage beside zoom controls.
 - Grid visibility and snapping can now be toggled from the canvas with G and S, while preserving Cmd/Ctrl+S for save; the grid/snap HUD exposes matching shortcut metadata.
 - Focused browser smokes now exercise the keyboard paths for zoom, pan, grid visibility, and snapping, not only pointer-click controls.
+- Editor shell controls now expose stable actions and shortcuts for Components (B), Inspector (I), Layers (L), and Focus (F); Layers/Inspector commands exit focus mode when needed so the requested panel becomes visible.
 - Group/ungroup toolbar and inspector controls now expose stable action ids plus `aria-keyshortcuts` for Cmd/Ctrl+G and Shift+Cmd/Ctrl+G, with source-only editor smoke coverage for shortcut discoverability.
 - Nested component authoring now includes direct child-layer scope selection through the toolbar, inspector, and Shift+Cmd/Ctrl+A shortcut so container/group children can be selected for grouping, alignment, duplication, and delete flows without repeated single-child drilling.
 - Sibling-scope selection is available from the toolbar plus single and multi-layer inspector cards with Cmd/Ctrl+A shortcut metadata, keeping same-parent grouping and alignment setup local to the current properties workflow.

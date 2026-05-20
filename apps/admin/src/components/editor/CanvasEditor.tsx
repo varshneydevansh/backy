@@ -1627,6 +1627,24 @@ export function CanvasEditor({
     });
   }, [handleFitCanvas]);
 
+  const handleToggleComponentPanel = useCallback(() => {
+    setIsCanvasFocusMode(false);
+    setShowComponentPanel((current) => (isCanvasFocusMode ? true : !current));
+  }, [isCanvasFocusMode]);
+
+  const handleToggleInspectorPanel = useCallback(() => {
+    setIsCanvasFocusMode(false);
+    setShowInspectorPanel((current) => (isCanvasFocusMode ? true : !current));
+  }, [isCanvasFocusMode]);
+
+  const handleToggleLayersPanel = useCallback(() => {
+    setIsCanvasFocusMode(false);
+    setShowInspectorPanel(true);
+    setRightPanel((current) => (
+      current === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'properties' : 'layers'
+    ));
+  }, [isCanvasFocusMode, showInspectorPanel]);
+
   const applyCanvasSize = useCallback((nextSize: CanvasSize, nextBreakpoint = breakpoint) => {
     if (isCanvasMutationDisabled) {
       setEditorNotice(editDisabledReason);
@@ -2207,16 +2225,22 @@ export function CanvasEditor({
       return;
     }
 
-    setSelectedIds((current) => current.filter((id) => !!findElementById(elements, id)));
+    const validSelectedIds = selectedIds.filter((id) => !!findElementById(elements, id));
+    setSelectedIds((current) => {
+      const next = current.filter((id) => !!findElementById(elements, id));
+      return next.length === current.length && next.every((id, index) => id === current[index])
+        ? current
+        : next;
+    });
 
     if (!selectedId) {
       return;
     }
 
     if (!findElementById(elements, selectedId)) {
-      setSelectedId(null);
+      setSelectedId(validSelectedIds[0] ?? null);
     }
-  }, [elements, selectedId, findElementById]);
+  }, [elements, selectedId, selectedIds, findElementById]);
 
   useEffect(() => {
     if (isApplyingHistoryRef.current) {
@@ -3098,9 +3122,14 @@ export function CanvasEditor({
       return;
     }
 
-    const selectedSet = new Set(selectedIds);
+    const activeSelectedIds = selectedIdsRef.current.length
+      ? selectedIdsRef.current
+      : selectedIdRef.current
+        ? [selectedIdRef.current]
+        : [];
+    const selectedSet = new Set(activeSelectedIds);
     const currentElements = elementsRef.current;
-    const entries = selectedIds
+    const entries = activeSelectedIds
       .map((id) => findElementEntry(currentElements, id))
       .filter((entry): entry is { element: CanvasElement; parentId: string | null } => !!entry);
 
@@ -3205,7 +3234,7 @@ export function CanvasEditor({
     setSelectedIds([groupId]);
     setSelectedId(groupId);
     setRightPanel('properties');
-  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, selectedIds, updateElementsWithHistory]);
+  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   const handleUngroupSelected = useCallback(() => {
     if (isCanvasMutationDisabled) {
@@ -3213,7 +3242,11 @@ export function CanvasEditor({
       return;
     }
 
-    const selectedGroupCandidateIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : [];
+    const selectedGroupCandidateIds = selectedIdsRef.current.length
+      ? selectedIdsRef.current
+      : selectedIdRef.current
+        ? [selectedIdRef.current]
+        : [];
     if (selectedGroupCandidateIds.length === 0) {
       return;
     }
@@ -3293,8 +3326,8 @@ export function CanvasEditor({
       });
     };
 
-    const nextSelectedId = expandedIds[0] ?? null;
     const nextElements = updateParentChildren(currentElements);
+    const nextSelectedId = expandedIds[0] ?? null;
     updateElementsWithHistory(nextElements, nextSelectedId, expandedIds);
     const coalesceMarker = {
       selectedIds: expandedIds,
@@ -3309,7 +3342,7 @@ export function CanvasEditor({
     setSelectedIds(expandedIds);
     setSelectedId(nextSelectedId);
     setRightPanel('layers');
-  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, selectedId, selectedIds, updateElementsWithHistory]);
+  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   // Get selected element
   const baseSelectedElement = selectedId ? findElementById(elements, selectedId) : null;
@@ -4686,6 +4719,30 @@ export function CanvasEditor({
         return;
       }
 
+      if (key === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleToggleComponentPanel();
+        return;
+      }
+
+      if (key === 'i' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleToggleInspectorPanel();
+        return;
+      }
+
+      if (key === 'l' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleToggleLayersPanel();
+        return;
+      }
+
+      if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleToggleCanvasFocus();
+        return;
+      }
+
       const isLayerOrderShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
         e.code === 'BracketLeft' ||
         e.code === 'BracketRight' ||
@@ -4861,8 +4918,12 @@ export function CanvasEditor({
     handleZOrderChange,
     handleGroupSelected,
     handleUngroupSelected,
+    handleToggleCanvasFocus,
     handleToggleCanvasPanMode,
+    handleToggleComponentPanel,
     handleToggleGridVisibility,
+    handleToggleInspectorPanel,
+    handleToggleLayersPanel,
     handleToggleSnap,
     handleZoomIn,
     handleZoomOut,
@@ -5558,16 +5619,19 @@ export function CanvasEditor({
 
             <button
               type="button"
-              onClick={() => setShowComponentPanel((current) => !current)}
+              onClick={handleToggleComponentPanel}
               className={cn(
                 'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
-                showComponentPanel
+                showComponentPanel && !isCanvasFocusMode
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'hover:bg-slate-100'
               )}
-              title={showComponentPanel ? 'Hide components panel' : 'Show components panel'}
-              aria-label={showComponentPanel ? 'Hide components panel' : 'Show components panel'}
-              aria-pressed={showComponentPanel}
+              title={showComponentPanel && !isCanvasFocusMode ? 'Hide components panel (B)' : 'Show components panel (B)'}
+              aria-label={showComponentPanel && !isCanvasFocusMode ? 'Hide components panel' : 'Show components panel'}
+              aria-pressed={showComponentPanel && !isCanvasFocusMode}
+              aria-keyshortcuts="B"
+              data-testid="editor-toggle-component-panel"
+              data-panel-visible={showComponentPanel && !isCanvasFocusMode ? 'true' : 'false'}
             >
               <PanelLeft className="w-4 h-4" />
               Components
@@ -5575,15 +5639,20 @@ export function CanvasEditor({
 
             <button
               type="button"
-              onClick={() => setRightPanel(rightPanel === 'layers' ? 'properties' : 'layers')}
+              onClick={handleToggleLayersPanel}
               className={cn(
                 'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
-                rightPanel === 'layers'
+                rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode
                   ? 'bg-slate-950 text-white'
                   : 'hover:bg-slate-100'
               )}
-              title="Toggle layers panel"
-              aria-label="Toggle layers panel"
+              title={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Show properties panel (L)' : 'Show layers panel (L)'}
+              aria-label={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Show properties panel' : 'Show layers panel'}
+              aria-pressed={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode}
+              aria-keyshortcuts="L"
+              data-testid="editor-toggle-layers-panel"
+              data-right-panel={rightPanel}
+              data-inspector-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
             >
               <Layers className="w-4 h-4" />
               Layers
@@ -5591,16 +5660,19 @@ export function CanvasEditor({
 
             <button
               type="button"
-              onClick={() => setShowInspectorPanel((current) => !current)}
+              onClick={handleToggleInspectorPanel}
               className={cn(
                 'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
-                showInspectorPanel
+                showInspectorPanel && !isCanvasFocusMode
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'hover:bg-slate-100'
               )}
-              title={showInspectorPanel ? 'Hide inspector panel' : 'Show inspector panel'}
-              aria-label={showInspectorPanel ? 'Hide inspector panel' : 'Show inspector panel'}
-              aria-pressed={showInspectorPanel}
+              title={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel (I)' : 'Show inspector panel (I)'}
+              aria-label={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel' : 'Show inspector panel'}
+              aria-pressed={showInspectorPanel && !isCanvasFocusMode}
+              aria-keyshortcuts="I"
+              data-testid="editor-toggle-inspector-panel"
+              data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
             >
               <PanelRight className="w-4 h-4" />
               Inspector
@@ -5615,9 +5687,12 @@ export function CanvasEditor({
                   ? 'bg-slate-950 text-white'
                   : 'hover:bg-slate-100'
               )}
-              title={isCanvasFocusMode ? 'Exit wide canvas focus' : 'Enter wide canvas focus'}
+              title={isCanvasFocusMode ? 'Exit wide canvas focus (F)' : 'Enter wide canvas focus (F)'}
               aria-label={isCanvasFocusMode ? 'Exit wide canvas focus' : 'Enter wide canvas focus'}
               aria-pressed={isCanvasFocusMode}
+              aria-keyshortcuts="F"
+              data-testid="editor-toggle-focus-mode"
+              data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
             >
               <Maximize2 className="w-4 h-4" />
               Focus
@@ -5732,7 +5807,17 @@ export function CanvasEditor({
         </header>
 
         {/* Main Content */}
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div
+          className="flex min-h-0 flex-1 overflow-hidden"
+          data-testid="editor-shell-layout"
+          data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+          data-component-panel-visible={!isPreview && !isCanvasFocusMode && showComponentPanel ? 'true' : 'false'}
+          data-inspector-panel-visible={!isPreview && !isCanvasFocusMode && showInspectorPanel ? 'true' : 'false'}
+          data-right-panel={rightPanel}
+          data-selected-id={selectedId || ''}
+          data-selected-ids={selectedIds.join(',')}
+          data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"
+        >
           {/* Left Sidebar - Component Library */}
           {!isPreview && !isCanvasFocusMode && showComponentPanel && (
             <ComponentLibrary

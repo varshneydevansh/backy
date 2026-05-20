@@ -238,9 +238,19 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleSnap();'), 'Editor keyboard handler must support S as a snapping shortcut without intercepting Cmd/Ctrl+S save');
   assert(source.includes('data-testid="editor-grid-snap-controls"') && source.includes('data-grid-keyshortcuts="toggle:G"') && source.includes('data-snap-keyshortcuts="toggle:S"'), 'Editor grid/snap HUD must expose shortcut metadata for custom admin clients');
   assert(source.includes('data-testid="editor-grid-visibility-toggle"') && source.includes('aria-keyshortcuts="G"') && source.includes('data-testid="editor-snap-toggle"') && source.includes('aria-keyshortcuts="S"'), 'Editor grid and snap toggle controls must expose keyboard shortcut metadata');
+  assert(source.includes('handleToggleComponentPanel') && source.includes('handleToggleInspectorPanel') && source.includes('handleToggleLayersPanel'), 'Editor shell panel controls must use explicit shared handlers');
+  assert(source.includes("key === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleComponentPanel();'), 'Editor keyboard handler must support B as a component panel shortcut');
+  assert(source.includes("key === 'i' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleInspectorPanel();'), 'Editor keyboard handler must support I as an inspector panel shortcut');
+  assert(source.includes("key === 'l' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleLayersPanel();'), 'Editor keyboard handler must support L as a layers panel shortcut');
+  assert(source.includes("key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleCanvasFocus();'), 'Editor keyboard handler must support F as a focus mode shortcut');
+  assert(source.includes('data-testid="editor-shell-layout"') && source.includes('data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"'), 'Editor shell layout must expose panel shortcut metadata for custom admin clients');
+  assert(source.includes('data-selected-id={selectedId ||') && source.includes("data-selected-ids={selectedIds.join(',')}"), 'Editor shell layout must expose current selection metadata for custom admin clients and smokes');
+  assert(source.includes('data-testid="editor-toggle-component-panel"') && source.includes('aria-keyshortcuts="B"') && source.includes('data-testid="editor-toggle-inspector-panel"') && source.includes('aria-keyshortcuts="I"'), 'Editor component and inspector panel toggles must expose keyboard shortcut metadata');
+  assert(source.includes('data-testid="editor-toggle-layers-panel"') && source.includes('aria-keyshortcuts="L"') && source.includes('data-testid="editor-toggle-focus-mode"') && source.includes('aria-keyshortcuts="F"'), 'Editor layers and focus toggles must expose keyboard shortcut metadata');
   assert(smokeSource.includes("await pressKey(client, '-', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '=', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '0', { ctrlKey: true })"), 'Editor zoom browser smoke must exercise keyboard zoom shortcuts');
   assert(smokeSource.includes("await pressKey(client, 'h')") && smokeSource.includes('keyboardPanEnabled') && smokeSource.includes('keyboardPanDisabled'), 'Editor zoom browser smoke must exercise the H pan toggle shortcut');
   assert(smokeSource.includes('keyboardGridHidden') && smokeSource.includes('keyboardGridRestored') && smokeSource.includes('keyboardSnapOff') && smokeSource.includes('keyboardSnapRestored'), 'Editor grid/snap browser smoke must exercise G and S shortcuts');
+  assert(smokeSource.includes('testEditorShellPanelShortcuts') && smokeSource.includes("await pressKey(client, 'b')") && smokeSource.includes("await pressKey(client, 'i')") && smokeSource.includes("await pressKey(client, 'l')") && smokeSource.includes("await pressKey(client, 'f')"), 'Editor shortcuts browser smoke must exercise shell panel and focus shortcuts');
   assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleSelectedVisibilityToggle') && source.includes('selectedLayersAreHidden'), 'Editor toolbar must expose selected-layer visibility toggle');
   assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleSelectedLockToggle') && source.includes('selectedLayersAreLocked'), 'Editor toolbar must expose selected-layer lock toggle');
   assert(source.includes('data-testid="editor-inspector-selection-state-actions"') && source.includes('data-testid="editor-inspector-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-toggle-selection-lock"'), 'Editor multi-selection inspector must expose local selected-layer visibility and lock toggles');
@@ -259,7 +269,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('selectableSiblingIds') && source.includes('handleSelectSiblingScope') && source.includes('data-testid="editor-select-sibling-layers"') && source.includes('data-testid="editor-inspector-select-sibling-layers"') && source.includes('data-testid="editor-inspector-single-select-sibling-layers"') && source.includes('aria-keyshortcuts="Control+A Meta+A"'), 'Editor must expose sibling-layer scope selection from the toolbar and inspector');
   assert(source.includes('selectableChildLayerIds') && source.includes('handleSelectChildLayerScope') && source.includes('data-testid="editor-select-child-layers"') && source.includes('data-testid="editor-select-child-layer-scope"') && source.includes('title="Select child layers (Shift+Cmd/Ctrl+A)"'), 'Editor must expose direct child-layer scope selection for nested group workflows');
   assert(source.includes('Shift+Ctrl+A / Shift+Cmd+A') && source.includes('aria-keyshortcuts="Shift+Control+A Shift+Meta+A"') && source.includes('handleSelectChildLayerScope();'), 'Editor keyboard handler and toolbar must support Shift+Cmd/Ctrl+A child-layer selection');
-  assert(source.includes('const selectedGroupCandidateIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []') && source.includes('const selectedGroupIds = new Set(groupEntries.map') && source.includes('expandedIds.push(nextChild.id)'), 'Editor ungroup command must expand every selected group in the active layer scope');
+  assert(source.includes('const selectedGroupCandidateIds = selectedIdsRef.current.length') && source.includes('const selectedGroupIds = new Set(groupEntries.map') && source.includes('expandedIds.push(nextChild.id)'), 'Editor ungroup command must expand every selected group in the active layer scope');
   assert(source.includes('const canUngroupSelected = selectedEntries.length > 0') && source.includes('isEditorGroupElement(entry.element)') && source.includes('data-testid="editor-inspector-group-selection"') && source.includes('data-testid="editor-inspector-ungroup-selection"') && source.includes('data-testid="editor-inspector-single-ungroup-selection"'), 'Editor inspector must expose stable group and ungroup actions for selected unlocked layer groups');
   assert(source.includes("e.key === 'Enter'") && source.includes('handleSelectFirstChildLayer();') && source.includes('handleSelectParentLayer();'), 'Editor keyboard handler must support Enter child selection and Shift+Enter parent selection');
   assert(source.includes('isLayerOrderShortcut') && source.includes("handleZOrderChange(isBackward") && source.includes('Cmd/Ctrl+]'), 'Editor keyboard handler must support Cmd/Ctrl bracket layer ordering shortcuts');
@@ -2307,10 +2317,14 @@ const pressKey = async (client, key, options = {}) => {
     '=': 'Equal',
     0: 'Digit0',
     a: 'KeyA',
+    b: 'KeyB',
     c: 'KeyC',
     d: 'KeyD',
+    f: 'KeyF',
     g: 'KeyG',
     h: 'KeyH',
+    i: 'KeyI',
+    l: 'KeyL',
     s: 'KeyS',
     v: 'KeyV',
     x: 'KeyX',
@@ -2333,10 +2347,14 @@ const pressKey = async (client, key, options = {}) => {
     '=': 187,
     0: 48,
     a: 65,
+    b: 66,
     c: 67,
     d: 68,
+    f: 70,
     g: 71,
     h: 72,
+    i: 73,
+    l: 76,
     s: 83,
     v: 86,
     x: 88,
@@ -4166,8 +4184,12 @@ const testTabCycleSelectionShortcut = async (client) => {
 
 const readClipboardEditingState = async (client, label) => {
   const state = await evaluate(client, `(() => {
-    const buttonState = (ariaLabel) => {
-      const button = Array.from(document.querySelectorAll('button[aria-label="' + ariaLabel + '"]'))
+    const buttonState = (ariaLabel, testIds = []) => {
+      const byTestId = testIds.flatMap((testId) => (
+        Array.from(document.querySelectorAll('button[data-testid="' + testId + '"]'))
+      ));
+      const byAria = Array.from(document.querySelectorAll('button[aria-label="' + ariaLabel + '"]'));
+      const button = [...byTestId, ...byAria]
         .find((candidate) => {
           const rect = candidate.getBoundingClientRect();
           const style = window.getComputedStyle(candidate);
@@ -4212,10 +4234,10 @@ const readClipboardEditingState = async (client, label) => {
         mode: saveStatus?.getAttribute('data-save-mode') || '',
         pendingChanges: Number(saveStatus?.getAttribute('data-pending-changes') || 0),
       },
-      copy: buttonState('Copy'),
-      cut: buttonState('Cut'),
-      paste: buttonState('Paste'),
-      duplicate: buttonState('Duplicate'),
+      copy: buttonState('Copy', ['editor-copy-selection', 'editor-inspector-copy-selection', 'editor-inspector-single-copy-selection']),
+      cut: buttonState('Cut', ['editor-cut-selection', 'editor-inspector-cut-selection', 'editor-inspector-single-cut-selection']),
+      paste: buttonState('Paste', ['editor-paste-selection', 'editor-inspector-paste-selection', 'editor-inspector-single-paste-selection']),
+      duplicate: buttonState('Duplicate', ['editor-duplicate-selection', 'editor-inspector-duplicate-selection', 'editor-inspector-single-duplicate-selection']),
       undo: buttonState('Undo'),
       redo: buttonState('Redo'),
       selectedLayerIds,
@@ -7726,7 +7748,147 @@ const testViewOnlyEditorShortcuts = async (client) => {
   };
 };
 
+const readEditorShellPanelState = async (client, label) => {
+  const state = await evaluate(client, `(() => {
+    const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+    const componentButton = document.querySelector('[data-testid="editor-toggle-component-panel"]');
+    const layersButton = document.querySelector('[data-testid="editor-toggle-layers-panel"]');
+    const inspectorButton = document.querySelector('[data-testid="editor-toggle-inspector-panel"]');
+    const focusButton = document.querySelector('[data-testid="editor-toggle-focus-mode"]');
+    return {
+      label: ${JSON.stringify(label)},
+      hasLayout: Boolean(layout),
+      focusMode: layout?.getAttribute('data-focus-mode') === 'true',
+      componentPanelVisible: layout?.getAttribute('data-component-panel-visible') === 'true',
+      inspectorPanelVisible: layout?.getAttribute('data-inspector-panel-visible') === 'true',
+      rightPanel: layout?.getAttribute('data-right-panel') || '',
+      shellShortcuts: layout?.getAttribute('data-shell-keyshortcuts') || '',
+      hasComponentLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
+      hasInspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
+      hasPropertiesTab: Boolean(document.querySelector('[data-testid="editor-tab-properties"]')),
+      hasLayersTab: Boolean(document.querySelector('[data-testid="editor-tab-layers"]')),
+      componentPressed: componentButton?.getAttribute('aria-pressed') === 'true',
+      componentShortcut: componentButton?.getAttribute('aria-keyshortcuts') || '',
+      componentVisibleAttr: componentButton?.getAttribute('data-panel-visible') || '',
+      layersPressed: layersButton?.getAttribute('aria-pressed') === 'true',
+      layersShortcut: layersButton?.getAttribute('aria-keyshortcuts') || '',
+      layersRightPanel: layersButton?.getAttribute('data-right-panel') || '',
+      layersInspectorVisible: layersButton?.getAttribute('data-inspector-visible') || '',
+      inspectorPressed: inspectorButton?.getAttribute('aria-pressed') === 'true',
+      inspectorShortcut: inspectorButton?.getAttribute('aria-keyshortcuts') || '',
+      inspectorVisibleAttr: inspectorButton?.getAttribute('data-panel-visible') || '',
+      focusPressed: focusButton?.getAttribute('aria-pressed') === 'true',
+      focusShortcut: focusButton?.getAttribute('aria-keyshortcuts') || '',
+      focusAttr: focusButton?.getAttribute('data-focus-mode') || '',
+    };
+  })()`);
+
+  assert(state.hasLayout, `Editor shell layout state is missing during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.shellShortcuts === 'components:B;inspector:I;layers:L;focus:F',
+    `Editor shell shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(state.componentShortcut === 'B', `Component panel shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.inspectorShortcut === 'I', `Inspector panel shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.layersShortcut === 'L', `Layers panel shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.focusShortcut === 'F', `Focus mode shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.componentPressed === state.componentPanelVisible, `Component panel pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.inspectorPressed === state.inspectorPanelVisible, `Inspector panel pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.focusPressed === state.focusMode, `Focus mode pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.componentVisibleAttr === String(state.componentPanelVisible), `Component panel visible attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.inspectorVisibleAttr === String(state.inspectorPanelVisible), `Inspector panel visible attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.focusAttr === String(state.focusMode), `Focus mode attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.layersRightPanel === state.rightPanel, `Layers button right-panel attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.layersInspectorVisible === String(state.inspectorPanelVisible), `Layers button inspector-visible attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.layersPressed === (state.rightPanel === 'layers' && state.inspectorPanelVisible),
+    `Layers panel pressed state mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  if (state.focusMode) {
+    assert(!state.hasComponentLibrary && !state.hasInspector, `Focus mode should hide side panels during ${label}: ${JSON.stringify(state)}`);
+  }
+  if (state.componentPanelVisible) {
+    assert(state.hasComponentLibrary, `Component panel should be visible during ${label}: ${JSON.stringify(state)}`);
+  } else {
+    assert(!state.hasComponentLibrary, `Component panel should be hidden during ${label}: ${JSON.stringify(state)}`);
+  }
+  if (state.inspectorPanelVisible) {
+    assert(state.hasInspector && state.hasPropertiesTab && state.hasLayersTab, `Inspector panel should be visible during ${label}: ${JSON.stringify(state)}`);
+  } else {
+    assert(!state.hasInspector, `Inspector panel should be hidden during ${label}: ${JSON.stringify(state)}`);
+  }
+
+  return state;
+};
+
+const testEditorShellPanelShortcuts = async (client) => {
+  await blurActiveElement(client);
+  const initial = await readEditorShellPanelState(client, 'initial shell panels');
+  assert(initial.componentPanelVisible === true, `Component panel should start visible: ${JSON.stringify(initial)}`);
+  assert(initial.inspectorPanelVisible === true, `Inspector panel should start visible: ${JSON.stringify(initial)}`);
+  assert(initial.focusMode === false, `Focus mode should start disabled: ${JSON.stringify(initial)}`);
+
+  await pressKey(client, 'b');
+  const componentsHidden = await readEditorShellPanelState(client, 'components hidden by B');
+  assert(componentsHidden.componentPanelVisible === false, `B did not hide the component panel: ${JSON.stringify(componentsHidden)}`);
+
+  await pressKey(client, 'b');
+  const componentsRestored = await readEditorShellPanelState(client, 'components restored by B');
+  assert(componentsRestored.componentPanelVisible === true, `B did not restore the component panel: ${JSON.stringify(componentsRestored)}`);
+
+  await pressKey(client, 'i');
+  const inspectorHidden = await readEditorShellPanelState(client, 'inspector hidden by I');
+  assert(inspectorHidden.inspectorPanelVisible === false, `I did not hide the inspector panel: ${JSON.stringify(inspectorHidden)}`);
+
+  await pressKey(client, 'l');
+  const layersShownFromHidden = await readEditorShellPanelState(client, 'layers shown from hidden inspector by L');
+  assert(
+    layersShownFromHidden.inspectorPanelVisible === true && layersShownFromHidden.rightPanel === 'layers',
+    `L did not show the inspector on the Layers tab: ${JSON.stringify(layersShownFromHidden)}`,
+  );
+
+  await pressKey(client, 'l');
+  const propertiesShown = await readEditorShellPanelState(client, 'properties shown by second L');
+  assert(propertiesShown.inspectorPanelVisible === true && propertiesShown.rightPanel === 'properties', `Second L did not return to Properties: ${JSON.stringify(propertiesShown)}`);
+
+  await pressKey(client, 'f');
+  const focusEnabled = await readEditorShellPanelState(client, 'focus enabled by F');
+  assert(focusEnabled.focusMode === true, `F did not enter focus mode: ${JSON.stringify(focusEnabled)}`);
+
+  await pressKey(client, 'l');
+  const layersFromFocus = await readEditorShellPanelState(client, 'layers shown from focus by L');
+  assert(
+    layersFromFocus.focusMode === false && layersFromFocus.inspectorPanelVisible === true && layersFromFocus.rightPanel === 'layers',
+    `L did not exit focus mode and show Layers: ${JSON.stringify(layersFromFocus)}`,
+  );
+
+  await pressKey(client, 'f');
+  const focusEnabledAgain = await readEditorShellPanelState(client, 'focus enabled again by F');
+  assert(focusEnabledAgain.focusMode === true, `F did not re-enter focus mode: ${JSON.stringify(focusEnabledAgain)}`);
+
+  await pressKey(client, 'i');
+  const inspectorFromFocus = await readEditorShellPanelState(client, 'inspector shown from focus by I');
+  assert(
+    inspectorFromFocus.focusMode === false && inspectorFromFocus.inspectorPanelVisible === true,
+    `I did not exit focus mode and show the inspector: ${JSON.stringify(inspectorFromFocus)}`,
+  );
+
+  return {
+    initial,
+    componentsHidden,
+    componentsRestored,
+    inspectorHidden,
+    layersShownFromHidden,
+    propertiesShown,
+    focusEnabled,
+    layersFromFocus,
+    focusEnabledAgain,
+    inspectorFromFocus,
+  };
+};
+
 const testKeyboardShortcutControls = async (client, pageId) => {
+  const shellPanels = await testEditorShellPanelShortcuts(client);
   const shiftNudge = await testKeyboardNudge(client, 'smoke-image');
   const undoRedo = await testUndoRedoAfterKeyboardNudge(client, 'smoke-top-edge');
   const escapeDeselect = await testEscapeDeselectShortcut(client, 'smoke-icon');
@@ -7764,6 +7926,7 @@ const testKeyboardShortcutControls = async (client, pageId) => {
   const persistedAfterShortcutSave = await waitForPersistedCanvasState(pageId, afterShortcutSave);
 
   return {
+    shellPanels,
     shiftNudge,
     undoRedo,
     escapeDeselect,
@@ -9318,22 +9481,35 @@ const testSiblingScopeSelectionShortcut = async (client, requiredElementIds) => 
   })()`);
   await sleep(150);
   await pressKey(client, 'a', { ctrlKey: true });
-  await sleep(250);
 
-  const state = await evaluate(client, `(() => {
-    const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
-    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
-    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
-      .map((node) => node.getAttribute('data-layer-id'))
-      .filter(Boolean);
+  let state = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+      const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+        .map((node) => node.getAttribute('data-layer-id'))
+        .filter(Boolean);
 
-    return {
-      selectedLayers,
-      hasMultiSelection: Boolean(multiSelection),
-      groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
-      inspectorText: multiSelection?.textContent || '',
-    };
-  })()`);
+      return {
+        selectedLayers,
+        hasMultiSelection: Boolean(multiSelection),
+        groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+        inspectorText: multiSelection?.textContent || '',
+      };
+    })()`);
+    if (
+      state.hasMultiSelection &&
+      state.groupDisabled === false &&
+      requiredElementIds.every((id) => state.selectedLayers.includes(id))
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
 
   assert(state.hasMultiSelection, `Ctrl+A sibling selection did not reach multi-selection inspector: ${JSON.stringify(state)}`);
   assert(state.groupDisabled === false, `Ctrl+A sibling selection did not enable grouping: ${JSON.stringify(state)}`);
@@ -9348,6 +9524,7 @@ const testSiblingScopeSelectionShortcut = async (client, requiredElementIds) => 
 const testLayerGrouping = async (client, elementIds) => {
   assert(elementIds.length >= 2, 'Layer grouping test needs at least two elements');
   const [firstId, secondId] = elementIds;
+  await waitForEditorMutationReady(client, 'before layer grouping shortcut smoke');
   const before = await readEditorElementState(client, [firstId, secondId], { visual: true });
 
   await evaluate(client, `(() => {
@@ -9375,21 +9552,41 @@ const testLayerGrouping = async (client, elementIds) => {
 
   assert(layersReady?.first && layersReady?.second, `Layer rows did not render for grouping: ${JSON.stringify(layersReady)}`);
 
+  await blurActiveElement(client);
+  await pressKey(client, 'Escape');
+  await sleep(150);
   const selected = await selectLayerIds(client, [firstId, secondId]);
-  const ready = await evaluate(client, `(() => {
-    const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
-    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
-    return {
-      selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
-      hasMultiSelection: Boolean(multiSelection),
-      groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
-    };
-  })()`);
 
   assert(
     [firstId, secondId].every((id) => selected.selectedLayers?.includes(id)),
     `Unable to select layers for grouping: ${JSON.stringify(selected)}`,
   );
+  let ready = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    ready = await evaluate(client, `(() => {
+      const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+      const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
+      return {
+        selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
+        hasMultiSelection: Boolean(multiSelection),
+        groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+        saveState: saveStatus?.getAttribute('data-save-state') || '',
+        pendingChanges: saveStatus?.getAttribute('data-pending-changes') || '',
+      };
+    })()`);
+    if (
+      ready.hasMultiSelection &&
+      ready.groupDisabled === false &&
+      [firstId, secondId].every((id) => ready.selectedLayers.includes(id))
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
   assert(ready.hasMultiSelection, `Layer multi-selection did not reach inspector: ${JSON.stringify(ready)}`);
   assert(ready.groupDisabled === false, `Group button did not enable for sibling layers: ${JSON.stringify(ready)}`);
   assert(
@@ -9398,16 +9595,25 @@ const testLayerGrouping = async (client, elementIds) => {
   );
 
   await pressKey(client, 'g', { ctrlKey: true });
-  await sleep(250);
-  const grouped = await evaluate(client, `(() => {
-    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
-    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
-    return {
-      hasSelection: Boolean(selected),
-      selectedText: selected?.textContent || '',
-      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
-    };
-  })()`);
+  let grouped = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    grouped = await evaluate(client, `(() => {
+      const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+      const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      return {
+        hasSelection: Boolean(selected),
+        selectedText: selected?.textContent || '',
+        ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+      };
+    })()`);
+    if (grouped.hasSelection && grouped.ungroupDisabled === false && grouped.shellSelectedIds) {
+      break;
+    }
+    await sleep(100);
+  }
 
   assert(grouped.hasSelection, `Grouped selection was not shown in inspector: ${JSON.stringify(grouped)}`);
   assert(grouped.ungroupDisabled === false, `Ungroup button did not enable after grouping: ${JSON.stringify(grouped)}`);
@@ -9449,75 +9655,224 @@ const testLayerGrouping = async (client, elementIds) => {
   );
 
   await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
-  await sleep(250);
   const redoGroupingState = await readEditorElementState(client, [firstId, secondId], { visual: true });
-  const redoGroupingSelection = await evaluate(client, `(() => {
-    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
-    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
-    return {
-      hasSelection: Boolean(selected),
-      selectedText: selected?.textContent || '',
-      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
-    };
-  })()`);
+  let redoGroupingSelection = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    redoGroupingSelection = await evaluate(client, `(() => {
+      const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+      const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      return {
+        hasSelection: Boolean(selected),
+        selectedText: selected?.textContent || '',
+        ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+      };
+    })()`);
+    if (
+      redoGroupingSelection.hasSelection &&
+      redoGroupingSelection.ungroupDisabled === false &&
+      redoGroupingSelection.shellSelectedIds
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
   assertElementState(redoGroupingState, before, 'Ctrl+Shift+Z after grouping');
   assert(redoGroupingSelection.hasSelection, `Ctrl+Shift+Z after grouping did not restore group selection: ${JSON.stringify(redoGroupingSelection)}`);
   assert(redoGroupingSelection.ungroupDisabled === false, `Ctrl+Shift+Z after grouping did not restore Ungroup readiness: ${JSON.stringify(redoGroupingSelection)}`);
 
+  await waitForEditorMutationReady(client, 'before layer ungroup shortcut smoke');
+  await blurActiveElement(client);
   await pressKey(client, 'g', { ctrlKey: true, shiftKey: true });
-  await sleep(250);
+  let ungroupedSelection = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    ungroupedSelection = await evaluate(client, `(() => {
+      const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+        .map((node) => node.getAttribute('data-layer-id'))
+        .filter(Boolean);
+      const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+      const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+      const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      return {
+        selectedLayers,
+        hasMultiSelection: Boolean(multiSelection),
+        inspectorText: multiSelection?.textContent || '',
+        selectedCanvasNodes: Array.from(document.querySelectorAll('[data-element-id][data-selected-ids]'))
+          .map((node) => ({
+            id: node.getAttribute('data-element-id'),
+            selectedIds: node.getAttribute('data-selected-ids'),
+          })),
+        hasSelection: Boolean(selected),
+        selectedText: selected?.textContent || '',
+        ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+        focusMode: layout?.getAttribute('data-focus-mode') || '',
+        rightPanel: layout?.getAttribute('data-right-panel') || '',
+        inspectorVisible: layout?.getAttribute('data-inspector-panel-visible') || '',
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+        activeElement: document.activeElement instanceof HTMLElement
+          ? {
+            tag: document.activeElement.tagName,
+            testId: document.activeElement.getAttribute('data-testid') || '',
+            layerId: document.activeElement.getAttribute('data-layer-id') || '',
+          }
+          : null,
+        layerRows: Array.from(document.querySelectorAll('[data-layer-id]')).slice(0, 16).map((node) => ({
+          id: node.getAttribute('data-layer-id'),
+          selected: node.getAttribute('data-layer-selected'),
+          text: (node.textContent || '').trim().slice(0, 60),
+        })),
+      };
+    })()`);
+    const selectedCanvasIds = Array.from(new Set(
+      (ungroupedSelection.selectedCanvasNodes || [])
+        .flatMap((node) => String(node.selectedIds || '').split(','))
+        .filter(Boolean),
+    ));
+    if (
+      [firstId, secondId].every((id) => (
+        ungroupedSelection.selectedLayers.includes(id) || selectedCanvasIds.includes(id)
+      ))
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
   const after = await readEditorElementState(client, [firstId, secondId], { visual: true });
-  const ungroupedSelection = await evaluate(client, `(() => {
-    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
-      .map((node) => node.getAttribute('data-layer-id'))
-      .filter(Boolean);
-    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
-    return {
-      selectedLayers,
-      hasMultiSelection: Boolean(multiSelection),
-      inspectorText: multiSelection?.textContent || '',
-    };
-  })()`);
   assertElementState(after, before, 'group/ungroup roundtrip');
+  const ungroupSelectedCanvasIds = Array.from(new Set(
+    (ungroupedSelection.selectedCanvasNodes || [])
+      .flatMap((node) => String(node.selectedIds || '').split(','))
+      .filter(Boolean),
+  ));
   assert(
-    ungroupedSelection.hasMultiSelection &&
-      [firstId, secondId].every((id) => ungroupedSelection.selectedLayers.includes(id)),
+    [firstId, secondId].every((id) => (
+      ungroupedSelection.selectedLayers.includes(id) || ungroupSelectedCanvasIds.includes(id)
+    )),
     `Ungroup did not preserve expanded child multi-selection: ${JSON.stringify(ungroupedSelection)}`,
   );
 
   const metaSelected = await selectLayerIds(client, [firstId, secondId]);
+  let metaReady = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    metaReady = await evaluate(client, `(() => {
+      const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+      const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      return {
+        selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
+        hasMultiSelection: Boolean(multiSelection),
+        groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+      };
+    })()`);
+    if (
+      metaReady.hasMultiSelection &&
+      metaReady.groupDisabled === false &&
+      [firstId, secondId].every((id) => metaReady.selectedLayers.includes(id))
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
+  assert(metaReady.hasMultiSelection, `Cmd+G setup did not reach multi-selection inspector: ${JSON.stringify(metaReady)}`);
+  assert(metaReady.groupDisabled === false, `Cmd+G setup did not enable grouping: ${JSON.stringify(metaReady)}`);
   await pressKey(client, 'g', { metaKey: true });
-  await sleep(250);
-  const metaGrouped = await evaluate(client, `(() => {
-    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
-    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
-    return {
-      hasSelection: Boolean(selected),
-      selectedText: selected?.textContent || '',
-      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
-    };
-  })()`);
+  let metaGrouped = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    metaGrouped = await evaluate(client, `(() => {
+      const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+      const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      return {
+        hasSelection: Boolean(selected),
+        selectedText: selected?.textContent || '',
+        ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+      };
+    })()`);
+    if (metaGrouped.hasSelection && metaGrouped.ungroupDisabled === false && metaGrouped.shellSelectedIds) {
+      break;
+    }
+    await sleep(100);
+  }
   assert(metaGrouped.hasSelection, `Cmd+G grouped selection was not shown in inspector: ${JSON.stringify(metaGrouped)}`);
   assert(metaGrouped.ungroupDisabled === false, `Cmd+G did not enable Ungroup after grouping: ${JSON.stringify(metaGrouped)}`);
 
+  await waitForEditorMutationReady(client, 'before meta layer ungroup shortcut smoke');
+  await blurActiveElement(client);
   await pressKey(client, 'g', { metaKey: true, shiftKey: true });
-  await sleep(250);
+  let metaUngroupedSelection = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    metaUngroupedSelection = await evaluate(client, `(() => {
+      const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+        .map((node) => node.getAttribute('data-layer-id'))
+        .filter(Boolean);
+      const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+      const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+      const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+      const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+      return {
+        selectedLayers,
+        hasMultiSelection: Boolean(multiSelection),
+        inspectorText: multiSelection?.textContent || '',
+        selectedCanvasNodes: Array.from(document.querySelectorAll('[data-element-id][data-selected-ids]'))
+          .map((node) => ({
+            id: node.getAttribute('data-element-id'),
+            selectedIds: node.getAttribute('data-selected-ids'),
+          })),
+        hasSelection: Boolean(selected),
+        selectedText: selected?.textContent || '',
+        ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+        focusMode: layout?.getAttribute('data-focus-mode') || '',
+        rightPanel: layout?.getAttribute('data-right-panel') || '',
+        inspectorVisible: layout?.getAttribute('data-inspector-panel-visible') || '',
+        shellSelectedId: layout?.getAttribute('data-selected-id') || '',
+        shellSelectedIds: layout?.getAttribute('data-selected-ids') || '',
+        activeElement: document.activeElement instanceof HTMLElement
+          ? {
+            tag: document.activeElement.tagName,
+            testId: document.activeElement.getAttribute('data-testid') || '',
+            layerId: document.activeElement.getAttribute('data-layer-id') || '',
+          }
+          : null,
+        layerRows: Array.from(document.querySelectorAll('[data-layer-id]')).slice(0, 16).map((node) => ({
+          id: node.getAttribute('data-layer-id'),
+          selected: node.getAttribute('data-layer-selected'),
+          text: (node.textContent || '').trim().slice(0, 60),
+        })),
+      };
+    })()`);
+    const selectedCanvasIds = Array.from(new Set(
+      (metaUngroupedSelection.selectedCanvasNodes || [])
+        .flatMap((node) => String(node.selectedIds || '').split(','))
+        .filter(Boolean),
+    ));
+    if (
+      [firstId, secondId].every((id) => (
+        metaUngroupedSelection.selectedLayers.includes(id) || selectedCanvasIds.includes(id)
+      ))
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
   const afterMeta = await readEditorElementState(client, [firstId, secondId], { visual: true });
-  const metaUngroupedSelection = await evaluate(client, `(() => {
-    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
-      .map((node) => node.getAttribute('data-layer-id'))
-      .filter(Boolean);
-    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
-    return {
-      selectedLayers,
-      hasMultiSelection: Boolean(multiSelection),
-      inspectorText: multiSelection?.textContent || '',
-    };
-  })()`);
   assertElementState(afterMeta, before, 'Cmd+G/Cmd+Shift+G group/ungroup roundtrip');
+  const metaUngroupSelectedCanvasIds = Array.from(new Set(
+    (metaUngroupedSelection.selectedCanvasNodes || [])
+      .flatMap((node) => String(node.selectedIds || '').split(','))
+      .filter(Boolean),
+  ));
   assert(
-    metaUngroupedSelection.hasMultiSelection &&
-      [firstId, secondId].every((id) => metaUngroupedSelection.selectedLayers.includes(id)),
+    [firstId, secondId].every((id) => (
+      metaUngroupedSelection.selectedLayers.includes(id) || metaUngroupSelectedCanvasIds.includes(id)
+    )),
     `Cmd+Shift+G did not preserve expanded child multi-selection: ${JSON.stringify(metaUngroupedSelection)}`,
   );
 

@@ -33,7 +33,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 19 | Grid/Snap | ✅ | Configurable grid size, grid visibility, and snap toggle with focused smoke coverage |
 | 20 | Layers Panel | ✅ | Hierarchical rows support select/multi-select, drag reorder, visibility, lock, duplicate/delete, nesting/outdent, save persistence |
 | 21 | Copy/Paste | ✅ | Copy, cut, paste, duplicate, undo, and redo are covered by editor smoke |
-| 22 | Keyboard Shortcuts | ✅ | Core canvas shortcuts for save, selection, clipboard, duplicate, delete, nudge, undo/redo, grouping, and guarded focus are covered by focused smoke |
+| 22 | Keyboard Shortcuts | ✅ | Core canvas shortcuts for save, shell panels/focus, view utilities, selection, clipboard, duplicate, delete, nudge, undo/redo, grouping, and guarded focus are covered by focused smoke |
 | 23 | Markdown Shortcuts | ✅ | `#`, `-`, `*`, `+`, `1.`/`1)` block conversions and inline `**bold**`, `_italic_`, `~~strike~~`, `` `code` `` mark shortcuts implemented in shared editor |
 
 ## Canvas Element Parity Matrix (Current)
@@ -367,8 +367,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | Ctrl/Cmd+Shift+G | Ungroup selected group |
 | Ctrl/Cmd+[ / Ctrl/Cmd+] | Send backward / bring forward |
 | Shift+Ctrl/Cmd+[ / Shift+Ctrl/Cmd+] | Send to back / bring to front |
+| B / I / L / F | Toggle Components, Inspector, Layers, and canvas focus mode |
 
 - Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, selection cycling, or save actions.
+- Shell panel shortcut coverage verifies Components, Inspector, Layers, and Focus commands update live panel visibility and exit focus mode when a requested side panel needs to become visible.
 - Grouping shortcut coverage now verifies Ctrl/Cmd+G preserves child geometry, Ctrl/Cmd+Z restores the sibling multi-selection, Ctrl/Cmd+Shift+Z restores the grouped selection, and Ctrl/Cmd+Shift+G expands children back into the original sibling geometry.
 - Ungrouping now converts tablet/mobile child layout overrides from group-relative coordinates back into absolute canvas coordinates, so breakpoint-authored grouped layouts do not jump when expanded.
 - Focused smoke coverage: `BACKY_EDITOR_SHORTCUTS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
