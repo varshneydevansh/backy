@@ -3213,26 +3213,36 @@ export function CanvasEditor({
       return;
     }
 
-    if (!selectedId) {
+    const selectedGroupCandidateIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : [];
+    if (selectedGroupCandidateIds.length === 0) {
       return;
     }
 
     const currentElements = elementsRef.current;
-    const entry = findElementEntry(currentElements, selectedId);
-    if (!entry?.element.children?.length || entry.element.locked || !isEditorGroupElement(entry.element)) {
+    const entries = selectedGroupCandidateIds
+      .map((id) => findElementEntry(currentElements, id))
+      .filter((entry): entry is { element: CanvasElement; parentId: string | null } => !!entry);
+    const parentId = entries[0]?.parentId ?? null;
+    const groupEntries = entries.filter((entry) => (
+      entry.parentId === parentId &&
+      !entry.element.locked &&
+      isEditorGroupElement(entry.element) &&
+      Boolean(entry.element.children?.length)
+    ));
+
+    if (entries.length === 0 || groupEntries.length !== entries.length) {
       return;
     }
 
-    const parentId = entry.parentId;
-    const children = entry.element.children;
-    const expandedIds = children.map((child) => child.id);
+    const selectedGroupIds = new Set(groupEntries.map((entry) => entry.element.id));
+    const expandedIds: string[] = [];
     const expandSiblings = (siblings: CanvasElement[]): CanvasElement[] => (
       siblings.flatMap((item) => {
-        if (item.id !== selectedId) {
+        if (!selectedGroupIds.has(item.id)) {
           return [item];
         }
 
-        return children.map((child, index) => {
+        return (item.children || []).map((child, index) => {
           const nextChild: CanvasElement = {
             ...child,
             x: item.x + child.x,
@@ -3253,6 +3263,7 @@ export function CanvasEditor({
             delete nextChild.responsive;
           }
 
+          expandedIds.push(nextChild.id);
           return nextChild;
         });
       })
@@ -3298,7 +3309,7 @@ export function CanvasEditor({
     setSelectedIds(expandedIds);
     setSelectedId(nextSelectedId);
     setRightPanel('layers');
-  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
+  }, [editDisabledReason, findElementEntry, isCanvasMutationDisabled, selectedId, selectedIds, updateElementsWithHistory]);
 
   // Get selected element
   const baseSelectedElement = selectedId ? findElementById(elements, selectedId) : null;
@@ -3349,10 +3360,13 @@ export function CanvasEditor({
   }, [elements, findElementEntry, selectedId]);
   const canGroupSelected = selectedEntries.length > 1
     && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
-  const canUngroupSelected = selectedEntries.length === 1
-    && !selectedEntries[0].element.locked
-    && isEditorGroupElement(selectedEntries[0].element)
-    && Boolean(selectedEntries[0].element.children?.length);
+  const canUngroupSelected = selectedEntries.length > 0
+    && selectedEntries.every((entry) => (
+      entry.parentId === selectedParentId &&
+      !entry.element.locked &&
+      isEditorGroupElement(entry.element) &&
+      Boolean(entry.element.children?.length)
+    ));
   const canAlignSelected = selectedEntries.length > 0
     && selectedEntries.every((entry) => (
       entry.parentId === selectedParentId &&
@@ -6031,15 +6045,27 @@ export function CanvasEditor({
                             Unlocked sibling selection
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleGroupSelected}
-                          disabled={isCanvasMutationDisabled || !canGroupSelected}
-                          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                        >
-                          <Group className="h-3.5 w-3.5" />
-                          Group
-                        </button>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={handleGroupSelected}
+                            disabled={isCanvasMutationDisabled || !canGroupSelected}
+                            className="inline-flex items-center gap-1 rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            <Group className="h-3.5 w-3.5" />
+                            Group
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleUngroupSelected}
+                            disabled={isCanvasMutationDisabled || !canUngroupSelected}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            data-testid="editor-inspector-ungroup-selection"
+                          >
+                            <Ungroup className="h-3.5 w-3.5" />
+                            Ungroup
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-3 grid grid-cols-6 gap-1.5" data-testid="editor-inspector-align-controls">
                         <button
