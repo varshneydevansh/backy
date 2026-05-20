@@ -170,6 +170,20 @@ export interface CommerceStorefrontContract {
     liveCertificationGate: 'ci:commerce-provider-certification';
     requiredFor: 'live-commerce-provider-launch';
     secretHandling: string;
+    operatorCommandTemplate: {
+      command: string;
+      providerChoices: {
+        payment: string[];
+        tax: string[];
+        shipping: string[];
+        catalog: string[];
+        subscription: string[];
+        webhook: string[];
+      };
+      requiredInputs: string[];
+      targetInputs: string[];
+      secretHandling: string;
+    };
     runtime: {
       paymentConfigured: boolean;
       taxConfigured: boolean;
@@ -250,6 +264,68 @@ const envValue = (keys: string[]): string | null => {
 };
 
 const hasEnv = (keys: string[]): boolean => Boolean(envValue(keys));
+
+const quoteCommerceShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
+const buildCommerceProviderCertificationCommand = (): string => {
+  const envEntries: Array<[string, string]> = [
+    ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
+    ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', '1'],
+    ['BACKY_COMMERCE_CERTIFY_PAYMENT', '1'],
+    ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', 'auto'],
+    ['BACKY_COMMERCE_CERTIFY_TAX', '1'],
+    ['BACKY_COMMERCE_CERTIFY_TAX_PROVIDER', 'auto'],
+    ['BACKY_COMMERCE_CERTIFY_SHIPPING', '1'],
+    ['BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER', 'auto'],
+    ['BACKY_COMMERCE_CERTIFY_CATALOG', '1'],
+    ['BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER', 'auto'],
+    ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', '1'],
+    ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER', 'auto'],
+    ['BACKY_COMMERCE_CERTIFY_WEBHOOKS', '1'],
+    ['BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER', 'auto'],
+  ];
+
+  return [
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteCommerceShellValue(value)}`),
+    '',
+    'npm run doctor:release-certification',
+    'npm run ci:commerce-provider-certification',
+  ].join('\n');
+};
+
+const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefrontContract['providerCertification']['operatorCommandTemplate'] = {
+  command: buildCommerceProviderCertificationCommand(),
+  providerChoices: {
+    payment: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay'],
+    tax: ['auto', 'stripe', 'taxjar', 'avalara', 'http'],
+    shipping: ['auto', 'easypost', 'shippo', 'http'],
+    catalog: ['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http'],
+    subscription: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http'],
+    webhook: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'generic'],
+  },
+  requiredInputs: [
+    'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1',
+    'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+    'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+    'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+    'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+    'BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL',
+    'BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL',
+    'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+  ],
+  targetInputs: [
+    'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
+  ],
+  secretHandling: 'Provider credential values stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
+};
 
 const commerceProviderCertificationRuntime = (): CommerceStorefrontContract['providerCertification']['runtime'] => {
   const paymentConfigured =
@@ -396,6 +472,7 @@ const commerceProviderCertification = (): CommerceStorefrontContract['providerCe
   liveCertificationGate: 'ci:commerce-provider-certification',
   requiredFor: 'live-commerce-provider-launch',
   secretHandling: 'Provider credentials stay in server environment/configuration; storefront contracts expose only non-secret readiness gates and provider-family requirements.',
+  operatorCommandTemplate: COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
   runtime: commerceProviderCertificationRuntime(),
   groups: [
     {

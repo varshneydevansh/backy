@@ -53,6 +53,46 @@ function assertCommerceProviderCertification(commerce, label) {
       certification.secretHandling.includes('Provider credentials stay in server environment/configuration'),
     `${label} missing non-secret credential handling guidance`,
   );
+  const operatorTemplate = certification.operatorCommandTemplate;
+  assert(
+    typeof operatorTemplate?.command === 'string' &&
+      operatorTemplate.command.includes('npm run ci:commerce-provider-certification'),
+    `${label} missing commerce provider operator command template`,
+  );
+  assert(
+    operatorTemplate.command.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') &&
+      operatorTemplate.command.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED'),
+    `${label} missing guarded commerce certification command env`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.providerChoices?.payment) &&
+      operatorTemplate.providerChoices.payment.includes('stripe') &&
+      operatorTemplate.providerChoices.payment.includes('razorpay'),
+    `${label} missing payment provider selector choices`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.providerChoices?.tax) &&
+      operatorTemplate.providerChoices.tax.includes('taxjar') &&
+      operatorTemplate.providerChoices.tax.includes('avalara'),
+    `${label} missing tax provider selector choices`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.providerChoices?.shipping) &&
+      operatorTemplate.providerChoices.shipping.includes('easypost') &&
+      operatorTemplate.providerChoices.shipping.includes('shippo'),
+    `${label} missing shipping provider selector choices`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.requiredInputs) &&
+      operatorTemplate.requiredInputs.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+      operatorTemplate.requiredInputs.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
+    `${label} missing commerce operator required-input aliases`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.targetInputs) &&
+      operatorTemplate.targetInputs.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL'),
+    `${label} missing commerce external target guard inputs`,
+  );
   assert(typeof certification.runtime?.paymentConfigured === 'boolean', `${label} missing payment provider runtime readiness`);
   assert(typeof certification.runtime?.taxConfigured === 'boolean', `${label} missing tax provider runtime readiness`);
   assert(typeof certification.runtime?.shippingConfigured === 'boolean', `${label} missing shipping provider runtime readiness`);

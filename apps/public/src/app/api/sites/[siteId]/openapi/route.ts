@@ -5887,6 +5887,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "liveCertificationGate",
                 "requiredFor",
                 "secretHandling",
+                "operatorCommandTemplate",
                 "runtime",
                 "groups",
               ],
@@ -5912,6 +5913,41 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   const: "live-commerce-provider-launch",
                 },
                 secretHandling: { type: "string" },
+                operatorCommandTemplate: {
+                  type: "object",
+                  required: [
+                    "command",
+                    "providerChoices",
+                    "requiredInputs",
+                    "targetInputs",
+                    "secretHandling",
+                  ],
+                  properties: {
+                    command: { type: "string" },
+                    providerChoices: {
+                      type: "object",
+                      properties: {
+                        payment: { type: "array", items: { type: "string" } },
+                        tax: { type: "array", items: { type: "string" } },
+                        shipping: { type: "array", items: { type: "string" } },
+                        catalog: { type: "array", items: { type: "string" } },
+                        subscription: { type: "array", items: { type: "string" } },
+                        webhook: { type: "array", items: { type: "string" } },
+                      },
+                      additionalProperties: true,
+                    },
+                    requiredInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    targetInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    secretHandling: { type: "string" },
+                  },
+                  additionalProperties: true,
+                },
                 runtime: {
                   type: "object",
                   required: [

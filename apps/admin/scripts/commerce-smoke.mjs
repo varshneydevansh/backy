@@ -978,6 +978,8 @@ const assertProductsApiContractsSource = () => {
     source.includes('data-testid="products-provider-certification-download-button"') &&
       source.includes('data-testid="products-provider-certification-copy-button"') &&
       source.includes('data-testid="products-provider-certification-command-copy-button"') &&
+      source.includes('data-testid="products-provider-certification-command-builder"') &&
+      source.includes('data-testid="products-provider-certification-command-builder-copy-button"') &&
       source.includes("providerCertificationHandoffText") &&
       source.includes("catalogEvidence") &&
       source.includes("endpointEvidence") &&
@@ -993,6 +995,14 @@ const assertProductsApiContractsSource = () => {
       source.includes("ci:commerce-provider-smoke") &&
       source.includes("ci:commerce-provider-certification") &&
       source.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification") &&
+      source.includes("buildProductProviderCertificationCommand") &&
+      source.includes("operatorCommandTemplate") &&
+      source.includes("products-provider-certification-payment-toggle") &&
+      source.includes('data-testid="products-provider-certification-tax-provider-select"') &&
+      source.includes('data-testid="products-provider-certification-external-target-input"') &&
+      source.includes('data-testid="products-provider-certification-doctor-toggle"') &&
+      source.includes("BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER") &&
+      source.includes("BACKY_COMMERCE_CERTIFICATION_BASE_URL") &&
       source.includes("npm run test:commerce-provider-certification-preflight-contract") &&
       source.includes("BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification") &&
       source.includes('data-testid="products-provider-runtime-evidence"') &&
@@ -1116,6 +1126,31 @@ const assertCommerceProviderCertificationResponse = (commerce, label) => {
     typeof certification.secretHandling === "string" &&
       certification.secretHandling.includes("Provider credentials stay in server environment/configuration"),
     `${label} provider certification must describe non-secret handling: ${JSON.stringify(certification)}`,
+  );
+  const operatorTemplate = certification.operatorCommandTemplate;
+  assert(
+    typeof operatorTemplate?.command === "string" &&
+      operatorTemplate.command.includes("npm run ci:commerce-provider-certification") &&
+      operatorTemplate.command.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED"),
+    `${label} provider certification must expose the guarded operator command template: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.providerChoices?.payment) &&
+      operatorTemplate.providerChoices.payment.includes("stripe") &&
+      operatorTemplate.providerChoices.payment.includes("razorpay"),
+    `${label} provider certification must expose payment selector choices: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.providerChoices?.tax) &&
+      operatorTemplate.providerChoices.tax.includes("taxjar") &&
+      operatorTemplate.providerChoices.tax.includes("avalara"),
+    `${label} provider certification must expose tax selector choices: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.requiredInputs) &&
+      operatorTemplate.requiredInputs.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1") &&
+      operatorTemplate.requiredInputs.includes("BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET"),
+    `${label} provider certification must expose operator required input aliases: ${JSON.stringify(certification)}`,
   );
   const groups = Array.isArray(certification.groups) ? certification.groups : [];
   const families = groups.map((group) => group.family);
@@ -6969,7 +7004,15 @@ const assertProductsLayout = async (client) => {
         hasProviderCertificationExport: Boolean(providerCertification) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-download-button"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-copy-button"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder-copy-button"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-payment-toggle"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-tax-provider-select"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-command"]')) &&
           providerCertificationText.includes('Live provider certification') &&
+          providerCertificationText.includes('Provider certification command builder') &&
+          providerCertificationText.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
+          providerCertificationText.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
           providerCertificationText.includes('Download provider JSON'),
         providerCertificationText,
         hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&

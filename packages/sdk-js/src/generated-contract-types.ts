@@ -1694,6 +1694,22 @@ export type GeneratedBackyOpenApiCommerceProviderCertification = {
   liveCertificationGate: "ci:commerce-provider-certification";
   requiredFor: "live-commerce-provider-launch";
   secretHandling: string;
+  operatorCommandTemplate: {
+    command: string;
+    providerChoices: {
+      payment?: Array<string>;
+      tax?: Array<string>;
+      shipping?: Array<string>;
+      catalog?: Array<string>;
+      subscription?: Array<string>;
+      webhook?: Array<string>;
+      [key: string]: unknown;
+    };
+    requiredInputs: Array<string>;
+    targetInputs: Array<string>;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
   runtime: {
     paymentConfigured: boolean;
     taxConfigured: boolean;
