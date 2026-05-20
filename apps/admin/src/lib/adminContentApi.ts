@@ -811,6 +811,12 @@ export interface FormsPersistenceCertification {
   requires: string[];
   evidenceExpectations?: string[];
   coverage?: string[];
+  operatorCommandTemplate?: {
+    command: string;
+    databaseUrlAliases: string[];
+    requiredInputs: string[];
+    targetGuards: string[];
+  };
   runtime?: {
     dataMode?: string;
     databaseType?: string;

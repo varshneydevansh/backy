@@ -501,6 +501,80 @@ const FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS = [
   'non-secret workflow summary with disposable database confirmation',
 ] as const;
 
+type FormsPostgresDatabaseEnvAlias = 'BACKY_DATABASE_URL' | 'DATABASE_URL';
+
+type FormsPostgresCertificationCommandOptions = {
+  databaseEnvAlias: FormsPostgresDatabaseEnvAlias;
+  disposableConfirmed: boolean;
+  expectedHost: string;
+  expectedDatabase: string;
+  includeReleaseDoctor: boolean;
+};
+
+const FORMS_POSTGRES_DATABASE_ENV_ALIASES: FormsPostgresDatabaseEnvAlias[] = ['BACKY_DATABASE_URL', 'DATABASE_URL'];
+
+const DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS = {
+  databaseEnvAlias: 'BACKY_DATABASE_URL',
+  disposableConfirmed: true,
+  expectedHost: '',
+  expectedDatabase: '',
+  includeReleaseDoctor: true,
+} satisfies FormsPostgresCertificationCommandOptions;
+
+const quoteFormsShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
+const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificationCommandOptions): string => {
+  const envEntries: Array<[string, string]> = [
+    ['BACKY_DATA_MODE', 'database'],
+    ['BACKY_DATABASE_DISPOSABLE_CONFIRMED', options.disposableConfirmed ? 'true' : '<confirm-disposable-db-first>'],
+  ];
+
+  if (options.includeReleaseDoctor) {
+    envEntries.unshift(
+      ['BACKY_RELEASE_CERTIFY_DATABASE', '1'],
+      ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
+    );
+  }
+
+  const expectedHost = options.expectedHost.trim();
+  const expectedDatabase = options.expectedDatabase.trim();
+  if (expectedHost) {
+    envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST', expectedHost]);
+  }
+  if (expectedDatabase) {
+    envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE', expectedDatabase]);
+  }
+
+  return [
+    `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
+    `# export ${options.databaseEnvAlias}='<postgres-url>'`,
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteFormsShellValue(value)}`),
+    '',
+    ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
+    'npm run ci:forms-postgres',
+  ].join('\n');
+};
+
+const buildFormsPostgresCertificationRequiredInputs = (options: FormsPostgresCertificationCommandOptions): string[] => [
+  `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+  'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
+  'disposable migrated Supabase/Postgres database',
+  'form_definitions, form_submissions, and form_contacts migrations with RLS policies',
+  ...(options.expectedHost.trim() ? ['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'] : []),
+  ...(options.expectedDatabase.trim() ? ['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'] : []),
+  ...(options.includeReleaseDoctor ? ['BACKY_RELEASE_CERTIFY_DATABASE=1', 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1'] : []),
+];
+
+const FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE = {
+  command: buildFormsPostgresCertificationCommand(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
+  databaseUrlAliases: FORMS_POSTGRES_DATABASE_ENV_ALIASES,
+  requiredInputs: buildFormsPostgresCertificationRequiredInputs(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
+  targetGuards: [
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
+  ],
+};
+
 const FORM_EXPORT_COLUMNS = [
   'form_id',
   'active_site_id',
@@ -579,6 +653,9 @@ function FormsRoute() {
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
+  const [formsPostgresCommandOptions, setFormsPostgresCommandOptions] = useState<FormsPostgresCertificationCommandOptions>(
+    DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS,
+  );
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
   const canViewForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canCreateForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.create', FORMS_PERMISSION_ROLE_DEFAULTS);
@@ -972,6 +1049,7 @@ function FormsRoute() {
     ],
     evidenceExpectations: formsPersistenceCertification?.evidenceExpectations || [...FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS],
     runtime: formsPersistenceCertification?.runtime || null,
+    operatorCommandTemplate: formsPersistenceCertification?.operatorCommandTemplate || FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE,
     secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
     checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
   }), [
@@ -979,6 +1057,7 @@ function FormsRoute() {
     formsPersistenceCertification?.coverage,
     formsPersistenceCertification?.evidenceExpectations,
     formsPersistenceCertification?.operatorGate,
+    formsPersistenceCertification?.operatorCommandTemplate,
     formsPersistenceCertification?.preflightGates,
     formsPersistenceCertification?.runtime,
   ]);
@@ -1173,6 +1252,14 @@ function FormsRoute() {
   ]);
   const formsTemplatePackText = useMemo(() => JSON.stringify(formsTemplatePack, null, 2), [formsTemplatePack]);
   const formPersistenceOperatorGate = formPersistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE;
+  const formsPostgresCertificationCommand = useMemo(
+    () => buildFormsPostgresCertificationCommand(formsPostgresCommandOptions),
+    [formsPostgresCommandOptions],
+  );
+  const formsPostgresCertificationRequiredInputs = useMemo(
+    () => buildFormsPostgresCertificationRequiredInputs(formsPostgresCommandOptions),
+    [formsPostgresCommandOptions],
+  );
   const formPersistenceCertificationText = useMemo(() => JSON.stringify(formPersistenceCertification, null, 2), [formPersistenceCertification]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
   const formsRouteSearch = useMemo<FormsSearch>(() => ({
@@ -2478,6 +2565,14 @@ function FormsRoute() {
     setError(null);
     setNotice(`${label} copied.`);
   };
+
+  const updateFormsPostgresCommandOptions = (next: Partial<FormsPostgresCertificationCommandOptions>) => {
+    setFormsPostgresCommandOptions((current) => ({
+      ...current,
+      ...next,
+    }));
+  };
+
   const downloadFormsHandoff = () => {
     if (isFormsBusy) return;
     if (!canExportForms) {
@@ -2996,6 +3091,121 @@ function FormsRoute() {
                     <li key={expectation}>{expectation}</li>
                   ))}
                 </ul>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="forms-postgres-certification-command-builder">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium text-foreground">Postgres certification command builder</div>
+                <p className="mt-1 max-w-3xl text-muted-foreground">
+                  Build the exact command for the disposable Forms database smoke. Database URLs stay in CI secrets or local shell env; this builder only writes aliases and target guards.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void copyFormApiText(formsPostgresCertificationCommand, 'Forms Postgres certification command')}
+                disabled={isFormsBusy || !canExportForms}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Copy className="size-4" />}
+                data-testid="forms-postgres-certification-command-builder-copy-button"
+              >
+                Copy guarded command
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="text-xs">
+                <span className="font-semibold text-foreground">Database URL alias</span>
+                <select
+                  value={formsPostgresCommandOptions.databaseEnvAlias}
+                  onChange={(event) => updateFormsPostgresCommandOptions({
+                    databaseEnvAlias: event.target.value as FormsPostgresDatabaseEnvAlias,
+                  })}
+                  disabled={isFormsBusy}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  data-testid="forms-postgres-certification-database-alias-select"
+                >
+                  {FORMS_POSTGRES_DATABASE_ENV_ALIASES.map((alias) => (
+                    <option key={alias} value={alias}>{alias}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  Store the actual Postgres URL outside Backy.
+                </span>
+              </label>
+              <label className="text-xs">
+                <span className="font-semibold text-foreground">Expected host</span>
+                <input
+                  type="text"
+                  value={formsPostgresCommandOptions.expectedHost}
+                  onChange={(event) => updateFormsPostgresCommandOptions({ expectedHost: event.target.value })}
+                  disabled={isFormsBusy}
+                  placeholder="db.example.supabase.co"
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  data-testid="forms-postgres-certification-expected-host-input"
+                />
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  Optional guard for the target database host.
+                </span>
+              </label>
+              <label className="text-xs">
+                <span className="font-semibold text-foreground">Expected database</span>
+                <input
+                  type="text"
+                  value={formsPostgresCommandOptions.expectedDatabase}
+                  onChange={(event) => updateFormsPostgresCommandOptions({ expectedDatabase: event.target.value })}
+                  disabled={isFormsBusy}
+                  placeholder="postgres"
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  data-testid="forms-postgres-certification-expected-database-input"
+                />
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  Optional guard for the database name in the URL path.
+                </span>
+              </label>
+              <div className="grid gap-2">
+                <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={formsPostgresCommandOptions.disposableConfirmed}
+                    onChange={(event) => updateFormsPostgresCommandOptions({ disposableConfirmed: event.target.checked })}
+                    disabled={isFormsBusy}
+                    className="mt-1 size-4 rounded border-border"
+                    data-testid="forms-postgres-certification-disposable-toggle"
+                  />
+                  <span>
+                    <span className="block font-semibold text-foreground">Disposable confirmed</span>
+                    <span className="mt-1 block font-mono text-[10px] text-muted-foreground">BACKY_DATABASE_DISPOSABLE_CONFIRMED=true</span>
+                  </span>
+                </label>
+                <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={formsPostgresCommandOptions.includeReleaseDoctor}
+                    onChange={(event) => updateFormsPostgresCommandOptions({ includeReleaseDoctor: event.target.checked })}
+                    disabled={isFormsBusy}
+                    className="mt-1 size-4 rounded border-border"
+                    data-testid="forms-postgres-certification-doctor-toggle"
+                  />
+                  <span>
+                    <span className="block font-semibold text-foreground">Run release doctor first</span>
+                    <span className="mt-1 block font-mono text-[10px] text-muted-foreground">npm run doctor:release-certification</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="forms-postgres-certification-command">
+              <code>{formsPostgresCertificationCommand}</code>
+            </pre>
+            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="forms-postgres-certification-required-inputs">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs for this command</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {formsPostgresCertificationRequiredInputs.map((input) => (
+                  <span key={input} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    {input}
+                  </span>
+                ))}
               </div>
             </div>
           </div>

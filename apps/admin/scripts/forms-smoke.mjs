@@ -333,7 +333,19 @@ const assertFormsPersistenceCertificationSource = () => {
     'external-database-gate',
     'forms-persistence-certification-runbook',
     'forms-persistence-runtime-evidence',
+    'forms-postgres-certification-command-builder',
+    'forms-postgres-certification-command-builder-copy-button',
+    'forms-postgres-certification-database-alias-select',
+    'forms-postgres-certification-expected-host-input',
+    'forms-postgres-certification-expected-database-input',
+    'forms-postgres-certification-disposable-toggle',
+    'forms-postgres-certification-doctor-toggle',
+    'forms-postgres-certification-required-inputs',
+    'operatorCommandTemplate',
+    'BACKY_RELEASE_CERTIFY_DATABASE',
+    'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED',
     'Copy CI command',
+    'Copy guarded command',
     'Runtime evidence',
     'preflight contract output',
     'DB-backed Forms smoke output',
@@ -363,6 +375,10 @@ const assertFormsPersistenceCertificationResponse = (payload) => {
   assert(Array.isArray(certification.targetGuards) && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), `Forms persistence certification missing target guards: ${JSON.stringify(certification)}`);
   assert(Array.isArray(certification.requires) && certification.requires.includes('disposable migrated Supabase/Postgres database') && certification.requires.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') && certification.requires.includes('disposable_database_confirmed=true'), `Forms persistence certification missing disposable database requirements: ${JSON.stringify(certification)}`);
   assert(Array.isArray(certification.evidenceExpectations) && certification.evidenceExpectations.includes('preflight contract output') && certification.evidenceExpectations.includes('DB-backed Forms smoke output'), `Forms persistence certification missing operator evidence expectations: ${JSON.stringify(certification)}`);
+  assert(certification.operatorCommandTemplate, `Forms persistence certification missing operator command template: ${JSON.stringify(certification)}`);
+  assert(typeof certification.operatorCommandTemplate.command === 'string' && certification.operatorCommandTemplate.command.includes('npm run ci:forms-postgres') && certification.operatorCommandTemplate.command.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED') && certification.operatorCommandTemplate.command.includes('BACKY_RELEASE_CERTIFY_DATABASE'), `Forms persistence certification missing operator command aliases: ${JSON.stringify(certification.operatorCommandTemplate)}`);
+  assert(Array.isArray(certification.operatorCommandTemplate.databaseUrlAliases) && certification.operatorCommandTemplate.databaseUrlAliases.includes('BACKY_DATABASE_URL') && certification.operatorCommandTemplate.databaseUrlAliases.includes('DATABASE_URL'), `Forms persistence certification missing database URL alias choices: ${JSON.stringify(certification.operatorCommandTemplate)}`);
+  assert(Array.isArray(certification.operatorCommandTemplate.requiredInputs) && certification.operatorCommandTemplate.requiredInputs.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'), `Forms persistence certification missing operator required inputs: ${JSON.stringify(certification.operatorCommandTemplate)}`);
   assert(certification.runtime && typeof certification.runtime.databaseUrlConfigured === 'boolean' && Object.prototype.hasOwnProperty.call(certification.runtime, 'databaseUrlAlias'), `Forms persistence certification must expose non-secret database URL runtime state: ${JSON.stringify(certification)}`);
   assert(typeof certification.runtime.dataMode === 'string' && typeof certification.runtime.databaseType === 'string', `Forms persistence certification must expose non-secret runtime mode/type defaults: ${JSON.stringify(certification)}`);
   assert(typeof certification.runtime.disposableConfirmed === 'boolean' && typeof certification.runtime.readyForCertification === 'boolean', `Forms persistence certification must expose disposable confirmation readiness: ${JSON.stringify(certification)}`);
@@ -2389,8 +2405,14 @@ const assertLayout = async (client) => {
       document.body?.innerText?.includes('Create registration form'),
     hasPersistenceCertification: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')) &&
       Boolean(document.querySelector('[data-testid="forms-persistence-runtime-evidence"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder-copy-button"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-postgres-certification-required-inputs"]')) &&
       document.body?.innerText?.includes('Persistence certification') &&
       document.body?.innerText?.includes('Runtime evidence') &&
+      document.body?.innerText?.includes('Postgres certification command builder') &&
+      document.body?.innerText?.includes('BACKY_RELEASE_CERTIFY_DATABASE') &&
+      document.body?.innerText?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
       document.body?.innerText?.includes('Database URLs and credentials are never returned') &&
       document.body?.innerText?.includes('test:forms-postgres') &&
       Boolean(document.querySelector('[data-testid="forms-persistence-certification-download-button"]')) &&
