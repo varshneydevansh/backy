@@ -1259,6 +1259,45 @@ const isEditorGroupElement = (element: CanvasElement | null | undefined): boolea
   element?.props?.editorGroup === true
 );
 
+const collectEditorCompositionMetrics = (nodes: CanvasElement[]) => {
+  const typeCounts: Record<string, number> = {};
+  const metrics = {
+    totalLayers: 0,
+    rootLayers: nodes.length,
+    groupLayers: 0,
+    nestedLayers: 0,
+    childContainerLayers: 0,
+    responsiveOverrideLayers: 0,
+    hiddenLayers: 0,
+    lockedLayers: 0,
+    maxDepth: 0,
+    typeCounts,
+  };
+
+  const walk = (items: CanvasElement[], depth: number) => {
+    metrics.maxDepth = Math.max(metrics.maxDepth, depth);
+    items.forEach((item) => {
+      const type = normalizeElementType(item.type);
+      metrics.totalLayers += 1;
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+
+      if (depth > 0) metrics.nestedLayers += 1;
+      if (isEditorGroupElement(item)) metrics.groupLayers += 1;
+      if (item.children?.length) metrics.childContainerLayers += 1;
+      if (item.responsive && Object.keys(item.responsive).length > 0) metrics.responsiveOverrideLayers += 1;
+      if (item.visible === false) metrics.hiddenLayers += 1;
+      if (item.locked === true) metrics.lockedLayers += 1;
+
+      if (item.children?.length) {
+        walk(item.children, depth + 1);
+      }
+    });
+  };
+
+  walk(nodes, 0);
+  return metrics;
+};
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -3522,6 +3561,135 @@ export function CanvasEditor({
   const canSelectParentLayer = selectedEntriesShareParent && Boolean(selectedParentId);
   const canSelectChildLayer = Boolean(selectableChildLayer);
   const canSelectChildLayerScope = selectableChildLayerIds.length > 0;
+  const editorCompositionReadiness = useMemo(() => {
+    const metrics = collectEditorCompositionMetrics(elements);
+    const topTypes = Object.entries(metrics.typeCounts)
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, 8)
+      .map(([type, count]) => ({ type, count }));
+    const selectionCanCompose = selectedIds.length < 2 || canGroupSelected || canUngroupSelected;
+    const checks = [
+      {
+        label: 'Layer tree',
+        detail: metrics.totalLayers > 0
+          ? `${metrics.totalLayers} layers across ${metrics.rootLayers} root layers.`
+          : 'Add at least one canvas layer.',
+        ready: metrics.totalLayers > 0,
+      },
+      {
+        label: 'Nested composition',
+        detail: metrics.groupLayers > 0 || metrics.nestedLayers > 0
+          ? `${metrics.groupLayers} editor groups and ${metrics.nestedLayers} nested child layers.`
+          : 'Group sibling layers or nest them into containers for reusable components.',
+        ready: metrics.groupLayers > 0 || metrics.nestedLayers > 0,
+      },
+      {
+        label: 'Selection scope',
+        detail: selectionCanCompose
+          ? selectedIds.length > 1
+            ? 'Selected layers share a valid compose/ungroup scope.'
+            : 'No multi-layer composition issue in the current selection.'
+          : 'Select unlocked sibling layers before grouping, aligning, duplicating, or deleting together.',
+        ready: selectionCanCompose,
+      },
+      {
+        label: 'Responsive handoff',
+        detail: metrics.responsiveOverrideLayers > 0
+          ? `${metrics.responsiveOverrideLayers} layers carry breakpoint overrides.`
+          : 'Desktop geometry is the current source of truth.',
+        ready: true,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+    const steps = [
+      ...(metrics.totalLayers === 0 ? ['Add canvas layers before exporting a composition handoff.'] : []),
+      ...(metrics.groupLayers === 0 && metrics.nestedLayers === 0 ? ['Use Cmd/Ctrl+G or nested containers to turn flat layers into reusable components.'] : []),
+      ...(!selectionCanCompose ? ['Move selected layers into the same parent scope and unlock them before grouping or bulk editing.'] : []),
+    ];
+
+    return {
+      schemaVersion: 'backy.editor-composition-readiness.v1',
+      ready: readyCount === checks.length,
+      readyCount,
+      checkCount: checks.length,
+      metrics: {
+        ...metrics,
+        topTypes,
+      },
+      selection: {
+        selectedIds,
+        selectedLayerCount: selectedIds.length,
+        parentId: selectedParentId,
+        shareParent: selectedEntriesShareParent,
+        canGroup: canGroupSelected,
+        canUngroup: canUngroupSelected,
+        canSelectChildren: canSelectChildLayerScope,
+      },
+      shortcuts: {
+        group: 'Cmd/Ctrl+G',
+        ungroup: 'Shift+Cmd/Ctrl+G',
+        selectSiblings: 'Cmd/Ctrl+A',
+        selectChildren: 'Shift+Cmd/Ctrl+A',
+        selectChild: 'Enter',
+        selectParent: 'Shift+Enter',
+      },
+      checks,
+      actionPlan: {
+        schemaVersion: 'backy.editor-composition-action-plan.v1',
+        status: readyCount === checks.length ? 'ready' : 'needs-composition-review',
+        recommendedNextAction: readyCount === checks.length
+          ? 'Reuse this grouped canvas tree in pages, posts, reusable sections, or custom frontend renderers.'
+          : 'Resolve the listed composition steps before treating this canvas tree as a reusable component.',
+        metrics: {
+          totalLayers: metrics.totalLayers,
+          rootLayers: metrics.rootLayers,
+          groupLayers: metrics.groupLayers,
+          nestedLayers: metrics.nestedLayers,
+          childContainerLayers: metrics.childContainerLayers,
+          responsiveOverrideLayers: metrics.responsiveOverrideLayers,
+          hiddenLayers: metrics.hiddenLayers,
+          lockedLayers: metrics.lockedLayers,
+          maxDepth: metrics.maxDepth,
+          topTypes,
+        },
+        selection: {
+          selectedIds,
+          selectedLayerCount: selectedIds.length,
+          parentId: selectedParentId,
+          shareParent: selectedEntriesShareParent,
+          canGroup: canGroupSelected,
+          canUngroup: canUngroupSelected,
+          canSelectChildren: canSelectChildLayerScope,
+        },
+        shortcuts: {
+          group: 'Cmd/Ctrl+G',
+          ungroup: 'Shift+Cmd/Ctrl+G',
+          selectSiblings: 'Cmd/Ctrl+A',
+          selectChildren: 'Shift+Cmd/Ctrl+A',
+          selectChild: 'Enter',
+          selectParent: 'Shift+Enter',
+        },
+        steps,
+      },
+    };
+  }, [
+    canGroupSelected,
+    canSelectChildLayerScope,
+    canUngroupSelected,
+    elements,
+    selectedEntriesShareParent,
+    selectedIds,
+    selectedParentId,
+  ]);
+  const copyEditorCompositionPlan = useCallback(async () => {
+    const plan = JSON.stringify(editorCompositionReadiness.actionPlan, null, 2);
+    try {
+      await navigator.clipboard.writeText(plan);
+      setEditorNotice('Editor composition action plan copied.');
+    } catch {
+      setEditorNotice('Unable to copy the editor composition action plan.');
+    }
+  }, [editorCompositionReadiness.actionPlan]);
 
   const handleSelectedVisibilityToggle = useCallback(() => {
     if (!canToggleSelectedVisibility || selectedActiveElements.length === 0) return;
@@ -6272,6 +6440,58 @@ export function CanvasEditor({
                     <Layers className="h-4 w-4" />
                     Layers
                   </button>
+                </div>
+
+                <div
+                  className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2.5 text-xs"
+                  data-testid="editor-composition-readiness"
+                  data-composition-schema={editorCompositionReadiness.schemaVersion}
+                  data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
+                  data-total-layers={editorCompositionReadiness.metrics.totalLayers}
+                  data-group-layers={editorCompositionReadiness.metrics.groupLayers}
+                  data-nested-layers={editorCompositionReadiness.metrics.nestedLayers}
+                  data-selected-layers={editorCompositionReadiness.selection.selectedLayerCount}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 font-semibold text-indigo-950">
+                        <Group className="h-3.5 w-3.5" />
+                        Composition
+                      </div>
+                      <div className="mt-1 text-[11px] leading-4 text-indigo-900/75">
+                        {editorCompositionReadiness.readyCount}/{editorCompositionReadiness.checkCount} ready
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void copyEditorCompositionPlan()}
+                      title="Copy editor composition action plan"
+                      aria-label="Copy editor composition action plan"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-100"
+                      data-testid="editor-copy-composition-plan"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copy plan
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-4 gap-1.5" data-testid="editor-composition-metrics">
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.totalLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Layers</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.groupLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Groups</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.nestedLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Nested</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.responsiveOverrideLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Breakpoints</div>
+                    </div>
+                  </div>
                 </div>
 
                 <div

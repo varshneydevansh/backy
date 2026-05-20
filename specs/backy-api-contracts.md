@@ -478,6 +478,7 @@ Public page payload should include:
 
 - `GET /api/admin/sites/:siteId/pages/:pageId`
   - Returns full editable page payload including canvas content.
+  - The shared admin canvas editor exposes the current canvas tree composition as `backy.editor-composition-readiness.v1` inspector metadata with layer/group/nesting/breakpoint counts, selection-scope evidence, and a copyable `backy.editor-composition-action-plan.v1` for custom admin/front-end builder handoff.
 
 - `GET /api/admin/sites/:siteId/pages/:pageId/readiness`
   - Admin page readiness audit for page editor publish workflow.

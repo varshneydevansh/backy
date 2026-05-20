@@ -319,6 +319,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-inspector-layer-name"') && source.includes('handleLayerRename(selectedElement.id') && source.includes('placeholder={selectedElementTypeLabel'), 'Editor inspector must expose a selected-layer name editor');
   assert(source.includes('data-testid="editor-group-selection"') && source.includes('data-testid="editor-inspector-group-selection"') && source.includes('aria-keyshortcuts="Control+G Meta+G"'), 'Editor group actions must expose Cmd/Ctrl+G through aria-keyshortcuts');
   assert(source.includes('data-testid="editor-ungroup-selection"') && source.includes('data-testid="editor-inspector-single-ungroup-selection"') && source.includes('aria-keyshortcuts="Shift+Control+G Shift+Meta+G"'), 'Editor ungroup actions must expose Shift+Cmd/Ctrl+G through aria-keyshortcuts');
+  assert(source.includes('backy.editor-composition-readiness.v1') && source.includes('data-testid="editor-composition-readiness"') && source.includes('data-testid="editor-composition-metrics"'), 'Editor inspector must expose a composition readiness contract for grouped and nested canvas trees');
+  assert(source.includes('backy.editor-composition-action-plan.v1') && source.includes('copyEditorCompositionPlan') && source.includes('data-testid="editor-copy-composition-plan"'), 'Editor inspector must expose a copyable composition action plan for custom frontend and operator handoff');
   assert(smokeSource.includes('testRichTextSelectionPreservedAcrossPropertyPanelFocus') && smokeSource.includes('focusPropertyControlByTestId') && smokeSource.includes('Property-panel focus did not move away from the canvas editor'), 'Editor rich-text smoke must prove selected text survives focus movement into right-panel controls');
   assert(activeEditorSource.includes('rootChildren[currentListIndex] = adjacentListClone;') && activeEditorSource.includes('rootChildren[adjacentListIndex] = currentListClone;'), 'Rich-text list move controls must swap root-adjacent single-item lists in both directions');
   assert(activeEditorSource.includes('(!Range.isCollapsed(storedRange) && Range.isCollapsed(incomingSelection))'), 'Active editor reactivation must preserve valid stored caret/table selections when no live incoming selection is available');
@@ -4163,6 +4165,39 @@ const readShortcutSelectionState = async (client, label) => evaluate(client, `((
     multiSelectionText: multiSelection?.textContent || '',
   };
 })()`);
+
+const readEditorCompositionReadiness = async (client, label) => {
+  const state = await evaluate(client, `(() => {
+    const card = document.querySelector('[data-testid="editor-composition-readiness"]');
+    const metrics = document.querySelector('[data-testid="editor-composition-metrics"]');
+    const copyButton = document.querySelector('[data-testid="editor-copy-composition-plan"]');
+    return {
+      label: ${JSON.stringify(label)},
+      hasCard: Boolean(card),
+      hasMetrics: Boolean(metrics),
+      schema: card?.getAttribute('data-composition-schema') || '',
+      actionPlanSchema: card?.getAttribute('data-action-plan-schema') || '',
+      totalLayers: Number(card?.getAttribute('data-total-layers') || 0),
+      groupLayers: Number(card?.getAttribute('data-group-layers') || 0),
+      nestedLayers: Number(card?.getAttribute('data-nested-layers') || 0),
+      selectedLayers: Number(card?.getAttribute('data-selected-layers') || 0),
+      text: card?.textContent || '',
+      copyTitle: copyButton?.getAttribute('title') || '',
+      copyLabel: copyButton?.getAttribute('aria-label') || '',
+      copyDisabled: copyButton instanceof HTMLButtonElement ? copyButton.disabled : null,
+    };
+  })()`);
+
+  assert(state.hasCard, `Editor composition readiness card missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.hasMetrics, `Editor composition metrics missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.schema === 'backy.editor-composition-readiness.v1', `Editor composition readiness schema mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.actionPlanSchema === 'backy.editor-composition-action-plan.v1', `Editor composition action-plan schema mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.copyDisabled === false, `Editor composition copy plan button disabled during ${label}: ${JSON.stringify(state)}`);
+  assert(state.copyTitle === 'Copy editor composition action plan', `Editor composition copy title mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.copyLabel === 'Copy editor composition action plan', `Editor composition copy label mismatch during ${label}: ${JSON.stringify(state)}`);
+
+  return state;
+};
 
 const testEscapeDeselectShortcut = async (client, elementId) => {
   await selectLayerIds(client, [elementId]);
@@ -9827,6 +9862,11 @@ const testLayerGrouping = async (client, elementIds) => {
     [firstId, secondId].every((id) => ready.selectedLayers.includes(id)),
     `Grouping selection drifted before grouping: ${JSON.stringify(ready)}`,
   );
+  const compositionBefore = await readEditorCompositionReadiness(client, 'before grouping');
+  assert(
+    compositionBefore.totalLayers >= 2 && compositionBefore.selectedLayers >= 2,
+    `Composition readiness did not reflect multi-layer grouping setup: ${JSON.stringify(compositionBefore)}`,
+  );
 
   await pressKey(client, 'g', { ctrlKey: true });
   let grouped = null;
@@ -9851,6 +9891,11 @@ const testLayerGrouping = async (client, elementIds) => {
 
   assert(grouped.hasSelection, `Grouped selection was not shown in inspector: ${JSON.stringify(grouped)}`);
   assert(grouped.ungroupDisabled === false, `Ungroup button did not enable after grouping: ${JSON.stringify(grouped)}`);
+  const compositionGrouped = await readEditorCompositionReadiness(client, 'after grouping');
+  assert(
+    compositionGrouped.groupLayers >= 1 && compositionGrouped.nestedLayers >= 2 && compositionGrouped.selectedLayers === 1,
+    `Composition readiness did not reflect grouped layer tree: ${JSON.stringify(compositionGrouped)}`,
+  );
 
   const groupedState = await readEditorElementState(client, [firstId, secondId], { visual: true });
   assertElementState(groupedState, before, 'grouping preserved child geometry');
@@ -9988,6 +10033,11 @@ const testLayerGrouping = async (client, elementIds) => {
     )),
     `Ungroup did not preserve expanded child multi-selection: ${JSON.stringify(ungroupedSelection)}`,
   );
+  const compositionAfter = await readEditorCompositionReadiness(client, 'after ungrouping');
+  assert(
+    compositionAfter.selectedLayers >= 2,
+    `Composition readiness did not reflect expanded child selection after ungrouping: ${JSON.stringify(compositionAfter)}`,
+  );
 
   const metaSelected = await selectLayerIds(client, [firstId, secondId]);
   let metaReady = null;
@@ -10122,6 +10172,9 @@ const testLayerGrouping = async (client, elementIds) => {
     redoGroupingSelection,
     metaGrouped,
     metaUngroupedSelection,
+    compositionBefore,
+    compositionGrouped,
+    compositionAfter,
     before,
     after,
     afterMeta,
