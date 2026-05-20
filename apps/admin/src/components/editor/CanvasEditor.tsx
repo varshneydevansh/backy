@@ -3338,6 +3338,8 @@ export function CanvasEditor({
     [displayedElements, elements, findElementById, selectedIds],
   );
   const selectedParentId = selectedEntries[0]?.parentId ?? null;
+  const selectedEntriesShareParent = selectedEntries.length > 0
+    && selectedEntries.every((entry) => entry.parentId === selectedParentId);
   const selectableSiblingIds = useMemo(() => {
     const selectedEntry = selectedId ? findElementEntry(elements, selectedId) : null;
     const parentId = selectedEntry?.parentId ?? null;
@@ -3359,26 +3361,28 @@ export function CanvasEditor({
     return siblings.length;
   }, [elements, findElementEntry, selectedId]);
   const canGroupSelected = selectedEntries.length > 1
-    && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
+    && selectedEntriesShareParent
+    && selectedEntries.every((entry) => !entry.element.locked);
   const canUngroupSelected = selectedEntries.length > 0
+    && selectedEntriesShareParent
     && selectedEntries.every((entry) => (
-      entry.parentId === selectedParentId &&
       !entry.element.locked &&
       isEditorGroupElement(entry.element) &&
       Boolean(entry.element.children?.length)
     ));
   const canAlignSelected = selectedEntries.length > 0
+    && selectedEntriesShareParent
     && selectedEntries.every((entry) => (
-      entry.parentId === selectedParentId &&
       !entry.element.locked &&
       entry.element.visible !== false
     ));
   const canZOrderSelected = selectedEntries.length > 0
+    && selectedEntriesShareParent
     && selectedSiblingLayerCount > selectedEntries.length
-    && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
+    && selectedEntries.every((entry) => !entry.element.locked);
   const canDistributeSelected = selectedEntries.length >= 3
+    && selectedEntriesShareParent
     && selectedEntries.every((entry) => (
-      entry.parentId === selectedParentId &&
       !entry.element.locked &&
       entry.element.visible !== false
     ));
@@ -3412,7 +3416,7 @@ export function CanvasEditor({
       ?.filter((child) => child.visible !== false && !child.locked)
       .map((child) => child.id) || []
   ), [selectedElement]);
-  const canSelectParentLayer = selectedEntries.length === 1 && Boolean(selectedParentId);
+  const canSelectParentLayer = selectedEntriesShareParent && Boolean(selectedParentId);
   const canSelectChildLayer = Boolean(selectableChildLayer);
   const canSelectChildLayerScope = selectableChildLayerIds.length > 0;
 
@@ -6046,6 +6050,16 @@ export function CanvasEditor({
                           </div>
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={handleSelectParentLayer}
+                            disabled={!canSelectParentLayer}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            data-testid="editor-inspector-select-parent-layer"
+                          >
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            Parent
+                          </button>
                           <button
                             type="button"
                             onClick={handleGroupSelected}
