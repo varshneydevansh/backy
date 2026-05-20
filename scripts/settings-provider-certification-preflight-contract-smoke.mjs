@@ -295,6 +295,10 @@ includesAll(
     'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
     'includeReleaseDoctor',
     'npm run doctor:release-certification',
+    'operatorEnvTemplate',
+    'buildSettingsProviderCertificationEnvTemplate',
+    'backy.settings-provider-certification-env-template.v1',
+    '.env.backy-settings-provider-certification',
   ],
   'Settings provider operation API routes',
 );
@@ -403,6 +407,9 @@ includesAll(
   [
     'backy.settings-provider-certification-handoff.v1',
     'Admin settings executable provider operation contract',
+    'operatorEnvTemplate',
+    'backy.settings-provider-certification-env-template.v1',
+    '.env.backy-settings-provider-certification',
     'settings.media_storage.provisioning_probe',
     'settings.media_storage.credential_rotation_probe',
     'settings.media_storage.secret_manager',
@@ -425,6 +432,9 @@ includesAll(
   apiContracts,
   [
     'data.settings.providerCertification',
+    'operatorEnvTemplate',
+    '.env.backy-settings-provider-certification',
+    'backy.settings-provider-certification-env-template.v1',
     'runtimeEvidence',
     'missingInputAliases',
     'backy.settings-provider-certification-handoff.v1',
@@ -479,6 +489,7 @@ includesAll(
     'Real-provider certification for Supabase, Vercel, storage, notification, and commerce providers.',
     'Settings provider certification gate wording update',
     'Settings provider command-builder doctor parity update',
+    'Settings admin API provider env-template handoff update',
     'Settings provider handoff evidence parity update',
     'npm run doctor:release-certification',
     'Products/Orders/Forms/SDK command-builder safety pattern',

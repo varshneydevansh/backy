@@ -245,6 +245,10 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('external-live-provider-gate'), 'Admin settings provider certification must expose external live-provider status');
   assert(source.includes('npm run ci:settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider gate');
   assert(source.includes('npm run ci:commerce-provider-certification'), 'Admin settings provider certification must expose the Commerce provider gate');
+  assert(source.includes('operatorEnvTemplate'), 'Admin settings provider certification must expose an operator env-template handoff');
+  assert(source.includes('buildSettingsProviderCertificationEnvTemplate'), 'Admin settings provider certification must build a copyable env-template handoff');
+  assert(source.includes('backy.settings-provider-certification-env-template.v1'), 'Admin settings provider certification must expose a stable env-template schema');
+  assert(source.includes('.env.backy-settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider env-template filename');
   for (const providerLabel of [
     'Supabase/Postgres',
     'BACKY_DATABASE_URL or DATABASE_URL',
@@ -308,6 +312,7 @@ function assertAdminSettingsContractSource() {
   assert(apiContracts.includes('settings.api_keys.revoke'), 'API contracts must document service key revoke audit events');
   assert(apiContracts.includes('data.settings.providerCertification'), 'API contracts must document admin Settings provider certification handoff');
   assert(apiContracts.includes('backy.settings-provider-certification-handoff.v1'), 'API contracts must document Settings provider certification schema');
+  assert(apiContracts.includes('operatorEnvTemplate` for `.env.backy-settings-provider-certification`'), 'API contracts must document Settings provider env-template handoff');
   assert(apiContracts.includes('BACKY_COMMERCE_WEBHOOK_SECRET`/`COMMERCE_WEBHOOK_SECRET'), 'API contracts must document provider certification alias families');
 }
 
@@ -7836,6 +7841,25 @@ try {
     assert(providerCertification?.localPreflight === 'npm run test:settings-provider-certification-preflight-contract', `${url} missing Settings provider local preflight`);
     assert(providerCertification?.releasePreflight === 'npm run test:release-certification-preflight-contract', `${url} missing Settings provider release preflight`);
     assert(providerCertification?.operatorCommandTemplate, `${url} missing provider certification operatorCommandTemplate`);
+    assert(providerCertification.operatorCommandTemplate.envTemplateSchemaVersion === 'backy.settings-provider-certification-env-template.v1', `${url} missing provider certification command-template env schema`);
+    assert(
+      typeof providerCertification.operatorCommandTemplate.envTemplate === 'string' &&
+        providerCertification.operatorCommandTemplate.envTemplate.includes('# Backy settings provider certification environment') &&
+        providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+        providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
+      `${url} missing provider certification command-template env body`,
+    );
+    assert(providerCertification?.operatorEnvTemplate, `${url} missing provider certification operatorEnvTemplate`);
+    assert(providerCertification.operatorEnvTemplate.schemaVersion === 'backy.settings-provider-certification-env-template.v1', `${url} missing provider certification env-template schema`);
+    assert(providerCertification.operatorEnvTemplate.format === 'shell-env', `${url} missing provider certification env-template format`);
+    assert(providerCertification.operatorEnvTemplate.fileName === '.env.backy-settings-provider-certification', `${url} missing provider certification env-template filename`);
+    assert(
+      typeof providerCertification.operatorEnvTemplate.body === 'string' &&
+        providerCertification.operatorEnvTemplate.body.includes('# Backy settings provider certification environment') &&
+        providerCertification.operatorEnvTemplate.body.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+        providerCertification.operatorEnvTemplate.body.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
+      `${url} missing provider certification env-template body`,
+    );
     assert(
       providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') &&
         providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER') &&

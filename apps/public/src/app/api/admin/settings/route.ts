@@ -143,6 +143,9 @@ const DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS = {
 } satisfies SettingsCertificationCommandOptions;
 
 const quoteShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteShellValue(value)
+);
 const boolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOptions) => (
   options.certifyStorage ||
@@ -151,7 +154,7 @@ const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOpti
   options.certifyNotification
 );
 
-const buildSettingsProviderCertificationCommand = (options: SettingsCertificationCommandOptions): string => {
+const buildSettingsProviderCertificationEnvEntries = (options: SettingsCertificationCommandOptions): Array<[string, string]> => {
   const settingsSelected = hasSettingsCertificationGroup(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/$/, '');
   const envEntries: Array<[string, string]> = [
@@ -185,6 +188,12 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
     envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID', options.vercelTeamId.trim()]);
   }
 
+  return envEntries;
+};
+
+const buildSettingsProviderCertificationCommand = (options: SettingsCertificationCommandOptions): string => {
+  const settingsSelected = hasSettingsCertificationGroup(options);
+  const envEntries = buildSettingsProviderCertificationEnvEntries(options);
   const commands = [
     settingsSelected ? 'npm run ci:settings-provider-certification' : '',
     options.certifyCommerce ? 'npm run ci:commerce-provider-certification' : '',
@@ -195,6 +204,16 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
     ...(commands.length ? commands : ['# Select at least one provider family before running certification.']),
+  ].join('\n');
+};
+
+const buildSettingsProviderCertificationEnvTemplate = (options: SettingsCertificationCommandOptions): string => {
+  const envEntries = buildSettingsProviderCertificationEnvEntries(options);
+
+  return [
+    '# Backy settings provider certification environment',
+    '# Keep real provider credential values in CI secrets or local shell variables.',
+    ...envEntries.map(([key, value]) => `${key}=${quoteEnvTemplateValue(value)}`),
   ].join('\n');
 };
 
@@ -222,6 +241,8 @@ const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCert
 
 const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildSettingsProviderCertificationCommand(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildSettingsProviderCertificationEnvTemplate(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.settings-provider-certification-env-template.v1',
   storageProviderChoices: SETTINGS_CERTIFICATION_STORAGE_PROVIDER_CHOICES,
   notificationProviderChoices: SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_CHOICES,
   requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
@@ -301,6 +322,13 @@ const providerCertificationContract = (runtimeEvidence: ReturnType<typeof buildP
   secretHandling: 'Provider credentials stay in deployment or CI environment variables; admin settings responses only expose non-secret provider families, gate names, and readiness evidence.',
   runtimeEvidence,
   operatorCommandTemplate: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+  operatorEnvTemplate: {
+    schemaVersion: 'backy.settings-provider-certification-env-template.v1',
+    format: 'shell-env',
+    fileName: '.env.backy-settings-provider-certification',
+    body: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    secretHandling: 'Generated template values are non-secret aliases and placeholders; keep real Settings, storage, Vercel, notification, and commerce provider credentials in CI secrets or local shell variables before execution.',
+  },
   groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
     family: group.family,
     providers: [...group.providers],

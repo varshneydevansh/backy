@@ -1162,6 +1162,9 @@ includesAll(
   [
     "backy.settings-provider-certification-handoff.v1",
     "operatorCommandTemplate",
+    "operatorEnvTemplate",
+    "backy.settings-provider-certification-env-template.v1",
+    ".env.backy-settings-provider-certification",
     "BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER",
     "BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER",
     "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED",
@@ -1197,7 +1200,13 @@ includesAll(
   routeSource,
   [
     "operatorCommandTemplate",
+    "operatorEnvTemplate",
     "buildSettingsProviderCertificationCommand",
+    "buildSettingsProviderCertificationEnvTemplate",
+    "buildSettingsProviderCertificationEnvEntries",
+    "backy.settings-provider-certification-env-template.v1",
+    ".env.backy-settings-provider-certification",
+    "# Backy settings provider certification environment",
     "BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER",
     "BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER",
     "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED",
