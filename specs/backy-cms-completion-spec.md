@@ -441,6 +441,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Current local editor parity is guarded by focused smoke paths for drag/drop, copy/cut/paste/duplicate/delete/grouping, responsive breakpoint state, rich-text table/list depth, imported list-indent edits, and long-session stress.
 - Remaining editor work should be treated as regression hardening and new-control coverage, not as a currently counted Partial gate.
 - Group/ungroup toolbar controls now expose `aria-keyshortcuts` for Cmd/Ctrl+G and Shift+Cmd/Ctrl+G, with source-only editor smoke coverage for shortcut discoverability.
+- Nested component authoring now includes direct child-layer scope selection through the toolbar, inspector, and Shift+Cmd/Ctrl+A shortcut so container/group children can be selected for grouping, alignment, duplication, and delete flows without repeated single-child drilling.
 - Keep right-pane rich-text selection, media/link sub-actions, and nested block confidence covered whenever related controls are changed.
 
 ### 9.2 Media/asset UX gaps

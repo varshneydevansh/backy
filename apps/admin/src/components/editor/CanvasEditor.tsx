@@ -3393,8 +3393,14 @@ export function CanvasEditor({
   const selectableChildLayer = selectedElement?.children?.find((child) => (
     child.visible !== false && !child.locked
   )) ?? null;
+  const selectableChildLayerIds = useMemo(() => (
+    selectedElement?.children
+      ?.filter((child) => child.visible !== false && !child.locked)
+      .map((child) => child.id) || []
+  ), [selectedElement]);
   const canSelectParentLayer = selectedEntries.length === 1 && Boolean(selectedParentId);
   const canSelectChildLayer = Boolean(selectableChildLayer);
+  const canSelectChildLayerScope = selectableChildLayerIds.length > 0;
 
   const handleSelectedVisibilityToggle = useCallback(() => {
     if (!canToggleSelectedVisibility || selectedActiveElements.length === 0) return;
@@ -3447,6 +3453,16 @@ export function CanvasEditor({
     setSelectedId(selectableChildLayer.id);
     setSelectedIds([selectableChildLayer.id]);
   }, [selectableChildLayer]);
+
+  const handleSelectChildLayerScope = useCallback(() => {
+    if (selectableChildLayerIds.length === 0) {
+      return;
+    }
+
+    setSelectedIds(selectableChildLayerIds);
+    setSelectedId(selectableChildLayerIds[0] || null);
+    setRightPanel(selectableChildLayerIds.length > 1 ? 'layers' : 'properties');
+  }, [selectableChildLayerIds]);
 
   /**
    * Handle element selection
@@ -4647,8 +4663,14 @@ export function CanvasEditor({
       }
 
       // Ctrl+A / Cmd+A (Select all unlocked siblings in the active canvas scope)
+      // Shift+Ctrl+A / Shift+Cmd+A (Select direct child layers of the selected container/group)
       if ((e.ctrlKey || e.metaKey) && key === 'a') {
         e.preventDefault();
+        if (e.shiftKey && canSelectChildLayerScope) {
+          handleSelectChildLayerScope();
+          return;
+        }
+
         handleSelectSiblingScope();
         return;
       }
@@ -4765,11 +4787,13 @@ export function CanvasEditor({
     handleGroupSelected,
     handleUngroupSelected,
     handleSelectFirstChildLayer,
+    handleSelectChildLayerScope,
     handleSelectParentLayer,
     handleSelectSiblingScope,
     cycleElementSelection,
     nudgeSelectedElement,
     canSelectChildLayer,
+    canSelectChildLayerScope,
     canSelectParentLayer,
     canEdit,
     editDisabledReason,
@@ -5210,6 +5234,18 @@ export function CanvasEditor({
               data-testid="editor-select-sibling-layers"
             >
               <CheckSquare className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleSelectChildLayerScope}
+              disabled={isCanvasMutationDisabled || !canSelectChildLayerScope}
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Select child layers (Shift+Cmd/Ctrl+A)"
+              aria-label="Select child layers"
+              aria-keyshortcuts="Shift+Control+A Shift+Meta+A"
+              data-testid="editor-select-child-layers"
+            >
+              <Layers className="h-4 w-4" />
             </button>
             <button
               type="button"
@@ -6156,6 +6192,17 @@ export function CanvasEditor({
                         >
                           <ArrowRight className="h-3.5 w-3.5" />
                           Select child
+                        </button>
+                      )}
+                      {canSelectChildLayerScope && (
+                        <button
+                          type="button"
+                          onClick={handleSelectChildLayerScope}
+                          className="mt-2 ml-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="editor-select-child-layer-scope"
+                        >
+                          <Layers className="h-3.5 w-3.5" />
+                          Select children
                         </button>
                       )}
                       {canUngroupSelected && (
