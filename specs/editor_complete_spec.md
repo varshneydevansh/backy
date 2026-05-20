@@ -93,7 +93,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface and covered by focused smoke.
 - Smart alignment guides render during drag, snap selected elements to peer/canvas edges, and clear after release.
 - Rulers render along the canvas edge with major/minor ticks.
-- Pan navigation works through the hand toggle and temporary Space-hold mode.
+- Pan navigation works through the hand toggle, H keyboard toggle, and temporary Space-hold mode.
 - **Issues:** None major
 - **Improvements Needed:**
     - None currently tracked for this panel

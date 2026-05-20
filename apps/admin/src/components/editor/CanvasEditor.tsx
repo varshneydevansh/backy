@@ -4668,6 +4668,12 @@ export function CanvasEditor({
         return;
       }
 
+      if (key === 'h' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleToggleCanvasPanMode();
+        return;
+      }
+
       const isLayerOrderShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
         e.code === 'BracketLeft' ||
         e.code === 'BracketRight' ||
@@ -4843,6 +4849,7 @@ export function CanvasEditor({
     handleZOrderChange,
     handleGroupSelected,
     handleUngroupSelected,
+    handleToggleCanvasPanMode,
     handleZoomIn,
     handleZoomOut,
     handleSelectFirstChildLayer,
@@ -5994,6 +6001,7 @@ export function CanvasEditor({
                 data-zoom-percent={zoomPercent}
                 data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
                 data-pan-active={isCanvasPanActive ? 'true' : 'false'}
+                data-pan-keyshortcuts="toggle:H;temporary:Space"
                 data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"
               >
                 <button
@@ -6005,9 +6013,10 @@ export function CanvasEditor({
                       ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
                   )}
-                  title={isCanvasPanMode ? 'Disable pan navigation' : 'Enable pan navigation'}
+                  title={isCanvasPanMode ? 'Disable pan navigation (H, hold Space)' : 'Enable pan navigation (H, hold Space)'}
                   aria-label={isCanvasPanMode ? 'Disable pan navigation' : 'Enable pan navigation'}
                   aria-pressed={isCanvasPanMode}
+                  aria-keyshortcuts="H Space"
                   data-testid="editor-pan-toggle"
                 >
                   <Hand className="h-4 w-4" />

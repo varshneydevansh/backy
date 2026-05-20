@@ -442,6 +442,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Remaining editor work should be treated as regression hardening and new-control coverage, not as a currently counted Partial gate.
 - Undo and redo controls now expose stable ids and shortcut metadata for Cmd/Ctrl+Z, Cmd/Ctrl+Y, and Shift+Cmd/Ctrl+Z, keeping the history command surface source-guarded alongside mutation controls.
 - Canvas zoom now supports Cmd/Ctrl+=, Cmd/Ctrl+-, and Cmd/Ctrl+0 for zoom in, zoom out, and fit canvas; the zoom HUD exposes the same shortcut metadata for accessible controls and custom admin clients.
+- Canvas pan navigation now exposes H for persistent hand mode plus hold-Space for temporary panning, with HUD metadata and source coverage beside zoom controls.
 - Group/ungroup toolbar and inspector controls now expose stable action ids plus `aria-keyshortcuts` for Cmd/Ctrl+G and Shift+Cmd/Ctrl+G, with source-only editor smoke coverage for shortcut discoverability.
 - Nested component authoring now includes direct child-layer scope selection through the toolbar, inspector, and Shift+Cmd/Ctrl+A shortcut so container/group children can be selected for grouping, alignment, duplication, and delete flows without repeated single-child drilling.
 - Sibling-scope selection is available from the toolbar plus single and multi-layer inspector cards with Cmd/Ctrl+A shortcut metadata, keeping same-parent grouping and alignment setup local to the current properties workflow.
