@@ -19,16 +19,52 @@ const normalizeId = (value: string) => (
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'page'
 );
 
+const cloneResponsive = (responsive: CanvasElement['responsive']): CanvasElement['responsive'] | undefined => (
+  responsive
+    ? Object.fromEntries(
+        Object.entries(responsive).map(([breakpoint, override]) => [
+          breakpoint,
+          {
+            ...override,
+            props: override.props ? { ...override.props } : undefined,
+            styles: override.styles ? { ...override.styles } : undefined,
+          },
+        ]),
+      ) as CanvasElement['responsive']
+    : undefined
+);
+
 const cloneCanvasElement = (element: CanvasElement): CanvasElement => ({
   ...element,
   props: { ...element.props },
+  responsive: cloneResponsive(element.responsive),
   dataBindings: element.dataBindings ? element.dataBindings.map((binding) => ({ ...binding })) : undefined,
   children: element.children?.map(cloneCanvasElement),
 });
 
+const shiftResponsiveY = (
+  responsive: CanvasElement['responsive'],
+  offsetY: number,
+): CanvasElement['responsive'] | undefined => (
+  responsive
+    ? Object.fromEntries(
+        Object.entries(responsive).map(([breakpoint, override]) => [
+          breakpoint,
+          {
+            ...override,
+            props: override.props ? { ...override.props } : undefined,
+            styles: override.styles ? { ...override.styles } : undefined,
+            y: typeof override.y === 'number' ? override.y + offsetY : override.y,
+          },
+        ]),
+      ) as CanvasElement['responsive']
+    : undefined
+);
+
 const shiftCanvasElement = (element: CanvasElement, offsetY: number): CanvasElement => ({
   ...cloneCanvasElement(element),
   y: element.y + offsetY,
+  responsive: shiftResponsiveY(element.responsive, offsetY),
 });
 
 export const getTemplateBottom = (elements: CanvasElement[]) => (
@@ -66,12 +102,20 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
         borderStyle: 'solid',
         padding: 0,
       },
+      responsive: {
+        tablet: { width: 768 },
+        mobile: { width: 375 },
+      },
       children: [
         createCanvasElement('text', 72, 30, {
           id: `${idPrefix}-site-brand`,
           width: 210,
           height: 30,
           props: { content: brandLabel, fontSize: 18, fontWeight: '800', color: '#111827' },
+          responsive: {
+            tablet: { x: 40, y: 30, width: 190 },
+            mobile: { x: 20, y: 16, width: 172, height: 26, props: { fontSize: 16 } },
+          },
         }),
         createCanvasElement('nav', 430, 18, {
           id: `${idPrefix}-site-navigation`,
@@ -82,6 +126,10 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
             backgroundColor: 'transparent',
             color: '#111827',
             padding: 0,
+          },
+          responsive: {
+            tablet: { x: 260, y: 18, width: 300, height: 52, props: { gap: 12 } },
+            mobile: { x: 20, y: 52, width: 335, height: 30, props: { gap: 12, fontSize: 13 } },
           },
         }),
         createCanvasElement('button', 982, 20, {
@@ -94,6 +142,10 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
             color: '#ffffff',
             borderRadius: 8,
             fontWeight: '700',
+          },
+          responsive: {
+            tablet: { x: 596, y: 22, width: 120, height: 44 },
+            mobile: { x: 242, y: 16, width: 113, height: 36, props: { fontSize: 13 } },
           },
         }),
       ],
@@ -108,12 +160,20 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
         color: '#ffffff',
         padding: 0,
       },
+      responsive: {
+        tablet: { width: 768 },
+        mobile: { width: 375 },
+      },
       children: [
         createCanvasElement('heading', 72, 40, {
           id: `${idPrefix}-footer-heading`,
           width: 360,
           height: 38,
           props: { content: brandLabel, level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+          responsive: {
+            tablet: { x: 40, y: 38, width: 300 },
+            mobile: { x: 20, y: 26, width: 320, height: 34, props: { fontSize: 22 } },
+          },
         }),
         createCanvasElement('paragraph', 72, 90, {
           id: `${idPrefix}-footer-copy`,
@@ -125,6 +185,10 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
             lineHeight: 1.5,
             color: '#cbd5e1',
           },
+          responsive: {
+            tablet: { x: 40, y: 86, width: 360, height: 50 },
+            mobile: { x: 20, y: 70, width: 320, height: 50 },
+          },
         }),
         createCanvasElement('nav', 700, 48, {
           id: `${idPrefix}-footer-navigation`,
@@ -135,6 +199,10 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
             backgroundColor: 'transparent',
             color: '#ffffff',
             padding: 0,
+          },
+          responsive: {
+            tablet: { x: 442, y: 58, width: 270, height: 50, props: { gap: 12 } },
+            mobile: { x: 20, y: 122, width: 320, height: 34, props: { gap: 12, fontSize: 13 } },
           },
         }),
       ],

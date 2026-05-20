@@ -1280,6 +1280,7 @@ const assert = (condition, message) => {
 const assertPageCreateSourceContracts = () => {
   const source = fs.readFileSync(new URL('../src/routes/pages.new.tsx', import.meta.url), 'utf8');
   const mediaApiSource = fs.readFileSync(new URL('../src/lib/mediaApi.ts', import.meta.url), 'utf8');
+  const chromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
   assert(
     source.includes('&& selectedSite') &&
       source.includes("if (!selectedSite) return 'Select a target site before creating this page.';"),
@@ -1304,6 +1305,16 @@ const assertPageCreateSourceContracts = () => {
       mediaApiSource.includes('Math.min(Math.max(requestedLimit, 1), MAX_MEDIA_LIST_LIMIT)') &&
       mediaApiSource.includes("query.set('limit', `${safeLimit}`)"),
     'Page editor media preloading must clamp listMediaLibrary limits to the admin media API maximum instead of emitting background 400s',
+  );
+  assert(
+    chromeSource.includes('const shiftResponsiveY =') &&
+      chromeSource.includes("y: typeof override.y === 'number' ? override.y + offsetY : override.y") &&
+      chromeSource.includes('responsive: cloneResponsive(element.responsive)') &&
+      chromeSource.includes('id: `${idPrefix}-site-navigation`') &&
+      chromeSource.includes('mobile: { x: 20, y: 52, width: 335, height: 30') &&
+      chromeSource.includes('id: `${idPrefix}-footer-navigation`') &&
+      chromeSource.includes('mobile: { x: 20, y: 122, width: 320, height: 34'),
+    'Starter page chrome must preserve cloned responsive overrides, shift root responsive y values with the header offset, and keep header/footer navigation usable on mobile.',
   );
   assert(
     source.includes("'member-login'") &&
