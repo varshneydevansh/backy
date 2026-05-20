@@ -635,6 +635,8 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Backend instance registry/propagation can now discover and refresh synced section copies across pages and blog posts. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Admin reusable-section routes now enforce the existing content permission matrix (`pages.view`, `pages.edit`, `pages.delete`); production completion still requires broader RBAC enforcement across other admin resources.
 
+The `/reusable-sections` admin workspace now also exposes a copyable `backy.reusable-section-portable-pack.v1` operator contract. The pack includes `backy.reusable-section-portability-readiness.v1` coverage for active sections, filtered exportability, frontend-template provenance, structured library metadata, version restore state, synced-instance propagation, and public/custom frontend discovery, plus `backy.reusable-section-portability-action-plan.v1` next actions for incomplete checks. This gives custom frontend builders a single JSON handoff for reusable block portability without scraping the admin UI.
+
 ### 3.5 Forms
 
 - `POST /api/admin/sites/:siteId/forms`

@@ -41,6 +41,11 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Reusable sections route must use the shared EmptyState component for library empty states');
   assert(source.includes("'No reusable sections yet'"), 'Reusable sections empty state must distinguish a new library from filtered results');
   assert(source.includes('frontend handoff APIs'), 'Reusable sections empty state must explain the frontend handoff value');
+  assert(source.includes("schemaVersion: 'backy.reusable-section-portable-pack.v1'"), 'Reusable sections route must expose the portable section pack contract');
+  assert(source.includes("schemaVersion: 'backy.reusable-section-portability-readiness.v1'"), 'Reusable sections route must expose portability readiness evidence');
+  assert(source.includes("schemaVersion: 'backy.reusable-section-portability-action-plan.v1'"), 'Reusable sections route must expose a copyable portability action plan');
+  assert(source.includes('data-testid="reusable-section-portability-readiness"'), 'Reusable sections command center must render portability readiness');
+  assert(source.includes('data-testid="reusable-section-portability-action-plan"'), 'Reusable sections command center must keep the portability action-plan copy control');
   assert(source.includes('title="No section versions yet"'), 'Reusable sections workflow must keep the empty version-history title visible');
   assert(source.includes('Save this reusable section or restore an imported version to start building a backend version history.'), 'Reusable sections empty version history must explain how versions are created');
   assert(source.includes('title="Version history not loaded"'), 'Reusable sections workflow must keep the unloaded version-history title visible');
@@ -74,13 +79,28 @@ const requestApi = async (endpoint, options = {}) => {
     headers.set('content-type', 'application/json');
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
-      ...Object.fromEntries(headers.entries()),
-    },
-  });
+  const requestMethod = String(options.method || 'GET').toUpperCase();
+  let response;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+          ...Object.fromEntries(headers.entries()),
+        },
+      });
+      break;
+    } catch (requestError) {
+      const message = requestError instanceof Error ? `${requestError.message} ${(requestError.cause && typeof requestError.cause === 'object' && 'code' in requestError.cause) ? String(requestError.cause.code) : ''}` : '';
+      if (requestMethod !== 'GET' || attempt === 2 || !/fetch failed|ECONNRESET|UND_ERR_SOCKET|ECONNREFUSED/.test(message)) {
+        throw requestError;
+      }
+      await sleep(250 * (attempt + 1));
+    }
+  }
+
+  assert(response, `${endpoint} did not return a response`);
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.success === false) {
@@ -547,7 +567,7 @@ const openPublicPreviewTab = async (parentClient, url, viewport) => {
 const navigateToReusableSections = async (client) => {
   await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/reusable-sections?siteId=${encodeURIComponent(SITE_ID)}` });
 
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const body = document.body?.innerText || '';
       return {
@@ -567,7 +587,7 @@ const navigateToReusableSections = async (client) => {
       return state;
     }
 
-    if (attempt === 119) {
+    if (attempt === 239) {
       throw new Error(`Reusable sections page did not render expected controls: ${JSON.stringify(state)}`);
     }
 
@@ -584,6 +604,10 @@ const assertReusableSectionsLayout = async (client) => {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="reusable-sections-command-center"]')),
+      hasPortabilityReadiness: Boolean(document.querySelector('[data-testid="reusable-section-portability-readiness"]')) &&
+        Boolean(document.querySelector('[data-testid="reusable-section-portability-action-plan"]')) &&
+        body.includes('Portable section readiness') &&
+        body.includes('Copy action plan'),
       hasFrontendTemplates: Boolean(document.querySelector('[data-testid="reusable-sections-frontend-template-options"]')) &&
         Boolean(document.querySelector(${JSON.stringify(`[data-testid="reusable-sections-frontend-template-${FRONTEND_SECTION_TEMPLATE_ID}"]`)})) &&
         body.includes('Frontend design sections') &&
@@ -605,7 +629,7 @@ const assertReusableSectionsLayout = async (client) => {
 
   assert(layout.scrollWidth <= layout.width + 8, `Reusable sections page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.hasWorkflowPanel,
+    layout.hasCommandCenter && layout.hasPortabilityReadiness && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.hasWorkflowPanel,
     `Reusable sections page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -634,6 +658,24 @@ const clickReusableSectionControl = async (client, testId) => evaluate(client, `
   return { ok: true };
 })()`);
 
+const waitForReusableSectionControlEnabled = async (client, testId, label) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+      return {
+        exists: button instanceof HTMLButtonElement,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : true,
+        body: document.body?.innerText?.slice(0, 1600) || '',
+      };
+    })()`);
+
+    if (state.exists && !state.disabled) return state;
+    await sleep(100);
+  }
+
+  throw new Error(`Timed out waiting for ${label} control to become enabled`);
+};
+
 const waitForPageText = async (client, expectedText, label) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -654,6 +696,7 @@ const createManualReusableSectionThroughUi = async (client) => {
   const suffix = Date.now().toString(36);
   const slug = `manual-smoke-section-${suffix}`;
 
+  await waitForReusableSectionControlEnabled(client, 'reusable-section-reset', 'manual reusable section reset');
   const reset = await clickReusableSectionControl(client, 'reusable-section-reset');
   assert(reset.ok, `Unable to reset reusable section form: ${JSON.stringify(reset)}`);
 

@@ -99,6 +99,16 @@ interface SectionMetadataDraft {
   labels: string;
 }
 
+type ReusableSectionPortabilityStatus = 'ready' | 'attention' | 'blocked' | 'unknown';
+
+interface ReusableSectionPortabilityCheck {
+  id: string;
+  label: string;
+  status: ReusableSectionPortabilityStatus;
+  evidence: string;
+  action: string;
+}
+
 const SECTION_STATUS_FILTERS: SectionStatusFilter[] = ['active', 'archived', 'all'];
 
 const normalizedSearchString = (value: unknown): string | undefined => {
@@ -337,6 +347,21 @@ const getSectionFrontendTemplateId = (section: ReusableSection): string | undefi
     : undefined
 );
 
+const reusableSectionLibraryFromMetadata = (metadata: Record<string, unknown> | undefined): Record<string, unknown> => {
+  const reusableSection = isPlainRecord(metadata?.reusableSection) ? metadata.reusableSection : {};
+  return isPlainRecord(reusableSection.library) ? reusableSection.library : {};
+};
+
+const reusableSectionHasLibraryMetadata = (section: ReusableSection): boolean => {
+  const library = reusableSectionLibraryFromMetadata(section.metadata);
+  return Boolean(
+    optionalStringFromRecord(library, 'displayName') ||
+    optionalStringFromRecord(library, 'summary') ||
+    optionalStringFromRecord(library, 'previewPath') ||
+    optionalStringListFromRecord(library, 'labels'),
+  );
+};
+
 const contentElementSummary = (content: ReusableSectionContent) => {
   const roots = content.elements.length;
   const nested = content.elements.reduce((count, element) => count + (element.children?.length || 0), 0);
@@ -524,6 +549,214 @@ function ReusableSectionsRoute() {
     })),
   }), [activeSite?.name, activeSiteId, activeSiteSlug, frontendDesign, frontendSectionTemplates, sections]);
   const handoffText = useMemo(() => JSON.stringify(handoffManifest, null, 2), [handoffManifest]);
+  const reusableSectionPortabilityPack = useMemo(() => {
+    const activeCount = sections.filter((section) => section.status === 'active').length;
+    const frontendSeededCount = sections.filter((section) => getSectionFrontendTemplateId(section)).length;
+    const missingMetadataCount = sections.filter((section) => !reusableSectionHasLibraryMetadata(section)).length;
+    const selectedLibrary = reusableSectionLibraryFromMetadata(activeSection?.metadata);
+    const selectedHasLibraryMetadata = Boolean(
+      activeSection &&
+      (
+        optionalStringFromRecord(selectedLibrary, 'displayName') ||
+        optionalStringFromRecord(selectedLibrary, 'summary') ||
+        optionalStringFromRecord(selectedLibrary, 'previewPath') ||
+        optionalStringListFromRecord(selectedLibrary, 'labels')
+      ),
+    );
+    const versionCount = sectionVersions?.versions.length ?? 0;
+    const staleInstanceCount = sectionInstances?.totals.stale ?? 0;
+    const selectedSectionSummary = activeSection ? {
+      id: activeSection.id,
+      slug: activeSection.slug,
+      name: activeSection.name,
+      status: activeSection.status,
+      category: activeSection.category,
+      tags: activeSection.tags,
+      updatedAt: activeSection.updatedAt || null,
+      frontendDesignTemplateId: getSectionFrontendTemplateId(activeSection) || null,
+      elementSummary: contentElementSummary(activeSection.content),
+      libraryMetadataLoaded: Boolean(sectionMetadata),
+      libraryMetadataReady: selectedHasLibraryMetadata,
+      versionHistoryLoaded: Boolean(sectionVersions),
+      versionCount,
+      syncedInstancesLoaded: Boolean(sectionInstances),
+      syncedInstanceTotals: sectionInstances?.totals || null,
+    } : null;
+
+    const checks: ReusableSectionPortabilityCheck[] = [
+      {
+        id: 'active-section-library',
+        label: 'Active section library',
+        status: activeCount > 0 ? 'ready' : sections.length > 0 ? 'attention' : 'blocked',
+        evidence: `${activeCount} active of ${sections.length} saved section${sections.length === 1 ? '' : 's'}.`,
+        action: activeCount > 0 ? 'Keep active sections reviewed before exposing them to page editors and custom frontends.' : 'Activate at least one reviewed reusable section before exporting the library.',
+      },
+      {
+        id: 'portable-json-export',
+        label: 'Portable JSON export',
+        status: filteredSections.length > 0 ? 'ready' : 'blocked',
+        evidence: `${filteredSections.length} section${filteredSections.length === 1 ? '' : 's'} in the current filtered export set.`,
+        action: filteredSections.length > 0 ? 'Use the visible or selected export action when moving sections between Backy sites.' : 'Clear filters or create a section before generating a portable section pack.',
+      },
+      {
+        id: 'frontend-template-provenance',
+        label: 'Frontend template provenance',
+        status: frontendSeededCount > 0 ? 'ready' : frontendSectionTemplates.length > 0 ? 'attention' : 'unknown',
+        evidence: `${frontendSeededCount} section${frontendSeededCount === 1 ? '' : 's'} seeded from ${frontendSectionTemplates.length} captured frontend section template${frontendSectionTemplates.length === 1 ? '' : 's'}.`,
+        action: frontendSeededCount > 0 ? 'Preserve stored source, token, chrome, CSS, and binding metadata in future section edits.' : 'Create reusable sections from captured frontend design templates when custom frontend parity matters.',
+      },
+      {
+        id: 'structured-library-metadata',
+        label: 'Structured library metadata',
+        status: sections.length === 0 ? 'blocked' : missingMetadataCount === 0 ? 'ready' : 'attention',
+        evidence: `${Math.max(sections.length - missingMetadataCount, 0)} of ${sections.length} section${sections.length === 1 ? '' : 's'} have display/search/preview metadata.`,
+        action: missingMetadataCount === 0 ? 'Keep labels, summaries, and preview paths current as reusable sections evolve.' : 'Add display name, summary, labels, or preview path for sections that should be discoverable in builders.',
+      },
+      {
+        id: 'version-restore-contract',
+        label: 'Version restore contract',
+        status: !activeSection ? 'unknown' : sectionVersions ? 'ready' : 'attention',
+        evidence: activeSection
+          ? sectionVersions
+            ? `${versionCount} version record${versionCount === 1 ? '' : 's'} available for ${activeSection.slug}.`
+            : `Workflow state has not been loaded for ${activeSection.slug}.`
+          : 'Select a section to inspect version restore readiness.',
+        action: activeSection
+          ? sectionVersions
+            ? 'Use restore only after reviewing the selected version and expected version conflict metadata.'
+            : 'Load workflow state before handoff so restore version and conflict evidence are included.'
+          : 'Select a reusable section before preparing a section-specific handoff.',
+      },
+      {
+        id: 'synced-instance-propagation',
+        label: 'Synced instance propagation',
+        status: !activeSection ? 'unknown' : sectionInstances ? (staleInstanceCount > 0 ? 'attention' : 'ready') : 'attention',
+        evidence: activeSection
+          ? sectionInstances
+            ? `${sectionInstances.totals.instances} synced instance${sectionInstances.totals.instances === 1 ? '' : 's'} across ${sectionInstances.totals.targets} target${sectionInstances.totals.targets === 1 ? '' : 's'}; ${staleInstanceCount} stale.`
+            : `Synced instance state has not been loaded for ${activeSection.slug}.`
+          : 'Select a section to inspect synced page/post instances.',
+        action: activeSection
+          ? sectionInstances
+            ? staleInstanceCount > 0 ? 'Run dry-run, review targets, then refresh stale page/post instances from the selected source section.' : 'No stale synced copies are currently reported for the selected section.'
+            : 'Load workflow state before final handoff so stale synced copies are visible.'
+          : 'Select a reusable section before preparing a section-specific propagation plan.',
+      },
+      {
+        id: 'public-custom-frontend-discovery',
+        label: 'Public/custom frontend discovery',
+        status: activeCount > 0 ? 'ready' : 'attention',
+        evidence: `Active sections are exposed through public reusable-section list/detail APIs, manifest discovery, OpenAPI, and SDK contracts for site ${activeSiteId}.`,
+        action: activeCount > 0 ? 'Use the public reusable-section endpoints from custom frontends; keep mutations in authenticated admin APIs.' : 'Make reviewed sections active before depending on public reusable-section discovery.',
+      },
+    ];
+    const readyCount = checks.filter((check) => check.status === 'ready').length;
+    const blockedCount = checks.filter((check) => check.status === 'blocked').length;
+    const attentionCount = checks.filter((check) => check.status === 'attention').length;
+    const unknownCount = checks.filter((check) => check.status === 'unknown').length;
+    const status: ReusableSectionPortabilityStatus = blockedCount > 0
+      ? 'blocked'
+      : attentionCount > 0
+        ? 'attention'
+        : unknownCount === checks.length
+          ? 'unknown'
+          : 'ready';
+    const nextActions = checks
+      .filter((check) => check.status !== 'ready')
+      .map((check) => ({
+        checkId: check.id,
+        label: check.label,
+        status: check.status,
+        action: check.action,
+      }));
+
+    return {
+      schemaVersion: 'backy.reusable-section-portable-pack.v1',
+      generatedAt: new Date().toISOString(),
+      readiness: {
+        schemaVersion: 'backy.reusable-section-portability-readiness.v1',
+        status,
+        score: {
+          ready: readyCount,
+          total: checks.length,
+          attention: attentionCount,
+          blocked: blockedCount,
+          unknown: unknownCount,
+        },
+        site: {
+          id: activeSiteId,
+          slug: activeSiteSlug,
+          name: activeSite?.name || activeSiteId,
+        },
+        selectedSection: selectedSectionSummary,
+        coverage: {
+          totalSections: sections.length,
+          activeSections: activeCount,
+          filteredExportSections: filteredSections.length,
+          frontendSeededSections: frontendSeededCount,
+          capturedFrontendSectionTemplates: frontendSectionTemplates.length,
+          sectionsMissingLibraryMetadata: missingMetadataCount,
+          selectedVersionCount: activeSection ? versionCount : null,
+          selectedSyncedInstances: activeSection ? sectionInstances?.totals.instances ?? null : null,
+          selectedStaleSyncedInstances: activeSection ? staleInstanceCount : null,
+        },
+        endpoints: {
+          adminList: `/api/admin/sites/${activeSiteId}/reusable-sections`,
+          adminExport: `/api/admin/sites/${activeSiteId}/reusable-sections/export`,
+          adminImport: `/api/admin/sites/${activeSiteId}/reusable-sections/import`,
+          adminSelectedWorkflow: activeSection
+            ? {
+                versions: `/api/admin/sites/${activeSiteId}/reusable-sections/${activeSection.id}/versions`,
+                instances: `/api/admin/sites/${activeSiteId}/reusable-sections/${activeSection.id}/instances`,
+                metadata: `/api/admin/sites/${activeSiteId}/reusable-sections/${activeSection.id}/metadata`,
+              }
+            : null,
+          publicList: `/api/sites/${activeSiteId}/reusable-sections`,
+          publicDetail: activeSection ? `/api/sites/${activeSiteId}/reusable-sections/${activeSection.slug}` : `/api/sites/${activeSiteId}/reusable-sections/{sectionIdOrSlug}`,
+          manifest: `/api/sites/${activeSiteId}/manifest`,
+          openapi: `/api/sites/${activeSiteId}/openapi`,
+        },
+        checks,
+      },
+      actionPlan: {
+        schemaVersion: 'backy.reusable-section-portability-action-plan.v1',
+        status,
+        siteId: activeSiteId,
+        selectedSection: selectedSectionSummary,
+        exportSet: filteredSections.map((section) => ({
+          id: section.id,
+          slug: section.slug,
+          name: section.name,
+          status: section.status,
+          frontendDesignTemplateId: getSectionFrontendTemplateId(section) || null,
+          hasLibraryMetadata: reusableSectionHasLibraryMetadata(section),
+        })),
+        nextActions,
+        handoffContracts: [
+          'backy.reusable-sections.handoff.v1',
+          'backy.reusable-sections.export.v1',
+          'backy.reusable-section-portability-readiness.v1',
+          'backy.reusable-section-portability-action-plan.v1',
+        ],
+      },
+    };
+  }, [
+    activeSection,
+    activeSite?.name,
+    activeSiteId,
+    activeSiteSlug,
+    filteredSections,
+    frontendSectionTemplates.length,
+    sectionInstances,
+    sectionMetadata,
+    sectionVersions,
+    sections,
+  ]);
+  const reusableSectionPortabilityText = useMemo(
+    () => JSON.stringify(reusableSectionPortabilityPack, null, 2),
+    [reusableSectionPortabilityPack],
+  );
+  const reusableSectionPortabilityReadiness = reusableSectionPortabilityPack.readiness;
 
   const updateRouteSearch = (next: ReusableSectionsSearchUpdate) => {
     const nextSectionId = next.sectionId === null ? null : next.sectionId ?? selectedSectionId;
@@ -1291,6 +1524,9 @@ function ReusableSectionsRoute() {
             <Button size="sm" onClick={() => void copyText(handoffText, 'Reusable sections handoff manifest')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
               Copy manifest
             </Button>
+            <Button size="sm" onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />} data-testid="reusable-sections-copy-portability-plan">
+              Copy portability plan
+            </Button>
             <Button size="sm" onClick={() => void downloadReusableSectionsExport(false)} disabled={isWorkflowBusy || filteredSections.length === 0 || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />} data-testid="reusable-sections-export-visible">
               Export visible
             </Button>
@@ -1311,6 +1547,38 @@ function ReusableSectionsRoute() {
               <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="reusable-section-portability-readiness">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Portable section readiness</h3>
+                <StatusBadge
+                  status={reusableSectionPortabilityReadiness.status}
+                  type={reusableSectionPortabilityReadiness.status === 'attention' ? 'warning' : undefined}
+                  className="capitalize"
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {reusableSectionPortabilityReadiness.score.ready}/{reusableSectionPortabilityReadiness.score.total} checks ready for reusable-section export, synced-instance propagation, and custom frontend discovery.
+              </p>
+            </div>
+            <Button size="sm" onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />} data-testid="reusable-section-portability-action-plan">
+              Copy action plan
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {reusableSectionPortabilityReadiness.checks.slice(0, 4).map((check) => (
+              <div key={check.id} className="rounded-md border border-border px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{check.label}</span>
+                  <StatusBadge status={check.status} type={check.status === 'attention' ? 'warning' : undefined} />
+                </div>
+                <p className="mt-1 leading-5 text-muted-foreground">{check.evidence}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
