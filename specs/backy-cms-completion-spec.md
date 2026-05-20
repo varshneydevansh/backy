@@ -433,6 +433,7 @@ Use this file as the persistent baseline before any implementation pass.
 
 ### 9.2 Media/asset UX gaps
 - Current media coverage includes centralized upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, and binding-aware previews.
+- The Media workspace now exposes copyable public list, filtered public list, font manifest, file delivery, transform, upload, folder, and provider analytics URLs in its frontend handoff manifest so custom frontends can mirror the current library view without reverse-engineering admin filters.
 - Remaining media work is provider-account automation, secret rotation execution, and cross-channel attribution beyond provider feeds.
 - Accessibility and discoverability:
   - destructive asset, bulk asset, and folder delete flows now expose labelled modal dialogs, explicit confirm/cancel action labels, visible focus rings, and source guards in `apps/admin/scripts/media-smoke.mjs`.

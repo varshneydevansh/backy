@@ -85,6 +85,8 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('hover:bg-red-50 hover:text-red-600 focus-ring') && source.includes('text-red-600 hover:bg-red-50 focus-ring'), 'Media destructive icon controls must keep visible focus rings');
   assert(source.includes("value: 'all'") && source.includes("label: 'All files'") && source.includes('if (mode === \'all\') return true;'), 'Media upload mode controls must keep an unrestricted All files intake mode.');
   assert(source.includes('Backy accepts any file and classifies known formats for editor, API, and delivery workflows.'), 'Media upload intake rules must explain arbitrary file support.');
+  assert(source.includes('buildPublicMediaListUrl') && source.includes("params.set('folderId', 'root')"), 'Media API handoff must keep root-folder-aware public media list URL generation.');
+  assert(source.includes('filteredPublicMediaListUrl') && source.includes('Copy filtered') && source.includes('Filtered media list'), 'Media API panel must expose a copyable filtered public media list URL.');
   assert(modalSource.includes('listMediaLibrary') && modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must keep loading scoped media through the admin media API');
   assert(modalSource.includes('scope: targetScope') && modalSource.includes('scopeTargetId: targetId || null'), 'Editor media uploads must keep persisting page/post scope metadata');
   assert(!editorSpec.includes('shared in-memory store state inside admin'), 'Editor spec must not regress to stale in-memory media contract language');

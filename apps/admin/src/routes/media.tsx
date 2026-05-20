@@ -423,6 +423,43 @@ const folderSelectionToRoute = (folderId: string | null | undefined): string | u
   return typeof folderId === 'string' ? folderId : undefined;
 };
 
+const buildPublicMediaListUrl = (
+  publicBaseUrl: string,
+  siteId: string,
+  filters: {
+    limit?: number;
+    search?: string;
+    tag?: string;
+    type?: MediaTypeFilter;
+    folderId?: string | null;
+  } = {},
+): string => {
+  const params = new URLSearchParams();
+  params.set('limit', String(filters.limit || MEDIA_LIBRARY_PAGE_SIZE));
+
+  const trimmedSearch = filters.search?.trim();
+  if (trimmedSearch) {
+    params.set('q', trimmedSearch);
+  }
+
+  const trimmedTag = filters.tag?.trim();
+  if (trimmedTag) {
+    params.set('tag', trimmedTag);
+  }
+
+  if (filters.type && filters.type !== 'all') {
+    params.set('type', filters.type);
+  }
+
+  if (filters.folderId === null) {
+    params.set('folderId', 'root');
+  } else if (typeof filters.folderId === 'string' && filters.folderId.trim()) {
+    params.set('folderId', filters.folderId.trim());
+  }
+
+  return `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?${params.toString()}`;
+};
+
 export const Route = createFileRoute('/media')({
   validateSearch: (search: Record<string, unknown>): MediaSearch => ({
     siteId: normalizedSearchString(search.siteId),
@@ -901,7 +938,14 @@ function MediaPage() {
   const isMediaLibraryBusy = isLoading || isMediaMutationBusy || isPermissionMatrixPending;
   const activeSiteRouteSearch = useMemo(() => ({ siteId }), [siteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
-  const publicMediaListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?limit=100`;
+  const publicMediaListUrl = buildPublicMediaListUrl(publicBaseUrl, siteId);
+  const filteredPublicMediaListUrl = buildPublicMediaListUrl(publicBaseUrl, siteId, {
+    search: searchQuery,
+    tag: tagFilter,
+    type: typeFilter,
+    folderId: selectedFolderId,
+    limit: MEDIA_LIBRARY_PAGE_SIZE,
+  });
   const publicMediaDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}`;
   const publicMediaFontsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/fonts`;
   const publicMediaFileUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/file`;
@@ -1397,6 +1441,7 @@ function MediaPage() {
       : null,
     endpoints: {
       list: publicMediaListUrl,
+      filteredList: filteredPublicMediaListUrl,
       detail: publicMediaDetailUrl,
       fonts: publicMediaFontsUrl,
       file: publicMediaFileUrl,
@@ -1405,6 +1450,25 @@ function MediaPage() {
       adminFolders: adminMediaFoldersUrl,
       adminFolder: adminMediaFolderUrl,
       adminProviderAnalytics: adminMediaProviderAnalyticsUrl,
+    },
+    currentView: {
+      filteredList: filteredPublicMediaListUrl,
+      publicFilters: {
+        ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+        ...(tagFilter.trim() ? { tag: tagFilter.trim() } : {}),
+        ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
+        ...(selectedFolderId === null ? { folderId: null } : {}),
+        ...(typeof selectedFolderId === 'string' ? { folderId: selectedFolderId } : {}),
+        visibility: 'public',
+      },
+      adminFilters: {
+        ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+        ...(tagFilter.trim() ? { tag: tagFilter.trim() } : {}),
+        type: typeFilter,
+        visibility: visibilityFilter,
+        usage: usageFilter,
+        folderId: selectedFolderId === undefined ? 'all' : selectedFolderId,
+      },
     },
     controlRoutes: Object.fromEntries(MEDIA_USAGE_SURFACES.map((surface) => [
       surface.title,
@@ -1535,13 +1599,20 @@ function MediaPage() {
     publicMediaDetailUrl,
     publicMediaFontsUrl,
     publicMediaFileUrl,
+    filteredPublicMediaListUrl,
     publicMediaListUrl,
     publicMediaTransformUrl,
     quotaUsagePercent,
     runtimeStorage,
     runtimeSupabase,
     scannerRuntime,
+    searchQuery,
+    selectedFolderId,
     siteId,
+    tagFilter,
+    typeFilter,
+    usageFilter,
+    visibilityFilter,
   ]);
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
   const storageSettings = settingsIntegrations?.storage || {};
@@ -3776,6 +3847,14 @@ function MediaPage() {
               <Button
                 type="button"
                 variant="outline"
+                onClick={() => void copyMediaApiText(filteredPublicMediaListUrl, 'Filtered media list URL')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy filtered
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => void copyMediaApiText(publicMediaFontsUrl, 'Font manifest URL')}
                 iconStart={<Type className="size-4" />}
               >
@@ -3794,6 +3873,7 @@ function MediaPage() {
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <MediaApiSnippet label="Public media list" value={publicMediaListUrl} />
+            <MediaApiSnippet label="Filtered media list" value={filteredPublicMediaListUrl} />
             <MediaApiSnippet label="Public media detail" value={publicMediaDetailUrl} />
             <MediaApiSnippet label="Font manifest" value={publicMediaFontsUrl} />
             <MediaApiSnippet label="File delivery" value={publicMediaFileUrl} />

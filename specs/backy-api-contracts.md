@@ -218,7 +218,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Public media catalog for custom frontends.
   - Response uses `{ success, requestId, data: { media, pagination } }`; legacy top-level `media` and `pagination` remain for compatibility.
   - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
-  - Supports `type`, `scope`, `pageId`, `postId`, `blogId` (alias for `postId`), `global=true`, `q`/`search`, `tag`, `folderId`, `limit`, and `offset` filters.
+  - Supports `type`, `scope`, `pageId`, `postId`, `blogId` (alias for `postId`), `global=true`, `q`/`search`, `tag`, `folderId`, `folder` (alias for `folderId`), `limit`, and `offset` filters. `folderId=root` and an empty folder filter select root-level media.
   - Invalid public media type filters return `400 INVALID_MEDIA_TYPE` instead of falling back to an unfiltered media catalog. `type=file` remains a compatibility alias for `document`.
   - Invalid public media scope filters return `400 INVALID_MEDIA_SCOPE` instead of falling back to an unscoped media catalog.
   - Invalid public media global filters return `400 INVALID_MEDIA_GLOBAL_FILTER`; accepted boolean spellings are `true/false`, `1/0`, `yes/no`, and `on/off`.

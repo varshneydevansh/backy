@@ -96,6 +96,25 @@ const booleanFilterFromInput = (value: string | null): { value?: boolean; invali
     return { value: parsed };
 };
 
+const mediaFolderIdFromInput = (searchParams: URLSearchParams): string | null | undefined => {
+    const rawValue = searchParams.has('folderId')
+        ? searchParams.get('folderId')
+        : searchParams.has('folder')
+            ? searchParams.get('folder')
+            : undefined;
+
+    if (rawValue === undefined) {
+        return undefined;
+    }
+
+    const normalized = (rawValue || '').trim();
+    if (!normalized || normalized.toLowerCase() === 'root') {
+        return null;
+    }
+
+    return normalized;
+};
+
 const integerQueryFromInput = (
     value: string | null,
     fallback: number,
@@ -197,11 +216,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const globalOnly = globalFilter.value;
         const search = searchParams.get('search') || searchParams.get('q');
         const tag = searchParams.get('tag');
-        const folderId = searchParams.has('folderId')
-            ? searchParams.get('folderId')
-            : searchParams.has('folder')
-                ? searchParams.get('folder')
-                : undefined;
+        const folderId = mediaFolderIdFromInput(searchParams);
 
         if (!shouldUseDemoStoreFallback()) {
             const repositories = await getRequiredDatabaseRepositories();
