@@ -121,6 +121,7 @@ type PageSaveConflict = {
 type PageRevisionDiff = {
   id: string;
   changedFields: string[];
+  details: PageRevisionDiffDetail[];
   summary: string;
   currentLayerCount: number;
   snapshotLayerCount: number;
@@ -128,6 +129,13 @@ type PageRevisionDiff = {
   currentRootLayerCount: number;
   snapshotRootLayerCount: number;
   rootLayerDelta: number;
+};
+
+type PageRevisionDiffDetail = {
+  field: string;
+  label: string;
+  snapshot: string;
+  current: string;
 };
 
 type PageEditorPermissionKey =
@@ -218,6 +226,12 @@ const metaStringValue = (meta: Record<string, any> | undefined, key: string): st
   return typeof value === 'string' ? value.trim() : '';
 };
 
+const compactRevisionDiffValue = (value: string | null | undefined, fallback = 'empty'): string => {
+  const normalized = value?.trim();
+  if (!normalized) return fallback;
+  return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
+};
+
 const pageRevisionDiff = (
   page: Page,
   revision: ContentRevision,
@@ -225,26 +239,41 @@ const pageRevisionDiff = (
   canvasSize: CanvasSize,
 ): PageRevisionDiff => {
   const changedFields: string[] = [];
+  const details: PageRevisionDiffDetail[] = [];
   const currentMetaTitle = metaStringValue(page.meta, 'title') || page.title;
   const currentMetaDescription = metaStringValue(page.meta, 'description');
+  const addChange = (field: string, label: string, snapshot: string, current: string) => {
+    changedFields.push(field);
+    details.push({
+      field,
+      label,
+      snapshot,
+      current,
+    });
+  };
 
   if (revision.snapshotTitle !== page.title) {
-    changedFields.push('title');
+    addChange('title', 'Title', compactRevisionDiffValue(revision.snapshotTitle), compactRevisionDiffValue(page.title));
   }
 
   if (revision.snapshotSlug !== page.slug) {
-    changedFields.push('route');
+    addChange('route', 'Route', `/${compactRevisionDiffValue(revision.snapshotSlug, 'root')}`, `/${compactRevisionDiffValue(page.slug, 'root')}`);
   }
 
   if (revision.snapshotStatus !== page.status) {
-    changedFields.push('status');
+    addChange('status', 'Status', revision.snapshotStatus, page.status);
   }
 
   if (
     (revision.snapshotMetaTitle || '') !== currentMetaTitle ||
     (revision.snapshotMetaDescription || '') !== currentMetaDescription
   ) {
-    changedFields.push('SEO');
+    addChange(
+      'SEO',
+      'SEO',
+      `${compactRevisionDiffValue(revision.snapshotMetaTitle || revision.snapshotTitle)} / ${compactRevisionDiffValue(revision.snapshotMetaDescription)}`,
+      `${compactRevisionDiffValue(currentMetaTitle)} / ${compactRevisionDiffValue(currentMetaDescription)}`,
+    );
   }
 
   const layerDelta = stats.totalLayerCount - revision.snapshotCanvas.totalLayerCount;
@@ -256,12 +285,18 @@ const pageRevisionDiff = (
   );
 
   if (layerDelta !== 0 || rootLayerDelta !== 0 || canvasSizeChanged) {
-    changedFields.push('canvas');
+    addChange(
+      'canvas',
+      'Canvas',
+      `${revision.snapshotCanvas.totalLayerCount} layers, ${revision.snapshotCanvas.canvasWidth || '?'}x${revision.snapshotCanvas.canvasHeight || '?'}, depth ${revision.snapshotCanvas.maxDepth || 0}`,
+      `${stats.totalLayerCount} layers, ${canvasSize.width}x${canvasSize.height}, depth ${stats.maxDepth || 0}`,
+    );
   }
 
   return {
     id: revision.id,
     changedFields,
+    details,
     summary: changedFields.length
       ? `${changedFields.length} changed area${changedFields.length === 1 ? '' : 's'}: ${changedFields.join(', ')}.`
       : 'Matches the current saved page summary.',
@@ -1863,6 +1898,21 @@ function PageEditorRoute() {
                           data-testid={`page-editor-revision-diff-${revision.id}`}
                         >
                           <div className="font-medium text-foreground">{revisionDiff?.summary}</div>
+                          {revisionDiff?.details.length ? (
+                            <div className="mt-1 grid gap-1" data-testid={`page-editor-revision-diff-details-${revision.id}`}>
+                              {revisionDiff.details.map((detail) => (
+                                <div key={detail.field} className="grid gap-1 border-t border-border/60 pt-1 first:border-t-0 sm:grid-cols-[72px_1fr]">
+                                  <span className="font-semibold text-foreground">{detail.label}</span>
+                                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                                    <span className="text-muted-foreground">Snapshot </span>
+                                    <span className="font-mono text-foreground">{detail.snapshot}</span>
+                                    <span className="text-muted-foreground">{' -> Current '}</span>
+                                    <span className="font-mono text-foreground">{detail.current}</span>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           <div>
                             Snapshot: {revision.snapshotCanvas.totalLayerCount} layer{revision.snapshotCanvas.totalLayerCount === 1 ? '' : 's'}
                             {' '}({revision.snapshotCanvas.rootLayerCount} root, depth {revision.snapshotCanvas.maxDepth || 0}).

@@ -194,6 +194,7 @@ type BlogCanvasTreeStats = {
 type BlogRevisionDiff = {
     id: string;
     changedFields: string[];
+    details: BlogRevisionDiffDetail[];
     summary: string;
     currentLayerCount: number;
     snapshotLayerCount: number;
@@ -201,6 +202,13 @@ type BlogRevisionDiff = {
     currentRootLayerCount: number;
     snapshotRootLayerCount: number;
     rootLayerDelta: number;
+};
+
+type BlogRevisionDiffDetail = {
+    field: string;
+    label: string;
+    snapshot: string;
+    current: string;
 };
 
 const getBlogCanvasTreeStats = (elements: CanvasElement[]): BlogCanvasTreeStats => {
@@ -238,6 +246,12 @@ const sameIdSet = (left: string[], right: string[]) => {
     return sortedLeft.length === sortedRight.length && sortedLeft.every((value, index) => value === sortedRight[index]);
 };
 
+const compactBlogRevisionDiffValue = (value: string | null | undefined, fallback = 'empty'): string => {
+    const normalized = value?.trim();
+    if (!normalized) return fallback;
+    return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
+};
+
 const blogRevisionDiff = (
     revision: ContentRevision,
     input: {
@@ -256,32 +270,47 @@ const blogRevisionDiff = (
     },
 ): BlogRevisionDiff => {
     const changedFields: string[] = [];
+    const details: BlogRevisionDiffDetail[] = [];
+    const addChange = (field: string, label: string, snapshot: string, current: string) => {
+        changedFields.push(field);
+        details.push({
+            field,
+            label,
+            snapshot,
+            current,
+        });
+    };
 
     if (revision.snapshotTitle !== input.title) {
-        changedFields.push('title');
+        addChange('title', 'Title', compactBlogRevisionDiffValue(revision.snapshotTitle), compactBlogRevisionDiffValue(input.title));
     }
 
     if (revision.snapshotSlug !== input.slug) {
-        changedFields.push('route');
+        addChange('route', 'Route', `/blog/${compactBlogRevisionDiffValue(revision.snapshotSlug, 'missing')}`, `/blog/${compactBlogRevisionDiffValue(input.slug, 'missing')}`);
     }
 
     if (revision.snapshotStatus !== input.status) {
-        changedFields.push('status');
+        addChange('status', 'Status', revision.snapshotStatus, input.status);
     }
 
     if ((revision.snapshotExcerpt || '') !== input.excerpt) {
-        changedFields.push('excerpt');
+        addChange('excerpt', 'Excerpt', compactBlogRevisionDiffValue(revision.snapshotExcerpt), compactBlogRevisionDiffValue(input.excerpt));
     }
 
     if (
         (revision.snapshotMetaTitle || revision.snapshotTitle) !== (input.seoTitle || input.title) ||
         (revision.snapshotMetaDescription || revision.snapshotExcerpt || '') !== (input.seoDescription || input.excerpt)
     ) {
-        changedFields.push('SEO');
+        addChange(
+            'SEO',
+            'SEO',
+            `${compactBlogRevisionDiffValue(revision.snapshotMetaTitle || revision.snapshotTitle)} / ${compactBlogRevisionDiffValue(revision.snapshotMetaDescription || revision.snapshotExcerpt)}`,
+            `${compactBlogRevisionDiffValue(input.seoTitle || input.title)} / ${compactBlogRevisionDiffValue(input.seoDescription || input.excerpt)}`,
+        );
     }
 
     if ((revision.snapshotFeaturedImageId || '') !== (input.featuredImageId || '')) {
-        changedFields.push('featured media');
+        addChange('featured media', 'Media', revision.snapshotFeaturedImageId || 'none', input.featuredImageId || 'none');
     }
 
     if (
@@ -289,7 +318,12 @@ const blogRevisionDiff = (
         !sameIdSet(revision.snapshotCategoryIds, input.selectedCategoryIds) ||
         !sameIdSet(revision.snapshotTagIds, input.selectedTagIds)
     ) {
-        changedFields.push('taxonomy');
+        addChange(
+            'taxonomy',
+            'Taxonomy',
+            `${revision.snapshotAuthorId || 'none'}, ${revision.snapshotCategoryIds.length} categories, ${revision.snapshotTagIds.length} tags`,
+            `${input.selectedAuthorId || 'none'}, ${input.selectedCategoryIds.length} categories, ${input.selectedTagIds.length} tags`,
+        );
     }
 
     const layerDelta = input.canvasStats.totalLayerCount - revision.snapshotCanvas.totalLayerCount;
@@ -301,12 +335,18 @@ const blogRevisionDiff = (
     );
 
     if (layerDelta !== 0 || rootLayerDelta !== 0 || canvasSizeChanged) {
-        changedFields.push('canvas');
+        addChange(
+            'canvas',
+            'Canvas',
+            `${revision.snapshotCanvas.totalLayerCount} layers, ${revision.snapshotCanvas.canvasWidth || '?'}x${revision.snapshotCanvas.canvasHeight || '?'}, depth ${revision.snapshotCanvas.maxDepth || 0}`,
+            `${input.canvasStats.totalLayerCount} layers, ${input.canvasSize.width}x${input.canvasSize.height}, depth ${input.canvasStats.maxDepth || 0}`,
+        );
     }
 
     return {
         id: revision.id,
         changedFields,
+        details,
         summary: changedFields.length
             ? `${changedFields.length} changed area${changedFields.length === 1 ? '' : 's'}: ${changedFields.join(', ')}.`
             : 'Matches the current saved post summary.',
@@ -2891,6 +2931,21 @@ function EditBlogPostPage() {
                                                         data-testid={`blog-editor-revision-diff-${revision.id}`}
                                                     >
                                                         <div className="font-medium text-foreground">{revisionDiff?.summary}</div>
+                                                        {revisionDiff?.details.length ? (
+                                                            <div className="mt-1 grid gap-1" data-testid={`blog-editor-revision-diff-details-${revision.id}`}>
+                                                                {revisionDiff.details.map((detail) => (
+                                                                    <div key={detail.field} className="grid gap-1 border-t border-border/60 pt-1 first:border-t-0 sm:grid-cols-[72px_1fr]">
+                                                                        <span className="font-semibold text-foreground">{detail.label}</span>
+                                                                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                                                                            <span className="text-muted-foreground">Snapshot </span>
+                                                                            <span className="font-mono text-foreground">{detail.snapshot}</span>
+                                                                            <span className="text-muted-foreground">{' -> Current '}</span>
+                                                                            <span className="font-mono text-foreground">{detail.current}</span>
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
                                                         <div>
                                                             Snapshot: {revision.snapshotCanvas.totalLayerCount} layer{revision.snapshotCanvas.totalLayerCount === 1 ? '' : 's'}
                                                             {' '}({revision.snapshotCanvas.rootLayerCount} root, depth {revision.snapshotCanvas.maxDepth || 0}).
