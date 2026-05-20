@@ -42,6 +42,9 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('hasActiveFilters') && source.includes('Clear filters'), 'Sites backend error state must expose filter recovery when filters are active');
   assert(source.includes('data-testid="sites-permission-state"') && source.includes('Site permissions could not be verified'), 'Sites route must expose a labelled permission error state');
   assert(source.includes('aria-label="Retry loading site permissions"') && source.includes('Retry permissions'), 'Sites permission error state must expose a retry action');
+  assert(source.includes('const loadSitePermissions = useCallback(() => {'), 'Sites route must keep permission loading in a reusable callback');
+  assert(source.includes('return loadSitePermissions();'), 'Sites route must wire the permission-loading effect through the reusable callback');
+  assert(source.includes('loadSitePermissions();') && source.includes('void loadSites();'), 'Sites workspace refresh must re-fetch permissions before reloading site data');
   assert(
     createSource.includes('const starterPageControlsDisabled = creationFormDisabled || !canEditPages || (statusSeedsPublishedPages && !canPublishPages);'),
     'Site create blueprint controls must disable starter-page blueprints when published page seeding lacks pages.publish',

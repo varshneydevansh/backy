@@ -654,6 +654,43 @@ function SitesListView() {
   const publicApiBase = useMemo(() => getApiBaseUrl('public'), []);
   const adminApiBase = useMemo(() => getApiBaseUrl('admin'), []);
 
+  const loadSitePermissions = useCallback(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((permissionsError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(permissionsError instanceof Error ? permissionsError.message : 'Unable to load site permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const loadSiteAuditLogs = useCallback(async () => {
     if (!canExportActivity) {
       setSiteAuditLogs([]);
@@ -730,40 +767,8 @@ function SitesListView() {
   }, [loadPlatformSettings, loadSiteAuditLogs, loadSites]);
 
   useEffect(() => {
-    let cancelled = false;
-    setPermissionError(null);
-
-    if (!currentAdmin?.id) {
-      setPermissionMatrix(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setIsPermissionsLoading(true);
-    getUserPermissions(currentAdmin.id)
-      .then((matrix) => {
-        if (!cancelled) {
-          setPermissionMatrix(matrix);
-          setPermissionError(null);
-        }
-      })
-      .catch((permissionsError) => {
-        if (!cancelled) {
-          setPermissionMatrix(null);
-          setPermissionError(permissionsError instanceof Error ? permissionsError.message : 'Unable to load site permissions.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsPermissionsLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentAdmin?.id]);
+    return loadSitePermissions();
+  }, [loadSitePermissions]);
 
   const metrics = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
@@ -1332,6 +1337,7 @@ function SitesListView() {
   const refreshSitesWorkspace = () => {
     if (isSitesBusy) return;
 
+    loadSitePermissions();
     void loadSites();
     void loadPlatformSettings();
     void loadSiteAuditLogs();
