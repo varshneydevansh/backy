@@ -509,6 +509,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Selected record summaries show visible/outside-view counts, and destructive confirmation calls out hidden selected records before mutating the API-backed dataset.
 - Source coverage is guarded by `apps/admin/scripts/collections-smoke.mjs`.
 
+### ✅ Forms submission bulk moderation
+- The forms submission inbox now supports selected-submission bulk approve, reject, and spam actions.
+- The submission bulk toolbar shows selected totals plus visible/outside-view counts, and failed per-submission updates are reported without dropping failed selections.
+- Source coverage is guarded by `apps/admin/scripts/forms-smoke.mjs`.
+
 ### ✅ Product catalog bulk selection
 - The product catalog bulk selector now adds every loaded product matching the current catalog filters instead of reusing only the already-selected subset.
 - This keeps publish/draft/archive/delete/export actions reachable from an empty selection after filtering the catalog.

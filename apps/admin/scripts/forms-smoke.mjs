@@ -72,6 +72,18 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('title="No consent fields detected"'), 'Forms consent export panel must keep the no-consent-fields empty-state title visible');
   assert(source.includes('title="No submissions match this view"'), 'Forms submission inbox filter empty state must keep the shared title visible');
   assert(source.includes('Change the submission search or status filter to review more entries for this form.'), 'Forms submission filter empty state must explain filter recovery');
+  assert(
+    source.includes('const selectedSubmissionSet = useMemo') &&
+      source.includes('const hiddenSelectedSubmissionCount = Math.max') &&
+      source.includes('toggleVisibleSubmissionSelection') &&
+      source.includes('handleBulkSubmissionStatus') &&
+      source.includes('data-testid="forms-submission-bulk-toolbar"') &&
+      source.includes('data-testid="forms-submission-bulk-selection-summary"') &&
+      source.includes('data-testid="forms-submission-bulk-clear-selection"') &&
+      source.includes('data-testid="forms-submission-bulk-approve"') &&
+      source.includes('outside this view'),
+    'Forms submission inbox must expose selected-submission bulk moderation with visible/outside-view summaries',
+  );
   assert(source.includes('cloneForm,') && source.includes('handleCloneSelectedForm') && source.includes('data-testid="form-clone-button"'), 'Forms page must expose a selected-form clone action');
   assert(source.includes('setIsCloningForm(true)') && source.includes("isActive: false") && source.includes('cloned as an inactive form.'), 'Forms clone action must create inactive clones with busy and notice states');
   assert(

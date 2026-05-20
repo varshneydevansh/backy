@@ -206,7 +206,7 @@ Legend:
 
 #### `apps/public/src/components/PageRenderer.tsx` (form handling)
 - ✅ configurable form method/action/redirect metadata now read from element props
-- ✅ Forms/comments include backend-backed moderation, delivery, analytics, RBAC, repository coverage, and public/admin API contracts.
+- ✅ Forms/comments include backend-backed moderation, selected-submission bulk review, delivery, analytics, RBAC, repository coverage, and public/admin API contracts.
 - ⚠️ Remaining Forms risk is executing the configured Supabase/Postgres smoke against a migrated disposable database.
 
 ---

@@ -547,6 +547,7 @@ function FormsRoute() {
   const [formReadinessFilter, setFormReadinessFilter] = useState<FormReadinessFilter>(routeSearch.readiness || 'all');
   const [statusFilter, setStatusFilter] = useState<SubmissionStatusFilter>(routeSearch.status || 'all');
   const [submissionQuery, setSubmissionQuery] = useState(routeSearch.submissionQ || '');
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [isRetryingDeliveryId, setIsRetryingDeliveryId] = useState<string | null>(null);
@@ -808,6 +809,16 @@ function FormsRoute() {
     }),
     [selectedSubmissions, statusFilter, submissionQuery],
   );
+  const selectedSubmissionSet = useMemo(() => new Set(selectedSubmissionIds), [selectedSubmissionIds]);
+  const selectedLoadedSubmissions = useMemo(() => (
+    selectedSubmissions.filter((submission) => selectedSubmissionSet.has(submission.id))
+  ), [selectedSubmissionSet, selectedSubmissions]);
+  const selectedVisibleSubmissions = useMemo(() => (
+    filteredSubmissions.filter((submission) => selectedSubmissionSet.has(submission.id))
+  ), [filteredSubmissions, selectedSubmissionSet]);
+  const hiddenSelectedSubmissionCount = Math.max(0, selectedLoadedSubmissions.length - selectedVisibleSubmissions.length);
+  const allVisibleSubmissionsSelected = filteredSubmissions.length > 0
+    && selectedVisibleSubmissions.length === filteredSubmissions.length;
   const selectedConsentRecords = useMemo(
     () => filteredSubmissions.flatMap((submission) => selectedConsentFields.map((field) => ({
       submission,
@@ -1481,16 +1492,29 @@ function FormsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
+    const loadedSubmissionIds = new Set(selectedSubmissions.map((submission) => submission.id));
+    setSelectedSubmissionIds((current) => {
+      const next = current.filter((submissionId) => loadedSubmissionIds.has(submissionId));
+      return next.length === current.length ? current : next;
+    });
+  }, [selectedSubmissions]);
+
+  useEffect(() => {
     const nextSiteId = routeSearch.siteId
       ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
       : selectedSiteId;
+    const nextFormId = routeSearch.formId || null;
     const siteChanged = nextSiteId !== selectedSiteId;
+    const formChanged = nextFormId !== selectedFormId;
 
     if (siteChanged) {
       setSelectedSiteId(nextSiteId);
     }
 
-    setSelectedFormId(routeSearch.formId || null);
+    setSelectedFormId(nextFormId);
+    if (siteChanged || formChanged) {
+      setSelectedSubmissionIds([]);
+    }
     setFormSearchQuery(routeSearch.q || '');
     setFormSourceFilter(routeSearch.source || 'all');
     setFormStateFilter(routeSearch.state || 'all');
@@ -1508,6 +1532,7 @@ function FormsRoute() {
     routeSearch.state,
     routeSearch.status,
     routeSearch.submissionQ,
+    selectedFormId,
     selectedSiteId,
     sites,
   ]);
@@ -2093,6 +2118,74 @@ function FormsRoute() {
     }
   };
 
+  const toggleVisibleSubmissionSelection = (selected: boolean) => {
+    if (isFormsBusy || !canManageForms) return;
+
+    const visibleIds = filteredSubmissions.map((submission) => submission.id);
+    setSelectedSubmissionIds((current) => (
+      selected
+        ? Array.from(new Set([...current, ...visibleIds]))
+        : current.filter((submissionId) => !visibleIds.includes(submissionId))
+    ));
+  };
+
+  const handleBulkSubmissionStatus = async (status: FormSubmissionStatus) => {
+    if (isFormsBusy || !selectedForm) return;
+    if (!canManageForms) {
+      setError(managePermissionTitle || 'Your account cannot review submissions.');
+      setNotice(null);
+      return;
+    }
+
+    const targets = selectedLoadedSubmissions.filter((submission) => submission.status !== status);
+    if (targets.length === 0) {
+      setNotice(selectedLoadedSubmissions.length > 0
+        ? `Selected submissions are already ${status}.`
+        : 'Select at least one loaded submission before applying a bulk review action.');
+      return;
+    }
+
+    setIsUpdatingId('bulk-submissions');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const results = await Promise.allSettled(targets.map((submission) => updateFormSubmission(activeSiteId, submission.formId, submission.id, {
+        status,
+        reviewedBy: 'admin',
+      })));
+      const updatedSubmissions = results
+        .filter((result): result is PromiseFulfilledResult<FormSubmission> => result.status === 'fulfilled')
+        .map((result) => result.value);
+      const failedCount = results.length - updatedSubmissions.length;
+
+      if (updatedSubmissions.length === 0) {
+        const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+        throw firstFailure?.reason || new Error('Unable to update selected submissions');
+      }
+
+      const updatedById = new Map(updatedSubmissions.map((submission) => [submission.id, submission]));
+      setInboxByForm((current) => {
+        const inbox = current[selectedForm.id];
+        if (!inbox) return current;
+
+        return {
+          ...current,
+          [selectedForm.id]: {
+            ...inbox,
+            submissions: inbox.submissions.map((submission) => updatedById.get(submission.id) || submission),
+          },
+        };
+      });
+      setSelectedSubmissionIds((current) => current.filter((submissionId) => !updatedById.has(submissionId)));
+      setNotice(`${updatedSubmissions.length} submission${updatedSubmissions.length === 1 ? '' : 's'} marked ${status}${failedCount > 0 ? `; ${failedCount} could not be updated` : ''}.`);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to update selected submissions');
+    } finally {
+      setIsUpdatingId(null);
+    }
+  };
+
   const handleExportSubmissions = () => {
     if (isFormsBusy) return;
     if (!selectedForm) return;
@@ -2453,6 +2546,7 @@ function FormsRoute() {
     setFormReadinessFilter('all');
     setSubmissionQuery('');
     setStatusFilter('all');
+    setSelectedSubmissionIds([]);
     setSelectedFormId(null);
     navigate({ to: '/forms', search: { siteId: nextSiteId }, replace: true });
   };
@@ -2462,6 +2556,7 @@ function FormsRoute() {
     setSelectedFormId(formId);
     setSubmissionQuery('');
     setStatusFilter('all');
+    setSelectedSubmissionIds([]);
     updateFormsRouteSearch({
       formId,
       status: undefined,
@@ -4829,6 +4924,77 @@ function FormsRoute() {
                 }
               />
               <PanelContent>
+                {selectedSubmissions.length > 0 && (
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3 text-sm" data-testid="forms-submission-bulk-toolbar">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="inline-flex items-center gap-2 font-medium text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleSubmissionsSelected}
+                          disabled={isFormsBusy || filteredSubmissions.length === 0 || !canManageForms}
+                          title={!canManageForms ? managePermissionTitle : undefined}
+                          onChange={(event) => toggleVisibleSubmissionSelection(event.target.checked)}
+                          className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label="Select visible submissions"
+                        />
+                        Select visible
+                      </label>
+                      <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground" data-testid="forms-submission-bulk-selection-summary">
+                        {selectedLoadedSubmissions.length} selected
+                        {selectedVisibleSubmissions.length !== selectedLoadedSubmissions.length ? ` · ${selectedVisibleSubmissions.length} visible` : ''}
+                        {hiddenSelectedSubmissionCount > 0 ? ` · ${hiddenSelectedSubmissionCount} outside this view` : ''}
+                      </span>
+                      {selectedSubmissionIds.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={isFormsBusy}
+                          onClick={() => setSelectedSubmissionIds([])}
+                          data-testid="forms-submission-bulk-clear-selection"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isFormsBusy || selectedLoadedSubmissions.length === 0 || !canManageForms}
+                        title={!canManageForms ? managePermissionTitle : undefined}
+                        onClick={() => void handleBulkSubmissionStatus('approved')}
+                        iconStart={<CheckCircle2 className="size-4" />}
+                        data-testid="forms-submission-bulk-approve"
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isFormsBusy || selectedLoadedSubmissions.length === 0 || !canManageForms}
+                        title={!canManageForms ? managePermissionTitle : undefined}
+                        onClick={() => void handleBulkSubmissionStatus('rejected')}
+                        data-testid="forms-submission-bulk-reject"
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="danger"
+                        disabled={isFormsBusy || selectedLoadedSubmissions.length === 0 || !canManageForms}
+                        title={!canManageForms ? managePermissionTitle : undefined}
+                        onClick={() => void handleBulkSubmissionStatus('spam')}
+                        iconStart={<XCircle className="size-4" />}
+                        data-testid="forms-submission-bulk-spam"
+                      >
+                        Spam
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {filteredSubmissions.length === 0 ? (
                   <EmptyState
                     icon={Inbox}
@@ -4843,8 +5009,17 @@ function FormsRoute() {
                         submission={submission}
                         fields={selectedForm?.fields || []}
                         isUpdating={isFormsBusy}
+                        selected={selectedSubmissionSet.has(submission.id)}
                         canManageForms={canManageForms}
                         disabledReason={managePermissionTitle}
+                        onSelect={(selected) => {
+                          if (isFormsBusy || !canManageForms) return;
+                          setSelectedSubmissionIds((current) => (
+                            selected
+                              ? Array.from(new Set([...current, submission.id]))
+                              : current.filter((submissionId) => submissionId !== submission.id)
+                          ));
+                        }}
                         onStatus={(status) => void handleSubmissionStatus(submission, status)}
                       />
                     ))}
@@ -5188,15 +5363,19 @@ function SubmissionCard({
   submission,
   fields,
   isUpdating,
+  selected,
   canManageForms,
   disabledReason,
+  onSelect,
   onStatus,
 }: {
   submission: FormSubmission;
   fields: FormDefinition['fields'];
   isUpdating: boolean;
+  selected: boolean;
   canManageForms: boolean;
   disabledReason?: string;
+  onSelect: (selected: boolean) => void;
   onStatus: (status: FormSubmissionStatus) => void;
 }) {
   const previewFields = fields.slice(0, 4);
@@ -5206,6 +5385,15 @@ function SubmissionCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selected}
+              disabled={isUpdating || !canManageForms}
+              title={!canManageForms ? disabledReason : undefined}
+              onChange={(event) => onSelect(event.target.checked)}
+              className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`Select submission ${submission.id}`}
+            />
             <StatusBadge
               status={submission.status}
               type={submission.status === 'approved' ? 'success' : submission.status === 'spam' || submission.status === 'rejected' ? 'error' : 'warning'}
