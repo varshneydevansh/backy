@@ -34,6 +34,7 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes('Public comments for this post will appear here for quick review'), 'Blog editor comments empty state must explain how post comments populate');
   assert(source.includes('create a restorable revision snapshot'), 'Blog editor revision empty state must explain how revisions populate');
   assert(source.includes('blogRevisionDiff') && source.includes('data-testid={`blog-editor-revision-diff-${revision.id}`}') && source.includes('compareToCurrent: revisionDiffById.get(revision.id)'), 'Blog editor revisions must expose current-vs-snapshot diff summaries in the UI and handoff manifest');
+  assert(source.includes("schema: 'backy.blog-revision-compare.v1'") && source.includes('copyBlogRevisionCompare') && source.includes('data-testid={`blog-editor-copy-revision-compare-${revision.id}`}'), 'Blog editor revisions must expose copyable revision comparison briefs');
   assert(
     source.includes('getScheduledBlogEditorDateError') &&
       source.includes('Date.parse(scheduledAt)') &&

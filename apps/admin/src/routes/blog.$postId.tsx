@@ -1669,6 +1669,74 @@ function EditBlogPostPage() {
         setWorkflowNotice('Blog editor handoff manifest downloaded.');
     };
 
+    const blogRevisionCompareBrief = (revision: ContentRevision) => ({
+        schema: 'backy.blog-revision-compare.v1',
+        generatedAt: new Date().toISOString(),
+        post: {
+            id: post.id,
+            title: title || post.title,
+            slug: normalizedSlug || post.slug,
+            path: publicPath,
+            status,
+            excerpt,
+            featuredImageId,
+            authorId: selectedAuthorId,
+            categoryIds: selectedCategoryIds,
+            tagIds: selectedTagIds,
+        },
+        revision: {
+            id: revision.id,
+            note: revision.note,
+            createdAt: revision.createdAt,
+            createdBy: revision.createdBy,
+            snapshot: {
+                title: revision.snapshotTitle,
+                slug: revision.snapshotSlug,
+                status: revision.snapshotStatus,
+                updatedAt: revision.snapshotUpdatedAt,
+                excerpt: revision.snapshotExcerpt,
+                authorId: revision.snapshotAuthorId,
+                featuredImageId: revision.snapshotFeaturedImageId,
+                categoryIds: revision.snapshotCategoryIds,
+                tagIds: revision.snapshotTagIds,
+                metaTitle: revision.snapshotMetaTitle,
+                metaDescription: revision.snapshotMetaDescription,
+                canvas: revision.snapshotCanvas,
+            },
+        },
+        current: {
+            title,
+            slug: normalizedSlug || post.slug,
+            status,
+            excerpt,
+            seoTitle,
+            seoDescription,
+            featuredImageId,
+            authorId: selectedAuthorId,
+            categoryIds: selectedCategoryIds,
+            tagIds: selectedTagIds,
+            canvas: {
+                width: canvasSize.width,
+                height: canvasSize.height,
+                rootLayerCount: canvasTreeStats.rootLayerCount,
+                totalLayerCount: canvasTreeStats.totalLayerCount,
+                containerLayerCount: canvasTreeStats.containerLayerCount,
+                maxDepth: canvasTreeStats.maxDepth,
+            },
+        },
+        compareToCurrent: revisionDiffById.get(revision.id) || null,
+        endpoints: {
+            revisions: `${adminBlogPostUrl}/revisions`,
+            rollback: `${adminBlogPostUrl}/rollback`,
+            rollbackMethod: 'POST',
+            rollbackBody: { revisionId: revision.id },
+        },
+    });
+
+    const copyBlogRevisionCompare = async (revision: ContentRevision) => {
+        await copyEditorHandoffText(JSON.stringify(blogRevisionCompareBrief(revision), null, 2), 'Blog revision comparison');
+    };
+
     return (
         <PageShell
             title={
@@ -2794,15 +2862,28 @@ function EditBlogPostPage() {
                                                                 {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
                                                             </div>
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
-                                                            onClick={() => setPendingRestoreRevision(revision)}
-                                                            className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
-                                                        >
-                                                            <RotateCcw className="w-4 h-4" />
-                                                        </button>
+                                                        <div className="flex shrink-0 items-center gap-1">
+                                                            <button
+                                                                type="button"
+                                                                disabled={editorActionBusy}
+                                                                onClick={() => void copyBlogRevisionCompare(revision)}
+                                                                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                                                title="Copy revision comparison"
+                                                                aria-label={`Copy comparison for revision ${revision.id}`}
+                                                                data-testid={`blog-editor-copy-revision-compare-${revision.id}`}
+                                                            >
+                                                                <Copy className="h-4 w-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
+                                                                onClick={() => setPendingRestoreRevision(revision)}
+                                                                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                                                title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
+                                                            >
+                                                                <RotateCcw className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
                                                     </div>
 
                                                     <div

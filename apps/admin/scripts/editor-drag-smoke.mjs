@@ -204,6 +204,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('No saved revisions yet'), 'Page editor revision panel must keep an explicit empty revision title visible');
   assert(source.includes('Save this canvas to create a rollback point before publishing or restoring designs.'), 'Page editor revision empty state must explain how rollback points are captured');
   assert(source.includes('pageRevisionDiff') && source.includes('data-testid={`page-editor-revision-diff-${revision.id}`}') && source.includes('compareToCurrent: revisionDiffById.get(revision.id)'), 'Page editor revisions must expose current-vs-snapshot diff summaries in the UI and handoff manifest');
+  assert(source.includes("schema: 'backy.page-revision-compare.v1'") && source.includes('copyPageRevisionCompare') && source.includes('data-testid={`page-editor-copy-revision-compare-${revision.id}`}'), 'Page editor revisions must expose copyable revision comparison briefs');
 };
 
 const assertCanvasEditorShortcutSource = () => {

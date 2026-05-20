@@ -948,6 +948,59 @@ function PageEditorRoute() {
     }
   };
 
+  const pageRevisionCompareBrief = (revision: ContentRevision) => ({
+    schema: 'backy.page-revision-compare.v1',
+    generatedAt: new Date().toISOString(),
+    page: {
+      id: page.id,
+      title: page.title,
+      slug: page.slug,
+      path: publicPath,
+      status: page.status,
+    },
+    revision: {
+      id: revision.id,
+      note: revision.note,
+      createdAt: revision.createdAt,
+      createdBy: revision.createdBy,
+      snapshot: {
+        title: revision.snapshotTitle,
+        slug: revision.snapshotSlug,
+        status: revision.snapshotStatus,
+        updatedAt: revision.snapshotUpdatedAt,
+        metaTitle: revision.snapshotMetaTitle,
+        metaDescription: revision.snapshotMetaDescription,
+        canvas: revision.snapshotCanvas,
+      },
+    },
+    current: {
+      title: page.title,
+      slug: page.slug,
+      status: page.status,
+      metaTitle: metaStringValue(page.meta, 'title') || page.title,
+      metaDescription: metaStringValue(page.meta, 'description'),
+      canvas: {
+        width: initialCanvasSize.width,
+        height: initialCanvasSize.height,
+        rootLayerCount: canvasTreeStats.rootLayerCount,
+        totalLayerCount: canvasTreeStats.totalLayerCount,
+        containerLayerCount: canvasTreeStats.containerLayerCount,
+        maxDepth: canvasTreeStats.maxDepth,
+      },
+    },
+    compareToCurrent: revisionDiffById.get(revision.id) || null,
+    endpoints: {
+      revisions: `${adminPageUrl}/revisions`,
+      rollback: `${adminPageUrl}/rollback`,
+      rollbackMethod: 'POST',
+      rollbackBody: { revisionId: revision.id },
+    },
+  });
+
+  const copyPageRevisionCompare = async (revision: ContentRevision) => {
+    await copyEditorHandoffText(JSON.stringify(pageRevisionCompareBrief(revision), null, 2), 'Page revision comparison');
+  };
+
   const downloadEditorHandoff = () => {
     if (isPageEditorBusy) return;
 
@@ -1781,15 +1834,28 @@ function PageEditorRoute() {
                               {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
-                            onClick={() => setPendingRestoreRevision(revision)}
-                            className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                            title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={isPageEditorBusy}
+                              onClick={() => void copyPageRevisionCompare(revision)}
+                              className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Copy revision comparison"
+                              aria-label={`Copy comparison for revision ${revision.id}`}
+                              data-testid={`page-editor-copy-revision-compare-${revision.id}`}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
+                              onClick={() => setPendingRestoreRevision(revision)}
+                              className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                              title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
 
                         <div
