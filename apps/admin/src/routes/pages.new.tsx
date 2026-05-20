@@ -1928,6 +1928,7 @@ function NewPageRoute() {
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
     }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
+    const submitControlState = canSubmit ? 'ready' : isPageCreateBusy ? 'busy' : 'blocked';
     const previewDraftBlockerMessage = useMemo(() => {
         if (isPreviewAfterCreateBusy || canCreatePreviewDraft) return null;
         if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
@@ -1950,6 +1951,7 @@ function NewPageRoute() {
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this preview draft to navigation.';
         return 'Review the required page basics before creating this preview draft.';
     }, [canCreatePreviewDraft, canEditPages, canPublishPages, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isPreviewAfterCreateBusy, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
+    const previewDraftControlState = canCreatePreviewDraft ? 'ready' : isPageCreateBusy ? 'busy' : 'blocked';
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -4006,7 +4008,14 @@ function NewPageRoute() {
 
                     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
                         {submitBlockerMessage && (
-                            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                            <div
+                                id="page-create-submit-blocker"
+                                role="status"
+                                aria-live="polite"
+                                data-testid="page-create-submit-blocker"
+                                data-state={submitControlState}
+                                className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                            >
                                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                                 <div>
                                     <div className="font-semibold">Create is blocked</div>
@@ -4032,6 +4041,10 @@ function NewPageRoute() {
                                 disabled={isPageCreateBusy || !canCreatePreviewDraft}
                                 title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
                                 aria-disabled={isPageCreateBusy || !canCreatePreviewDraft}
+                                aria-describedby={previewDraftBlockerMessage ? 'page-create-submit-blocker' : undefined}
+                                data-testid="page-create-preview-button"
+                                data-state={previewDraftControlState}
+                                data-blocker={previewDraftBlockerMessage || ''}
                                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Eye className="w-4 h-4" />
@@ -4043,6 +4056,11 @@ function NewPageRoute() {
                                 disabled={isPageCreateBusy || !canSubmit}
                                 title={submitBlockerMessage || 'Create page and open the visual editor'}
                                 aria-disabled={isPageCreateBusy || !canSubmit}
+                                aria-describedby={submitBlockerMessage ? 'page-create-submit-blocker' : undefined}
+                                data-state={submitControlState}
+                                data-blocker={submitBlockerMessage || ''}
+                                data-can-submit={String(canSubmit)}
+                                data-can-preview={String(canCreatePreviewDraft)}
                                 className={cn(
                                     'flex items-center justify-center gap-2 rounded-lg px-6 py-2.5',
                                     'bg-primary text-primary-foreground font-medium',

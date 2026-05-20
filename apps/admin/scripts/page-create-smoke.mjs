@@ -23,6 +23,8 @@ const STARTER_TEMPLATE_BACKEND_FILTER = (process.env.BACKY_PAGE_CREATE_STARTER_F
   .split(',')
   .map((template) => template.trim())
   .filter(Boolean);
+const PAGE_CREATE_CONTROL_WAIT_ATTEMPTS = Number(process.env.BACKY_PAGE_CREATE_CONTROL_WAIT_ATTEMPTS || 240);
+const PAGE_CREATE_CONTROL_WAIT_DELAY_MS = 250;
 
 const EDITOR_SCREENSHOT_THRESHOLDS = {
   minClipWidth: 280,
@@ -1304,6 +1306,13 @@ const assertPageCreateSourceContracts = () => {
       source.includes('const pageCreateBusyState = [') &&
       source.includes("data-busy-state={pageCreateBusyState}") &&
       source.includes("data-template-selection-disabled={String(templateSelectionDisabled)}") &&
+      source.includes('const submitControlState = canSubmit ?') &&
+      source.includes('data-testid="page-create-submit-blocker"') &&
+      source.includes('aria-describedby={submitBlockerMessage ?') &&
+      source.includes('data-state={submitControlState}') &&
+      source.includes("data-blocker={submitBlockerMessage || ''}") &&
+      source.includes('data-can-submit={String(canSubmit)}') &&
+      source.includes('data-testid="page-create-preview-button"') &&
       source.includes('options?: { allowDuringRouteCheck?: boolean }') &&
       source.includes('const draftLocked = options?.allowDuringRouteCheck ? isPageCreateMutating : isPageCreateBusy;') &&
       source.includes('if (templateSelectionDisabled || !canEditPages) return;') &&
@@ -2892,11 +2901,14 @@ const assertTemplateSwitching = async (client) => {
 };
 
 const waitForPageCreateControls = async (client, slug, title, navLabel, seo, parentPageId, url) => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < PAGE_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
       busyState: document.querySelector('[data-testid="page-creation-command-center"]')?.getAttribute('data-busy-state') || '',
       templateSelectionDisabled: document.querySelector('[data-testid="page-creation-command-center"]')?.getAttribute('data-template-selection-disabled') || '',
+      submitState: document.querySelector('[data-testid="page-create-submit-button"]')?.getAttribute('data-state') || '',
+      submitBlocker: document.querySelector('[data-testid="page-create-submit-button"]')?.getAttribute('data-blocker') || '',
+      visibleSubmitBlocker: document.querySelector('[data-testid="page-create-submit-blocker"]')?.textContent || '',
       nav: Boolean(document.querySelector('[data-testid="page-navigation-placement"]')),
       title: document.querySelector('#page-title')?.value || '',
       slug: document.querySelector('#page-slug')?.value || '',
@@ -2941,11 +2953,11 @@ const waitForPageCreateControls = async (client, slug, title, navLabel, seo, par
       return { url, state };
     }
 
-    if (attempt === 99) {
+    if (attempt === PAGE_CREATE_CONTROL_WAIT_ATTEMPTS - 1) {
       throw new Error(`Page create route did not render expected controls: ${JSON.stringify(state)}`);
     }
 
-    await sleep(250);
+    await sleep(PAGE_CREATE_CONTROL_WAIT_DELAY_MS);
   }
 
   return null;
@@ -3026,10 +3038,12 @@ const assertSlugCanSyncFromTitle = async (client) => {
 };
 
 const waitForStarterTemplateCreateControls = async (client, testCase, slug, url) => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < PAGE_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
+      const previewButton = document.querySelector('[data-testid="page-create-preview-button"]');
+      const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
         title: document.querySelector('#page-title')?.value || '',
@@ -3043,6 +3057,13 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
         payloadForms: payload.forms || '',
         payloadDynamicData: payload.dynamicData || '',
         createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+        createButtonState: createButton?.getAttribute('data-state') || '',
+        createButtonBlocker: createButton?.getAttribute('data-blocker') || '',
+        createButtonCanSubmit: createButton?.getAttribute('data-can-submit') || '',
+        previewButtonState: previewButton?.getAttribute('data-state') || '',
+        previewButtonBlocker: previewButton?.getAttribute('data-blocker') || '',
+        visibleBlocker: blocker?.textContent || '',
+        visibleBlockerState: blocker?.getAttribute('data-state') || '',
         body: document.body?.innerText?.slice(0, 260) || '',
       };
     })()`);
@@ -3057,15 +3078,18 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
       && state.navPlacement === testCase.expectedNavigationPlacement
       && state.payloadTemplate === testCase.template
       && state.createButtonDisabled === false
+      && state.createButtonState === 'ready'
+      && state.createButtonCanSubmit === 'true'
+      && state.createButtonBlocker === ''
     ) {
       return { url, state };
     }
 
-    if (attempt === 99) {
+    if (attempt === PAGE_CREATE_CONTROL_WAIT_ATTEMPTS - 1) {
       throw new Error(`Starter template create route did not render expected controls for ${testCase.template}: ${JSON.stringify(state)}`);
     }
 
-    await sleep(250);
+    await sleep(PAGE_CREATE_CONTROL_WAIT_DELAY_MS);
   }
 
   return null;
@@ -3085,10 +3109,11 @@ const navigateToStarterTemplateCreate = async (client, testCase, slug) => {
 };
 
 const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, url) => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < PAGE_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
+      const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
         frontendPanel: Boolean(document.querySelector('[data-testid="page-frontend-template-options"]')),
@@ -3102,6 +3127,10 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
         payloadSiteChrome: payload.siteChrome || '',
         selectedTemplateName: Array.from(document.querySelectorAll('#page-preview dd')).map((node) => node.textContent?.trim() || '')[0] || '',
         createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+        createButtonState: createButton?.getAttribute('data-state') || '',
+        createButtonBlocker: createButton?.getAttribute('data-blocker') || '',
+        createButtonCanSubmit: createButton?.getAttribute('data-can-submit') || '',
+        visibleBlocker: blocker?.textContent || '',
         body: document.body?.innerText?.slice(0, 300) || '',
       };
     })()`);
@@ -3119,15 +3148,18 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
       && state.payloadSiteChrome === 'captured from frontend design contract'
       && state.selectedTemplateName === `${FRONTEND_DESIGN_TEMPLATE_NAME} frontend template`
       && state.createButtonDisabled === false
+      && state.createButtonState === 'ready'
+      && state.createButtonCanSubmit === 'true'
+      && state.createButtonBlocker === ''
     ) {
       return { url, state };
     }
 
-    if (attempt === 99) {
+    if (attempt === PAGE_CREATE_CONTROL_WAIT_ATTEMPTS - 1) {
       throw new Error(`Frontend design template create route did not render expected controls: ${JSON.stringify(state)}`);
     }
 
-    await sleep(250);
+    await sleep(PAGE_CREATE_CONTROL_WAIT_DELAY_MS);
   }
 
   return null;
@@ -3148,13 +3180,14 @@ const navigateToFrontendDesignTemplateCreate = async (client, slug, title) => {
 };
 
 const waitForDatasetPageCreateControls = async (client, collection, mode, slug, title, url) => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < PAGE_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
       const importPanel = document.querySelector('[data-testid="page-create-dataset-import"]');
       const readinessPanel = document.querySelector('[data-testid="page-create-dataset-readiness"]');
       const actionPlanButton = document.querySelector('[data-testid="page-create-dataset-action-plan"]');
+      const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
         importPanel: Boolean(importPanel),
@@ -3174,6 +3207,10 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
         payloadDescriptionField: payload.datasetImport?.descriptionField || '',
         payloadImageField: payload.datasetImport?.imageField || '',
         createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+        createButtonState: createButton?.getAttribute('data-state') || '',
+        createButtonBlocker: createButton?.getAttribute('data-blocker') || '',
+        createButtonCanSubmit: createButton?.getAttribute('data-can-submit') || '',
+        visibleBlocker: blocker?.textContent || '',
         body: document.body?.innerText?.slice(0, 360) || '',
       };
     })()`);
@@ -3198,15 +3235,18 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
       && state.payloadDescriptionField === 'summary'
       && state.payloadImageField === 'image'
       && state.createButtonDisabled === false
+      && state.createButtonState === 'ready'
+      && state.createButtonCanSubmit === 'true'
+      && state.createButtonBlocker === ''
     ) {
       return { url, state };
     }
 
-    if (attempt === 99) {
+    if (attempt === PAGE_CREATE_CONTROL_WAIT_ATTEMPTS - 1) {
       throw new Error(`Dataset page create route did not render expected controls: ${JSON.stringify(state)}`);
     }
 
-    await sleep(250);
+    await sleep(PAGE_CREATE_CONTROL_WAIT_DELAY_MS);
   }
 
   return null;
@@ -3978,11 +4018,19 @@ const createPageFromUi = async (client) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     clicked = await evaluate(client, `(() => {
       const button = document.querySelector('[data-testid="page-create-submit-button"]');
+      const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
-        return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+        return {
+          ok: false,
+          label: button?.textContent || null,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          state: button?.getAttribute('data-state') || null,
+          canSubmit: button?.getAttribute('data-can-submit') || null,
+          blocker: button?.getAttribute('data-blocker') || blocker?.textContent || null,
+        };
       }
       button.click();
-      return { ok: true, label: button.textContent || '' };
+      return { ok: true, label: button.textContent || '', state: button.getAttribute('data-state') || null };
     })()`);
 
     if (clicked.ok) {
