@@ -708,6 +708,9 @@ const DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS = {
 const uniqueTextValues = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
 
 const quoteShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteShellValue(value)
+);
 
 const boolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 
@@ -979,7 +982,9 @@ const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOpti
   options.certifyNotification
 );
 
-const buildSettingsProviderCertificationCommand = (options: SettingsCertificationCommandOptions): string => {
+const buildSettingsProviderCertificationEnvEntries = (
+  options: SettingsCertificationCommandOptions,
+): Array<[string, string]> => {
   const settingsSelected = hasSettingsCertificationGroup(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/$/, '');
   const envEntries: Array<[string, string]> = [
@@ -1013,6 +1018,12 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
     envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID', options.vercelTeamId.trim()]);
   }
 
+  return envEntries;
+};
+
+const buildSettingsProviderCertificationCommand = (options: SettingsCertificationCommandOptions): string => {
+  const settingsSelected = hasSettingsCertificationGroup(options);
+  const envEntries = buildSettingsProviderCertificationEnvEntries(options);
   const commands = [
     settingsSelected ? 'npm run ci:settings-provider-certification' : '',
     options.certifyCommerce ? 'npm run ci:commerce-provider-certification' : '',
@@ -1023,6 +1034,16 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
     ...(commands.length ? commands : ['# Select at least one provider family before running certification.']),
+  ].join('\n');
+};
+
+const buildSettingsProviderCertificationEnvTemplate = (options: SettingsCertificationCommandOptions): string => {
+  const envEntries = buildSettingsProviderCertificationEnvEntries(options);
+
+  return [
+    '# Backy settings provider certification environment',
+    '# Keep real provider credential values in CI secrets or local shell variables.',
+    ...envEntries.map(([key, value]) => `${key}=${quoteEnvTemplateValue(value)}`),
   ].join('\n');
 };
 
@@ -1105,6 +1126,8 @@ const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCert
 
 const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildSettingsProviderCertificationCommand(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildSettingsProviderCertificationEnvTemplate(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.settings-provider-certification-env-template.v1',
   storageProviderChoices: SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS.map((option) => option.value),
   notificationProviderChoices: SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS.map((option) => option.value),
   requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
@@ -2304,6 +2327,13 @@ function SettingsPage() {
       commerce: integrations.commerce || null,
     },
     operatorCommandTemplate: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+    operatorEnvTemplate: {
+      schemaVersion: 'backy.settings-provider-certification-env-template.v1',
+      format: 'shell-env',
+      fileName: '.env.backy-settings-provider-certification',
+      body: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+      secretHandling: 'Generated template values are non-secret selectors and placeholders; replace placeholders with CI secrets or local shell values before execution.',
+    },
     groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
       family: group.family,
       providers: [...group.providers],
@@ -6807,8 +6837,13 @@ function InfrastructureSettings({
     DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS,
   );
   const [copiedCertificationCommand, setCopiedCertificationCommand] = useState(false);
+  const [copiedCertificationEnvTemplate, setCopiedCertificationEnvTemplate] = useState(false);
   const settingsCertificationCommand = useMemo(
     () => buildSettingsProviderCertificationCommand(settingsCertificationCommandOptions),
+    [settingsCertificationCommandOptions],
+  );
+  const settingsCertificationEnvTemplate = useMemo(
+    () => buildSettingsProviderCertificationEnvTemplate(settingsCertificationCommandOptions),
     [settingsCertificationCommandOptions],
   );
   const settingsCertificationRequiredAliases = useMemo(
@@ -6937,6 +6972,20 @@ function InfrastructureSettings({
       }, 1400);
     } catch {
       setCopiedCertificationCommand(false);
+    }
+  };
+
+  const copySettingsProviderCertificationEnvTemplate = async () => {
+    if (providerCertificationControlsDisabled || !settingsCertificationHasSelectedFamily) return;
+
+    try {
+      await navigator.clipboard.writeText(settingsCertificationEnvTemplate);
+      setCopiedCertificationEnvTemplate(true);
+      setTimeout(() => {
+        setCopiedCertificationEnvTemplate(false);
+      }, 1400);
+    } catch {
+      setCopiedCertificationEnvTemplate(false);
     }
   };
 
@@ -7514,17 +7563,30 @@ function InfrastructureSettings({
                     Select the provider families for this run; the command keeps credentials in CI or shell environment variables and only writes non-secret aliases here.
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={providerCertificationControlsDisabled || !settingsCertificationHasSelectedFamily}
-                  title={providerCertificationControlsTitle || (!settingsCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined)}
-                  onClick={() => void copySettingsProviderCertificationCommand()}
-                  iconStart={copiedCertificationCommand ? <Check className="size-4" /> : <Copy className="size-4" />}
-                  data-testid="settings-provider-certification-command-copy-button"
-                >
-                  {copiedCertificationCommand ? 'Copied command' : 'Copy command'}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={providerCertificationControlsDisabled || !settingsCertificationHasSelectedFamily}
+                    title={providerCertificationControlsTitle || (!settingsCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined)}
+                    onClick={() => void copySettingsProviderCertificationEnvTemplate()}
+                    iconStart={copiedCertificationEnvTemplate ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    data-testid="settings-provider-certification-env-copy-button"
+                  >
+                    {copiedCertificationEnvTemplate ? 'Copied env template' : 'Copy env template'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={providerCertificationControlsDisabled || !settingsCertificationHasSelectedFamily}
+                    title={providerCertificationControlsTitle || (!settingsCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined)}
+                    onClick={() => void copySettingsProviderCertificationCommand()}
+                    iconStart={copiedCertificationCommand ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    data-testid="settings-provider-certification-command-copy-button"
+                  >
+                    {copiedCertificationCommand ? 'Copied command' : 'Copy command'}
+                  </Button>
+                </div>
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
                 {([
@@ -7666,6 +7728,25 @@ function InfrastructureSettings({
                     />
                   </label>
                 </div>
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="settings-provider-certification-env-template">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Env template</div>
+                    <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                      Copy this into CI secrets or a local shell env file, then replace placeholders with live provider credentials before running the guarded command.
+                    </p>
+                  </div>
+                  <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    backy.settings-provider-certification-env-template.v1
+                  </span>
+                </div>
+                <pre
+                  className="mt-2 max-h-64 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px] leading-5 text-foreground"
+                  data-testid="settings-provider-certification-env-template-body"
+                >
+                  {settingsCertificationEnvTemplate}
+                </pre>
               </div>
               <pre className="mt-3 max-h-72 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="settings-provider-certification-command">
                 <code>{settingsCertificationCommand}</code>

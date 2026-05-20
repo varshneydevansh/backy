@@ -133,14 +133,22 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-provider-certification-download-button"',
     'data-testid="settings-provider-certification-copy-button"',
     'data-testid="settings-provider-certification-command-builder"',
+    'data-testid="settings-provider-certification-env-copy-button"',
+    'data-testid="settings-provider-certification-env-template"',
+    'data-testid="settings-provider-certification-env-template-body"',
     'data-testid="settings-provider-certification-command-copy-button"',
     'settings-provider-certification-doctor-toggle',
     'data-testid="settings-provider-certification-required-aliases"',
     'providerCertification',
     'providerCertificationHandoff',
+    'settingsCertificationEnvTemplate',
+    'buildSettingsProviderCertificationEnvTemplate',
     'scenarioEvidence',
     'backy.settings-provider-certification-evidence.v1',
     'operatorCommandTemplate',
+    'operatorEnvTemplate',
+    'backy.settings-provider-certification-env-template.v1',
+    'Copy env template',
     'providerRuntimeEvidenceRows',
     'providerRuntimeEvidenceReadyCount',
     'buildSettingsProviderRuntimeEvidence',
@@ -1792,6 +1800,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   const infrastructureState = await evaluate(client, `(() => {
     const runbookText = document.querySelector('[data-testid="settings-release-certification-runbook"]')?.textContent || '';
     const providerCommandBuilderText = document.querySelector('[data-testid="settings-provider-certification-command-builder"]')?.textContent || '';
+    const providerEnvTemplateText = document.querySelector('[data-testid="settings-provider-certification-env-template-body"]')?.textContent || '';
     const providerCommandText = document.querySelector('[data-testid="settings-provider-certification-command"]')?.textContent || '';
     return {
     search: window.location.search,
@@ -1843,6 +1852,16 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasProviderCertificationDownloadButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-download-button"]')),
     hasProviderCertificationCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-copy-button"]')),
     hasProviderCertificationCommandBuilder: Boolean(document.querySelector('[data-testid="settings-provider-certification-command-builder"]')),
+    hasProviderCertificationEnvCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-env-copy-button"]')),
+    hasProviderCertificationEnvTemplate: Boolean(document.querySelector('[data-testid="settings-provider-certification-env-template"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-provider-certification-env-template-body"]')) &&
+      providerCommandBuilderText.includes('Copy env template') &&
+      providerCommandBuilderText.includes('backy.settings-provider-certification-env-template.v1') &&
+      providerEnvTemplateText.includes('# Backy settings provider certification environment') &&
+      providerEnvTemplateText.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+      providerEnvTemplateText.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1') &&
+      providerEnvTemplateText.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER=auto') &&
+      providerEnvTemplateText.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
     hasProviderCertificationCommandCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-command-copy-button"]')),
     hasProviderCertificationCommandDefaults: providerCommandText.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_STORAGE') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION') && providerCommandText.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('npm run doctor:release-certification') && providerCommandText.includes('npm run ci:settings-provider-certification') && providerCommandText.includes('npm run ci:commerce-provider-certification'),
     hasProviderCertificationCommandAliases: providerCommandBuilderText.includes('Release doctor') && providerCommandBuilderText.includes('npm run doctor:release-certification') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER') && providerCommandBuilderText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
@@ -1913,6 +1932,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasProviderCertificationDownloadButton &&
       infrastructureState.hasProviderCertificationCopyButton &&
       infrastructureState.hasProviderCertificationCommandBuilder &&
+      infrastructureState.hasProviderCertificationEnvCopyButton &&
+      infrastructureState.hasProviderCertificationEnvTemplate &&
       infrastructureState.hasProviderCertificationCommandCopyButton &&
       infrastructureState.hasProviderCertificationCommandDefaults &&
       infrastructureState.hasProviderCertificationCommandAliases &&
