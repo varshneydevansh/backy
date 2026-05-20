@@ -136,7 +136,7 @@ It explicitly excludes:
 6. `/pages`: persisted filtering, paging, search, status chips
 7. `/pages.new`: slug uniqueness, template starter, validation, scheduled publish checks, and retryable permission recovery
 8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring for `interactiveFigure`/`codeComponent` blocks; uploaded/signed custom component bundles, hostile-bundle browser security fixtures, component usage governance, and production repository smoke are now covered for the current platform scope
-9. `/blog`: status controls, tag/category UI, list filters, and filtered full-result bulk selection
+9. `/blog`: status controls, tag/category UI, list filters, retryable permission recovery, and filtered full-result bulk selection
 10. `/blog.new`: post metadata + publish path
 11. `/blog.$postId`: revisioning and publication state
 12. `/media`: upload -> validation -> metadata edit -> storage urls

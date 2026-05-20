@@ -37,6 +37,8 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   assert(source.includes('aria-label="Retry loading blog posts"') && source.includes('Retry load'), 'Blog list backend error state must expose a retry action');
   assert(source.includes('hasBlogFilters') && source.includes('Clear filters'), 'Blog list backend error state must expose filter recovery when filters are active');
   assert(source.includes('data-testid="blog-permission-state"') && source.includes('Blog permissions could not be verified'), 'Blog list must expose a labelled permission error state');
+  assert(source.includes('const loadBlogPermissions = useCallback(() => {'), 'Blog list must keep permission loading in a reusable retryable callback');
+  assert(source.includes('aria-label="Retry loading blog permissions"') && source.includes('Retry permissions'), 'Blog permission error state must expose a retry action');
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Blog permission error state must link to user access management');
   assert(
     source.includes('getPostScheduleSummary') &&

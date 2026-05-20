@@ -4,7 +4,7 @@
  * Layout route that shows list at /blog, renders child routes otherwise.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X, MessageSquare, History } from 'lucide-react';
 import {
@@ -352,7 +352,7 @@ function BlogListView() {
   const adminBlogReadinessUrl = `${adminBlogPostUrl}/readiness`;
   const adminBlogPreviewUrl = `${adminBlogPostUrl}/preview`;
 
-  useEffect(() => {
+  const loadBlogPermissions = useCallback(() => {
     let cancelled = false;
     setPermissionError(null);
 
@@ -389,6 +389,8 @@ function BlogListView() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadBlogPermissions(), [loadBlogPermissions]);
 
   const refreshPosts = useMemo(
     () => async (siteId: string) => {
@@ -1619,12 +1621,23 @@ function BlogListView() {
                 <p className="mt-1 leading-6">{permissionError}</p>
               </div>
             </div>
-            <Link
-              to="/users"
-              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
-            >
-              Review users
-            </Link>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadBlogPermissions}
+                disabled={isPermissionsLoading}
+                aria-label="Retry loading blog permissions"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry permissions
+              </button>
+              <Link
+                to="/users"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+              >
+                Review users
+              </Link>
+            </div>
           </div>
         </div>
       )}
