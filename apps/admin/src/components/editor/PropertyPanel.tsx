@@ -6009,6 +6009,91 @@ const childBindingSlotSummary = (
   return { total, applicable };
 };
 
+interface BindingSlotCoverageItem {
+  id: string;
+  label: string;
+  targetLabel: string;
+  fieldPath: string;
+  applied: boolean;
+  applicable: boolean;
+  required: boolean;
+  reason: string;
+}
+
+interface BindingSlotCoverageSummary {
+  total: number;
+  applicable: number;
+  applied: number;
+  missingRequired: number;
+  items: BindingSlotCoverageItem[];
+}
+
+const bindingSlotCoverageForElement = (
+  element: CanvasElement,
+  collection: Collection | null,
+  collections: Collection[],
+  targetPathOptions: Array<{ value: string; label: string }>,
+): BindingSlotCoverageSummary => {
+  const items: BindingSlotCoverageItem[] = [];
+  const addSlot = (
+    ownerElement: CanvasElement,
+    slot: ComponentBindingSlot,
+    ownerTargetPathOptions: Array<{ value: string; label: string }>,
+    labelPrefix = '',
+  ) => {
+    const fieldCandidates = bindingSlotFieldCandidates(slot);
+    const fieldPath = bindingSlotFieldPath(slot, collection, collections);
+    const targetAllowed = bindingSlotTargetAllowed(ownerElement, slot);
+    const canApplyWithoutFieldPath = bindingSlotCanApplyWithoutFieldPath(ownerElement, slot);
+    const applicable = Boolean(collection && targetAllowed && (fieldPath || canApplyWithoutFieldPath));
+    const applied = isBindingSlotApplied(ownerElement, slot, collection, fieldPath);
+    const reason = !collection
+      ? 'Choose a collection.'
+      : !targetAllowed
+        ? 'Target unavailable.'
+        : fieldCandidates.length === 0 && !canApplyWithoutFieldPath
+          ? 'Record-level slot.'
+          : !fieldPath && !canApplyWithoutFieldPath
+            ? 'No matching field.'
+            : '';
+
+    items.push({
+      id: `${ownerElement.id}-${slot.id}`,
+      label: labelPrefix ? `${labelPrefix}: ${slot.label}` : slot.label,
+      targetLabel: bindingSlotTargetLabel(ownerElement, slot, ownerTargetPathOptions),
+      fieldPath,
+      applied,
+      applicable,
+      required: Boolean(slot.required),
+      reason,
+    });
+  };
+  const walk = (itemsToWalk?: CanvasElement[]) => {
+    (itemsToWalk || []).forEach((child) => {
+      (Array.isArray(child.bindingSlots) ? child.bindingSlots : []).forEach((slot) => {
+        addSlot(child, slot, getTargetPathOptions(child.type), child.name || child.type);
+      });
+      walk(child.children);
+    });
+  };
+
+  (Array.isArray(element.bindingSlots) ? element.bindingSlots : [])
+    .forEach((slot) => addSlot(element, slot, targetPathOptions));
+  walk(element.children);
+
+  const applied = items.filter((item) => item.applied).length;
+  const applicable = items.filter((item) => item.applicable).length;
+  const missingRequired = items.filter((item) => item.required && !item.applied).length;
+
+  return {
+    total: items.length,
+    applicable,
+    applied,
+    missingRequired,
+    items,
+  };
+};
+
 const applyChildBindingSlots = (
   element: CanvasElement,
   collection: Collection,
@@ -6234,6 +6319,13 @@ function PresetBindingSlotsPanel({
       }).length
     : 0;
   const allApplicableCount = rootApplicableCount + childSummary.applicable;
+  const coverageSummary = bindingSlotCoverageForElement(element, selectedCollection, collections, targetPathOptions);
+  const coveragePercent = coverageSummary.total > 0
+    ? Math.round((coverageSummary.applied / coverageSummary.total) * 100)
+    : 0;
+  const unresolvedCoverageItems = coverageSummary.items
+    .filter((item) => !item.applied)
+    .slice(0, 3);
 
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-slots">
@@ -6281,6 +6373,49 @@ function PresetBindingSlotsPanel({
             Clear all
           </button>
         </div>
+
+        {coverageSummary.total > 0 && (
+          <div
+            className="rounded-md border border-border bg-background p-2 text-xs"
+            data-testid="editor-data-binding-slot-coverage"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-foreground">Slot coverage</span>
+              <span className="text-muted-foreground">
+                {coverageSummary.applied}/{coverageSummary.total} applied
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${coveragePercent}%` }}
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] text-muted-foreground">
+              <span>{coverageSummary.applicable} match</span>
+              <span>{coverageSummary.missingRequired} required</span>
+              <span>{clearableBindingCount} bound</span>
+            </div>
+            {unresolvedCoverageItems.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {unresolvedCoverageItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground"
+                    data-testid={`editor-data-binding-slot-coverage-item-${item.id}`}
+                  >
+                    <span className="min-w-0 truncate">
+                      {item.label}
+                    </span>
+                    <span className="max-w-[45%] truncate text-right">
+                      {item.fieldPath || item.reason || item.targetLabel}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {slots.map((slot) => {
           const fieldCandidates = bindingSlotFieldCandidates(slot);
