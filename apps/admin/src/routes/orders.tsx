@@ -737,6 +737,236 @@ const ORDER_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS = [
   'non-secret workflow summary without provider secrets',
 ] as const;
 
+const ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS = [
+  { value: 'auto', label: 'Auto', description: 'Use the first configured live payment/refund provider credential.' },
+  { value: 'stripe', label: 'Stripe', description: 'Require Stripe checkout/refund credentials.' },
+  { value: 'paypal', label: 'PayPal', description: 'Require PayPal refund credentials.' },
+  { value: 'paddle', label: 'Paddle', description: 'Require Paddle adjustment credentials.' },
+  { value: 'square', label: 'Square', description: 'Require Square refund credentials.' },
+  { value: 'adyen', label: 'Adyen', description: 'Require Adyen API and merchant-account credentials.' },
+  { value: 'mollie', label: 'Mollie', description: 'Require Mollie refund credentials.' },
+  { value: 'razorpay', label: 'Razorpay', description: 'Require Razorpay key id and secret credentials.' },
+] as const;
+const ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS = [
+  { value: 'auto', label: 'Auto', description: 'Use the first configured live tax quote credential.' },
+  { value: 'stripe', label: 'Stripe Tax', description: 'Require Stripe Tax credentials.' },
+  { value: 'taxjar', label: 'TaxJar', description: 'Require TaxJar credentials.' },
+  { value: 'avalara', label: 'Avalara', description: 'Require Avalara account, license, and company code.' },
+  { value: 'http', label: 'HTTP', description: 'Require a Settings tax quote provider URL.' },
+] as const;
+const ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS = [
+  { value: 'auto', label: 'Auto', description: 'Use the first configured live shipping credential.' },
+  { value: 'easypost', label: 'EasyPost', description: 'Require EasyPost rates, labels, refunds, and tracking credentials.' },
+  { value: 'shippo', label: 'Shippo', description: 'Require Shippo rates, labels, refunds, and tracking credentials.' },
+  { value: 'http', label: 'HTTP', description: 'Require a Settings shipping quote provider URL.' },
+] as const;
+const ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS = [
+  ...ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS,
+  { value: 'http', label: 'HTTP', description: 'Require a Settings subscription action provider URL.' },
+] as const;
+const ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS = [
+  ...ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS,
+  { value: 'generic', label: 'Generic', description: 'Require a signed Backy commerce webhook secret only.' },
+] as const;
+
+type OrderProviderCertificationPaymentProvider = (typeof ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS)[number]['value'];
+type OrderProviderCertificationTaxProvider = (typeof ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS)[number]['value'];
+type OrderProviderCertificationShippingProvider = (typeof ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS)[number]['value'];
+type OrderProviderCertificationSubscriptionProvider = (typeof ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS)[number]['value'];
+type OrderProviderCertificationWebhookProvider = (typeof ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS)[number]['value'];
+
+type OrderProviderCertificationCommandOptions = {
+  certifyPayment: boolean;
+  paymentProvider: OrderProviderCertificationPaymentProvider;
+  certifyTax: boolean;
+  taxProvider: OrderProviderCertificationTaxProvider;
+  certifyShipping: boolean;
+  shippingProvider: OrderProviderCertificationShippingProvider;
+  certifySubscriptions: boolean;
+  subscriptionProvider: OrderProviderCertificationSubscriptionProvider;
+  certifyWebhooks: boolean;
+  webhookProvider: OrderProviderCertificationWebhookProvider;
+  includeFulfillmentEvidence: boolean;
+  externalBaseUrl: string;
+  includeReleaseDoctor: boolean;
+};
+
+const DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
+  certifyPayment: true,
+  paymentProvider: 'auto',
+  certifyTax: true,
+  taxProvider: 'auto',
+  certifyShipping: true,
+  shippingProvider: 'auto',
+  certifySubscriptions: true,
+  subscriptionProvider: 'auto',
+  certifyWebhooks: true,
+  webhookProvider: 'auto',
+  includeFulfillmentEvidence: true,
+  externalBaseUrl: '',
+  includeReleaseDoctor: true,
+} satisfies OrderProviderCertificationCommandOptions;
+
+const quoteOrderShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const orderBoolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
+const uniqueOrderCertificationInputs = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
+const hasOrderProviderCertificationSelector = (options: OrderProviderCertificationCommandOptions): boolean => (
+  options.certifyPayment ||
+  options.certifyTax ||
+  options.certifyShipping ||
+  options.certifySubscriptions ||
+  options.certifyWebhooks
+);
+
+const ORDER_PROVIDER_CERTIFICATION_PAYMENT_INPUTS: Record<OrderProviderCertificationPaymentProvider, string[]> = {
+  auto: [
+    'at least one live payment/refund provider credential',
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+    'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+    'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+    'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN',
+    'BACKY_ADYEN_API_KEY/BACKY_ADYEN_MERCHANT_ACCOUNT or ADYEN_API_KEY/ADYEN_MERCHANT_ACCOUNT',
+    'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY',
+    'BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET',
+  ],
+  stripe: ['BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY'],
+  paypal: ['BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN'],
+  paddle: ['BACKY_PADDLE_API_KEY or PADDLE_API_KEY'],
+  square: ['BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN'],
+  adyen: ['BACKY_ADYEN_API_KEY/BACKY_ADYEN_MERCHANT_ACCOUNT or ADYEN_API_KEY/ADYEN_MERCHANT_ACCOUNT'],
+  mollie: ['BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY'],
+  razorpay: ['BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET'],
+};
+const ORDER_PROVIDER_CERTIFICATION_TAX_INPUTS: Record<OrderProviderCertificationTaxProvider, string[]> = {
+  auto: [
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+    'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+    'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',
+    'BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL',
+  ],
+  stripe: ['BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY'],
+  taxjar: ['BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY'],
+  avalara: ['BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code'],
+  http: ['BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL'],
+};
+const ORDER_PROVIDER_CERTIFICATION_SHIPPING_INPUTS: Record<OrderProviderCertificationShippingProvider, string[]> = {
+  auto: [
+    'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+    'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+    'BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL',
+  ],
+  easypost: ['BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY'],
+  shippo: ['BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY'],
+  http: ['BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL'],
+};
+const ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_INPUTS: Record<OrderProviderCertificationSubscriptionProvider, string[]> = {
+  ...ORDER_PROVIDER_CERTIFICATION_PAYMENT_INPUTS,
+  http: ['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL'],
+};
+const ORDER_PROVIDER_CERTIFICATION_WEBHOOK_INPUTS: Record<OrderProviderCertificationWebhookProvider, string[]> = {
+  auto: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'payment-provider webhook signing credentials when provider-specific'],
+  stripe: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY'],
+  paypal: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN'],
+  paddle: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'BACKY_PADDLE_API_KEY or PADDLE_API_KEY'],
+  square: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN'],
+  adyen: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'BACKY_ADYEN_API_KEY/BACKY_ADYEN_MERCHANT_ACCOUNT or ADYEN_API_KEY/ADYEN_MERCHANT_ACCOUNT'],
+  mollie: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY'],
+  razorpay: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET', 'BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET'],
+  generic: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'],
+};
+
+const buildOrderProviderCertificationCommand = (options: OrderProviderCertificationCommandOptions): string => {
+  const selectedSelector = hasOrderProviderCertificationSelector(options);
+  const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/+$/, '');
+  const envEntries: Array<[string, string]> = [
+    ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', orderBoolEnv(selectedSelector)],
+    ['BACKY_COMMERCE_CERTIFY_PAYMENT', orderBoolEnv(options.certifyPayment)],
+    ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', options.paymentProvider],
+    ['BACKY_COMMERCE_CERTIFY_TAX', orderBoolEnv(options.certifyTax)],
+    ['BACKY_COMMERCE_CERTIFY_TAX_PROVIDER', options.taxProvider],
+    ['BACKY_COMMERCE_CERTIFY_SHIPPING', orderBoolEnv(options.certifyShipping)],
+    ['BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER', options.shippingProvider],
+    ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', orderBoolEnv(options.certifySubscriptions)],
+    ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER', options.subscriptionProvider],
+    ['BACKY_COMMERCE_CERTIFY_WEBHOOKS', orderBoolEnv(options.certifyWebhooks)],
+    ['BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER', options.webhookProvider],
+  ];
+
+  if (options.includeReleaseDoctor) {
+    envEntries.unshift(['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1']);
+  }
+
+  if (externalBaseUrl) {
+    envEntries.push(
+      ['BACKY_COMMERCE_CERTIFICATION_BASE_URL', externalBaseUrl],
+      ['BACKY_ADMIN_API_KEY', '<admin-api-key>'],
+    );
+  }
+
+  if (options.certifyTax && options.taxProvider === 'http') {
+    envEntries.push(['BACKY_COMMERCE_TAX_PROVIDER_URL', '<https-tax-provider-url>']);
+  }
+  if (options.certifyShipping && options.shippingProvider === 'http') {
+    envEntries.push(['BACKY_COMMERCE_SHIPPING_PROVIDER_URL', '<https-shipping-provider-url>']);
+  }
+  if (options.certifySubscriptions && options.subscriptionProvider === 'http') {
+    envEntries.push(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', '<https-subscription-action-url>']);
+  }
+
+  return [
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteOrderShellValue(value)}`),
+    ...(options.includeFulfillmentEvidence ? [
+      '# Configure Settings Commerce fulfillmentProvider=http and fulfillmentProviderUrl before attaching warehouse/3PL dispatch evidence.',
+    ] : []),
+    '',
+    ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
+    selectedSelector ? 'npm run ci:commerce-provider-certification' : '# Select at least one commerce provider selector before running certification.',
+  ].join('\n');
+};
+
+const buildOrderProviderCertificationRequiredInputs = (options: OrderProviderCertificationCommandOptions): string[] => {
+  const externalBaseUrl = options.externalBaseUrl.trim();
+  return uniqueOrderCertificationInputs([
+    hasOrderProviderCertificationSelector(options) ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+    options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT=1' : '',
+    options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER' : '',
+    ...(options.certifyPayment ? ORDER_PROVIDER_CERTIFICATION_PAYMENT_INPUTS[options.paymentProvider] : []),
+    options.certifyTax ? 'BACKY_COMMERCE_CERTIFY_TAX=1' : '',
+    options.certifyTax ? 'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER' : '',
+    ...(options.certifyTax ? ORDER_PROVIDER_CERTIFICATION_TAX_INPUTS[options.taxProvider] : []),
+    options.certifyShipping ? 'BACKY_COMMERCE_CERTIFY_SHIPPING=1' : '',
+    options.certifyShipping ? 'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER' : '',
+    ...(options.certifyShipping ? ORDER_PROVIDER_CERTIFICATION_SHIPPING_INPUTS[options.shippingProvider] : []),
+    options.certifySubscriptions ? 'BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS=1' : '',
+    options.certifySubscriptions ? 'BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER' : '',
+    ...(options.certifySubscriptions ? ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_INPUTS[options.subscriptionProvider] : []),
+    options.certifyWebhooks ? 'BACKY_COMMERCE_CERTIFY_WEBHOOKS=1' : '',
+    options.certifyWebhooks ? 'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER' : '',
+    ...(options.certifyWebhooks ? ORDER_PROVIDER_CERTIFICATION_WEBHOOK_INPUTS[options.webhookProvider] : []),
+    options.includeFulfillmentEvidence ? 'Settings commerce fulfillmentProvider=http plus fulfillmentProviderUrl' : '',
+    externalBaseUrl ? 'BACKY_COMMERCE_CERTIFICATION_BASE_URL' : '',
+    externalBaseUrl ? 'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY' : '',
+    options.includeReleaseDoctor ? 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1' : '',
+  ]);
+};
+
+const ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
+  command: buildOrderProviderCertificationCommand(DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
+  providerChoices: {
+    payment: ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.map((option) => option.value),
+    tax: ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.map((option) => option.value),
+    shipping: ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS.map((option) => option.value),
+    subscription: ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS.map((option) => option.value),
+    webhook: ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS.map((option) => option.value),
+  },
+  requiredInputs: buildOrderProviderCertificationRequiredInputs(DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
+  targetInputs: [
+    'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
+  ],
+  secretHandling: 'Provider credential values stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
+};
+
 const EMPTY_ORDER_FORM: OrderFormState = {
   orderNumber: '',
   customerName: '',
@@ -836,6 +1066,9 @@ function OrdersRoute() {
   const [cronReadinessError, setCronReadinessError] = useState<string | null>(null);
   const [commerceSettings, setCommerceSettings] = useState<CommerceProviderSettings | null>(null);
   const [runtimeCommerce, setRuntimeCommerce] = useState<RuntimeCommerceSettings | null>(null);
+  const [providerCertificationCommandOptions, setProviderCertificationCommandOptions] = useState<OrderProviderCertificationCommandOptions>(
+    DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS,
+  );
   const [isProviderReadinessLoading, setIsProviderReadinessLoading] = useState(false);
   const [providerReadinessError, setProviderReadinessError] = useState<string | null>(null);
   const [orderAnalytics, setOrderAnalytics] = useState<OrderAnalytics | null>(null);
@@ -866,6 +1099,21 @@ function OrdersRoute() {
   const canConfigureOrders = canConfigureCommerce && canEditCollections;
   const canExportOrders = canViewCommerce && canExportCollections;
   const canDeleteOrders = canDeleteCommerce && canDeleteCollections;
+  const providerCertificationHasSelectedSelector = hasOrderProviderCertificationSelector(providerCertificationCommandOptions);
+  const providerCertificationCommand = useMemo(
+    () => buildOrderProviderCertificationCommand(providerCertificationCommandOptions),
+    [providerCertificationCommandOptions],
+  );
+  const providerCertificationRequiredInputs = useMemo(
+    () => buildOrderProviderCertificationRequiredInputs(providerCertificationCommandOptions),
+    [providerCertificationCommandOptions],
+  );
+  const updateProviderCertificationCommandOptions = (next: Partial<OrderProviderCertificationCommandOptions>) => {
+    setProviderCertificationCommandOptions((current) => ({
+      ...current,
+      ...next,
+    }));
+  };
   const viewPermissionTitle = canViewOrders
     ? undefined
     : adminPermissionReason(permissionMatrix, currentAdmin, !canViewCommerce ? 'commerce.view' : 'collections.view', ORDER_PERMISSION_ROLE_DEFAULTS);
@@ -1295,6 +1543,11 @@ function OrdersRoute() {
     localMockGate: 'ci:commerce-provider-smoke',
     liveCertificationGate: 'ci:commerce-provider-certification',
     operatorGate: ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+    operatorCommandTemplate: {
+      ...ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+      command: providerCertificationCommand,
+      requiredInputs: providerCertificationRequiredInputs,
+    },
     preflightGates: [...ORDER_PROVIDER_CERTIFICATION_PREFLIGHT_GATES],
     providerSelectors: [...ORDER_PROVIDER_CERTIFICATION_SELECTORS],
     evidenceExpectations: [...ORDER_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS],
@@ -1349,6 +1602,8 @@ function OrdersRoute() {
     orderAnalytics?.providerOperations,
     orderReadiness.score,
     ordersApiReady,
+    providerCertificationCommand,
+    providerCertificationRequiredInputs,
     providerReadinessChecks,
     providerReadinessReadyCount,
     providerRuntimeEvidence,
@@ -2843,10 +3098,10 @@ function OrdersRoute() {
     }
 
     try {
-      await navigator.clipboard.writeText(providerCertificationSummary.operatorGate);
+      await navigator.clipboard.writeText(providerCertificationCommand);
       setNotice('Orders provider certification CI command copied.');
     } catch {
-      setNotice(providerCertificationSummary.operatorGate);
+      setNotice(providerCertificationCommand);
     }
   };
 
@@ -3513,11 +3768,242 @@ function OrdersRoute() {
                             <li key={expectation}>{expectation}</li>
                           ))}
                         </ul>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-runtime-evidence">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+	                      </div>
+	                    </div>
+	                  </div>
+	                  <div className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="orders-provider-certification-command-builder">
+	                    <div className="flex flex-wrap items-start justify-between gap-3">
+	                      <div>
+	                        <div className="font-medium text-foreground">Order certification command builder</div>
+	                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+	                          Select the live order-operation families for this run. The command keeps provider credentials in CI or shell environment variables and only writes non-secret selector aliases.
+	                        </p>
+	                      </div>
+	                      <Button
+	                        size="sm"
+	                        variant="outline"
+	                        onClick={() => void copyProviderCertificationOperatorGate()}
+	                        disabled={isOrdersAccessBusy || !canExportOrders || !providerCertificationHasSelectedSelector}
+	                        title={!canExportOrders ? exportPermissionTitle : !providerCertificationHasSelectedSelector ? 'Select at least one commerce provider selector' : undefined}
+	                        iconStart={<Copy className="size-4" />}
+	                        data-testid="orders-provider-certification-command-builder-copy-button"
+	                      >
+	                        Copy guarded command
+	                      </Button>
+	                    </div>
+	                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+	                      {([
+	                        {
+	                          key: 'certifyPayment',
+	                          label: 'Payment/refunds',
+	                          env: 'BACKY_COMMERCE_CERTIFY_PAYMENT',
+	                          testId: 'orders-provider-certification-payment-toggle',
+	                        },
+	                        {
+	                          key: 'certifyTax',
+	                          label: 'Tax quotes',
+	                          env: 'BACKY_COMMERCE_CERTIFY_TAX',
+	                          testId: 'orders-provider-certification-tax-toggle',
+	                        },
+	                        {
+	                          key: 'certifyShipping',
+	                          label: 'Shipping/labels',
+	                          env: 'BACKY_COMMERCE_CERTIFY_SHIPPING',
+	                          testId: 'orders-provider-certification-shipping-toggle',
+	                        },
+	                        {
+	                          key: 'certifySubscriptions',
+	                          label: 'Subscriptions',
+	                          env: 'BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS',
+	                          testId: 'orders-provider-certification-subscriptions-toggle',
+	                        },
+	                        {
+	                          key: 'certifyWebhooks',
+	                          label: 'Webhooks',
+	                          env: 'BACKY_COMMERCE_CERTIFY_WEBHOOKS',
+	                          testId: 'orders-provider-certification-webhooks-toggle',
+	                        },
+	                        {
+	                          key: 'includeFulfillmentEvidence',
+	                          label: 'Fulfillment',
+	                          env: 'Settings fulfillmentProviderUrl',
+	                          testId: 'orders-provider-certification-fulfillment-toggle',
+	                        },
+	                      ] satisfies Array<{
+	                        key: 'certifyPayment' | 'certifyTax' | 'certifyShipping' | 'certifySubscriptions' | 'certifyWebhooks' | 'includeFulfillmentEvidence';
+	                        label: string;
+	                        env: string;
+	                        testId: string;
+	                      }>).map((item) => (
+	                        <label key={item.key} className="flex min-h-[88px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+	                          <input
+	                            type="checkbox"
+	                            checked={providerCertificationCommandOptions[item.key]}
+	                            onChange={(event) => updateProviderCertificationCommandOptions({
+	                              [item.key]: event.target.checked,
+	                            } as Partial<OrderProviderCertificationCommandOptions>)}
+	                            disabled={isOrdersAccessBusy}
+	                            className="mt-1 size-4 rounded border-border"
+	                            data-testid={item.testId}
+	                          />
+	                          <span>
+	                            <span className="block font-semibold text-foreground">{item.label}</span>
+	                            <span className="mt-1 block break-words font-mono text-[10px] leading-4 text-muted-foreground">{item.env}</span>
+	                          </span>
+	                        </label>
+	                      ))}
+	                    </div>
+	                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+	                      <label className="text-xs">
+	                        <span className="font-semibold text-foreground">Payment/refund provider</span>
+	                        <select
+	                          value={providerCertificationCommandOptions.paymentProvider}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({
+	                            paymentProvider: event.target.value as OrderProviderCertificationPaymentProvider,
+	                          })}
+	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyPayment}
+	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+	                          data-testid="orders-provider-certification-payment-provider-select"
+	                        >
+	                          {ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.map((option) => (
+	                            <option key={option.value} value={option.value}>{option.label}</option>
+	                          ))}
+	                        </select>
+	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+	                          {ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.find((option) => option.value === providerCertificationCommandOptions.paymentProvider)?.description}
+	                        </span>
+	                      </label>
+	                      <label className="text-xs">
+	                        <span className="font-semibold text-foreground">Tax provider</span>
+	                        <select
+	                          value={providerCertificationCommandOptions.taxProvider}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({
+	                            taxProvider: event.target.value as OrderProviderCertificationTaxProvider,
+	                          })}
+	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyTax}
+	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+	                          data-testid="orders-provider-certification-tax-provider-select"
+	                        >
+	                          {ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.map((option) => (
+	                            <option key={option.value} value={option.value}>{option.label}</option>
+	                          ))}
+	                        </select>
+	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+	                          {ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.find((option) => option.value === providerCertificationCommandOptions.taxProvider)?.description}
+	                        </span>
+	                      </label>
+	                      <label className="text-xs">
+	                        <span className="font-semibold text-foreground">Shipping provider</span>
+	                        <select
+	                          value={providerCertificationCommandOptions.shippingProvider}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({
+	                            shippingProvider: event.target.value as OrderProviderCertificationShippingProvider,
+	                          })}
+	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyShipping}
+	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+	                          data-testid="orders-provider-certification-shipping-provider-select"
+	                        >
+	                          {ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS.map((option) => (
+	                            <option key={option.value} value={option.value}>{option.label}</option>
+	                          ))}
+	                        </select>
+	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+	                          {ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS.find((option) => option.value === providerCertificationCommandOptions.shippingProvider)?.description}
+	                        </span>
+	                      </label>
+	                      <label className="text-xs">
+	                        <span className="font-semibold text-foreground">Subscription provider</span>
+	                        <select
+	                          value={providerCertificationCommandOptions.subscriptionProvider}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({
+	                            subscriptionProvider: event.target.value as OrderProviderCertificationSubscriptionProvider,
+	                          })}
+	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifySubscriptions}
+	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+	                          data-testid="orders-provider-certification-subscription-provider-select"
+	                        >
+	                          {ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS.map((option) => (
+	                            <option key={option.value} value={option.value}>{option.label}</option>
+	                          ))}
+	                        </select>
+	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+	                          {ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS.find((option) => option.value === providerCertificationCommandOptions.subscriptionProvider)?.description}
+	                        </span>
+	                      </label>
+	                      <label className="text-xs">
+	                        <span className="font-semibold text-foreground">Webhook provider</span>
+	                        <select
+	                          value={providerCertificationCommandOptions.webhookProvider}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({
+	                            webhookProvider: event.target.value as OrderProviderCertificationWebhookProvider,
+	                          })}
+	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyWebhooks}
+	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+	                          data-testid="orders-provider-certification-webhook-provider-select"
+	                        >
+	                          {ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS.map((option) => (
+	                            <option key={option.value} value={option.value}>{option.label}</option>
+	                          ))}
+	                        </select>
+	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+	                          {ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS.find((option) => option.value === providerCertificationCommandOptions.webhookProvider)?.description}
+	                        </span>
+	                      </label>
+	                    </div>
+	                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_260px]">
+	                      <label className="text-xs">
+	                        <span className="font-semibold text-foreground">External target URL</span>
+	                        <input
+	                          type="url"
+	                          value={providerCertificationCommandOptions.externalBaseUrl}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({ externalBaseUrl: event.target.value })}
+	                          disabled={isOrdersAccessBusy}
+	                          placeholder="https://backy.example.com"
+	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+	                          data-testid="orders-provider-certification-external-target-input"
+	                        />
+	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+	                          Optional deployed target. External runs require BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY.
+	                        </span>
+	                      </label>
+	                      <label className="flex min-h-[72px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+	                        <input
+	                          type="checkbox"
+	                          checked={providerCertificationCommandOptions.includeReleaseDoctor}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({ includeReleaseDoctor: event.target.checked })}
+	                          disabled={isOrdersAccessBusy}
+	                          className="mt-1 size-4 rounded border-border"
+	                          data-testid="orders-provider-certification-doctor-toggle"
+	                        />
+	                        <span>
+	                          <span className="block font-semibold text-foreground">Release doctor</span>
+	                          <span className="mt-1 block break-words font-mono text-[10px] leading-4 text-muted-foreground">
+	                            BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1
+	                          </span>
+	                        </span>
+	                      </label>
+	                    </div>
+	                    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+	                      <div>
+	                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Generated command</div>
+	                        <pre className="mt-1 max-h-72 overflow-auto rounded-md border border-border bg-background p-3 font-mono text-[11px] leading-5 text-foreground" data-testid="orders-provider-certification-command">
+	                          {providerCertificationCommand}
+	                        </pre>
+	                      </div>
+	                      <div>
+	                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Selected required inputs</div>
+	                        <div className="mt-1 flex max-h-72 flex-wrap gap-1 overflow-auto rounded-md border border-border bg-background p-3" data-testid="orders-provider-certification-required-inputs">
+	                          {providerCertificationRequiredInputs.map((input) => (
+	                            <span key={input} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+	                              {input}
+	                            </span>
+	                          ))}
+	                        </div>
+	                      </div>
+	                    </div>
+	                  </div>
+	                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-runtime-evidence">
+	                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="font-medium text-foreground">Runtime evidence</div>
                       <span className={cn(
                         'rounded-full px-2 py-0.5 text-[11px] font-semibold',

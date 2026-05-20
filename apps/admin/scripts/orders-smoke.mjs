@@ -159,9 +159,11 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
-    source.includes('data-testid="orders-provider-certification-download-button"') &&
+      source.includes('data-testid="orders-provider-certification-download-button"') &&
       source.includes('data-testid="orders-provider-certification-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-command-copy-button"') &&
+      source.includes('data-testid="orders-provider-certification-command-builder"') &&
+      source.includes('data-testid="orders-provider-certification-command-builder-copy-button"') &&
       source.includes('providerCertificationHandoffText') &&
       source.includes('orderEvidence') &&
       source.includes('endpointEvidence') &&
@@ -177,6 +179,14 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('ci:commerce-provider-smoke') &&
       source.includes('ci:commerce-provider-certification') &&
       source.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification') &&
+      source.includes('buildOrderProviderCertificationCommand') &&
+      source.includes('operatorCommandTemplate') &&
+      source.includes('orders-provider-certification-payment-toggle') &&
+      source.includes('data-testid="orders-provider-certification-tax-provider-select"') &&
+      source.includes('data-testid="orders-provider-certification-external-target-input"') &&
+      source.includes('data-testid="orders-provider-certification-doctor-toggle"') &&
+      source.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
+      source.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
       source.includes('npm run test:commerce-provider-certification-preflight-contract') &&
       source.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification') &&
       source.includes('data-testid="orders-provider-runtime-evidence"') &&
@@ -2022,8 +2032,16 @@ const assertOrdersLayout = async (client) => {
         Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-command-copy-button"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder-copy-button"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-payment-toggle"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-tax-provider-select"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-command"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-runbook"]')) &&
         document.body?.innerText?.includes('Live provider certification') &&
+        document.body?.innerText?.includes('Order certification command builder') &&
+        document.body?.innerText?.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
+        document.body?.innerText?.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
         document.body?.innerText?.includes('Copy CI command') &&
         document.body?.innerText?.includes('Live provider runbook') &&
         document.body?.innerText?.includes('Download provider JSON'),
