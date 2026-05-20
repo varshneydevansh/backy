@@ -53,6 +53,17 @@ const assertCommentsRouteSourceContract = () => {
       source.includes('Block'),
     'Comments moderation queue must expose the promised selected-comment bulk Block action',
   );
+  assert(
+    source.includes('const loadCommentPermissions = useCallback(() => {') &&
+      source.includes('data-testid="comments-permission-state"') &&
+      source.includes('data-testid="comments-rbac-permission-state"') &&
+      source.includes('Comment permissions could not be verified') &&
+      source.includes('aria-label="Retry loading comment permissions"') &&
+      source.includes('Retry permissions') &&
+      source.includes('to="/users"') &&
+      source.includes('Review users'),
+    'Comments permission states must expose retryable permission recovery and user-access handoff',
+  );
 };
 
 const requestApi = async (endpoint, options = {}) => {

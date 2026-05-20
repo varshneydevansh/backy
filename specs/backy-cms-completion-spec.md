@@ -209,7 +209,7 @@ Legend:
 
 #### `apps/public/src/components/PageRenderer.tsx` (form handling)
 - ✅ configurable form method/action/redirect metadata now read from element props
-- ✅ Forms/comments include backend-backed moderation, selected-submission bulk review, delivery, analytics, RBAC, repository coverage, and public/admin API contracts.
+- ✅ Forms/comments include backend-backed moderation, selected-submission bulk review, delivery, analytics, retryable permission recovery, RBAC, repository coverage, and public/admin API contracts.
 - ⚠️ Remaining Forms risk is executing the configured Supabase/Postgres smoke against a migrated disposable database.
 
 ---
@@ -460,6 +460,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/media` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/users/new` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/contacts` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
+  - `/comments` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/collections` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, permission-contract retry actions, and filtered full-result record bulk selection summaries.
   - `/forms` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
   - `/products` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.

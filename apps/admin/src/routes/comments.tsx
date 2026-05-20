@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   CheckCircle2,
@@ -918,7 +918,7 @@ function CommentsRoute() {
     navigate({ to: '/comments', search: normalized, replace: true });
   };
 
-  useEffect(() => {
+  const loadCommentPermissions = useCallback(() => {
     let cancelled = false;
     setPermissionError(null);
 
@@ -954,6 +954,8 @@ function CommentsRoute() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadCommentPermissions(), [loadCommentPermissions]);
 
   const refreshBlocklist = async () => {
     if (!canManageComments) {
@@ -1682,8 +1684,40 @@ function CommentsRoute() {
         title="Comments unavailable"
         description={viewPermissionTitle || 'Your account cannot view comments.'}
       >
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant comments.view access.'}
+        <div
+          role="alert"
+          data-testid="comments-permission-state"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Comment permissions could not be verified</p>
+                <p className="mt-1 leading-6">
+                  {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant comments.view access.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadCommentPermissions}
+                disabled={isPermissionsLoading}
+                aria-label="Retry loading comment permissions"
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={cn('size-3.5', isPermissionsLoading && 'animate-spin')} />
+                Retry permissions
+              </button>
+              <Link
+                to="/users"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+              >
+                Review users
+              </Link>
+            </div>
+          </div>
         </div>
       </PageShell>
     );
@@ -1728,8 +1762,38 @@ function CommentsRoute() {
         </div>
       )}
       {permissionError && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError}
+        <div
+          role="alert"
+          data-testid="comments-rbac-permission-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Comment permissions could not be verified</p>
+                <p className="mt-1 leading-6">{permissionError}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadCommentPermissions}
+                disabled={isPermissionsLoading}
+                aria-label="Retry loading comment permissions"
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={cn('size-3.5', isPermissionsLoading && 'animate-spin')} />
+                Retry permissions
+              </button>
+              <Link
+                to="/users"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+              >
+                Review users
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 
