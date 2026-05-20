@@ -5520,7 +5520,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "object",
                   additionalProperties: true,
                   description:
-                    "Optional per-submit contact sharing override for generated form integrations.",
+                    "Optional contact-share mapping override for generated form integrations.",
                   properties: {
                     enabled: { type: "boolean" },
                     nameField: { type: "string" },

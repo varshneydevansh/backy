@@ -54,6 +54,20 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes("schemaVersion: 'backy.form-template-pack.v1'"), 'Forms template export must advertise backy.form-template-pack.v1');
   assert(source.includes('templateExport'), 'Forms handoff manifest must summarize template export metadata');
   assert(source.includes('-backy-form-template-pack.json'), 'Forms template export must download a named JSON template pack');
+  assert(source.includes('data-testid="forms-launch-readiness"'), 'Forms selected-form workspace must render the launch readiness handoff');
+  assert(
+    source.includes("schemaVersion: 'backy.form-launch-readiness.v1'") &&
+      source.includes("schemaVersion: 'backy.form-launch-action-plan.v1'") &&
+      source.includes('selectedFormLaunchReadinessText') &&
+      source.includes('selectedFormLaunchReadiness') &&
+      source.includes('buildFormLaunchReadinessHandoff') &&
+      source.includes('data-testid="forms-launch-readiness-copy-button"') &&
+      source.includes('data-testid="forms-launch-readiness-action-plan"') &&
+      source.includes("selectedFormLaunchReadinessText, 'Form launch readiness handoff'") &&
+      source.includes('includesSubmissionValues: false') &&
+      source.includes('customerSafeFieldsOnly'),
+    'Forms page must expose a copyable selected-form launch readiness manifest',
+  );
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Forms route must use the shared EmptyState component');
   assert(source.includes('data-testid="forms-error-state"') && source.includes('Forms workspace needs attention'), 'Forms route must expose a labelled backend error state');
   assert(source.includes('aria-label="Retry loading forms"') && source.includes('Clear form filters'), 'Forms backend error state must expose retry and filter recovery actions');
@@ -2418,13 +2432,22 @@ const assertLayout = async (client) => {
       Boolean(document.querySelector('[data-testid="forms-persistence-certification-download-button"]')) &&
       Boolean(document.querySelector('[data-testid="forms-persistence-certification-copy-button"]')) &&
       document.body?.innerText?.includes('Download DB JSON'),
+    hasLaunchReadiness: Boolean(document.querySelector('[data-testid="forms-launch-readiness"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-launch-readiness-copy-button"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-launch-readiness-action-plan"]')) &&
+      document.body?.innerText?.includes('Form launch readiness') &&
+      document.body?.innerText?.includes('backy.form-launch-readiness.v1') &&
+      document.body?.innerText?.includes('Copy launch JSON') &&
+      document.body?.innerText?.includes('Selected form') &&
+      document.body?.innerText?.includes('Public API') &&
+      document.body?.innerText?.includes('Next action'),
     hasDeliveryPanel: Boolean(document.querySelector('[data-testid="forms-webhook-delivery-panel"]')) &&
       document.body?.innerText?.includes('Webhook delivery'),
     hasTemplates: document.body?.innerText?.includes('Form templates') || false,
     hasInbox: document.body?.innerText?.includes('Submission inbox') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasLaunchReadiness && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

@@ -73,6 +73,106 @@ type FormStateFilter = 'all' | 'active' | 'inactive';
 type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
 type FormReadinessFilter = 'all' | 'ready' | 'needs-work';
 type FormsPermissionKey = 'forms.view' | 'forms.create' | 'forms.edit' | 'forms.manage' | 'forms.export' | 'forms.delete' | 'collections.view' | 'activity.export';
+type FormLaunchReadinessStatus = 'ready' | 'attention' | 'blocked';
+
+interface FormReadinessSummary {
+  score: number;
+  checks: Array<{
+    label: string;
+    detail: string;
+    ready: boolean;
+  }>;
+  workflow: Array<{
+    label: string;
+    detail: string;
+  }>;
+}
+
+interface FormLaunchReadinessCheck {
+  key: string;
+  label: string;
+  status: FormLaunchReadinessStatus;
+  detail: string;
+}
+
+interface FormLaunchActionPlan {
+  schemaVersion: 'backy.form-launch-action-plan.v1';
+  nextAction: 'select-form' | 'activate-form' | 'add-fields' | 'add-identity-field' | 'add-spam-guard' | 'route-destination' | 'configure-delivery' | 'certify-persistence' | 'launch-ready';
+  recommendation: string;
+  blockers: string[];
+  attention: string[];
+}
+
+interface FormLaunchReadinessHandoff {
+  schemaVersion: 'backy.form-launch-readiness.v1';
+  generatedAt: string;
+  status: FormLaunchReadinessStatus;
+  score: number;
+  selectedSiteId: string;
+  form: {
+    id: string;
+    name: string;
+    title: string;
+    isActive: boolean;
+    audience: FormDefinition['audience'];
+    source: Exclude<FormSourceFilter, 'all'>;
+    fieldCount: number;
+    requiredFieldCount: number;
+    moderationMode: FormDefinition['moderationMode'];
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  endpoints: {
+    definition: string;
+    submit: string;
+    contacts: string;
+  };
+  routing: {
+    contactShareEnabled: boolean;
+    collectionWriteEnabled: boolean;
+    collectionId: string;
+    notificationEmailConfigured: boolean;
+    notificationWebhookConfigured: boolean;
+  };
+  delivery: {
+    total: number;
+    succeeded: number;
+    failed: number;
+    queued: number;
+  };
+  consent: {
+    fields: number;
+    records: number;
+    granted: number;
+    missing: number;
+  };
+  persistenceCertification: {
+    schemaVersion: FormsPersistenceCertification['schemaVersion'];
+    status: FormsPersistenceCertification['status'];
+    operatorGate: string;
+    runtimeReady: boolean;
+    missingInputs: string[];
+  };
+  privacy: {
+    includesSubmissionValues: boolean;
+    customerSafeFieldsOnly: boolean;
+    excludedFields: string[];
+  };
+  samplePayload: Record<string, unknown> | null;
+  checks: FormLaunchReadinessCheck[];
+  actionPlan: FormLaunchActionPlan;
+  nextSteps: string[];
+}
+type FormPersistenceCertificationHandoff = Omit<FormsPersistenceCertification, 'runtime' | 'checks'> & {
+  runtime: FormsPersistenceCertification['runtime'] | null;
+  checks: Array<{
+    key: string;
+    title: string;
+    gate: string;
+    status: string;
+    detail: string;
+  }>;
+};
 
 const FORMS_PERMISSION_ROLE_DEFAULTS: Record<FormsPermissionKey, Array<AuthUser['role']>> = {
   'forms.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -739,7 +839,7 @@ function FormsRoute() {
       : '',
     [selectedForm, selectedFormSamplePayloadText, selectedFormSubmitUrl],
   );
-  const selectedFormReadiness = useMemo(() => {
+  const selectedFormReadiness = useMemo<FormReadinessSummary>(() => {
     if (!selectedForm) {
       return {
         score: 0,
@@ -1017,7 +1117,7 @@ function FormsRoute() {
   const selectedFormContactsUrl = selectedForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/contacts?limit=100`
     : '';
-  const formPersistenceCertification = useMemo(() => ({
+  const formPersistenceCertification = useMemo<FormPersistenceCertificationHandoff>(() => ({
     schemaVersion: 'backy.forms-persistence-certification.v1',
     status: 'external-database-gate',
     selectedSiteId: activeSiteId,
@@ -1083,6 +1183,31 @@ function FormsRoute() {
       settings: buildFrontendFormTemplateSettings(template, frontendDesign, blueprint.frontendFieldKeyMap),
     })),
   }), [activeSite?.name, activeSite?.slug, activeSiteId, frontendDesign, frontendTemplateBlueprints]);
+  const selectedFormLaunchReadiness = useMemo<FormLaunchReadinessHandoff>(() => buildFormLaunchReadinessHandoff({
+    activeSiteId,
+    form: selectedForm,
+    readiness: selectedFormReadiness,
+    persistenceCertification: formPersistenceCertification,
+    definitionUrl: selectedFormDefinitionUrl,
+    submitUrl: selectedFormSubmitUrl,
+    contactsUrl: selectedFormContactsUrl,
+    analytics: selectedFormAnalytics,
+    deliveryMetrics: selectedDeliveryMetrics,
+    consentMetrics: selectedConsentMetrics,
+    samplePayload: selectedFormSamplePayload,
+  }), [
+    activeSiteId,
+    formPersistenceCertification,
+    selectedConsentMetrics,
+    selectedDeliveryMetrics,
+    selectedForm,
+    selectedFormAnalytics,
+    selectedFormContactsUrl,
+    selectedFormDefinitionUrl,
+    selectedFormReadiness,
+    selectedFormSamplePayload,
+    selectedFormSubmitUrl,
+  ]);
   const formsHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1132,6 +1257,7 @@ function FormsRoute() {
       remainingAccountMilestone: 'Authenticated member accounts, password/session lifecycle, and role assignment are still handled by the Users/Auth roadmap.',
     },
     persistenceCertification: formPersistenceCertification,
+    selectedFormLaunchReadiness,
     templateExport: {
       schemaVersion: formsTemplatePack.schemaVersion,
       format: formsTemplatePack.export.format,
@@ -1247,10 +1373,12 @@ function FormsRoute() {
     selectedFormContactsUrl,
     selectedFormCurlExample,
     selectedFormDefinitionUrl,
+    selectedFormLaunchReadiness,
     selectedFormSamplePayload,
     selectedFormSubmitUrl,
   ]);
   const formsTemplatePackText = useMemo(() => JSON.stringify(formsTemplatePack, null, 2), [formsTemplatePack]);
+  const selectedFormLaunchReadinessText = useMemo(() => JSON.stringify(selectedFormLaunchReadiness, null, 2), [selectedFormLaunchReadiness]);
   const formPersistenceOperatorGate = formPersistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE;
   const formsPostgresCertificationCommand = useMemo(
     () => buildFormsPostgresCertificationCommand(formsPostgresCommandOptions),
@@ -4811,6 +4939,105 @@ function FormsRoute() {
                     </div>
                   </div>
 
+                  <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4" data-testid="forms-launch-readiness">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-semibold">Form launch readiness</h3>
+                          <span className={cn(
+                            'rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
+                            selectedFormLaunchReadiness.status === 'ready'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : selectedFormLaunchReadiness.status === 'attention'
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-destructive/10 text-destructive',
+                          )}
+                          >
+                            {selectedFormLaunchReadiness.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                          Copy the selected form contract for custom frontends, generated pages, embed blocks, and launch reviews without including private submission values.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                          {selectedFormLaunchReadiness.schemaVersion}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyFormApiText(selectedFormLaunchReadinessText, 'Form launch readiness handoff')}
+                          disabled={isFormsBusy || !canExportForms}
+                          title={!canExportForms ? exportPermissionTitle : undefined}
+                          iconStart={<Copy className="size-4" />}
+                          data-testid="forms-launch-readiness-copy-button"
+                        >
+                          Copy launch JSON
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 md:grid-cols-4">
+                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                        <div className="text-muted-foreground">Selected form</div>
+                        <div className="mt-1 truncate font-semibold text-foreground">
+                          {selectedFormLaunchReadiness.form?.title || 'No form selected'}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                        <div className="text-muted-foreground">Public API</div>
+                        <div className="mt-1 font-semibold text-foreground">
+                          {selectedFormLaunchReadiness.endpoints.definition ? 'Definition + submit' : 'Unavailable'}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                        <div className="text-muted-foreground">Routing</div>
+                        <div className="mt-1 truncate font-semibold text-foreground">
+                          {[
+                            selectedFormLaunchReadiness.routing.contactShareEnabled ? 'contacts' : null,
+                            selectedFormLaunchReadiness.routing.collectionWriteEnabled ? 'collections' : null,
+                            selectedFormLaunchReadiness.routing.notificationWebhookConfigured ? 'webhook' : null,
+                            selectedFormLaunchReadiness.routing.notificationEmailConfigured ? 'email' : null,
+                          ].filter(Boolean).join(' + ') || 'inbox only'}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                        <div className="text-muted-foreground">Launch score</div>
+                        <div className="mt-1 font-semibold text-foreground">{selectedFormLaunchReadiness.score}%</div>
+                      </div>
+                    </div>
+
+                    <div
+                      className={cn(
+                        'mt-3 rounded-lg border px-3 py-2 text-xs',
+                        selectedFormLaunchReadiness.actionPlan.blockers.length
+                          ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                          : selectedFormLaunchReadiness.actionPlan.attention.length
+                            ? 'border-amber-200 bg-amber-50 text-amber-900'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-800',
+                      )}
+                      data-testid="forms-launch-readiness-action-plan"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold">Next action: {selectedFormLaunchReadiness.actionPlan.nextAction.replace(/-/g, ' ')}</span>
+                        <span className="font-mono text-[11px]">{selectedFormLaunchReadiness.actionPlan.schemaVersion}</span>
+                      </div>
+                      <div className="mt-1 leading-5">{selectedFormLaunchReadiness.actionPlan.recommendation}</div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {selectedFormLaunchReadiness.checks.map((check) => (
+                        <FormLaunchReadinessCheckCard key={check.key} check={check} />
+                      ))}
+                    </div>
+
+                    <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                      <div className="font-semibold text-foreground">Next steps</div>
+                      <div className="mt-1 leading-5">{selectedFormLaunchReadiness.nextSteps.join(' ')}</div>
+                    </div>
+                  </div>
+
                   <div id="forms-api" className="mb-5 rounded-lg border border-border bg-muted/30 p-4 scroll-mt-24">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -5488,6 +5715,28 @@ function FormReadinessCheck({ label, detail, ready }: { label: string; detail: s
   );
 }
 
+function FormLaunchReadinessCheckCard({ check }: { check: FormLaunchReadinessCheck }) {
+  return (
+    <div className={cn(
+      'rounded-md border px-3 py-2 text-xs',
+      check.status === 'ready'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : check.status === 'attention'
+          ? 'border-amber-200 bg-amber-50 text-amber-900'
+          : 'border-destructive/30 bg-destructive/10 text-destructive',
+    )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-semibold">{check.label}</span>
+        <span className="shrink-0 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] capitalize">
+          {check.status}
+        </span>
+      </div>
+      <div className="mt-1 leading-5 opacity-90">{check.detail}</div>
+    </div>
+  );
+}
+
 function FormWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
   return (
     <div className="flex items-start gap-3 rounded-lg border border-border bg-background px-3 py-2">
@@ -5775,6 +6024,279 @@ const getFormLaunchReadinessScore = (form: FormDefinition): number => {
   const readyCount = checks.filter(Boolean).length;
 
   return Math.round((readyCount / checks.length) * 100);
+};
+
+const summarizeFormLaunchStatus = (checks: FormLaunchReadinessCheck[]): FormLaunchReadinessStatus => {
+  if (checks.some((check) => check.status === 'blocked')) return 'blocked';
+  if (checks.some((check) => check.status === 'attention')) return 'attention';
+  return 'ready';
+};
+
+const buildFormLaunchActionPlan = (checks: FormLaunchReadinessCheck[]): FormLaunchActionPlan => {
+  const blockers = checks.filter((check) => check.status === 'blocked').map((check) => check.detail);
+  const attention = checks.filter((check) => check.status === 'attention').map((check) => check.detail);
+  const hasBlocked = (key: string) => checks.some((check) => check.key === key && check.status === 'blocked');
+  const hasAttention = (key: string) => checks.some((check) => check.key === key && check.status === 'attention');
+
+  const nextAction: FormLaunchActionPlan['nextAction'] = hasBlocked('selected-form')
+    ? 'select-form'
+    : hasBlocked('active-definition')
+      ? 'activate-form'
+      : hasBlocked('field-schema')
+        ? 'add-fields'
+        : hasBlocked('identity-routing')
+          ? 'add-identity-field'
+          : hasAttention('spam-moderation')
+            ? 'add-spam-guard'
+            : hasAttention('destination-routing')
+              ? 'route-destination'
+              : hasAttention('delivery-handoff')
+                ? 'configure-delivery'
+                : hasAttention('persistence-certification')
+                  ? 'certify-persistence'
+                  : 'launch-ready';
+  const recommendation = (() => {
+    if (nextAction === 'select-form') return 'Select or create a form before copying a launch handoff.';
+    if (nextAction === 'activate-form') return 'Activate the form so the public definition and submission APIs can be used.';
+    if (nextAction === 'add-fields') return 'Add at least one form field before publishing this frontend contract.';
+    if (nextAction === 'add-identity-field') return 'Add an email or phone field before relying on contact or account-style routing.';
+    if (nextAction === 'add-spam-guard') return 'Enable honeypot or captcha before exposing this form to high-traffic public surfaces.';
+    if (nextAction === 'route-destination') return 'Choose contact sharing or collection writes when the form should power leads, registrations, or dynamic records.';
+    if (nextAction === 'configure-delivery') return 'Configure email or webhook delivery if external systems need immediate notification.';
+    if (nextAction === 'certify-persistence') return 'Run the disposable Supabase/Postgres Forms gate before treating production persistence as complete.';
+    return 'Form launch handoff is ready for custom frontends and embed blocks.';
+  })();
+
+  return {
+    schemaVersion: 'backy.form-launch-action-plan.v1',
+    nextAction,
+    recommendation,
+    blockers,
+    attention,
+  };
+};
+
+const buildFormLaunchReadinessHandoff = ({
+  activeSiteId,
+  form,
+  readiness,
+  persistenceCertification,
+  definitionUrl,
+  submitUrl,
+  contactsUrl,
+  analytics,
+  deliveryMetrics,
+  consentMetrics,
+  samplePayload,
+}: {
+  activeSiteId: string;
+  form: FormDefinition | null;
+  readiness: FormReadinessSummary;
+  persistenceCertification: FormPersistenceCertificationHandoff;
+  definitionUrl: string;
+  submitUrl: string;
+  contactsUrl: string;
+  analytics: FormsAnalytics['forms'][number] | null;
+  deliveryMetrics: FormLaunchReadinessHandoff['delivery'];
+  consentMetrics: FormLaunchReadinessHandoff['consent'];
+  samplePayload: Record<string, unknown> | null;
+}): FormLaunchReadinessHandoff => {
+  const generatedAt = new Date().toISOString();
+  const persistenceRuntimeReady = Boolean(persistenceCertification.runtime?.readyForCertification);
+  const persistenceMissingInputs = Array.isArray(persistenceCertification.runtime?.missing)
+    ? persistenceCertification.runtime.missing
+    : [];
+
+  if (!form) {
+    const checks: FormLaunchReadinessCheck[] = [
+      {
+        key: 'selected-form',
+        label: 'Selected form',
+        status: 'blocked',
+        detail: 'Select or create a form before exporting a launch readiness handoff.',
+      },
+      {
+        key: 'persistence-certification',
+        label: 'Supabase/Postgres gate',
+        status: 'attention',
+        detail: `${persistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE} remains the production persistence gate.`,
+      },
+    ];
+    const actionPlan = buildFormLaunchActionPlan(checks);
+
+    return {
+      schemaVersion: 'backy.form-launch-readiness.v1',
+      generatedAt,
+      status: summarizeFormLaunchStatus(checks),
+      score: 0,
+      selectedSiteId: activeSiteId,
+      form: null,
+      endpoints: {
+        definition: definitionUrl,
+        submit: submitUrl,
+        contacts: contactsUrl,
+      },
+      routing: {
+        contactShareEnabled: false,
+        collectionWriteEnabled: false,
+        collectionId: '',
+        notificationEmailConfigured: false,
+        notificationWebhookConfigured: false,
+      },
+      delivery: deliveryMetrics,
+      consent: consentMetrics,
+      persistenceCertification: {
+        schemaVersion: persistenceCertification.schemaVersion,
+        status: persistenceCertification.status,
+        operatorGate: persistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE,
+        runtimeReady: persistenceRuntimeReady,
+        missingInputs: persistenceMissingInputs,
+      },
+      privacy: {
+        includesSubmissionValues: false,
+        customerSafeFieldsOnly: true,
+        excludedFields: ['submission.values', 'ipHash', 'userAgent', 'reviewNotes', 'delivery.providerResponse', 'databaseUrl'],
+      },
+      samplePayload: null,
+      checks,
+      actionPlan,
+      nextSteps: actionPlan.blockers.length ? actionPlan.blockers : actionPlan.attention,
+    };
+  }
+
+  const hasFields = form.fields.length > 0;
+  const hasIdentity = formHasRequiredIdentity(form);
+  const hasSpamGuard = formHasSpamGuard(form);
+  const hasDestination = formHasDestination(form);
+  const hasDelivery = Boolean(form.notificationEmail || form.notificationWebhook);
+  const analyticsSubmissionCount = analytics?.submissions ?? 0;
+  const requiredFieldCount = form.fields.filter((field) => field.required).length;
+  const checks: FormLaunchReadinessCheck[] = [
+    {
+      key: 'active-definition',
+      label: 'Active public definition',
+      status: form.isActive ? 'ready' : 'blocked',
+      detail: form.isActive
+        ? `Definition and submit endpoints are available for ${form.title || form.name}; builder readiness is ${readiness.score}%.`
+        : 'Inactive forms are hidden from public delivery until activated.',
+    },
+    {
+      key: 'field-schema',
+      label: 'Field schema',
+      status: hasFields ? 'ready' : 'blocked',
+      detail: hasFields
+        ? `${form.fields.length} field${form.fields.length === 1 ? '' : 's'} with ${requiredFieldCount} required field${requiredFieldCount === 1 ? '' : 's'} are ready for dynamic renderers.`
+        : 'Add fields before using this form in a page, app, or custom frontend.',
+    },
+    {
+      key: 'identity-routing',
+      label: 'Lead identity',
+      status: hasIdentity ? 'ready' : 'blocked',
+      detail: hasIdentity
+        ? 'Email or phone data is available for contact, account, or follow-up workflows.'
+        : 'Add an email or phone field before relying on contact or account-style routing.',
+    },
+    {
+      key: 'spam-moderation',
+      label: 'Spam and moderation',
+      status: hasSpamGuard ? 'ready' : 'attention',
+      detail: hasSpamGuard
+        ? `Spam guard is enabled with ${form.enableHoneypot ? 'honeypot' : ''}${form.enableHoneypot && form.enableCaptcha ? ' and ' : ''}${form.enableCaptcha ? 'captcha' : ''}; moderation is ${form.moderationMode || 'manual'}.`
+        : `Moderation is ${form.moderationMode || 'manual'}, but honeypot/captcha should be enabled before high-traffic launch.`,
+    },
+    {
+      key: 'destination-routing',
+      label: 'Destination routing',
+      status: hasDestination ? 'ready' : 'attention',
+      detail: hasDestination
+        ? [
+            form.contactShare?.enabled ? 'Contact sharing is enabled' : null,
+            form.collectionTarget?.enabled ? `collection writes target ${form.collectionTarget.collectionId}` : null,
+          ].filter(Boolean).join('; ')
+        : 'Submissions stay in the form inbox only; choose Contacts or a collection for lead/registration workflows.',
+    },
+    {
+      key: 'delivery-handoff',
+      label: 'Delivery handoff',
+      status: hasDelivery || deliveryMetrics.total > 0 ? 'ready' : 'attention',
+      detail: hasDelivery
+        ? `${form.notificationEmail ? 'Email delivery' : ''}${form.notificationEmail && form.notificationWebhook ? ' and ' : ''}${form.notificationWebhook ? 'webhook delivery' : ''} configured; ${deliveryMetrics.total} delivery event${deliveryMetrics.total === 1 ? '' : 's'} and ${analyticsSubmissionCount} analytics submission${analyticsSubmissionCount === 1 ? '' : 's'} tracked.`
+        : `No email or webhook destination is configured; ${analyticsSubmissionCount} analytics submission${analyticsSubmissionCount === 1 ? '' : 's'} remain available in the Backy inbox.`,
+    },
+    {
+      key: 'frontend-contract',
+      label: 'Custom frontend contract',
+      status: definitionUrl && submitUrl && samplePayload ? 'ready' : 'blocked',
+      detail: definitionUrl && submitUrl && samplePayload
+        ? 'Definition URL, submit URL, sample payload, cURL, and embed-block generation are available.'
+        : 'Frontend contract endpoints or sample payload are unavailable until a form is selected.',
+    },
+    {
+      key: 'persistence-certification',
+      label: 'Supabase/Postgres gate',
+      status: 'attention',
+      detail: persistenceRuntimeReady
+        ? `${persistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE} is ready to run against the configured disposable database target.`
+        : `${persistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE} still needs ${persistenceMissingInputs.length ? persistenceMissingInputs.join(', ') : 'database URL and disposable confirmation'} before production persistence is certified.`,
+    },
+  ];
+  const status = summarizeFormLaunchStatus(checks);
+  const readyCount = checks.filter((check) => check.status === 'ready').length;
+  const actionPlan = buildFormLaunchActionPlan(checks);
+  const nextSteps = [...actionPlan.blockers, ...actionPlan.attention].slice(0, 5);
+
+  return {
+    schemaVersion: 'backy.form-launch-readiness.v1',
+    generatedAt,
+    status,
+    score: Math.round((readyCount / checks.length) * 100),
+    selectedSiteId: activeSiteId,
+    form: {
+      id: form.id,
+      name: form.name,
+      title: form.title || form.name,
+      isActive: form.isActive,
+      audience: form.audience,
+      source: getFormSource(form),
+      fieldCount: form.fields.length,
+      requiredFieldCount,
+      moderationMode: form.moderationMode,
+      createdAt: form.createdAt,
+      updatedAt: form.updatedAt,
+    },
+    endpoints: {
+      definition: definitionUrl,
+      submit: submitUrl,
+      contacts: contactsUrl,
+    },
+    routing: {
+      contactShareEnabled: Boolean(form.contactShare?.enabled),
+      collectionWriteEnabled: Boolean(form.collectionTarget?.enabled),
+      collectionId: form.collectionTarget?.enabled ? form.collectionTarget.collectionId : '',
+      notificationEmailConfigured: Boolean(form.notificationEmail),
+      notificationWebhookConfigured: Boolean(form.notificationWebhook),
+    },
+    delivery: deliveryMetrics,
+    consent: consentMetrics,
+    persistenceCertification: {
+      schemaVersion: persistenceCertification.schemaVersion,
+      status: persistenceCertification.status,
+      operatorGate: persistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE,
+      runtimeReady: persistenceRuntimeReady,
+      missingInputs: persistenceMissingInputs,
+    },
+    privacy: {
+      includesSubmissionValues: false,
+      customerSafeFieldsOnly: true,
+      excludedFields: ['submission.values', 'ipHash', 'userAgent', 'reviewNotes', 'delivery.providerResponse', 'databaseUrl'],
+    },
+    samplePayload,
+    checks,
+    actionPlan,
+    nextSteps: nextSteps.length
+      ? nextSteps
+      : ['Form launch handoff is ready for custom frontends, embed blocks, lead routing, and operator certification review.'],
+  };
 };
 
 const cloneFormDefinition = (form: FormDefinition): FormDefinition => JSON.parse(JSON.stringify(form)) as FormDefinition;
