@@ -40,6 +40,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
+import { RevisionCanvasVisualDiff } from '@/components/editor/RevisionCanvasVisualDiff';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -3094,6 +3095,18 @@ function EditBlogPostPage() {
                                                                     </div>
                                                                 ))}
                                                             </div>
+                                                        ) : null}
+                                                        {revisionDiff ? (
+                                                            <RevisionCanvasVisualDiff
+                                                                testId={`blog-editor-revision-visual-diff-${revision.id}`}
+                                                                snapshotElements={revision.snapshotElements}
+                                                                currentElements={canvasElements}
+                                                                snapshotCanvasWidth={revision.snapshotCanvas.canvasWidth}
+                                                                snapshotCanvasHeight={revision.snapshotCanvas.canvasHeight}
+                                                                currentCanvasWidth={canvasSize.width}
+                                                                currentCanvasHeight={canvasSize.height}
+                                                                elementDiff={revisionDiff.elementDiff}
+                                                            />
                                                         ) : null}
                                                         {revisionDiff?.elementDiff.totalChanged ? (
                                                             <div className="mt-2 border-t border-border/60 pt-2" data-testid={`blog-editor-revision-element-diff-${revision.id}`}>

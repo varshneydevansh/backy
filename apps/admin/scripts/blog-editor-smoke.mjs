@@ -37,6 +37,7 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes("schema: 'backy.blog-revision-compare.v1'") && source.includes('copyBlogRevisionCompare') && source.includes('data-testid={`blog-editor-copy-revision-compare-${revision.id}`}'), 'Blog editor revisions must expose copyable revision comparison briefs');
   assert(source.includes('details: BlogRevisionDiffDetail[]') && source.includes('data-testid={`blog-editor-revision-diff-details-${revision.id}`}') && source.includes('Snapshot </span>'), 'Blog editor revision cards must show field-level diff details, not only summary text');
   assert(source.includes('compareCanvasRevisionElements') && source.includes('elementDiff: CanvasRevisionElementDiff') && source.includes('data-testid={`blog-editor-revision-element-diff-${revision.id}`}'), 'Blog editor revision cards must show canvas element/property diffs');
+  assert(source.includes('RevisionCanvasVisualDiff') && source.includes('testId={`blog-editor-revision-visual-diff-${revision.id}`}') && source.includes('currentElements={canvasElements}'), 'Blog editor revision cards must show side-by-side visual canvas diffs');
   assert(source.includes("schema: 'backy.blog-revision-graph.v1'") && source.includes('blogRevisionTimeline') && source.includes('data-testid="blog-editor-revision-graph"') && source.includes('data-testid="blog-editor-toggle-revision-graph"'), 'Blog editor revisions must expose graph timeline navigation and handoff metadata');
   assert(
     source.includes('getScheduledBlogEditorDateError') &&
