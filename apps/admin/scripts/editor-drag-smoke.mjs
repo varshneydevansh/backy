@@ -220,6 +220,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
 
 const assertCanvasEditorShortcutSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const layersPanelSource = fs.readFileSync(new URL('../src/components/editor/LayersPanel.tsx', import.meta.url), 'utf8');
   const componentLibrarySource = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
@@ -237,6 +238,9 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleSnap();'), 'Editor keyboard handler must support S as a snapping shortcut without intercepting Cmd/Ctrl+S save');
   assert(source.includes('data-testid="editor-grid-snap-controls"') && source.includes('data-grid-keyshortcuts="toggle:G"') && source.includes('data-snap-keyshortcuts="toggle:S"'), 'Editor grid/snap HUD must expose shortcut metadata for custom admin clients');
   assert(source.includes('data-testid="editor-grid-visibility-toggle"') && source.includes('aria-keyshortcuts="G"') && source.includes('data-testid="editor-snap-toggle"') && source.includes('aria-keyshortcuts="S"'), 'Editor grid and snap toggle controls must expose keyboard shortcut metadata');
+  assert(smokeSource.includes("await pressKey(client, '-', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '=', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '0', { ctrlKey: true })"), 'Editor zoom browser smoke must exercise keyboard zoom shortcuts');
+  assert(smokeSource.includes("await pressKey(client, 'h')") && smokeSource.includes('keyboardPanEnabled') && smokeSource.includes('keyboardPanDisabled'), 'Editor zoom browser smoke must exercise the H pan toggle shortcut');
+  assert(smokeSource.includes('keyboardGridHidden') && smokeSource.includes('keyboardGridRestored') && smokeSource.includes('keyboardSnapOff') && smokeSource.includes('keyboardSnapRestored'), 'Editor grid/snap browser smoke must exercise G and S shortcuts');
   assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleSelectedVisibilityToggle') && source.includes('selectedLayersAreHidden'), 'Editor toolbar must expose selected-layer visibility toggle');
   assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleSelectedLockToggle') && source.includes('selectedLayersAreLocked'), 'Editor toolbar must expose selected-layer lock toggle');
   assert(source.includes('data-testid="editor-inspector-selection-state-actions"') && source.includes('data-testid="editor-inspector-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-toggle-selection-lock"'), 'Editor multi-selection inspector must expose local selected-layer visibility and lock toggles');
@@ -2299,13 +2303,18 @@ const pressKey = async (client, key, options = {}) => {
     Tab: 'Tab',
     '[': 'BracketLeft',
     ']': 'BracketRight',
+    '-': 'Minus',
+    '=': 'Equal',
+    0: 'Digit0',
     a: 'KeyA',
     c: 'KeyC',
     d: 'KeyD',
     g: 'KeyG',
+    h: 'KeyH',
     s: 'KeyS',
     v: 'KeyV',
     x: 'KeyX',
+    y: 'KeyY',
     z: 'KeyZ',
   };
   const virtualKeyByKey = {
@@ -2320,12 +2329,18 @@ const pressKey = async (client, key, options = {}) => {
     Tab: 9,
     '[': 219,
     ']': 221,
+    '-': 189,
+    '=': 187,
+    0: 48,
     a: 65,
     c: 67,
     d: 68,
     g: 71,
+    h: 72,
+    s: 83,
     v: 86,
     x: 88,
+    y: 89,
     z: 90,
   };
   const modifiers = getInputModifiers(options);
@@ -7933,6 +7948,22 @@ const testZoomControls = async (client) => {
   assert(afterFit.autoFit === true, `Fit canvas did not enable auto-fit: ${JSON.stringify(afterFit)}`);
   assert(afterFit.scale > 0 && afterFit.scale <= 2, `Fit canvas produced out-of-range scale: ${JSON.stringify(afterFit)}`);
 
+  await blurActiveElement(client);
+  await pressKey(client, '-', { ctrlKey: true });
+  const afterKeyboardZoomOut = await readZoomControlState(client, 'after keyboard zoom out');
+  assert(afterKeyboardZoomOut.scale < afterFit.scale, `Ctrl/Cmd+- did not reduce canvas scale: ${JSON.stringify({ afterFit, afterKeyboardZoomOut })}`);
+  assert(afterKeyboardZoomOut.autoFit === false, `Ctrl/Cmd+- should disable auto-fit: ${JSON.stringify(afterKeyboardZoomOut)}`);
+
+  await pressKey(client, '=', { ctrlKey: true });
+  const afterKeyboardZoomIn = await readZoomControlState(client, 'after keyboard zoom in');
+  assert(afterKeyboardZoomIn.scale > afterKeyboardZoomOut.scale, `Ctrl/Cmd+= did not increase canvas scale: ${JSON.stringify({ afterKeyboardZoomOut, afterKeyboardZoomIn })}`);
+  assert(afterKeyboardZoomIn.autoFit === false, `Ctrl/Cmd+= should keep manual zoom mode: ${JSON.stringify(afterKeyboardZoomIn)}`);
+
+  await pressKey(client, '0', { ctrlKey: true });
+  const afterKeyboardFit = await readZoomControlState(client, 'after keyboard fit');
+  assert(afterKeyboardFit.autoFit === true, `Ctrl/Cmd+0 did not enable auto-fit: ${JSON.stringify(afterKeyboardFit)}`);
+  assert(afterKeyboardFit.scale > 0 && afterKeyboardFit.scale <= 2, `Ctrl/Cmd+0 produced out-of-range scale: ${JSON.stringify(afterKeyboardFit)}`);
+
   await clickControlByTestId(client, 'editor-pan-toggle');
   const panEnabled = await readCanvasNavigationState(client, 'pan enabled');
   assert(panEnabled.panMode === true && panEnabled.panActive === true, `Pan toggle did not enable pan mode: ${JSON.stringify(panEnabled)}`);
@@ -7946,6 +7977,15 @@ const testZoomControls = async (client) => {
   await clickControlByTestId(client, 'editor-pan-toggle');
   const panDisabled = await readCanvasNavigationState(client, 'pan disabled');
   assert(panDisabled.panMode === false && panDisabled.panActive === false, `Pan toggle did not disable pan mode: ${JSON.stringify(panDisabled)}`);
+
+  await blurActiveElement(client);
+  await pressKey(client, 'h');
+  const keyboardPanEnabled = await readCanvasNavigationState(client, 'keyboard pan enabled');
+  assert(keyboardPanEnabled.panMode === true && keyboardPanEnabled.panActive === true, `H did not enable persistent pan mode: ${JSON.stringify(keyboardPanEnabled)}`);
+
+  await pressKey(client, 'h');
+  const keyboardPanDisabled = await readCanvasNavigationState(client, 'keyboard pan disabled');
+  assert(keyboardPanDisabled.panMode === false && keyboardPanDisabled.panActive === false, `H did not disable persistent pan mode: ${JSON.stringify(keyboardPanDisabled)}`);
 
   await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
   await sleep(150);
@@ -7962,9 +8002,14 @@ const testZoomControls = async (client) => {
     afterZoomOut,
     afterZoomIn,
     afterFit,
+    afterKeyboardZoomOut,
+    afterKeyboardZoomIn,
+    afterKeyboardFit,
     panEnabled,
     panDrag,
     panDisabled,
+    keyboardPanEnabled,
+    keyboardPanDisabled,
     spacePanActive,
     spacePanReleased,
   };
@@ -7985,6 +8030,10 @@ const readGridSnapControlState = async (client, label) => {
       gridVisible: controls?.getAttribute('data-grid-visible') === 'true',
       togglePressed: toggle?.getAttribute('aria-pressed') === 'true',
       gridTogglePressed: gridToggle?.getAttribute('aria-pressed') === 'true',
+      gridKeyshortcuts: controls?.getAttribute('data-grid-keyshortcuts') || '',
+      snapKeyshortcuts: controls?.getAttribute('data-snap-keyshortcuts') || '',
+      gridToggleShortcut: gridToggle?.getAttribute('aria-keyshortcuts') || '',
+      snapToggleShortcut: toggle?.getAttribute('aria-keyshortcuts') || '',
       gridSize: Number(controls?.getAttribute('data-grid-size') || 0),
       inputValue: input instanceof HTMLInputElement ? input.value : '',
       hasGrid: Boolean(grid),
@@ -7996,6 +8045,8 @@ const readGridSnapControlState = async (client, label) => {
   assert(state.hasControls, `Grid/snap controls are missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.snapEnabled === state.togglePressed, `Snap toggle state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.gridVisible === state.gridTogglePressed, `Grid visibility toggle state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.gridKeyshortcuts === 'toggle:G' && state.gridToggleShortcut === 'G', `Grid shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.snapKeyshortcuts === 'toggle:S' && state.snapToggleShortcut === 'S', `Snap shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.gridSize === Number(state.inputValue), `Grid input does not match control state during ${label}: ${JSON.stringify(state)}`);
   if (state.gridVisible) {
     assert(state.hasGrid, `Canvas grid should be visible during ${label}: ${JSON.stringify(state)}`);
@@ -8080,6 +8131,23 @@ const testGridSnapControls = async (client) => {
   assert(initial.snapEnabled === true, `Snap should default to enabled: ${JSON.stringify(initial)}`);
   assert(initial.gridVisible === true, `Grid should default to visible: ${JSON.stringify(initial)}`);
 
+  await blurActiveElement(client);
+  await pressKey(client, 'g');
+  const keyboardGridHidden = await readGridSnapControlState(client, 'keyboard grid hidden');
+  assert(keyboardGridHidden.gridVisible === false, `G did not hide the grid: ${JSON.stringify(keyboardGridHidden)}`);
+
+  await pressKey(client, 'g');
+  const keyboardGridRestored = await readGridSnapControlState(client, 'keyboard grid restored');
+  assert(keyboardGridRestored.gridVisible === true, `G did not restore the grid: ${JSON.stringify(keyboardGridRestored)}`);
+
+  await pressKey(client, 's');
+  const keyboardSnapOff = await readGridSnapControlState(client, 'keyboard snap off');
+  assert(keyboardSnapOff.snapEnabled === false, `S did not turn snapping off: ${JSON.stringify(keyboardSnapOff)}`);
+
+  await pressKey(client, 's');
+  const keyboardSnapRestored = await readGridSnapControlState(client, 'keyboard snap restored');
+  assert(keyboardSnapRestored.snapEnabled === true, `S did not restore snapping: ${JSON.stringify(keyboardSnapRestored)}`);
+
   await clickControlByTestId(client, 'editor-grid-visibility-toggle');
   await sleep(150);
   const gridHidden = await readGridSnapControlState(client, 'grid hidden');
@@ -8138,6 +8206,10 @@ const testGridSnapControls = async (client) => {
 
   return {
     initial,
+    keyboardGridHidden,
+    keyboardGridRestored,
+    keyboardSnapOff,
+    keyboardSnapRestored,
     gridHidden,
     gridRestored,
     grid20,

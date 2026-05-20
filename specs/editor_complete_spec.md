@@ -89,11 +89,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ✅ Working
 - Renders all element types
 - Handle drop events
-- Grid background in edit mode, with G/S keyboard toggles for grid visibility and snapping.
-- Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface and covered by focused smoke.
+- Grid background in edit mode, with G/S keyboard toggles for grid visibility and snapping covered by focused smoke.
+- Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface, including pointer and keyboard shortcuts covered by focused smoke.
 - Smart alignment guides render during drag, snap selected elements to peer/canvas edges, and clear after release.
 - Rulers render along the canvas edge with major/minor ticks.
-- Pan navigation works through the hand toggle, H keyboard toggle, and temporary Space-hold mode.
+- Pan navigation works through the hand toggle, H keyboard toggle, and temporary Space-hold mode, with focused smoke coverage.
 - **Issues:** None major
 - **Improvements Needed:**
     - None currently tracked for this panel
