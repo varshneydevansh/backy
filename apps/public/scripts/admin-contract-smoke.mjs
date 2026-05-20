@@ -240,8 +240,11 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('runtimeVercel: getVercelRuntimeSummary()'), 'Admin settings response must include Vercel runtime diagnostics');
   assert(source.includes('const runtimeCommerce = getCommerceRuntimeSummary(settings)') && source.includes('runtimeCommerce,'), 'Admin settings response must include commerce runtime diagnostics');
   assert(source.includes('const runtimeInteractiveComponents = getInteractiveComponentRuntimeSummary()') && source.includes('runtimeInteractiveComponents,'), 'Admin settings response must include interactive runtime diagnostics');
-  assert(source.includes('providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence)'), 'Admin settings response must include provider certification metadata');
+  assert(source.includes('providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence, providerCertificationScenarioEvidence)'), 'Admin settings response must include provider certification metadata');
   assert(source.includes('backy.settings-provider-certification-handoff.v1'), 'Admin settings provider certification must expose a stable handoff schema');
+  assert(source.includes('buildProviderCertificationScenarioEvidence'), 'Admin settings provider certification must build scenario evidence for custom admin clients');
+  assert(source.includes('backy.settings-provider-certification-evidence.v1'), 'Admin settings provider certification must expose a stable scenario-evidence schema');
+  assert(source.includes('scenarioEvidence'), 'Admin settings provider certification must return scenario evidence');
   assert(source.includes('external-live-provider-gate'), 'Admin settings provider certification must expose external live-provider status');
   assert(source.includes('npm run ci:settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider gate');
   assert(source.includes('npm run ci:commerce-provider-certification'), 'Admin settings provider certification must expose the Commerce provider gate');
@@ -7841,6 +7844,22 @@ try {
     assert(providerCertification?.localPreflight === 'npm run test:settings-provider-certification-preflight-contract', `${url} missing Settings provider local preflight`);
     assert(providerCertification?.releasePreflight === 'npm run test:release-certification-preflight-contract', `${url} missing Settings provider release preflight`);
     assert(providerCertification?.operatorCommandTemplate, `${url} missing provider certification operatorCommandTemplate`);
+    assert(providerCertification?.scenarioEvidence?.schemaVersion === 'backy.settings-provider-certification-evidence.v1', `${url} missing provider certification scenario evidence schema`);
+    assert(providerCertification.scenarioEvidence.requiredGate === 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:settings-provider-certification', `${url} missing provider certification scenario evidence gate`);
+    assert(
+      providerCertification.scenarioEvidence.coverage?.total === 8 &&
+        Array.isArray(providerCertification.scenarioEvidence.coverage?.missing) &&
+        Array.isArray(providerCertification.scenarioEvidence.scenarios) &&
+        providerCertification.scenarioEvidence.scenarios.some((scenario) => scenario.key === 'database-supabase') &&
+        providerCertification.scenarioEvidence.scenarios.some((scenario) => scenario.key === 'public-api-cors') &&
+        providerCertification.scenarioEvidence.scenarios.some((scenario) => scenario.key === 'release-certification-readiness'),
+      `${url} missing provider certification scenario coverage`,
+    );
+    assert(
+      typeof providerCertification.scenarioEvidence.secretHandling === 'string' &&
+        providerCertification.scenarioEvidence.secretHandling.includes('database URLs, provider credentials'),
+      `${url} missing provider certification scenario secret-handling guidance`,
+    );
     assert(providerCertification.operatorCommandTemplate.envTemplateSchemaVersion === 'backy.settings-provider-certification-env-template.v1', `${url} missing provider certification command-template env schema`);
     assert(
       typeof providerCertification.operatorCommandTemplate.envTemplate === 'string' &&

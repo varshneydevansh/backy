@@ -108,6 +108,57 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
   },
 ] as const;
 
+const SETTINGS_PROVIDER_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'database-supabase',
+    label: 'Database and Supabase',
+    expectedEvidence: ['database runtime readiness', 'Supabase project metadata', 'service-role alias readiness'],
+    nextAction: 'Configure the disposable Supabase/Postgres target and Supabase runtime aliases before running provider certification.',
+  },
+  {
+    key: 'storage-media',
+    label: 'Storage and media delivery',
+    expectedEvidence: ['storage provider readiness', 'bucket/path metadata', 'media scanner readiness'],
+    nextAction: 'Run storage provisioning and scanner checks for the selected local, Supabase, or S3-compatible provider.',
+  },
+  {
+    key: 'vercel-deployment',
+    label: 'Vercel deployment and secrets',
+    expectedEvidence: ['project id', 'team/project target', 'env secret planning evidence'],
+    nextAction: 'Attach Vercel project/team metadata and run the Settings provider certification gate with Vercel selectors.',
+  },
+  {
+    key: 'notification-delivery',
+    label: 'Notification delivery',
+    expectedEvidence: ['selected provider', 'test delivery result', 'retry/audit evidence'],
+    nextAction: 'Configure webhook, Resend, SMTP, or local-outbox delivery and capture a non-secret test notification result.',
+  },
+  {
+    key: 'commerce-provider-bridge',
+    label: 'Commerce provider bridge',
+    expectedEvidence: ['commerce provider family', 'webhook secret alias readiness', 'nested commerce gate'],
+    nextAction: 'Select commerce provider families and run the nested commerce certification gate when Settings owns commerce runtime readiness.',
+  },
+  {
+    key: 'public-api-cors',
+    label: 'Public API and CORS',
+    expectedEvidence: ['allowed origins', 'exposed Backy headers', 'custom frontend API boundary'],
+    nextAction: 'Set exact custom frontend origins through BACKY_CORS_ALLOWED_ORIGINS and verify exposed Backy contract headers.',
+  },
+  {
+    key: 'interactive-components',
+    label: 'Interactive component sandbox',
+    expectedEvidence: ['registry runtime', 'sandbox policy', 'custom-code capability state'],
+    nextAction: 'Verify interactive registry and sandbox runtime diagnostics before launching custom code components.',
+  },
+  {
+    key: 'release-certification-readiness',
+    label: 'Release certification readiness',
+    expectedEvidence: ['release doctor output', 'missing alias list', 'provider family selectors'],
+    nextAction: 'Run the release doctor with Settings provider certification required and attach the non-secret summary.',
+  },
+] as const;
+
 type SettingsCertificationStorageProvider = 'auto' | 'local' | 's3' | 'supabase';
 type SettingsCertificationNotificationProvider = 'auto' | 'webhook' | 'http-endpoint' | 'resend' | 'smtp' | 'local-outbox';
 
@@ -261,6 +312,17 @@ const missingInputsFromRuntime = (summary: unknown): string[] => {
     : [];
 };
 
+const objectValue = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+);
+
+const booleanFlag = (source: unknown, key: string): boolean => objectValue(source)[key] === true;
+
+const stringField = (source: unknown, key: string): string => {
+  const value = objectValue(source)[key];
+  return typeof value === 'string' ? value.trim() : '';
+};
+
 const buildProviderCertificationRuntimeEvidence = ({
   database,
   storage,
@@ -311,7 +373,125 @@ const buildProviderCertificationRuntimeEvidence = ({
   };
 };
 
-const providerCertificationContract = (runtimeEvidence: ReturnType<typeof buildProviderCertificationRuntimeEvidence>) => ({
+const buildProviderCertificationScenarioEvidence = ({
+  settings,
+  runtimeEvidence,
+  database,
+  storage,
+  supabase,
+  vercel,
+  mediaScanner,
+  notifications,
+  commerce,
+  interactiveComponents,
+  publicApi,
+}: {
+  settings: AdminSettingsSource;
+  runtimeEvidence: ReturnType<typeof buildProviderCertificationRuntimeEvidence>;
+  database: unknown;
+  storage: unknown;
+  supabase: unknown;
+  vercel: unknown;
+  mediaScanner: unknown;
+  notifications: unknown;
+  commerce: unknown;
+  interactiveComponents: unknown;
+  publicApi: unknown;
+}) => {
+  const integrations = objectValue(settings.integrations);
+  const integrationCommerce = objectValue(integrations.commerce);
+  const integrationNotifications = objectValue(integrations.notifications);
+  const integrationStorage = objectValue(integrations.storage);
+  const integrationSupabase = objectValue(integrations.supabase);
+  const integrationVercel = objectValue(integrations.vercel);
+  const exposedHeaders = objectValue(publicApi).exposedContractHeaders;
+  const commerceProviderConfigured = [
+    'webhookSecretConfigured',
+    'stripeSecretConfigured',
+    'paypalAccessTokenConfigured',
+    'paddleApiKeyConfigured',
+    'squareAccessTokenConfigured',
+    'adyenApiKeyConfigured',
+    'mollieApiKeyConfigured',
+    'easyPostApiKeyConfigured',
+    'shippoApiKeyConfigured',
+    'shopifyAdminAccessTokenConfigured',
+    'bigCommerceAccessTokenConfigured',
+    'wooCommerceConsumerKeyConfigured',
+    'etsyAccessTokenConfigured',
+    'magentoAccessTokenConfigured',
+  ].some((key) => booleanFlag(commerce, key)) || (
+    booleanFlag(commerce, 'razorpayKeyIdConfigured') &&
+    booleanFlag(commerce, 'razorpayKeySecretConfigured')
+  ) || booleanFlag(integrationCommerce, 'webhookEventsEnabled')
+    || (Boolean(stringField(integrationCommerce, 'paymentProvider')) && stringField(integrationCommerce, 'paymentProvider') !== 'none')
+    || Boolean(stringField(integrationCommerce, 'catalogSyncProvider'));
+  const countEvidence = (...values: boolean[]) => values.filter(Boolean).length;
+  const evidenceCounts: Record<string, number> = {
+    'database-supabase': countEvidence(
+      booleanFlag(database, 'configured'),
+      booleanFlag(supabase, 'configured') ||
+        booleanFlag(integrationSupabase, 'databaseEnabled') ||
+        booleanFlag(integrationSupabase, 'authEnabled') ||
+        booleanFlag(integrationSupabase, 'storageEnabled'),
+    ),
+    'storage-media': countEvidence(
+      booleanFlag(storage, 'configured') ||
+        Boolean(stringField(integrationStorage, 'provider')) ||
+        Boolean(stringField(integrationStorage, 'bucket')) ||
+        Boolean(stringField(integrationStorage, 'publicBaseUrl')),
+      objectValue(mediaScanner).configured !== false,
+    ),
+    'vercel-deployment': countEvidence(
+      booleanFlag(vercel, 'configured') ||
+        Boolean(stringField(integrationVercel, 'projectId')) ||
+        Boolean(stringField(integrationVercel, 'productionDomain')),
+    ),
+    'notification-delivery': countEvidence(
+      booleanFlag(notifications, 'productionReady') ||
+        booleanFlag(notifications, 'configured') ||
+        Object.keys(integrationNotifications).length > 0,
+    ),
+    'commerce-provider-bridge': countEvidence(commerceProviderConfigured),
+    'public-api-cors': countEvidence(
+      booleanFlag(publicApi, 'corsAllowedOriginsConfigured') &&
+        Array.isArray(exposedHeaders) &&
+        exposedHeaders.length > 0,
+    ),
+    'interactive-components': countEvidence(objectValue(interactiveComponents).configured !== false),
+    'release-certification-readiness': countEvidence(
+      runtimeEvidence.localRuntimeInputsConfigured,
+      SETTINGS_PROVIDER_CERTIFICATION_GROUPS.length > 0,
+    ),
+  };
+  const scenarios = SETTINGS_PROVIDER_CERTIFICATION_SCENARIOS.map((scenario) => {
+    const evidenceCount = evidenceCounts[scenario.key] || 0;
+    return {
+      ...scenario,
+      evidenceCount,
+      status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+    };
+  });
+  const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+  return {
+    schemaVersion: 'backy.settings-provider-certification-evidence.v1',
+    status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+    requiredGate: 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:settings-provider-certification',
+    coverage: {
+      covered,
+      total: scenarios.length,
+      missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+    },
+    scenarios,
+    secretHandling: 'Settings provider certification evidence reports scenario names, counts, gates, and non-secret runtime readiness only; database URLs, provider credentials, service-role keys, Vercel tokens, notification secrets, and commerce secrets stay private.',
+  };
+};
+
+const providerCertificationContract = (
+  runtimeEvidence: ReturnType<typeof buildProviderCertificationRuntimeEvidence>,
+  scenarioEvidence: ReturnType<typeof buildProviderCertificationScenarioEvidence>,
+) => ({
   generatedAt: new Date().toISOString(),
   schemaVersion: 'backy.settings-provider-certification-handoff.v1',
   status: 'external-live-provider-gate',
@@ -321,6 +501,7 @@ const providerCertificationContract = (runtimeEvidence: ReturnType<typeof buildP
   releasePreflight: 'npm run test:release-certification-preflight-contract',
   secretHandling: 'Provider credentials stay in deployment or CI environment variables; admin settings responses only expose non-secret provider families, gate names, and readiness evidence.',
   runtimeEvidence,
+  scenarioEvidence,
   operatorCommandTemplate: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
   operatorEnvTemplate: {
     schemaVersion: 'backy.settings-provider-certification-env-template.v1',
@@ -1102,6 +1283,19 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
     interactiveComponents: runtimeInteractiveComponents,
     publicApi: runtimePublicApi,
   });
+  const providerCertificationScenarioEvidence = buildProviderCertificationScenarioEvidence({
+    settings,
+    runtimeEvidence: providerCertificationRuntimeEvidence,
+    database: runtimeDatabase,
+    storage: runtimeStorage,
+    supabase: runtimeSupabase,
+    vercel: runtimeVercel,
+    mediaScanner: runtimeMediaScanner,
+    notifications: runtimeNotifications,
+    commerce: runtimeCommerce,
+    interactiveComponents: runtimeInteractiveComponents,
+    publicApi: runtimePublicApi,
+  });
 
   return {
     schemaVersion: ADMIN_SETTINGS_SCHEMA,
@@ -1131,7 +1325,7 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
     runtimeCommerce,
     runtimeInteractiveComponents,
     runtimePublicApi,
-    providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence),
+    providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence, providerCertificationScenarioEvidence),
     updatedAt: settings.updatedAt,
   };
 };
