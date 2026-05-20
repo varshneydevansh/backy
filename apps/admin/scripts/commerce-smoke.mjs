@@ -957,11 +957,15 @@ const assertProductsApiContractsSource = () => {
   );
   assert(
     source.includes('data-testid="products-subscription-action-plan"') &&
+      source.includes('data-testid="products-subscription-certification"') &&
       source.includes("Lifecycle action plan") &&
+      source.includes("Lifecycle certification evidence") &&
       source.includes("backy.product-subscription-action-plan-summary.v1") &&
+      source.includes("backy.product-subscription-certification.v1") &&
+      source.includes("launch scenarios evidenced") &&
       source.includes("subscription.actionPlan.recommendation") &&
       source.includes("subscription.actionPlan.handoffRequired"),
-    "Products page must render the subscription lifecycle action plan and per-subscription recommendations",
+    "Products page must render the subscription lifecycle action plan, certification evidence, and per-subscription recommendations",
   );
   assert(
     source.includes("bulkUpdateCollectionRecords") &&
@@ -1103,12 +1107,18 @@ const assertProductsApiContractsSource = () => {
     lifecycleSource.includes("publicContractJson") &&
       lifecycleSource.includes("lifecycleResponse") &&
       lifecycleSource.includes("backy.product-subscription-lifecycle.v1") &&
+      lifecycleSource.includes("backy.product-subscription-certification.v1") &&
       lifecycleSource.includes("actionExecutionModes") &&
       lifecycleSource.includes("buildSubscriptionActionPlan") &&
       lifecycleSource.includes("backy.product-subscription-action-plan.v1") &&
       lifecycleSource.includes("actionPlanSummary") &&
-      lifecycleSource.includes("razorpayCredentialsConfigured"),
-    "Product subscription lifecycle endpoint must emit Backy contract/cache headers and action planning metadata",
+      lifecycleSource.includes("razorpayCredentialsConfigured") &&
+      lifecycleSource.includes("Settled checkout") &&
+      lifecycleSource.includes("Trial ending") &&
+      lifecycleSource.includes("Cancellation") &&
+      lifecycleSource.includes("requiredGate: 'npm run ci:commerce-provider-certification'") &&
+      lifecycleSource.includes("provider secrets, customer payloads, and raw order values stay private"),
+    "Product subscription lifecycle endpoint must emit Backy contract/cache headers, action planning metadata, and certification scenario evidence",
   );
   assert(
     actionSource.includes("publicContractJson") &&
@@ -7145,6 +7155,11 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('backy.product-subscription-action-plan-summary.v1') &&
           document.body?.innerText?.includes('Action execution readiness') &&
           document.body?.innerText?.includes('backy.product-subscription-execution-readiness.v1') &&
+          document.body?.innerText?.includes('Lifecycle certification evidence') &&
+          document.body?.innerText?.includes('backy.product-subscription-certification.v1') &&
+          document.body?.innerText?.includes('Settled checkout') &&
+          document.body?.innerText?.includes('Trial ending') &&
+          document.body?.innerText?.includes('Cancellation') &&
           document.body?.innerText?.includes('Recent subscription orders') &&
           document.body?.innerText?.includes('backy.product-subscription-lifecycle.v1') &&
           document.body?.innerText?.includes('/api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action') &&

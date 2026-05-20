@@ -645,6 +645,81 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
       handoffSubscriptions: subscriptions.filter((subscription) => !subscriptionHasExecutableAction(subscription)).length,
     },
   };
+  const actionEvidenceCount = (action: SubscriptionLifecycleOperatorAction) => subscriptions.filter((subscription) => (
+    subscription.actionHistory.some((entry) => (
+      entry.action === action &&
+      ['requested', 'succeeded', 'requires_action'].includes(entry.status)
+    ))
+  )).length;
+  const scenarioInputs = [
+    {
+      key: 'settled-checkout',
+      label: 'Settled checkout',
+      evidenceCount: summary.active + summary.renewals,
+      expectedEvidence: ['checkout.session.completed', 'paid subscription order', 'Backy private order linked to product item'],
+      nextAction: 'Complete a live checkout and confirm the private order reaches active or renewal state.',
+    },
+    {
+      key: 'renewal',
+      label: 'Renewal',
+      evidenceCount: summary.renewals,
+      expectedEvidence: ['invoice.payment_succeeded', 'invoice.paid', 'provider renewal webhook'],
+      nextAction: 'Let a live provider renewal settle and verify the renewal order state appears here.',
+    },
+    {
+      key: 'dunning',
+      label: 'Dunning',
+      evidenceCount: summary.dunning,
+      expectedEvidence: ['invoice.payment_failed', 'failed payment status', 'provider recovery state'],
+      nextAction: 'Trigger or import a provider payment-failure event and verify the dunning state appears here.',
+    },
+    {
+      key: 'pause',
+      label: 'Pause',
+      evidenceCount: summary.paused + actionEvidenceCount('pause'),
+      expectedEvidence: ['customer.subscription.paused', 'pause action history', 'paused private order state'],
+      nextAction: 'Run a pause action or receive a provider pause webhook for this product subscription.',
+    },
+    {
+      key: 'resume',
+      label: 'Resume',
+      evidenceCount: actionEvidenceCount('resume'),
+      expectedEvidence: ['customer.subscription.resumed', 'resume action history', 'active post-resume state'],
+      nextAction: 'Run a resume action after pause/dunning and verify the action history plus active state.',
+    },
+    {
+      key: 'trial-ending',
+      label: 'Trial ending',
+      evidenceCount: summary.trialEnding,
+      expectedEvidence: ['customer.subscription.trial_will_end', 'trial-ending provider webhook'],
+      nextAction: 'Trigger a provider trial-ending event and verify the retention-review state appears here.',
+    },
+    {
+      key: 'cancellation',
+      label: 'Cancellation',
+      evidenceCount: summary.cancelled + actionEvidenceCount('cancel'),
+      expectedEvidence: ['customer.subscription.deleted', 'cancel action history', 'cancelled private order state'],
+      nextAction: 'Run or receive a live cancellation and verify the final cancelled state is retained.',
+    },
+  ];
+  const certificationScenarios = scenarioInputs.map((scenario) => ({
+    ...scenario,
+    status: scenario.evidenceCount > 0 ? 'covered' : 'missing',
+  }));
+  const coveredScenarioCount = certificationScenarios.filter((scenario) => scenario.status === 'covered').length;
+  const certification = {
+    schemaVersion: 'backy.product-subscription-certification.v1',
+    status: coveredScenarioCount === certificationScenarios.length ? 'ready' : 'attention',
+    requiredGate: 'npm run ci:commerce-provider-certification',
+    coverage: {
+      covered: coveredScenarioCount,
+      total: certificationScenarios.length,
+      missing: certificationScenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+    },
+    scenarios: certificationScenarios,
+    providerFamilies: ['stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http', 'manual-handoff'],
+    secretHandling: 'Subscription certification exposes scenario names, counts, provider families, and gate commands only; provider secrets, customer payloads, and raw order values stay private.',
+  };
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -660,6 +735,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
     actionPlan: actionPlanSummary,
     subscriptions: subscriptions.slice(0, 25),
     execution,
+    certification,
     contract: {
       ordersApi: `/api/admin/sites/:siteId/commerce/orders`,
       webhookApi: `/api/sites/:siteId/commerce/webhook`,

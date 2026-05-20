@@ -1696,6 +1696,26 @@ export interface ProductSubscriptionLifecycle {
       handoffSubscriptions: number;
     };
   };
+  certification?: {
+    schemaVersion: 'backy.product-subscription-certification.v1';
+    status: 'ready' | 'attention';
+    requiredGate: string;
+    coverage: {
+      covered: number;
+      total: number;
+      missing: string[];
+    };
+    scenarios: Array<{
+      key: string;
+      label: string;
+      status: 'covered' | 'missing';
+      evidenceCount: number;
+      expectedEvidence: string[];
+      nextAction: string;
+    }>;
+    providerFamilies: string[];
+    secretHandling: string;
+  };
   contract: {
     ordersApi: string;
     webhookApi: string;

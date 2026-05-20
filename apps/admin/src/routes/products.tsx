@@ -146,7 +146,7 @@ const PRODUCT_API_CONTRACTS = [
     endpointKey: 'productSubscriptions',
     schemaVersion: 'backy.product-subscription-lifecycle.v1',
     cacheScope: 'private',
-    detail: 'Product-scoped subscription order summary, lifecycle states, action-plan recommendations, provider readiness, and bounded action history.',
+    detail: 'Product-scoped subscription order summary, lifecycle states, action-plan recommendations, provider readiness, certification scenario evidence, and bounded action history.',
   },
   {
     key: 'subscription-action',
@@ -328,6 +328,50 @@ const PRODUCT_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS = [
 const PRODUCT_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS = [
   ...PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS,
   { value: 'generic', label: 'Generic', description: 'Require a signed Backy commerce webhook secret only.' },
+] as const;
+const PRODUCT_SUBSCRIPTION_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'settled-checkout',
+    label: 'Settled checkout',
+    expectedEvidence: ['checkout.session.completed', 'paid subscription order'],
+    nextAction: 'Complete a live checkout and confirm the private order reaches active or renewal state.',
+  },
+  {
+    key: 'renewal',
+    label: 'Renewal',
+    expectedEvidence: ['invoice.payment_succeeded', 'provider renewal webhook'],
+    nextAction: 'Let a live provider renewal settle and verify the renewal state appears here.',
+  },
+  {
+    key: 'dunning',
+    label: 'Dunning',
+    expectedEvidence: ['invoice.payment_failed', 'provider recovery state'],
+    nextAction: 'Trigger or import a provider payment-failure event.',
+  },
+  {
+    key: 'pause',
+    label: 'Pause',
+    expectedEvidence: ['customer.subscription.paused', 'pause action history'],
+    nextAction: 'Run a pause action or receive a provider pause webhook.',
+  },
+  {
+    key: 'resume',
+    label: 'Resume',
+    expectedEvidence: ['customer.subscription.resumed', 'resume action history'],
+    nextAction: 'Run a resume action after pause or dunning.',
+  },
+  {
+    key: 'trial-ending',
+    label: 'Trial ending',
+    expectedEvidence: ['customer.subscription.trial_will_end', 'trial-ending provider webhook'],
+    nextAction: 'Trigger a provider trial-ending event.',
+  },
+  {
+    key: 'cancellation',
+    label: 'Cancellation',
+    expectedEvidence: ['customer.subscription.deleted', 'cancel action history'],
+    nextAction: 'Run or receive a live cancellation.',
+  },
 ] as const;
 
 type ProductProviderCertificationPaymentProvider = (typeof PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS)[number]['value'];
@@ -6047,6 +6091,73 @@ function ProductsRoute() {
                         ))}
                       </div>
                     ) : null}
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="products-subscription-certification">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">Lifecycle certification evidence</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          {selectedProductLifecycle?.certification
+                            ? `${selectedProductLifecycle.certification.coverage.covered}/${selectedProductLifecycle.certification.coverage.total} launch scenarios evidenced`
+                            : 'Refresh lifecycle to compare live provider evidence against required subscription launch scenarios.'}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {selectedProductLifecycle?.certification?.schemaVersion || 'backy.product-subscription-certification.v1'}
+                      </div>
+                    </div>
+                    {selectedProductLifecycle?.certification ? (
+                      <>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>Gate</span>
+                          <span className="rounded-md border border-border bg-card px-2 py-1 font-mono text-foreground">
+                            {selectedProductLifecycle.certification.requiredGate}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                          {selectedProductLifecycle.certification.scenarios.map((scenario) => (
+                            <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2 text-xs">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="font-medium text-foreground">{scenario.label}</div>
+                                <span className={cn(
+                                  'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                                  scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                                )}>
+                                  {scenario.status}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-muted-foreground">
+                                {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
+                              </div>
+                              {scenario.status === 'missing' ? (
+                                <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                              ) : null}
+                              <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                                Expected: {scenario.expectedEvidence.slice(0, 2).join(' · ')}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-[11px] text-muted-foreground">
+                          {selectedProductLifecycle.certification.secretHandling}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                        {PRODUCT_SUBSCRIPTION_CERTIFICATION_SCENARIOS.map((scenario) => (
+                          <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2 text-xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="font-medium text-foreground">{scenario.label}</div>
+                              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">pending</span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                            <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                              Expected: {scenario.expectedEvidence.join(' · ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="mt-3 rounded-md border border-border bg-background p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
