@@ -360,6 +360,16 @@ assert(
 );
 
 assert(
+  adminCollectionsPage.includes('data-testid="collections-slug-policy-controls"') &&
+    adminCollectionsPage.includes('backy.collection-slug-policy.v1') &&
+    adminCollectionsPage.includes('backy.collection-slug-policy-readiness.v1') &&
+    adminCollectionsPage.includes('backy.collection-slug-policy-action-plan.v1') &&
+    adminCollectionsPage.includes('slugPolicy: slugPolicyReadiness') &&
+    apiContracts.includes('backy.collection-slug-policy.v1'),
+  'Admin collections dynamic routes must expose slug policy readiness and handoff metadata for custom frontends.',
+);
+
+assert(
   manifestRoute.includes('databaseCertification: frontendDatabaseCertification') &&
     manifestRoute.includes('backy.frontend-database-certification.v1') &&
     manifestRoute.includes('npm run ci:sdk-postgres-smoke') &&

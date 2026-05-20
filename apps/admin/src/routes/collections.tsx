@@ -547,6 +547,32 @@ interface CollectionVisitorWritePolicyForm {
   allowedUpdateFields: string[];
 }
 
+const COLLECTION_SLUG_UPDATE_BEHAVIORS = [
+  {
+    value: 'create-only',
+    label: 'Generate on create',
+    detail: 'Use the source/fallback fields when new records do not provide a slug.',
+  },
+  {
+    value: 'manual',
+    label: 'Manual review',
+    detail: 'Keep slugs editor-controlled after creation.',
+  },
+  {
+    value: 'sync-drafts',
+    label: 'Sync drafts',
+    detail: 'Custom frontends can refresh draft slugs before publish.',
+  },
+] as const;
+
+type CollectionSlugUpdateBehavior = typeof COLLECTION_SLUG_UPDATE_BEHAVIORS[number]['value'];
+
+interface CollectionSlugPolicyForm {
+  sourceField: string;
+  fallbackField: string;
+  updateBehavior: CollectionSlugUpdateBehavior;
+}
+
 const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
   list: {
     variant: 'cards',
@@ -679,6 +705,141 @@ const findCollectionAuthoringField = (
   if (preferred) return preferred;
 
   return sorted.find((field) => !allowedTypes || allowedTypes.includes(field.type)) || null;
+};
+
+const findCollectionSlugPolicyField = (
+  fields: CollectionField[],
+  preferredKeys: string[],
+) => findCollectionAuthoringField(fields, preferredKeys, TEXT_FIELD_TYPES);
+
+const defaultSlugPolicy = (fields: CollectionField[] = []): CollectionSlugPolicyForm => {
+  const slugField = findCollectionAuthoringField(fields, ['slug', 'permalink'], ['slug', 'text']);
+  const titleField = findCollectionSlugPolicyField(fields, ['title', 'name', 'headline', 'label']);
+  const fallbackField = titleField && titleField.key !== slugField?.key
+    ? titleField
+    : fields.find((field) => TEXT_FIELD_TYPES.includes(field.type) && field.key !== slugField?.key) || null;
+
+  return {
+    sourceField: slugField?.key || titleField?.key || '',
+    fallbackField: fallbackField?.key || '',
+    updateBehavior: 'create-only',
+  };
+};
+
+const normalizeSlugPolicy = (
+  metadata: unknown,
+  fields: CollectionField[] = [],
+): CollectionSlugPolicyForm => {
+  const defaults = defaultSlugPolicy(fields);
+  if (!isPlainRecord(metadata)) return defaults;
+  const policy = isPlainRecord(metadata.slugPolicy) ? metadata.slugPolicy : {};
+  const fieldKeys = new Set(fields.map((field) => field.key).filter(Boolean));
+  const sourceField = optionalStringFromRecord(policy, 'sourceField') || defaults.sourceField;
+  const fallbackField = optionalStringFromRecord(policy, 'fallbackField') || defaults.fallbackField;
+  const updateBehavior = COLLECTION_SLUG_UPDATE_BEHAVIORS.some((behavior) => behavior.value === policy.updateBehavior)
+    ? policy.updateBehavior as CollectionSlugUpdateBehavior
+    : defaults.updateBehavior;
+
+  return {
+    sourceField: fieldKeys.has(sourceField) ? sourceField : defaults.sourceField,
+    fallbackField: fieldKeys.has(fallbackField) && fallbackField !== sourceField ? fallbackField : defaults.fallbackField,
+    updateBehavior,
+  };
+};
+
+const collectionMetadataWithSlugPolicy = (
+  metadata: unknown,
+  slugPolicy: CollectionSlugPolicyForm,
+  fields: CollectionField[],
+): Record<string, unknown> => {
+  const baseMetadata = isPlainRecord(metadata) ? { ...metadata } : {};
+  const fieldKeys = new Set(fields.map((field) => field.key).filter(Boolean));
+  const sourceField = fieldKeys.has(slugPolicy.sourceField) ? slugPolicy.sourceField : '';
+  const fallbackField = fieldKeys.has(slugPolicy.fallbackField) && slugPolicy.fallbackField !== sourceField
+    ? slugPolicy.fallbackField
+    : '';
+
+  return {
+    ...baseMetadata,
+    slugPolicy: {
+      schemaVersion: 'backy.collection-slug-policy.v1',
+      routeParameter: ':recordSlug',
+      transform: 'lowercase-dashes',
+      uniquenessScope: 'collection',
+      conflictStrategy: 'reject-duplicates',
+      sourceField,
+      fallbackField,
+      updateBehavior: slugPolicy.updateBehavior,
+    },
+  };
+};
+
+const buildCollectionSlugPolicyReadiness = (
+  slugPolicy: CollectionSlugPolicyForm,
+  fields: CollectionField[],
+  routePattern: string,
+  collectionSlug: string,
+  previewRecord: CollectionRecord | null,
+) => {
+  const fieldKeys = new Set(fields.map((field) => field.key).filter(Boolean));
+  const sourceField = fields.find((field) => field.key === slugPolicy.sourceField) || null;
+  const fallbackField = fields.find((field) => field.key === slugPolicy.fallbackField) || null;
+  const normalizedRoute = normalizeCollectionRoutePattern(routePattern, collectionSlug || 'collection');
+  const routeHasRecordSlug = normalizedRoute.split('/').includes(':recordSlug');
+  const previewSource = sourceField ? formatValue(previewRecord?.values?.[sourceField.key]) : previewRecord?.slug || '';
+  const previewFallback = fallbackField ? formatValue(previewRecord?.values?.[fallbackField.key]) : '';
+  const exampleSlug = normalizeSlug(previewSource || previewFallback || previewRecord?.slug || 'example-record', 'example-record');
+  const checks = [
+    {
+      label: 'Route parameter',
+      detail: routeHasRecordSlug ? `${normalizedRoute} includes :recordSlug` : 'Item route must include :recordSlug.',
+      ready: routeHasRecordSlug,
+    },
+    {
+      label: 'Source field',
+      detail: sourceField
+        ? `${sourceField.label} (${sourceField.key}) feeds slug generation hints.`
+        : 'Choose a source field or rely on manual record slugs.',
+      ready: Boolean(sourceField || previewRecord?.slug),
+    },
+    {
+      label: 'Duplicate handling',
+      detail: 'Admin and import APIs reject duplicate slugs inside this collection.',
+      ready: true,
+    },
+    {
+      label: 'Custom frontend handoff',
+      detail: 'Expose lowercase-dashes, collection-scoped uniqueness, and :recordSlug routing to external forms/importers.',
+      ready: fieldKeys.size > 0,
+    },
+  ];
+  const readyCount = checks.filter((check) => check.ready).length;
+  const actionPlan = {
+    schemaVersion: 'backy.collection-slug-policy-action-plan.v1',
+    status: readyCount === checks.length ? 'ready' : 'needs-policy-review',
+    recommendedNextAction: readyCount === checks.length
+      ? 'Use the slug policy in custom frontend create/edit forms and import tooling.'
+      : 'Choose slug source/fallback fields and keep the item route on :recordSlug before publish.',
+    steps: checks.filter((check) => !check.ready).map((check) => check.detail),
+  };
+
+  return {
+    schemaVersion: 'backy.collection-slug-policy-readiness.v1',
+    ready: readyCount === checks.length,
+    readyCount,
+    checkCount: checks.length,
+    sourceField: sourceField?.key || null,
+    fallbackField: fallbackField?.key || null,
+    updateBehavior: slugPolicy.updateBehavior,
+    transform: 'lowercase-dashes',
+    uniquenessScope: 'collection',
+    conflictStrategy: 'reject-duplicates',
+    routeTemplate: normalizedRoute,
+    exampleSlug,
+    exampleItemPath: normalizedRoute.replace(':recordSlug', exampleSlug),
+    checks,
+    actionPlan,
+  };
 };
 
 const datasetFieldBinding = (field: CollectionField | null) => (
@@ -1481,6 +1642,7 @@ function CollectionsPage() {
     permissions: DEFAULT_PERMISSIONS,
     frontendDesignTemplateId: routeSearch.frontendTemplate || '',
     dynamicTemplates: defaultDynamicTemplates(),
+    slugPolicy: defaultSlugPolicy([createStarterField()]),
     visitorWritePolicy: defaultVisitorWritePolicy(),
     fields: [createStarterField()],
   });
@@ -1721,6 +1883,22 @@ function CollectionsPage() {
       missingSelectOptions,
     };
   }, [activeSchemaFields]);
+  const slugPolicyReadiness = useMemo(
+    () => buildCollectionSlugPolicyReadiness(
+      collectionForm.slugPolicy,
+      activeSchemaFields,
+      collectionForm.routePattern,
+      collectionForm.slug || 'collection',
+      dynamicTemplatePreviewRecord,
+    ),
+    [
+      activeSchemaFields,
+      collectionForm.routePattern,
+      collectionForm.slug,
+      collectionForm.slugPolicy,
+      dynamicTemplatePreviewRecord,
+    ],
+  );
   const collectionReadiness = useMemo(() => {
     const checks = [
       {
@@ -1758,6 +1936,13 @@ function CollectionsPage() {
           : 'Visitor create is off; admin API controls writes.',
         ready: !collectionForm.permissions.publicCreate || activeSchemaFields.length > 0,
       },
+      {
+        label: 'Slug policy',
+        detail: slugPolicyReadiness.ready
+          ? `${slugPolicyReadiness.exampleItemPath} with duplicate rejection`
+          : 'Choose slug source/fallback fields and keep item routes on :recordSlug.',
+        ready: slugPolicyReadiness.ready,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -1773,6 +1958,8 @@ function CollectionsPage() {
     collectionForm.permissions.publicCreate,
     fieldHealth.missingReferenceTargets,
     fieldHealth.missingSelectOptions,
+    slugPolicyReadiness.exampleItemPath,
+    slugPolicyReadiness.ready,
   ]);
   const relationshipBrowser = useMemo(() => {
     const activeId = activeCollection?.id || '';
@@ -2030,6 +2217,7 @@ function CollectionsPage() {
               : null,
             publicReadReady: activeCollectionIsPublic,
             publicCreateReady: activeCollection.permissions.publicCreate,
+            slugPolicy: slugPolicyReadiness,
             visitorWritePolicy: normalizeVisitorWritePolicy(activeCollection.metadata, activeCollection.fields),
             authoringShortcuts: datasetAuthoringShortcuts
               ? {
@@ -2093,6 +2281,7 @@ function CollectionsPage() {
       status: activeCollection.status,
       description: activeCollection.description,
       permissions: activeCollection.permissions,
+      slugPolicy: slugPolicyReadiness,
       visitorWritePolicy: normalizeVisitorWritePolicy(activeCollection.metadata, activeCollection.fields),
       listRoutePattern: normalizeCollectionListRoutePattern(activeCollection.listRoutePattern, activeCollection.slug),
       routePattern: normalizeCollectionRoutePattern(activeCollection.routePattern, activeCollection.slug),
@@ -2185,6 +2374,7 @@ function CollectionsPage() {
     datasetAuthoringShortcuts,
     dynamicTemplatePreviewItemPath,
     dynamicTemplatePreviewRecord,
+    slugPolicyReadiness,
     fieldHealth,
     frontendCollectionTemplates,
     frontendDesign,
@@ -2687,6 +2877,7 @@ function CollectionsPage() {
       permissions: DEFAULT_PERMISSIONS,
       frontendDesignTemplateId: options.frontendTemplateId || '',
       dynamicTemplates: defaultDynamicTemplates(),
+      slugPolicy: defaultSlugPolicy([createStarterField()]),
       visitorWritePolicy: defaultVisitorWritePolicy(),
       fields: [createStarterField()],
     });
@@ -2952,6 +3143,7 @@ function CollectionsPage() {
       permissions: { ...template.permissions },
       frontendDesignTemplateId: '',
       dynamicTemplates: defaultDynamicTemplates(),
+      slugPolicy: defaultSlugPolicy(template.fields),
       visitorWritePolicy: defaultVisitorWritePolicy(),
       fields: cloneTemplateFields(template.fields),
     });
@@ -2986,6 +3178,7 @@ function CollectionsPage() {
         buildFrontendCollectionTemplateMetadata(template, frontendDesign),
         defaultDynamicTemplates(),
       );
+      const fields = cloneTemplateFields(blueprint.fields);
       const saved = await createCollection(activeSiteId, {
         name: blueprint.name,
         slug: blueprint.slug,
@@ -2994,8 +3187,12 @@ function CollectionsPage() {
         description: blueprint.description,
         status: blueprint.status,
         permissions: blueprint.permissions,
-        fields: cloneTemplateFields(blueprint.fields),
-        metadata,
+        fields,
+        metadata: collectionMetadataWithSlugPolicy(
+          metadata,
+          defaultSlugPolicy(fields),
+          fields,
+        ),
       });
 
       setCollections((prev) => [saved, ...prev.filter((collection) => collection.id !== saved.id)]);
@@ -3034,6 +3231,7 @@ function CollectionsPage() {
       permissions: collection.permissions,
       frontendDesignTemplateId: getCollectionFrontendTemplateId(collection) || '',
       dynamicTemplates: normalizeDynamicTemplates(collection.metadata),
+      slugPolicy: normalizeSlugPolicy(collection.metadata, collection.fields),
       visitorWritePolicy: normalizeVisitorWritePolicy(collection.metadata, collection.fields),
       fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
     });
@@ -3373,6 +3571,23 @@ function CollectionsPage() {
     });
   };
 
+  const updateSlugPolicy = (updates: Partial<CollectionSlugPolicyForm>) => {
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', 'update collection slug policy');
+      }
+      return;
+    }
+
+    setCollectionForm((prev) => ({
+      ...prev,
+      slugPolicy: {
+        ...prev.slugPolicy,
+        ...updates,
+      },
+    }));
+  };
+
   const updateVisitorWritePolicy = (updates: Partial<CollectionVisitorWritePolicyForm>) => {
     setCollectionForm((prev) => ({
       ...prev,
@@ -3572,7 +3787,11 @@ function CollectionsPage() {
         : null;
       const baseMetadata = collectionMetadataWithVisitorWritePolicy(
         stripFrontendCollectionTemplateMetadata(
-          collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
+          collectionMetadataWithSlugPolicy(
+            collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
+            collectionForm.slugPolicy,
+            fields,
+          ),
         ),
         collectionForm.visitorWritePolicy,
         fields,
@@ -5298,6 +5517,123 @@ function CollectionsPage() {
                   placeholder={defaultCollectionRoutePattern(collectionForm.slug)}
                 />
               </label>
+              <div
+                className="space-y-3 rounded-lg border border-sky-200 bg-sky-50/60 p-4 text-sm lg:col-span-3"
+                data-testid="collections-slug-policy-controls"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-sky-950">Slug policy</div>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-sky-900/80">
+                      Define how collection record slugs are generated, previewed, and handed to custom frontends that create or edit dynamic records.
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium',
+                      slugPolicyReadiness.ready
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-amber-50 text-amber-700',
+                    )}
+                  >
+                    {slugPolicyReadiness.ready ? (
+                      <CheckCircle2 className="size-3.5" />
+                    ) : (
+                      <AlertTriangle className="size-3.5" />
+                    )}
+                    {slugPolicyReadiness.readyCount}/{slugPolicyReadiness.checkCount} ready
+                  </span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="space-y-1">
+                    <span className="font-medium text-sky-950">Source field</span>
+                    <select
+                      value={collectionForm.slugPolicy.sourceField}
+                      onChange={(event) => updateSlugPolicy({ sourceField: event.target.value })}
+                      disabled={schemaMutationDisabled}
+                      title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                      className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-slug-policy-source-field"
+                    >
+                      <option value="">Manual record slug</option>
+                      {dynamicTemplateFields
+                        .filter((field) => TEXT_FIELD_TYPES.includes(field.type))
+                        .map((field) => (
+                          <option key={field.key} value={field.key}>
+                            {field.label} ({field.key})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="font-medium text-sky-950">Fallback field</span>
+                    <select
+                      value={collectionForm.slugPolicy.fallbackField}
+                      onChange={(event) => updateSlugPolicy({ fallbackField: event.target.value })}
+                      disabled={schemaMutationDisabled}
+                      title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                      className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-slug-policy-fallback-field"
+                    >
+                      <option value="">No fallback</option>
+                      {dynamicTemplateFields
+                        .filter((field) => TEXT_FIELD_TYPES.includes(field.type) && field.key !== collectionForm.slugPolicy.sourceField)
+                        .map((field) => (
+                          <option key={field.key} value={field.key}>
+                            {field.label} ({field.key})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="font-medium text-sky-950">Update behavior</span>
+                    <select
+                      value={collectionForm.slugPolicy.updateBehavior}
+                      onChange={(event) => updateSlugPolicy({ updateBehavior: event.target.value as CollectionSlugUpdateBehavior })}
+                      disabled={schemaMutationDisabled}
+                      title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                      className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-slug-policy-update-behavior"
+                    >
+                      {COLLECTION_SLUG_UPDATE_BEHAVIORS.map((behavior) => (
+                        <option key={behavior.value} value={behavior.value}>
+                          {behavior.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="grid gap-2 md:grid-cols-4">
+                  <CollectionApiStat label="Transform" value={slugPolicyReadiness.transform} />
+                  <CollectionApiStat label="Unique scope" value={slugPolicyReadiness.uniquenessScope} />
+                  <CollectionApiStat label="Duplicates" value={slugPolicyReadiness.conflictStrategy} />
+                  <CollectionApiStat label="Example slug" value={slugPolicyReadiness.exampleSlug} />
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {slugPolicyReadiness.checks.map((check) => (
+                    <CollectionReadinessCheck key={check.label} {...check} />
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="break-all rounded-md bg-white px-2 py-1 text-xs text-sky-900">
+                    {slugPolicyReadiness.exampleItemPath}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => void copyCollectionApiText(JSON.stringify(slugPolicyReadiness.actionPlan, null, 2), 'Collection slug policy action plan', {
+                      key: 'collections.export',
+                      action: 'copy slug policy action plan',
+                    })}
+                    disabled={isCollectionsBusy || !canExportCollections}
+                    title={!canExportCollections ? exportPermissionTitle : undefined}
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-medium text-sky-950 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-slug-policy-copy-plan"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy slug plan
+                  </button>
+                </div>
+              </div>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Status</span>
                 <select

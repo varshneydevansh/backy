@@ -43,6 +43,12 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('Capture a list canvas to create rollback-ready versions for generated collection index pages.'), 'Collections list template history empty state must explain the capture workflow');
   assert(source.includes('title="No item template capture history"'), 'Collections item template history must use a shared empty-state title');
   assert(source.includes('Capture an item canvas to create rollback-ready versions for generated collection detail pages.'), 'Collections item template history empty state must explain the capture workflow');
+  assert(source.includes('data-testid="collections-slug-policy-controls"'), 'Collections schema editor must expose dynamic record slug policy controls');
+  assert(source.includes('backy.collection-slug-policy.v1'), 'Collections metadata must persist a named slug policy contract');
+  assert(source.includes('backy.collection-slug-policy-readiness.v1'), 'Collections route must compute slug policy readiness for dynamic routes');
+  assert(source.includes('backy.collection-slug-policy-action-plan.v1'), 'Collections route must expose a copyable slug policy action plan');
+  assert(source.includes('data-testid="collections-slug-policy-copy-plan"'), 'Collections schema editor must expose a copy slug policy plan action');
+  assert(source.includes('Slug policy'), 'Collections readiness must include slug policy status');
   assert(
     source.includes('listAllCollectionRecords') &&
       source.includes('const selectedRecordIdSet = useMemo') &&
