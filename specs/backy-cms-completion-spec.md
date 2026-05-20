@@ -161,7 +161,7 @@ Legend:
 - ⚠️ Broader external auth-provider rollout remains globally tracked outside this page.
 
 #### `/users.new` (`users.new.tsx`)
-- ✅ User creation/invite flow is backend-backed with invite token and password policy coverage.
+- ✅ User creation/invite flow is backend-backed with invite token, password policy coverage, and retryable permission recovery.
 - ⚠️ External auth-provider rollout remains a certification gate.
 
 #### `/users.$userId` (`users.$userId.tsx`)
@@ -458,6 +458,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/pages` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/media` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
+  - `/users/new` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/collections` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, permission-contract retry actions, and filtered full-result record bulk selection summaries.
   - `/forms` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
   - `/products` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.

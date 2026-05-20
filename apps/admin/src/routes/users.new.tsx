@@ -2,8 +2,8 @@
  * BACKY CMS - NEW USER PAGE
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, Copy, Download, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
@@ -240,7 +240,7 @@ function NewUserPage() {
   ]);
   const inviteHandoffText = useMemo(() => JSON.stringify(inviteHandoff, null, 2), [inviteHandoff]);
 
-  useEffect(() => {
+  const loadUserInvitePermissions = useCallback(() => {
     let cancelled = false;
     setPermissionError(null);
 
@@ -276,6 +276,8 @@ function NewUserPage() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadUserInvitePermissions(), [loadUserInvitePermissions]);
 
   const copyInviteText = async (value: string, label: string) => {
     if (isInviteBusy) return;
@@ -366,8 +368,40 @@ function NewUserPage() {
         }
         className="w-full"
       >
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {permissionError || createPermissionTitle || 'Ask an owner or admin with users.create access to open this page.'}
+        <div
+          role="alert"
+          data-testid="user-invite-permission-state"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">User invite permissions need attention</p>
+                <p className="mt-1 leading-6">
+                  {permissionError || createPermissionTitle || 'Ask an owner or admin with users.create access to open this page.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadUserInvitePermissions}
+                disabled={isPermissionsLoading}
+                aria-label="Retry loading user invite permissions"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry permissions
+              </button>
+              <Link
+                to="/users"
+                search={usersRouteSearch}
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+              >
+                Review users
+              </Link>
+            </div>
+          </div>
         </div>
       </PageShell>
     );

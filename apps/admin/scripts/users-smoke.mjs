@@ -30,6 +30,7 @@ const assert = (condition, message) => {
 
 const assertUsersEmptyStatesUseSharedComponent = () => {
   const source = fs.readFileSync(new URL('../src/routes/users.tsx', import.meta.url), 'utf8');
+  const createSource = fs.readFileSync(new URL('../src/routes/users.new.tsx', import.meta.url), 'utf8');
   const detailSource = fs.readFileSync(new URL('../src/routes/users.$userId.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Users route must use the shared EmptyState component');
   assert(source.includes('title="No user audit events yet"'), 'Users audit panel must keep the empty audit title visible');
@@ -47,6 +48,16 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       source.includes('data-testid="users-bulk-clear-selection"') &&
       source.includes('outside this view'),
     'Users bulk toolbar must summarize selected actionable users outside the current table view',
+  );
+  assert(
+    createSource.includes('const loadUserInvitePermissions = useCallback(() => {') &&
+      createSource.includes('data-testid="user-invite-permission-state"') &&
+      createSource.includes('User invite permissions need attention') &&
+      createSource.includes('aria-label="Retry loading user invite permissions"') &&
+      createSource.includes('Retry permissions') &&
+      createSource.includes('to="/users"') &&
+      createSource.includes('Review users'),
+    'User invite permission state must expose retryable permission recovery and user-access handoff',
   );
 };
 
