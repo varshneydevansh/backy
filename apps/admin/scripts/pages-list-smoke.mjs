@@ -38,6 +38,8 @@ const assertPagesListSourceContract = () => {
   assert(source.includes('aria-label="Retry loading pages"') && source.includes('Retry load'), 'Pages list backend error state must expose a retry action');
   assert(source.includes('hasPageFilters') && source.includes('Clear filters'), 'Pages list backend error state must expose filter recovery when filters are active');
   assert(source.includes('data-testid="pages-permission-state"') && source.includes('Page permissions could not be verified'), 'Pages list must expose a labelled permission error state');
+  assert(source.includes('const loadPagePermissions = useCallback(() => {'), 'Pages list must keep permission loading in a reusable retryable callback');
+  assert(source.includes('aria-label="Retry loading page permissions"') && source.includes('Retry permissions'), 'Pages permission error state must expose a retry action');
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Pages permission error state must link to user access management');
   assert(
     source.includes('const selectedFilteredPages = filteredPages.filter') &&

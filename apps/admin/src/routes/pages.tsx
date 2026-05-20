@@ -6,7 +6,7 @@
  * - At /pages/new or /pages/:id/edit: renders child via <Outlet />
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, EyeOff, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus, History, LogIn } from 'lucide-react';
 import {
@@ -1002,7 +1002,7 @@ function PagesListView() {
     }
   }, [selectedSiteId, sites]);
 
-  useEffect(() => {
+  const loadPagePermissions = useCallback(() => {
     let cancelled = false;
     setPermissionError(null);
 
@@ -1038,6 +1038,8 @@ function PagesListView() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadPagePermissions(), [loadPagePermissions]);
 
   const refreshPages = useMemo(
     () => async (siteId: string) => {
@@ -2274,12 +2276,23 @@ function PagesListView() {
                 </p>
               </div>
             </div>
-            <Link
-              to="/users"
-              className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
-            >
-              Review users
-            </Link>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadPagePermissions}
+                disabled={isPermissionsLoading}
+                aria-label="Retry loading page permissions"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry permissions
+              </button>
+              <Link
+                to="/users"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+              >
+                Review users
+              </Link>
+            </div>
           </div>
         </div>
       </PageShell>
