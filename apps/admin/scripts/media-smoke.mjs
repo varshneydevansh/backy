@@ -87,6 +87,15 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('Backy accepts any file and classifies known formats for editor, API, and delivery workflows.'), 'Media upload intake rules must explain arbitrary file support.');
   assert(source.includes('buildPublicMediaListUrl') && source.includes("params.set('folderId', 'root')"), 'Media API handoff must keep root-folder-aware public media list URL generation.');
   assert(source.includes('filteredPublicMediaListUrl') && source.includes('Copy filtered') && source.includes('Filtered media list'), 'Media API panel must expose a copyable filtered public media list URL.');
+  assert(
+    source.includes('const mediaMatchesCurrentFilters = useCallback') &&
+      source.includes('const handleLoadAndSelectMatchingMedia = async () =>') &&
+      source.includes("await loadLibrary({ mode: 'all' })") &&
+      source.includes('loaded.filter(mediaMatchesCurrentFilters).map((file) => file.id)') &&
+      source.includes('data-testid="media-bulk-load-select-matching"') &&
+      source.includes('Load and select matching'),
+    'Media bulk management must load and select every matching asset before applying cross-library folder, tag, safety, or delete actions.',
+  );
   assert(modalSource.includes('listMediaLibrary') && modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must keep loading scoped media through the admin media API');
   assert(modalSource.includes('scope: targetScope') && modalSource.includes('scopeTargetId: targetId || null'), 'Editor media uploads must keep persisting page/post scope metadata');
   assert(!editorSpec.includes('shared in-memory store state inside admin'), 'Editor spec must not regress to stale in-memory media contract language');

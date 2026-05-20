@@ -1152,63 +1152,62 @@ function MediaPage() {
     [currentAdmin, permissionMatrix],
   );
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
-  const displayedFiles = useMemo(() => {
+  const mediaMatchesCurrentFilters = useCallback((file: MediaAsset) => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const normalizedTagFilter = tagFilter.trim().toLowerCase();
 
-    return files.filter((file) => {
-      if (typeFilter !== 'all' && file.type !== typeFilter) {
+    if (typeFilter !== 'all' && file.type !== typeFilter) {
+      return false;
+    }
+
+    if (visibilityFilter !== 'all' && (file.visibility || 'public') !== visibilityFilter) {
+      return false;
+    }
+
+    if (selectedFolderId === null && file.folderId) {
+      return false;
+    }
+
+    if (typeof selectedFolderId === 'string' && (!file.folderId || !selectedFolderFilterIds?.has(file.folderId))) {
+      return false;
+    }
+
+    if (normalizedSearch) {
+      const searchableText = [
+        file.name,
+        file.type,
+        file.altText,
+        file.caption,
+        file.visibility || 'public',
+        ...(file.tags || []),
+        typeof file.metadata?.mimeType === 'string' ? file.metadata.mimeType : '',
+        typeof file.metadata?.fontFamily === 'string' ? file.metadata.fontFamily : '',
+      ].join(' ').toLowerCase();
+
+      if (!searchableText.includes(normalizedSearch)) {
         return false;
       }
+    }
 
-      if (visibilityFilter !== 'all' && (file.visibility || 'public') !== visibilityFilter) {
-        return false;
-      }
+    if (normalizedTagFilter && !(file.tags || []).some((tag) => tag.trim().toLowerCase() === normalizedTagFilter)) {
+      return false;
+    }
 
-      if (selectedFolderId === null && file.folderId) {
-        return false;
-      }
-
-      if (typeof selectedFolderId === 'string' && (!file.folderId || !selectedFolderFilterIds?.has(file.folderId))) {
-        return false;
-      }
-
-      if (normalizedSearch) {
-        const searchableText = [
-          file.name,
-          file.type,
-          file.altText,
-          file.caption,
-          file.visibility || 'public',
-          ...(file.tags || []),
-          typeof file.metadata?.mimeType === 'string' ? file.metadata.mimeType : '',
-          typeof file.metadata?.fontFamily === 'string' ? file.metadata.fontFamily : '',
-        ].join(' ').toLowerCase();
-
-        if (!searchableText.includes(normalizedSearch)) {
-          return false;
-        }
-      }
-
-      if (normalizedTagFilter && !(file.tags || []).some((tag) => tag.trim().toLowerCase() === normalizedTagFilter)) {
-        return false;
-      }
-
-      if (usageFilter === 'unused') {
-        return !hasMediaReferences(file);
-      }
-      if (usageFilter === 'referenced') {
-        return hasMediaReferences(file);
-      }
-      if (usageFilter === 'replaced') {
-        return getReplacementVersions(file.metadata).length > 0;
-      }
-      if (usageFilter === 'quarantined') {
-        return getMediaSecurityPolicy(file.metadata).status === 'quarantined';
-      }
-      return true;
-    });
-  }, [files, searchQuery, selectedFolderFilterIds, selectedFolderId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
+    if (usageFilter === 'unused') {
+      return !hasMediaReferences(file);
+    }
+    if (usageFilter === 'referenced') {
+      return hasMediaReferences(file);
+    }
+    if (usageFilter === 'replaced') {
+      return getReplacementVersions(file.metadata).length > 0;
+    }
+    if (usageFilter === 'quarantined') {
+      return getMediaSecurityPolicy(file.metadata).status === 'quarantined';
+    }
+    return true;
+  }, [searchQuery, selectedFolderFilterIds, selectedFolderId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
+  const displayedFiles = useMemo(() => files.filter(mediaMatchesCurrentFilters), [files, mediaMatchesCurrentFilters]);
   const quotaUsagePercent = mediaQuota && mediaQuota.limitBytes > 0
     ? Math.min(100, Math.round((mediaQuota.usedBytes / mediaQuota.limitBytes) * 100))
     : 0;
@@ -1652,7 +1651,7 @@ function MediaPage() {
       if (!isPermissionMatrixPending) {
         setError(`Your account needs media.view to load the media library. ${viewPermissionTitle}`);
       }
-      return;
+      return [];
     }
 
     const mode = options.mode || 'replace';
@@ -1713,8 +1712,10 @@ function MediaPage() {
       setMediaQuota(firstPage.quota);
       mediaPaginationRef.current = latestPagination;
       setMediaPagination(latestPagination);
+      return nextMedia;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load media library.');
+      return filesRef.current;
     } finally {
       setIsLoading(false);
     }
@@ -2683,6 +2684,24 @@ function MediaPage() {
       displayedFiles.forEach((file) => next.add(file.id));
       return Array.from(next);
     });
+  };
+
+  const handleLoadAndSelectMatchingMedia = async () => {
+    if (isMediaLibraryBusy) return;
+    if (!canBulkSelectMedia) {
+      setBulkNotice(null);
+      setError(deniedBulkSelectionMessage);
+      return;
+    }
+
+    setBulkNotice(null);
+    setPendingBulkDelete(false);
+
+    const loaded = await loadLibrary({ mode: 'all' });
+    const matchingIds = loaded.filter(mediaMatchesCurrentFilters).map((file) => file.id);
+
+    setSelectedMediaIds((current) => Array.from(new Set([...current, ...matchingIds])));
+    setBulkNotice(`Selected ${matchingIds.length} matching loaded asset${matchingIds.length === 1 ? '' : 's'} for bulk actions.`);
   };
 
   const handleClearSelection = () => {
@@ -5442,10 +5461,12 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="ghost"
-                    disabled={isMediaLibraryBusy || !hasUnloadedMedia}
-                    onClick={() => void loadLibrary({ mode: 'all' })}
+                    disabled={isMediaLibraryBusy || !canBulkSelectMedia}
+                    title={!canBulkSelectMedia ? bulkSelectionPermissionTitle : 'Load every matching asset and add it to the bulk selection'}
+                    onClick={() => void handleLoadAndSelectMatchingMedia()}
+                    data-testid="media-bulk-load-select-matching"
                   >
-                    Load all matching
+                    Load and select matching
                   </Button>
                   <Button
                     type="button"
@@ -5468,7 +5489,8 @@ function MediaPage() {
                     </Button>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Add visible assets from the current filters. Selected hidden assets remain selected and are included in bulk actions until cleared.
+                    Add visible assets from the current filters, or load every matching result before selecting so folder, tag, safety, and delete actions cover the full filtered set.
+                    Selected hidden assets remain selected and are included in bulk actions until cleared.
                   </p>
                 </div>
 

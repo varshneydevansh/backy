@@ -475,6 +475,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Finalized the media scope model as `global|page|post`, with `blogId` remaining a public API alias for `postId`.
 - Public/admin media filters return global assets plus assets explicitly scoped or bound to the requested page/post, while `global=true` isolates reusable global assets.
 - Page/post scoped uploads now require `scopeTargetId`, and admin media updates write the same scope, target, `pageIds`, and `postIds` metadata through both demo-store and DB-backed runtimes.
+- Central media bulk management can now load every asset matching the current search/type/visibility/folder/tag/usage filters and select that full loaded set before applying folder moves, visibility changes, quarantine/release, tag edits, or deletion.
 - Covered by `npm run test:media-scope --workspace @backy/public` and `npm run typecheck --workspace @backy/public`.
 
 ### ✅ Blog post editor flow
