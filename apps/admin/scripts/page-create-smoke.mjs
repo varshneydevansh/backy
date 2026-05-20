@@ -1310,11 +1310,15 @@ const assertPageCreateSourceContracts = () => {
     chromeSource.includes('const shiftResponsiveY =') &&
       chromeSource.includes("y: typeof override.y === 'number' ? override.y + offsetY : override.y") &&
       chromeSource.includes('responsive: cloneResponsive(element.responsive)') &&
+      chromeSource.includes('const getFooterYForBreakpoint =') &&
+      chromeSource.includes("const tabletFooterY = getFooterYForBreakpoint(shiftedElements, 'tablet')") &&
+      chromeSource.includes("const mobileFooterY = getFooterYForBreakpoint(shiftedElements, 'mobile')") &&
+      /id: `\$\{idPrefix\}-site-footer`[\s\S]*responsive: \{[\s\S]*tablet: \{ y: tabletFooterY, width: 768 \}[\s\S]*mobile: \{ y: mobileFooterY, width: 375 \}/.test(chromeSource) &&
       chromeSource.includes('id: `${idPrefix}-site-navigation`') &&
       chromeSource.includes('mobile: { x: 20, y: 52, width: 335, height: 30') &&
       chromeSource.includes('id: `${idPrefix}-footer-navigation`') &&
       chromeSource.includes('mobile: { x: 20, y: 122, width: 320, height: 34'),
-    'Starter page chrome must preserve cloned responsive overrides, shift root responsive y values with the header offset, and keep header/footer navigation usable on mobile.',
+    'Starter page chrome must preserve cloned responsive overrides, shift root responsive y values with the header offset, place footers per breakpoint, and keep header/footer navigation usable on mobile.',
   );
   assert(
     source.includes("'member-login'") &&

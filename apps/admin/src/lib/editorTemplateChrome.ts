@@ -6,6 +6,7 @@ import type { CanvasElement } from '@/types/editor';
 
 const PAGE_CHROME_HEADER_HEIGHT = 88;
 const PAGE_CHROME_FOOTER_HEIGHT = 168;
+type PageChromeResponsiveBreakpoint = 'tablet' | 'mobile';
 
 interface PageChromeOptions {
   title: string;
@@ -80,13 +81,42 @@ export const getTemplateBottom = (elements: CanvasElement[]) => (
   }, 0)
 );
 
+const elementBottomForBreakpoint = (
+  element: CanvasElement,
+  breakpoint?: PageChromeResponsiveBreakpoint,
+) => {
+  const override = breakpoint ? element.responsive?.[breakpoint] : undefined;
+  const y = typeof override?.y === 'number' ? override.y : element.y;
+  const height = typeof override?.height === 'number' ? override.height : element.height;
+  return y + height;
+};
+
+const getTemplateBottomForBreakpoint = (
+  elements: CanvasElement[],
+  breakpoint?: PageChromeResponsiveBreakpoint,
+) => (
+  elements.reduce((bottom, element) => Math.max(bottom, elementBottomForBreakpoint(element, breakpoint)), 0)
+);
+
+const getFooterYForBreakpoint = (
+  elements: CanvasElement[],
+  breakpoint?: PageChromeResponsiveBreakpoint,
+) => (
+  Math.max(
+    getTemplateBottomForBreakpoint(elements, breakpoint) + 56,
+    DEFAULT_CANVAS_SIZE.height - PAGE_CHROME_FOOTER_HEIGHT,
+  )
+);
+
 export const getCanvasHeightForElements = (elements: CanvasElement[]) => (
   Math.max(DEFAULT_CANVAS_SIZE.height, getTemplateBottom(elements) + 48)
 );
 
 export function withPageChrome(elements: CanvasElement[], options: PageChromeOptions): CanvasElement[] {
   const shiftedElements = elements.map((element) => shiftCanvasElement(element, PAGE_CHROME_HEADER_HEIGHT));
-  const footerY = Math.max(getTemplateBottom(shiftedElements) + 56, DEFAULT_CANVAS_SIZE.height - PAGE_CHROME_FOOTER_HEIGHT);
+  const footerY = getFooterYForBreakpoint(shiftedElements);
+  const tabletFooterY = getFooterYForBreakpoint(shiftedElements, 'tablet');
+  const mobileFooterY = getFooterYForBreakpoint(shiftedElements, 'mobile');
   const idPrefix = normalizeId(options.variant);
   const brandLabel = options.title || 'Backy site';
 
@@ -161,8 +191,8 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
         padding: 0,
       },
       responsive: {
-        tablet: { width: 768 },
-        mobile: { width: 375 },
+        tablet: { y: tabletFooterY, width: 768 },
+        mobile: { y: mobileFooterY, width: 375 },
       },
       children: [
         createCanvasElement('heading', 72, 40, {
