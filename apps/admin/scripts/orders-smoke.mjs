@@ -186,6 +186,7 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('orderEvidence') &&
       source.includes('endpointEvidence') &&
       source.includes('providerReadinessEvidence') &&
+      source.includes('certificationEvidence') &&
       source.includes('-backy-orders-provider-certification.json') &&
       source.includes('Orders provider certification handoff downloaded.'),
     'Orders page must expose a focused provider certification JSON export',
@@ -208,7 +209,14 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('npm run test:commerce-provider-certification-preflight-contract') &&
       source.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification') &&
       source.includes('data-testid="orders-provider-runtime-evidence"') &&
+      source.includes('data-testid="orders-provider-certification-evidence"') &&
       source.includes('data-testid="orders-provider-certification-runbook"') &&
+      source.includes("schemaVersion: 'backy.order-provider-certification-evidence.v1'") &&
+      source.includes('Checkout settlement') &&
+      source.includes('Quote recalculation') &&
+      source.includes('Carrier labels and tracking') &&
+      source.includes('Webhook and reconciliation') &&
+      source.includes('Order certification evidence') &&
       source.includes('requiredInputs'),
     'Orders handoff manifest must expose mock and live provider certification gates',
   );
@@ -2071,6 +2079,12 @@ const assertOrdersLayout = async (client) => {
         document.body?.innerText?.includes('Order certification command builder') &&
         document.body?.innerText?.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
         document.body?.innerText?.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
+        document.body?.innerText?.includes('Order certification evidence') &&
+        document.body?.innerText?.includes('backy.order-provider-certification-evidence.v1') &&
+        document.body?.innerText?.includes('Checkout settlement') &&
+        document.body?.innerText?.includes('Quote recalculation') &&
+        document.body?.innerText?.includes('Carrier labels and tracking') &&
+        document.body?.innerText?.includes('Webhook and reconciliation') &&
         document.body?.innerText?.includes('Copy CI command') &&
         document.body?.innerText?.includes('Live provider runbook') &&
         document.body?.innerText?.includes('Download provider JSON'),

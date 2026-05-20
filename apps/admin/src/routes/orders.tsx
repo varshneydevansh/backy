@@ -849,6 +849,50 @@ const ORDER_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS = [
   'credentialed order execution check output',
   'non-secret workflow summary without provider secrets',
 ] as const;
+const ORDER_PROVIDER_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'checkout-settlement',
+    label: 'Checkout settlement',
+    expectedEvidence: ['paid checkout order', 'payment provider reference', 'signed provider webhook'],
+    nextAction: 'Run a live checkout and verify the private order reaches paid state with provider reference evidence.',
+  },
+  {
+    key: 'quote-recalculation',
+    label: 'Quote recalculation',
+    expectedEvidence: ['tax quote', 'shipping quote', 'discount adjustment'],
+    nextAction: 'Refresh a live order quote through selected tax, shipping, and discount providers.',
+  },
+  {
+    key: 'carrier-label-tracking',
+    label: 'Carrier labels and tracking',
+    expectedEvidence: ['purchased label', 'void/refund result', 'tracking status'],
+    nextAction: 'Purchase or import a live carrier label, void/refund when needed, and refresh tracking.',
+  },
+  {
+    key: 'fulfillment-dispatch',
+    label: 'Fulfillment dispatch',
+    expectedEvidence: ['warehouse dispatch request', 'provider dispatch id', 'processing/fulfilled state'],
+    nextAction: 'Dispatch a paid order through the configured warehouse or 3PL adapter.',
+  },
+  {
+    key: 'provider-refund',
+    label: 'Provider refund',
+    expectedEvidence: ['provider refund id', 'refund status refresh', 'refund webhook outcome'],
+    nextAction: 'Execute and refresh a live provider refund for a settled payment.',
+  },
+  {
+    key: 'webhook-reconciliation',
+    label: 'Webhook and reconciliation',
+    expectedEvidence: ['commerce-webhook event', 'reconciliation run', 'idempotent repair result'],
+    nextAction: 'Replay signed provider webhooks and run reconciliation against the live target.',
+  },
+  {
+    key: 'subscription-lifecycle',
+    label: 'Subscription lifecycle',
+    expectedEvidence: ['renewal', 'dunning', 'pause/resume/cancel action'],
+    nextAction: 'Run subscription lifecycle scenarios through the product subscription certification gate.',
+  },
+] as const;
 
 const ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS = [
   { value: 'auto', label: 'Auto', description: 'Use the first configured live payment/refund provider credential.' },
@@ -1684,6 +1728,85 @@ function OrdersRoute() {
       secretHandling: 'Provider secret values are never returned; order runtime evidence reports booleans, aliases, provider families, and non-secret URLs only.',
     };
   }, [orderAnalytics?.providerOperations, providerReadinessChecks, providerReadinessReadyCount, runtimeCommerce]);
+  const orderProviderCertificationEvidence = useMemo(() => {
+    const countOrdersMatching = (predicate: (order: CollectionRecord) => boolean) => orders.filter(predicate).length;
+    const hasOrderValue = (order: CollectionRecord, key: string) => Boolean(String(readOrderValue(order.values, key, '') || '').trim());
+    const normalizedOrderValue = (order: CollectionRecord, key: string, fallback = '') => String(readOrderValue(order.values, key, fallback) || fallback).trim().toLowerCase();
+    const providerStatusCount = (items?: Array<{ statuses: Record<string, number> }>) => (
+      items || []
+    ).reduce((sum, item) => sum + Object.values(item.statuses || {}).reduce((innerSum, value) => innerSum + value, 0), 0);
+    const analyticsOperations = orderAnalytics?.operations;
+    const checkoutSettlementCount = Math.max(
+      analyticsOperations?.checkoutOrderCount ?? 0,
+      orderAnalytics?.payment?.paid?.count ?? 0,
+      countOrdersMatching((order) => (
+        normalizedOrderValue(order, 'paymentstatus') === 'paid' &&
+        (normalizedOrderValue(order, 'ordersource') === 'web' || hasOrderValue(order, 'checkoutsessionid'))
+      )),
+    );
+    const quoteRecalculationCount = countOrdersMatching((order) => (
+      toNumber(readOrderValue(order.values, 'taxamount', 0)) > 0 ||
+      toNumber(readOrderValue(order.values, 'shippingamount', 0)) > 0 ||
+      toNumber(readOrderValue(order.values, 'discountamount', 0)) > 0
+    ));
+    const carrierEvidenceCount = countOrdersMatching((order) => {
+      const labelStatus = normalizedOrderValue(order, 'shippinglabelstatus', 'none');
+      return labelStatus !== 'none' || hasOrderValue(order, 'trackingnumber') || hasOrderValue(order, 'trackingstatus');
+    }) + (analyticsOperations?.shippingLabelIssueCount ?? 0);
+    const fulfillmentEvidenceCount = countOrdersMatching((order) => {
+      const fulfillmentStatus = normalizedOrderValue(order, 'fulfillmentstatus', 'unfulfilled');
+      const dispatchStatus = normalizedOrderValue(order, 'fulfillmentdispatchstatus', 'none');
+      return ['processing', 'fulfilled'].includes(fulfillmentStatus) || dispatchStatus !== 'none';
+    }) + (analyticsOperations?.fulfillmentDispatchPendingCount ?? 0) + (analyticsOperations?.fulfillmentDispatchFailureCount ?? 0);
+    const providerRefundEvidenceCount = countOrdersMatching((order) => (
+      normalizedOrderValue(order, 'providerrefundstatus', 'none') !== 'none' ||
+      normalizedOrderValue(order, 'paymentstatus') === 'refunded' ||
+      toNumber(readOrderValue(order.values, 'refundamount', 0)) > 0
+    )) + providerStatusCount(orderAnalytics?.providerOperations?.refundProviders);
+    const webhookReconciliationEvidenceCount = countOrdersMatching((order) => (
+      String(readOrderValue(order.values, 'providerrefundpayload', '') || '').toLowerCase().includes('webhook') ||
+      String(readOrderValue(order.values, 'notes', '') || '').toLowerCase().includes('webhook')
+    )) + (reconciliationResult?.eventCount ?? 0);
+    const subscriptionEvidenceCount = (
+      (analyticsOperations?.subscriptionRenewalCount ?? 0) +
+      (analyticsOperations?.subscriptionDunningCount ?? 0) +
+      (analyticsOperations?.subscriptionPausedCount ?? 0) +
+      (analyticsOperations?.subscriptionResumedCount ?? 0) +
+      (analyticsOperations?.subscriptionTrialEndingCount ?? 0) +
+      (analyticsOperations?.subscriptionCancelledCount ?? 0)
+    );
+    const evidenceCounts: Record<string, number> = {
+      'checkout-settlement': checkoutSettlementCount,
+      'quote-recalculation': quoteRecalculationCount,
+      'carrier-label-tracking': carrierEvidenceCount,
+      'fulfillment-dispatch': fulfillmentEvidenceCount,
+      'provider-refund': providerRefundEvidenceCount,
+      'webhook-reconciliation': webhookReconciliationEvidenceCount,
+      'subscription-lifecycle': subscriptionEvidenceCount,
+    };
+    const scenarios = ORDER_PROVIDER_CERTIFICATION_SCENARIOS.map((scenario) => {
+      const evidenceCount = evidenceCounts[scenario.key] || 0;
+      return {
+        ...scenario,
+        evidenceCount,
+        status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+      };
+    });
+    const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+    return {
+      schemaVersion: 'backy.order-provider-certification-evidence.v1',
+      status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+      requiredGate: ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+      coverage: {
+        covered,
+        total: scenarios.length,
+        missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+      },
+      scenarios,
+      secretHandling: 'Order certification evidence reports scenario names, counts, gates, and non-secret provider families only; provider secrets, customer payloads, and raw order values stay private.',
+    };
+  }, [orderAnalytics, orders, reconciliationResult?.eventCount]);
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -1738,6 +1861,7 @@ function OrdersRoute() {
       checks: providerReadinessChecks,
     },
     operationActionPlan: orderOperationPlanSummary,
+    certificationEvidence: orderProviderCertificationEvidence,
     providerRuntimeEvidence,
     groups: ORDER_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
       family: group.family,
@@ -1758,6 +1882,7 @@ function OrdersRoute() {
     missingOrderFields,
     orderAnalytics?.providerOperations,
     orderReadiness.score,
+    orderProviderCertificationEvidence,
     orderOperationPlanSummary,
     ordersApiReady,
     providerCertificationCommand,
@@ -4296,6 +4421,57 @@ function OrdersRoute() {
                     ) : null}
                     <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
                       Provider secret values are never returned; runtime evidence reports booleans, aliases, provider families, and non-secret URLs only.
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-certification-evidence">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-foreground">Order certification evidence</div>
+                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                          Tracks the non-secret scenario coverage operators must attach before treating live order execution as certified.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                          {orderProviderCertificationEvidence.schemaVersion}
+                        </span>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                          orderProviderCertificationEvidence.status === 'ready' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                        )}>
+                          {orderProviderCertificationEvidence.coverage.covered}/{orderProviderCertificationEvidence.coverage.total} scenarios
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+                      {orderProviderCertificationEvidence.requiredGate}
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {orderProviderCertificationEvidence.scenarios.map((scenario) => (
+                        <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="font-medium text-foreground">{scenario.label}</div>
+                            <span className={cn(
+                              'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                              scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                            )}>
+                              {scenario.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
+                          </div>
+                          {scenario.status === 'missing' ? (
+                            <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                          ) : null}
+                          <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                            Expected: {scenario.expectedEvidence.join(' | ')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                      {orderProviderCertificationEvidence.secretHandling}
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
