@@ -618,7 +618,7 @@ Execution status (2026-02-24):
 - Anti-bot fields (`requestId`, `startedAt`, `honeypot`) are now sent from the comment renderer and checked in both page/post comment submit routes.
 - Shared store now includes comment classification with validation, timing, honeypot, duplicate and rate-limit checks.
 - Parent-thread integrity is now validated in API routes before comment creation.
-- Report routes, report-reason discovery, site-level comment lists, blocklist management, single-comment moderation, deletion, and bulk moderation/report clearing are implemented.
+- Report routes, report-reason discovery, site-level comment lists, blocklist management, single-comment moderation, deletion, selected-comment bulk approve/reject/spam/block controls, and bulk report clearing are implemented.
 - Remaining for parity: export/report analytics depth, block-level spam tuning, and live database certification of the full moderation workflow.
 
 ### 13.4 What frontend should expect from page/blog render APIs

@@ -40,6 +40,19 @@ const assertCommentsRouteSourceContract = () => {
   assert(source.includes('Page and blog comments will appear here with parent and reply counts once submitted.'), 'Comments thread empty state must explain what will populate triage');
   assert(source.includes('title="No blocked authors match this view"'), 'Comments blocklist panel must keep the filtered empty title visible');
   assert(source.includes('Block a comment to create an appealable author identity entry.'), 'Comments blocklist empty state must explain blocklist recovery');
+  assert(
+    source.includes('const selectedVisibleComments = useMemo') &&
+      source.includes('const hiddenSelectedCommentCount = Math.max') &&
+      source.includes('data-testid="comments-bulk-selection-summary"') &&
+      source.includes('data-testid="comments-bulk-clear-selection"'),
+    'Comments bulk toolbar must summarize selected comments outside the current filtered view and expose a clear-selection action',
+  );
+  assert(
+    source.includes("handleModerate(selectedCommentIds, 'blocked', { blockReason })") &&
+      source.includes('iconStart={<ShieldAlert className="size-4" />}') &&
+      source.includes('Block'),
+    'Comments moderation queue must expose the promised selected-comment bulk Block action',
+  );
 };
 
 const requestApi = async (endpoint, options = {}) => {
@@ -1430,6 +1443,12 @@ const cleanup = async ({ client, childProcess, userDataDir, pageId }) => {
 };
 
 const main = async () => {
+  assertCommentsRouteSourceContract();
+  if (process.env.BACKY_COMMENTS_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'comments-source' }));
+    return;
+  }
+
   let client;
   let childProcess;
   let userDataDir;
@@ -1442,7 +1461,6 @@ const main = async () => {
   let restoredNotifications = false;
 
   try {
-    assertCommentsRouteSourceContract();
     await loginAdminApi();
     await assertCommentsPermissionOverridesAreEnforced();
     webhookReceiver = await startCommentWebhookReceiver({ failFirstKind: 'comment-reported' });

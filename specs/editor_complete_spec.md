@@ -514,6 +514,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - This keeps lifecycle, sync, retention, export, and duplicate-merge actions explicit before they operate on all selected loaded contacts.
 - Source coverage is guarded by `apps/admin/scripts/contacts-smoke.mjs`.
 
+### ✅ Comments bulk moderation controls
+- The comments moderation queue now exposes the promised selected-comment bulk Block action alongside Approve, Reject, Spam, Resolve reports, and CSV export.
+- The selected-comment summary now reports hidden selected comments and includes a clear-selection action, matching the private moderation handoff manifest.
+- Source coverage is guarded by `apps/admin/scripts/comments-smoke.mjs`.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.

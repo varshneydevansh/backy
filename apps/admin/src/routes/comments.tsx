@@ -557,11 +557,23 @@ function CommentsRoute() {
     moderation: commentAuditLogs.filter((log) => log.action === 'comment.moderate' || log.action === 'comment.reports.clear').length,
     operations: commentAuditLogs.filter((log) => log.action === 'comment.thread.update' || log.action === 'commentDelivery.retry' || log.action === 'commentBlocklist.delete').length,
   }), [commentAuditLogs]);
-  const hasSelection = selectedIds.length > 0;
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const selectedReportedIds = useMemo(() => comments
-    .filter((comment) => selectedSet.has(comment.id) && ((comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length)))
-    .map((comment) => comment.id), [comments, selectedSet]);
+  const selectedComments = useMemo(() => (
+    comments.filter((comment) => selectedSet.has(comment.id))
+  ), [comments, selectedSet]);
+  const selectedCommentIds = useMemo(() => selectedComments.map((comment) => comment.id), [selectedComments]);
+  const selectedVisibleComments = useMemo(() => (
+    filteredComments.filter((comment) => selectedSet.has(comment.id))
+  ), [filteredComments, selectedSet]);
+  const selectedVisibleCommentIds = useMemo(() => selectedVisibleComments.map((comment) => comment.id), [selectedVisibleComments]);
+  const hiddenSelectedCommentCount = Math.max(0, selectedCommentIds.length - selectedVisibleCommentIds.length);
+  const hasSelection = selectedCommentIds.length > 0;
+  const selectedCommentSummary = hasSelection
+    ? `${selectedCommentIds.length} selected${hiddenSelectedCommentCount > 0 ? ` · ${selectedVisibleCommentIds.length} visible · ${hiddenSelectedCommentCount} outside this view` : ''}`
+    : 'none selected';
+  const selectedReportedIds = useMemo(() => selectedComments
+    .filter((comment) => (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length))
+    .map((comment) => comment.id), [selectedComments]);
   const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
   const commentPolicyDirty = JSON.stringify(commentPolicyDraft) !== JSON.stringify(savedCommentPolicy);
   const commentPolicyBlockedTermsText = commentPolicyDraft.blockedTerms.join('\n');
@@ -616,7 +628,7 @@ function CommentsRoute() {
       },
       {
         label: 'Bulk controls',
-        detail: hasSelection ? `${selectedIds.length} selected for moderation.` : 'Approve, reject, spam, block, and export actions are available.',
+        detail: hasSelection ? `${selectedCommentIds.length} selected for moderation.` : 'Approve, reject, spam, block, and export actions are available.',
         ready: true,
       },
       {
@@ -651,7 +663,7 @@ function CommentsRoute() {
         { label: 'Serve', detail: 'Only approved comments should reach public frontend comment feeds.' },
       ],
     };
-  }, [activeSite, auditMetrics.total, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, comments.length, deliveryMetrics.total, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length, threadSummaries]);
+  }, [activeSite, auditMetrics.total, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, comments.length, deliveryMetrics.total, hasSelection, metrics.flagged, metrics.pending, selectedCommentIds.length, targets.length, threadSummaries]);
   const moderationHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -770,7 +782,12 @@ function CommentsRoute() {
         createdAt: entry.createdAt,
       })),
     },
-    selectedCommentIds: selectedIds,
+    selectedCommentIds: selectedCommentIds,
+    selection: {
+      selectedIds: selectedCommentIds,
+      selectedVisibleIds: selectedVisibleCommentIds,
+      hiddenSelectedCount: hiddenSelectedCommentCount,
+    },
     targets: targets.map((target) => ({
       id: target.id,
       type: target.type,
@@ -847,7 +864,9 @@ function CommentsRoute() {
     moderationSingleUpdateUrl,
     publicBaseUrl,
     searchQuery,
-    selectedIds,
+    selectedCommentIds,
+    selectedVisibleCommentIds,
+    hiddenSelectedCommentCount,
     sortFilter,
     statusFilter,
     targetByKey,
@@ -2519,14 +2538,17 @@ function CommentsRoute() {
               >
                 Export CSV
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
                 Approve
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
                 Reject
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
                 Spam
+              </Button>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'blocked', { blockReason })} iconStart={<ShieldAlert className="size-4" />}>
+                Block
               </Button>
               <Button
                 size="sm"
@@ -2584,7 +2606,7 @@ function CommentsRoute() {
 
             <div className="mt-4 grid gap-3 md:grid-cols-4">
               <MetaTile label="Visibility" value="private" />
-              <MetaTile label="Bulk action" value={hasSelection ? `${selectedIds.length} selected` : 'none selected'} />
+              <MetaTile label="Bulk action" value={selectedCommentSummary} />
               <MetaTile label="Queue" value={`${filteredComments.length} visible`} />
               <MetaTile label="Public threads" value="page + blog" />
             </div>
@@ -2812,18 +2834,38 @@ function CommentsRoute() {
             />
           ) : (
             <div className="space-y-3">
-              <label className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  disabled={isCommentsBusy || !canManageComments}
-                  title={managePermissionTitle}
-                  onChange={toggleVisibleSelection}
-                  className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                  aria-label="Select visible comments"
-                />
-                Select visible comments
-              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    disabled={isCommentsBusy || !canManageComments}
+                    title={managePermissionTitle}
+                    onChange={toggleVisibleSelection}
+                    className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Select visible comments"
+                  />
+                  Select visible comments
+                </label>
+                <span
+                  className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground"
+                  data-testid="comments-bulk-selection-summary"
+                >
+                  {selectedCommentSummary}
+                </span>
+                {hasSelection && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={isCommentsBusy}
+                    onClick={() => setSelectedIds([])}
+                    data-testid="comments-bulk-clear-selection"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
               {filteredComments.map((comment) => {
                 const parentOptions = (topLevelParentsByTarget.get(`${comment.targetType}:${comment.targetId}`) || [])
                   .filter((parent) => parent.id !== comment.id);
