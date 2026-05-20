@@ -165,7 +165,7 @@ Legend:
 - ⚠️ External auth-provider rollout remains a certification gate.
 
 #### `/users.$userId` (`users.$userId.tsx`)
-- ✅ User detail supports role/status editing, permission preview, active sessions, reset-password, session revocation, MFA/recovery-code management, and audit activity.
+- ✅ User detail supports role/status editing, permission preview, retryable permission recovery, active sessions, reset-password, session revocation, MFA/recovery-code management, and audit activity.
 - ⚠️ Broader external auth-provider rollout remains globally tracked outside this page.
 
 #### `/settings` (`settings.tsx`)
@@ -459,6 +459,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/media` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/users/new` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
+  - `/users/$userId` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/contacts` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/comments` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/collections` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, permission-contract retry actions, and filtered full-result record bulk selection summaries.

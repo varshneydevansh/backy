@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -317,7 +317,7 @@ function EditUserPage() {
     }
   }, [user]);
 
-  useEffect(() => {
+  const loadCurrentAdminUserPermissions = useCallback(() => {
     let cancelled = false;
     setCurrentAdminPermissionError(null);
 
@@ -353,6 +353,8 @@ function EditUserPage() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadCurrentAdminUserPermissions(), [loadCurrentAdminUserPermissions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -711,8 +713,40 @@ function EditUserPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to users
         </button>
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {notice || currentAdminPermissionError || viewPermissionTitle || 'Ask an owner or admin with users.view access to open this page.'}
+        <div
+          role="alert"
+          data-testid="user-detail-permission-state"
+          className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">User detail permissions need attention</p>
+                <p className="mt-1 leading-6">
+                  {notice || currentAdminPermissionError || viewPermissionTitle || 'Ask an owner or admin with users.view access to open this page.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadCurrentAdminUserPermissions}
+                disabled={isLoadingCurrentAdminPermissions}
+                aria-label="Retry loading user detail permissions"
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={cn('size-3.5', isLoadingCurrentAdminPermissions && 'animate-spin')} />
+                Retry permissions
+              </button>
+              <Link
+                to="/users"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+              >
+                Review users
+              </Link>
+            </div>
+          </div>
         </div>
       </PageShell>
     );
@@ -1321,8 +1355,38 @@ function EditUserPage() {
               </div>
             )}
             {currentAdminPermissionError && (
-              <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {currentAdminPermissionError}
+              <div
+                role="alert"
+                data-testid="user-detail-rbac-permission-state"
+                className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="flex gap-3">
+                    <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">User detail permissions need attention</p>
+                      <p className="mt-1 leading-6">{currentAdminPermissionError}</p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={loadCurrentAdminUserPermissions}
+                      disabled={isLoadingCurrentAdminPermissions}
+                      aria-label="Retry loading user detail permissions"
+                      className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <RefreshCw className={cn('size-3.5', isLoadingCurrentAdminPermissions && 'animate-spin')} />
+                      Retry permissions
+                    </button>
+                    <Link
+                      to="/users"
+                      className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+                    >
+                      Review users
+                    </Link>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1451,8 +1515,38 @@ function EditUserPage() {
             </div>
 
             {permissionError && (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                {permissionError}
+              <div
+                role="alert"
+                data-testid="user-detail-matrix-permission-state"
+                className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="flex gap-3">
+                    <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">User permission matrix could not be verified</p>
+                      <p className="mt-1 leading-6">{permissionError}</p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void loadPermissionMatrix()}
+                      disabled={isLoadingPermissions || !canViewUsers}
+                      aria-label="Retry loading selected user permissions"
+                      className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <RefreshCw className={cn('size-3.5', isLoadingPermissions && 'animate-spin')} />
+                      Retry permissions
+                    </button>
+                    <Link
+                      to="/users"
+                      className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+                    >
+                      Review users
+                    </Link>
+                  </div>
+                </div>
               </div>
             )}
 

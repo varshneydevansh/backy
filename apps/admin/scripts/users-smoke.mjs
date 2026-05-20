@@ -59,6 +59,20 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       createSource.includes('Review users'),
     'User invite permission state must expose retryable permission recovery and user-access handoff',
   );
+  assert(
+    detailSource.includes('const loadCurrentAdminUserPermissions = useCallback(() => {') &&
+      detailSource.includes('data-testid="user-detail-permission-state"') &&
+      detailSource.includes('data-testid="user-detail-rbac-permission-state"') &&
+      detailSource.includes('data-testid="user-detail-matrix-permission-state"') &&
+      detailSource.includes('User detail permissions need attention') &&
+      detailSource.includes('User permission matrix could not be verified') &&
+      detailSource.includes('aria-label="Retry loading user detail permissions"') &&
+      detailSource.includes('aria-label="Retry loading selected user permissions"') &&
+      detailSource.includes('Retry permissions') &&
+      detailSource.includes('to="/users"') &&
+      detailSource.includes('Review users'),
+    'User detail permission states must expose retryable permission recovery and user-access handoff',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
