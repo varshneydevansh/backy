@@ -43,7 +43,6 @@ type FlattenedCanvasElement = {
 };
 
 const MAX_LISTED_ELEMENT_CHANGES = 8;
-const MAX_LISTED_PROPERTY_CHANGES = 6;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   !!value && typeof value === 'object' && !Array.isArray(value)
@@ -276,7 +275,7 @@ export const compareCanvasRevisionElements = (
         type: current.type,
         path: current.path,
         propertyChangeCount: propertyChanges.length,
-        properties: propertyChanges.slice(0, MAX_LISTED_PROPERTY_CHANGES),
+        properties: propertyChanges,
       });
     }
   });

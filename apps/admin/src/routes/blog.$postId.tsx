@@ -3119,20 +3119,22 @@ function EditBlogPostPage() {
                                                                                 <span className="font-mono">{change.type}</span>
                                                                                 <span className="min-w-0 [overflow-wrap:anywhere]">{change.label}</span>
                                                                             </div>
-                                                                            <div className="grid gap-1 pl-2">
-                                                                                {change.properties.slice(0, 3).map((property) => (
-                                                                                    <div key={property.property} className="min-w-0 [overflow-wrap:anywhere]">
-                                                                                        <span className="font-mono text-foreground">{property.property}</span>
-                                                                                        <span className="text-muted-foreground"> Snapshot </span>
-                                                                                        <span>{property.snapshot}</span>
-                                                                                        <span className="text-muted-foreground">{' -> Current '}</span>
-                                                                                        <span>{property.current}</span>
-                                                                                    </div>
-                                                                                ))}
-                                                                                {change.propertyChangeCount > 3 ? (
-                                                                                    <div>{change.propertyChangeCount - 3} more changed propert{change.propertyChangeCount - 3 === 1 ? 'y' : 'ies'} summarized by the diff totals.</div>
-                                                                                ) : null}
-                                                                            </div>
+                                                                            <details className="pl-2" open={change.propertyChangeCount <= 3}>
+                                                                                <summary className="cursor-pointer font-medium text-primary">
+                                                                                    {change.propertyChangeCount} changed propert{change.propertyChangeCount === 1 ? 'y' : 'ies'}
+                                                                                </summary>
+                                                                                <div className="mt-1 grid gap-1">
+                                                                                    {change.properties.map((property) => (
+                                                                                        <div key={property.property} className="min-w-0 [overflow-wrap:anywhere]">
+                                                                                            <span className="font-mono text-foreground">{property.property}</span>
+                                                                                            <span className="text-muted-foreground"> Snapshot </span>
+                                                                                            <span>{property.snapshot}</span>
+                                                                                            <span className="text-muted-foreground">{' -> Current '}</span>
+                                                                                            <span>{property.current}</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </details>
                                                                         </div>
                                                                     ))}
                                                                     {revisionDiff.elementDiff.totalChanged > revisionDiff.elementDiff.changes.length ? (
