@@ -4,7 +4,7 @@
 
 export type GeneratedBackyOpenApiOperationId = "bulkUpdateBackySiteComments" | "createBackyCollectionRecord" | "createBackyCommerceOrder" | "deleteBackyCollectionRecord" | "deleteBackyCommentBlocklistEntries" | "discoverBackySite" | "getBackyBlogComment" | "getBackyBlogRssFeed" | "getBackyCollection" | "getBackyCommentReportReasons" | "getBackyCommerceCatalog" | "getBackyCommerceOrderContract" | "getBackyFontManifest" | "getBackyForm" | "getBackyFormContact" | "getBackyFormDefinition" | "getBackyFormSubmission" | "getBackyFrontendDesignContract" | "getBackyFrontendManifest" | "getBackyInteractiveComponentRegistry" | "getBackyInteractiveComponentSandbox" | "getBackyLiveManagedBlogPost" | "getBackyLiveManagedPage" | "getBackyMedia" | "getBackyMediaFile" | "getBackyNavigation" | "getBackyOpenApiDocument" | "getBackyPageComment" | "getBackyRenderPayload" | "getBackyReusableSection" | "getBackySeoDiscovery" | "getBackySiteComment" | "listBackyBlogAuthors" | "listBackyBlogCategories" | "listBackyBlogComments" | "listBackyBlogPosts" | "listBackyBlogTags" | "listBackyCollectionRecords" | "listBackyCollections" | "listBackyCommentBlocklist" | "listBackyCommentReportReasons" | "listBackyFormContacts" | "listBackyFormSubmissions" | "listBackyForms" | "listBackyInteractionEvents" | "listBackyMedia" | "listBackyMediaFolders" | "listBackyPageComments" | "listBackyPages" | "listBackyReusableSections" | "listBackySiteComments" | "receiveBackyCommerceWebhook" | "recordBackyInteractiveRuntimeEvent" | "reportBackyComment" | "resolveBackyRoute" | "reviewBackyFormSubmission" | "submitBackyBlogComment" | "submitBackyForm" | "submitBackyPageComment" | "transformBackyMediaImage" | "updateBackyBlogComment" | "updateBackyCollectionRecord" | "updateBackyFormContact" | "updateBackyLiveManagedBlogPost" | "updateBackyLiveManagedPage" | "updateBackyPageComment" | "updateBackySiteComment";
 
-export type GeneratedBackyOpenApiComponentName = "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProviderCertification" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "MediaAsset" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
+export type GeneratedBackyOpenApiComponentName = "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProviderCertification" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
 
 export interface GeneratedBackyOpenApiOperation {
   operationId?: GeneratedBackyOpenApiOperationId;
@@ -20,6 +20,7 @@ export interface GeneratedBackyOpenApiDocument {
   openapi: string;
   "x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification;
   "x-backy-frontend-launch-readiness"?: GeneratedBackyFrontendManifestLaunchReadiness;
+  "x-backy-media-file-categories"?: GeneratedBackyOpenApiMediaFileCategoryDiscovery;
   info: { title: string; version: string; description?: string; [key: string]: unknown };
   servers?: Array<{ url: string; [key: string]: unknown }>;
   paths: Record<string, Partial<Record<"get" | "post" | "put" | "patch" | "delete", GeneratedBackyOpenApiOperation>> & Record<string, unknown>>;
@@ -513,6 +514,43 @@ export type GeneratedBackyOpenApiMediaList = {
     pagination: Record<string, unknown>;
   };
   error?: GeneratedBackyOpenApiErrorEnvelope;
+};
+
+export type GeneratedBackyOpenApiMediaFileCategoryDiscovery = {
+  schemaVersion: "backy.media-file-categories.v1";
+  fileCategories: Array<GeneratedBackyOpenApiMediaFileCategory>;
+  deliveryPolicy: GeneratedBackyOpenApiMediaDeliveryPolicy;
+  [key: string]: unknown;
+};
+
+export type GeneratedBackyOpenApiMediaFileCategory = {
+  type: "image" | "video" | "audio" | "document" | "font" | "other";
+  label: string;
+  accepts: Array<string>;
+  aliases?: Array<string>;
+  pickerUse: "visual-media" | "embedded-media" | "downloadable-document" | "downloadable-file" | "typography";
+  delivery: "public-or-signed-file" | "font-manifest-or-file";
+  transformEligible: boolean;
+  responsiveEligible: boolean;
+  fontManifestEligible: boolean;
+  [key: string]: unknown;
+};
+
+export type GeneratedBackyOpenApiMediaDeliveryPolicy = {
+  publicFiles: "direct-file-url";
+  privateFiles: "signed-url-required";
+  signedUrlEndpoint: string;
+  signedUrlMethod: "POST";
+  signedUrlPermission: "media.view";
+  acceptedDispositions: Array<"inline" | "attachment">;
+  defaultDisposition: "inline";
+  maxSignedUrlSeconds: 3600;
+  transformableTypes: Array<"image">;
+  responsiveTypes: Array<"image">;
+  fontManifestTypes: Array<"font">;
+  downloadableTypes: Array<"document" | "other" | "audio" | "video">;
+  secretHandling: string;
+  [key: string]: unknown;
 };
 
 export type GeneratedBackyOpenApiMediaFolder = {
@@ -2062,8 +2100,11 @@ export interface GeneratedBackyOpenApiComponentSchemas {
   InteractiveComponentSecurity?: GeneratedBackyOpenApiInteractiveComponentSecurity;
   InteractiveRuntimeEventRequest?: GeneratedBackyOpenApiInteractiveRuntimeEventRequest;
   MediaAsset?: GeneratedBackyOpenApiMediaAsset;
+  MediaDeliveryPolicy?: GeneratedBackyOpenApiMediaDeliveryPolicy;
   MediaDetailEnvelope?: GeneratedBackyOpenApiMediaDetailEnvelope;
   MediaEditableMetadata?: GeneratedBackyOpenApiMediaEditableMetadata;
+  MediaFileCategory?: GeneratedBackyOpenApiMediaFileCategory;
+  MediaFileCategoryDiscovery?: GeneratedBackyOpenApiMediaFileCategoryDiscovery;
   MediaFolder?: GeneratedBackyOpenApiMediaFolder;
   MediaFolderListEnvelope?: GeneratedBackyOpenApiMediaFolderListEnvelope;
   MediaFolderRoot?: GeneratedBackyOpenApiMediaFolderRoot;

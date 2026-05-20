@@ -594,6 +594,101 @@ const mediaTransformErrorResponseHeaders = {
   "X-Backy-Request-Id": mediaTransformResponseHeaders["X-Backy-Request-Id"],
 };
 
+const mediaFileCategories = [
+  {
+    type: "image",
+    label: "Images",
+    accepts: ["image/*"],
+    pickerUse: "visual-media",
+    delivery: "public-or-signed-file",
+    transformEligible: true,
+    responsiveEligible: true,
+    fontManifestEligible: false,
+  },
+  {
+    type: "video",
+    label: "Videos",
+    accepts: ["video/*"],
+    pickerUse: "embedded-media",
+    delivery: "public-or-signed-file",
+    transformEligible: false,
+    responsiveEligible: false,
+    fontManifestEligible: false,
+  },
+  {
+    type: "audio",
+    label: "Audio",
+    accepts: ["audio/*"],
+    pickerUse: "embedded-media",
+    delivery: "public-or-signed-file",
+    transformEligible: false,
+    responsiveEligible: false,
+    fontManifestEligible: false,
+  },
+  {
+    type: "document",
+    label: "Documents",
+    accepts: [
+      "application/pdf",
+      "text/plain",
+      "text/csv",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ],
+    aliases: ["file"],
+    pickerUse: "downloadable-document",
+    delivery: "public-or-signed-file",
+    transformEligible: false,
+    responsiveEligible: false,
+    fontManifestEligible: false,
+  },
+  {
+    type: "font",
+    label: "Fonts",
+    accepts: ["font/*", ".woff", ".woff2", ".ttf", ".otf", ".eot"],
+    pickerUse: "typography",
+    delivery: "font-manifest-or-file",
+    transformEligible: false,
+    responsiveEligible: false,
+    fontManifestEligible: true,
+  },
+  {
+    type: "other",
+    label: "Other files",
+    accepts: ["application/octet-stream"],
+    pickerUse: "downloadable-file",
+    delivery: "public-or-signed-file",
+    transformEligible: false,
+    responsiveEligible: false,
+    fontManifestEligible: false,
+  },
+] as const;
+
+const mediaFileCategoryDiscovery = (siteId: string) => ({
+  schemaVersion: "backy.media-file-categories.v1",
+  fileCategories: mediaFileCategories,
+  deliveryPolicy: {
+    publicFiles: "direct-file-url",
+    privateFiles: "signed-url-required",
+    signedUrlEndpoint: `/api/admin/sites/${siteId}/media/{mediaId}/signed-url`,
+    signedUrlMethod: "POST",
+    signedUrlPermission: "media.view",
+    acceptedDispositions: ["inline", "attachment"],
+    defaultDisposition: "inline",
+    maxSignedUrlSeconds: 3600,
+    transformableTypes: ["image"],
+    responsiveTypes: ["image"],
+    fontManifestTypes: ["font"],
+    downloadableTypes: ["document", "other", "audio", "video"],
+    secretHandling:
+      "Private file bytes require short-lived signed URLs minted through authenticated admin media APIs; public OpenAPI discovery never includes private file tokens.",
+  },
+});
+
 const blogFeedDiscovery = (site: { id: string; name: string }) => ({
   id: "blog-rss",
   title: `${site.name} Blog RSS`,
@@ -785,6 +880,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       site.settings?.redirectRules,
     ).filter((rule) => rule.enabled);
     const blogFeed = blogFeedDiscovery(site);
+    const mediaFileCategoryDiscoveryContract = mediaFileCategoryDiscovery(site.id);
     const delivery = deliveryDiscovery(origin, site);
     const frontendLaunchReadiness = buildFrontendLaunchReadiness({
       siteId: site.id,
@@ -807,6 +903,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         openapi: "3.1.0",
         "x-backy-database-certification": frontendDatabaseCertification,
         "x-backy-frontend-launch-readiness": frontendLaunchReadiness,
+        "x-backy-media-file-categories": mediaFileCategoryDiscoveryContract,
         info: {
           title: `${site.name} Backy Public API`,
           version: "backy-public.v1",
@@ -1599,6 +1696,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               tags: ["Media"],
               summary: "List public media assets",
               operationId: "listBackyMedia",
+              "x-backy-media-file-categories": mediaFileCategoryDiscoveryContract,
               parameters: [
                 {
                   name: "type",
@@ -4246,6 +4344,113 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   pagination: { type: "object", additionalProperties: true },
                 },
               }),
+            },
+            MediaFileCategoryDiscovery: {
+              type: "object",
+              additionalProperties: true,
+              required: ["schemaVersion", "fileCategories", "deliveryPolicy"],
+              properties: {
+                schemaVersion: { const: "backy.media-file-categories.v1" },
+                fileCategories: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/MediaFileCategory" },
+                },
+                deliveryPolicy: {
+                  $ref: "#/components/schemas/MediaDeliveryPolicy",
+                },
+              },
+            },
+            MediaFileCategory: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "type",
+                "label",
+                "accepts",
+                "pickerUse",
+                "delivery",
+                "transformEligible",
+                "responsiveEligible",
+                "fontManifestEligible",
+              ],
+              properties: {
+                type: {
+                  type: "string",
+                  enum: ["image", "video", "audio", "document", "font", "other"],
+                },
+                label: { type: "string" },
+                accepts: { type: "array", items: { type: "string" } },
+                aliases: { type: "array", items: { type: "string" } },
+                pickerUse: {
+                  type: "string",
+                  enum: [
+                    "visual-media",
+                    "embedded-media",
+                    "downloadable-document",
+                    "downloadable-file",
+                    "typography",
+                  ],
+                },
+                delivery: {
+                  type: "string",
+                  enum: ["public-or-signed-file", "font-manifest-or-file"],
+                },
+                transformEligible: { type: "boolean" },
+                responsiveEligible: { type: "boolean" },
+                fontManifestEligible: { type: "boolean" },
+              },
+            },
+            MediaDeliveryPolicy: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "publicFiles",
+                "privateFiles",
+                "signedUrlEndpoint",
+                "signedUrlMethod",
+                "signedUrlPermission",
+                "acceptedDispositions",
+                "defaultDisposition",
+                "maxSignedUrlSeconds",
+                "transformableTypes",
+                "responsiveTypes",
+                "fontManifestTypes",
+                "downloadableTypes",
+                "secretHandling",
+              ],
+              properties: {
+                publicFiles: { const: "direct-file-url" },
+                privateFiles: { const: "signed-url-required" },
+                signedUrlEndpoint: { type: "string" },
+                signedUrlMethod: { const: "POST" },
+                signedUrlPermission: { const: "media.view" },
+                acceptedDispositions: {
+                  type: "array",
+                  items: { type: "string", enum: ["inline", "attachment"] },
+                },
+                defaultDisposition: { const: "inline" },
+                maxSignedUrlSeconds: { const: 3600 },
+                transformableTypes: {
+                  type: "array",
+                  items: { type: "string", enum: ["image"] },
+                },
+                responsiveTypes: {
+                  type: "array",
+                  items: { type: "string", enum: ["image"] },
+                },
+                fontManifestTypes: {
+                  type: "array",
+                  items: { type: "string", enum: ["font"] },
+                },
+                downloadableTypes: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                    enum: ["document", "other", "audio", "video"],
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
             },
             MediaFolder: {
               type: "object",
@@ -6923,6 +7128,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           formIds,
           reusableSectionIds,
           blogFeeds: [blogFeed],
+          mediaFileCategories: mediaFileCategoryDiscoveryContract,
           delivery,
           localeRouting: {
             defaultLocale: delivery.defaultLocale,

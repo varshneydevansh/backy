@@ -129,6 +129,10 @@ assert(
     manifestRoute.includes("file: 'document'") &&
     manifestRoute.includes('media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length)') &&
     manifestRoute.includes('media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total)') &&
+    openApiRoute.includes('mediaFileCategoryDiscovery') &&
+    openApiRoute.includes('"x-backy-media-file-categories"') &&
+    openApiRoute.includes('MediaFileCategoryDiscovery') &&
+    openApiRoute.includes('MediaDeliveryPolicy') &&
     frontendManifestSchema.includes('"backy.media-discovery.v1"') &&
     frontendManifestSchema.includes('"signedPrivateFiles"') &&
     frontendManifestSchema.includes('"fileCategories"') &&
@@ -150,13 +154,15 @@ assert(
     sdkSource.includes('mediaFolders(') &&
     sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') &&
     sdkSource.includes('siteId?: string') &&
+    generatedSdkTypes.includes('"x-backy-media-file-categories"?: GeneratedBackyOpenApiMediaFileCategoryDiscovery') &&
     sdkSmoke.includes('manifest() missing media discovery module') &&
     sdkSmoke.includes('manifest() media discovery missing folderId filter') &&
     sdkSmoke.includes('manifest() media discovery missing document category') &&
     sdkSmoke.includes('manifest() media discovery missing signed URL policy') &&
     sdkSmoke.includes('mediaFolders() missing folder array') &&
+    generatedSdkSmoke.includes('openApiMediaFileCategories') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery'),
-  'Frontend manifest and SDK must expose structured media discovery for custom frontend asset browsers.',
+  'Frontend manifest, OpenAPI, and SDK must expose structured media discovery for custom frontend asset browsers.',
 );
 
 assert(

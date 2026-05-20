@@ -151,6 +151,7 @@ import type {
   GeneratedBackyOpenApiMediaAsset,
   GeneratedBackyOpenApiMediaDetailEnvelope,
   GeneratedBackyOpenApiMediaEditableMetadata,
+  GeneratedBackyOpenApiMediaFileCategoryDiscovery,
   GeneratedBackyOpenApiMediaFolder,
   GeneratedBackyOpenApiMediaFolderListEnvelope,
   GeneratedBackyOpenApiMediaFolderRoot,
@@ -2532,6 +2533,12 @@ const sdkManifestMedia = {
   },
 } satisfies BackyManifestMediaModule;
 
+const openApiMediaFileCategories = {
+  schemaVersion: "backy.media-file-categories.v1",
+  fileCategories: sdkManifestMedia.fileCategories,
+  deliveryPolicy: sdkManifestMedia.deliveryPolicy,
+} satisfies GeneratedBackyOpenApiMediaFileCategoryDiscovery;
+
 const sdkManifestCommerceRuntime = {
   schemaVersion: "backy.commerce-discovery.v1",
   enabled: true,
@@ -2893,6 +2900,7 @@ const siteListEnvelope = {
 const openApi = {
   openapi: "3.1.0",
   "x-backy-database-certification": frontendDatabaseCertification,
+  "x-backy-media-file-categories": openApiMediaFileCategories,
   info: {
     title: "Demo Backy Public API",
     version: "backy-public.v1",
@@ -2922,6 +2930,7 @@ const openApi = {
         },
       },
       SiteSummary: siteSummary,
+      MediaFileCategoryDiscovery: openApiMediaFileCategories,
       SiteEnvelope: siteEnvelope,
       SiteListEnvelope: siteListEnvelope,
       RouteResolveEnvelope: {
@@ -2955,6 +2964,7 @@ const openApiOperationId =
 const openApiComponentName =
   "ErrorEnvelope" satisfies GeneratedBackyOpenApiComponentName;
 const openApiComponents = {
+  MediaFileCategoryDiscovery: openApiMediaFileCategories,
   ErrorEnvelope: {
     success: false,
     requestId: "req_error",
