@@ -4,9 +4,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
 import {
     createPage,
+    createPagePreview,
     getAdminApiBase,
     getPage,
     getSiteFrontendDesign,
@@ -19,6 +20,7 @@ import {
     type Collection,
     type CollectionField,
     type CollectionFieldType,
+    type PageCreateInput,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
@@ -1217,6 +1219,7 @@ function NewPageRoute() {
     const currentAdmin = useAuthStore((state) => state.user);
     const { sites, pages, setPages } = useStore();
     const [isLoading, setIsLoading] = useState(false);
+    const [isPreviewAfterCreateBusy, setIsPreviewAfterCreateBusy] = useState(false);
     const [isCheckingPages, setIsCheckingPages] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
@@ -1252,7 +1255,7 @@ function NewPageRoute() {
     const sitesConfigurePermissionTitle = canConfigureSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const sitesCreatePermissionTitle = canCreateSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canApplyNavigationPlacement = canViewSites && canConfigureSites;
-    const isPageCreateBusy = isLoading || isCheckingPages || isPermissionMatrixPending;
+    const isPageCreateBusy = isLoading || isPreviewAfterCreateBusy || isCheckingPages || isPermissionMatrixPending;
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
@@ -1847,16 +1850,13 @@ function NewPageRoute() {
     );
     const publishPermissionReady = formData.status === 'draft' || canPublishPages;
     const navigationPermissionReady = formData.navigationPlacement === 'none' || canApplyNavigationPlacement;
-	    const canSubmit = Boolean(
-	        canEditPages
-	        &&
-	        formData.title.trim()
+    const baseCreateReady = Boolean(
+        canEditPages
+        && formData.title.trim()
         && formData.siteId
         && selectedSite
         && !isCheckingPages
-        && publishPermissionReady
         && navigationPermissionReady
-        && hasFutureSchedule
         && !routeConflict
         && !routeCheckError
         && !isCollectionRouteCheckPending
@@ -1868,6 +1868,8 @@ function NewPageRoute() {
         && datasetImportReady
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
+    const canSubmit = Boolean(baseCreateReady && publishPermissionReady && hasFutureSchedule);
+    const canCreatePreviewDraft = Boolean(baseCreateReady && canPublishPages);
     const submitBlockerMessage = useMemo(() => {
         if (isLoading || canSubmit) return null;
         if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
@@ -1891,6 +1893,28 @@ function NewPageRoute() {
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
     }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
+    const previewDraftBlockerMessage = useMemo(() => {
+        if (isPreviewAfterCreateBusy || canCreatePreviewDraft) return null;
+        if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
+        if (!canPublishPages) return publishPermissionTitle || 'Your account cannot create page preview links.';
+        if (!navigationPermissionReady) return !canViewSites
+            ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
+            : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.';
+        if (isCheckingPages) return 'Checking existing routes for this site before creating the preview draft.';
+        if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the preview draft.';
+        if (isCollectionRouteCheckPending) return 'Checking collection routes for this site before creating the preview draft.';
+        if (collectionRouteCheckError) return 'Backy could not verify collection routes for this site. Refresh or choose the site again before creating the preview draft.';
+        if (!selectedSite) return 'Select a target site before creating this preview draft.';
+        if (!formData.title.trim()) return 'Add a page title so Backy can create a named preview draft.';
+        if (routeConflict) return routeConflict.message;
+        if (!canonicalValid) return 'Use a canonical path that starts with / or paste a valid site URL.';
+        if (!jsonLdValid) return jsonLdResult.message;
+        if (formData.collectionId && collectionsLoading) return 'Loading the selected collection before creating the preview draft.';
+        if (formData.collectionId && !selectedDatasetCollection) return collectionsError || 'Choose an existing collection before creating this dataset preview draft.';
+        if (!hasValidParentPage) return 'Choose an existing parent page or keep this preview draft at the top level.';
+        if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this preview draft to navigation.';
+        return 'Review the required page basics before creating this preview draft.';
+    }, [canCreatePreviewDraft, canEditPages, canPublishPages, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isPreviewAfterCreateBusy, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -2371,7 +2395,7 @@ function NewPageRoute() {
     ]);
 
     useEffect(() => {
-        if (!hasHydratedAutosave || autosavePausedForRecovery || isLoading) {
+        if (!hasHydratedAutosave || autosavePausedForRecovery || isLoading || isPreviewAfterCreateBusy) {
             return;
         }
 
@@ -2406,6 +2430,7 @@ function NewPageRoute() {
         hasAutosaveContent,
         hasHydratedAutosave,
         isLoading,
+        isPreviewAfterCreateBusy,
     ]);
 
     const clearAutosavedDraft = () => {
@@ -2487,6 +2512,150 @@ function NewPageRoute() {
         setNotice('Page creation handoff manifest downloaded.');
     };
 
+    const buildPageCreateInput = (statusOverride: PageCreationStatus = formData.status): PageCreateInput & { siteId: string } => {
+        const title = formData.title.trim();
+        const slug = resolvedSlug;
+        const content = createInitialPageContent({
+            template: formData.template,
+            frontendTemplate: selectedFrontendTemplate,
+            frontendDesign,
+            datasetCollection: selectedDatasetCollection,
+            datasetMode: selectedDatasetMode || undefined,
+            title,
+            slug,
+            status: statusOverride,
+            description: formData.description,
+        });
+
+        return {
+            title,
+            slug,
+            siteId: formData.siteId,
+            status: statusOverride,
+            scheduledAt: statusOverride === 'scheduled' ? formData.scheduledAt : null,
+            template: formData.template,
+            description: formData.description,
+            isHomepage: formData.isHomepage,
+            parentId: selectedParentPage?.id || null,
+            meta: {
+                title: effectiveSeoTitle || title,
+                description: formData.description,
+                canonical: normalizedCanonicalPath,
+                keywords: effectiveKeywords,
+                jsonLd: effectiveJsonLd,
+                ogImage: formData.ogImage.trim() || undefined,
+                noIndex: formData.noIndex,
+                noFollow: formData.noFollow,
+                template: formData.template,
+                frontendDesignTemplateId: selectedFrontendTemplate?.id,
+                frontendDesignTemplateName: selectedFrontendTemplate?.name,
+                frontendDesignSource: selectedFrontendTemplate ? frontendDesign?.source : undefined,
+                frontendDesignRoutePattern: selectedFrontendTemplate?.routePattern,
+                frontendDesignTokens: selectedFrontendTemplate ? frontendDesign?.tokens : undefined,
+                frontendDesignChrome: selectedFrontendTemplate ? frontendDesign?.chrome : undefined,
+                frontendDesignCustomCss: selectedFrontendTemplate ? frontendDesign?.tokens?.customCss : undefined,
+                frontendDesignBindingHints: selectedFrontendTemplate?.bindingHints,
+                navigationPlacement: formData.navigationPlacement,
+                navigationLabel: formData.navigationLabel.trim() || title,
+                parentPageId: selectedParentPage?.id || undefined,
+                parentPageTitle: selectedParentPage?.title || undefined,
+                collectionDataset: selectedDatasetContract || undefined,
+            },
+            content,
+        };
+    };
+
+    const applyNavigationForCreatedPage = async (created: Page, title: string) => {
+        let navigationWarning: string | null = null;
+
+        try {
+            await applyPageNavigationPlacement({
+                siteId: formData.siteId,
+                page: created,
+                placement: formData.navigationPlacement,
+                label: formData.navigationLabel.trim() || title,
+                parentPage: selectedParentPage,
+            });
+        } catch (navigationError) {
+            console.warn('Page was created, but navigation placement failed.', navigationError);
+            navigationWarning = navigationError instanceof Error
+                ? `Page was created, but navigation placement failed: ${navigationError.message}`
+                : 'Page was created, but navigation placement failed. Update navigation manually from site settings.';
+        }
+
+        return navigationWarning;
+    };
+
+    const handleCreatePreview = async () => {
+        if (isPageCreateBusy) return;
+
+        if (!canEditPages) {
+            setError(editPermissionTitle || 'Your account cannot create pages.');
+            setNotice(null);
+            return;
+        }
+
+        if (!canPublishPages) {
+            setError(publishPermissionTitle || 'Your account cannot create page previews.');
+            setNotice(null);
+            return;
+        }
+
+        if (!canCreatePreviewDraft) {
+            setError(previewDraftBlockerMessage || 'Review the required page basics before creating this preview draft.');
+            setNotice(null);
+            return;
+        }
+
+        setIsPreviewAfterCreateBusy(true);
+        setError(null);
+        setNotice(null);
+        setRouteCheckError(null);
+
+        let created: Page | null = null;
+        let navigationWarning: string | null = null;
+
+        try {
+            const title = formData.title.trim();
+            created = await createPage(formData.siteId, buildPageCreateInput('draft'));
+            navigationWarning = await applyNavigationForCreatedPage(created, title);
+            clearAutosavedDraft();
+            setPages([created, ...pages.filter((page) => page.id !== created?.id)]);
+
+            const preview = await createPagePreview(formData.siteId, created.id);
+            window.open(preview.url, '_blank', 'noopener,noreferrer');
+            navigate({
+                to: '/pages/$pageId/edit',
+                params: { pageId: created.id },
+                search: {
+                    siteId: formData.siteId,
+                    ...(navigationWarning ? { navWarning: navigationWarning } : {}),
+                },
+            });
+        } catch (createError) {
+            if (created) {
+                const previewWarning = createError instanceof Error
+                    ? `Page was created, but preview failed: ${createError.message}`
+                    : 'Page was created, but preview failed. Open preview from the page editor after saving.';
+                navigate({
+                    to: '/pages/$pageId/edit',
+                    params: { pageId: created.id },
+                    search: {
+                        siteId: formData.siteId,
+                        navWarning: [navigationWarning, previewWarning].filter(Boolean).join(' '),
+                    },
+                });
+                return;
+            }
+
+            setError(createError instanceof Error
+                ? `${createError.message}. The preview draft was not created.`
+                : 'Unable to create preview draft. The page was not persisted.');
+        } finally {
+            setIsPreviewAfterCreateBusy(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isPageCreateBusy) return;
@@ -2539,74 +2708,10 @@ function NewPageRoute() {
         setNotice(null);
         setRouteCheckError(null);
 
-        const title = formData.title.trim();
-        const slug = resolvedSlug;
-        const content = createInitialPageContent({
-            template: formData.template,
-            frontendTemplate: selectedFrontendTemplate,
-            frontendDesign,
-            datasetCollection: selectedDatasetCollection,
-            datasetMode: selectedDatasetMode || undefined,
-            title,
-            slug,
-            status: formData.status,
-            description: formData.description,
-        });
-
-        const input = {
-            title,
-            slug,
-            siteId: formData.siteId,
-            status: formData.status,
-            scheduledAt: formData.status === 'scheduled' ? formData.scheduledAt : null,
-            template: formData.template,
-            description: formData.description,
-            isHomepage: formData.isHomepage,
-            parentId: selectedParentPage?.id || null,
-            meta: {
-                title: effectiveSeoTitle || title,
-                description: formData.description,
-                canonical: normalizedCanonicalPath,
-                keywords: effectiveKeywords,
-                jsonLd: effectiveJsonLd,
-                ogImage: formData.ogImage.trim() || undefined,
-                noIndex: formData.noIndex,
-                noFollow: formData.noFollow,
-                template: formData.template,
-                frontendDesignTemplateId: selectedFrontendTemplate?.id,
-                frontendDesignTemplateName: selectedFrontendTemplate?.name,
-                frontendDesignSource: selectedFrontendTemplate ? frontendDesign?.source : undefined,
-                frontendDesignRoutePattern: selectedFrontendTemplate?.routePattern,
-                frontendDesignTokens: selectedFrontendTemplate ? frontendDesign?.tokens : undefined,
-                frontendDesignChrome: selectedFrontendTemplate ? frontendDesign?.chrome : undefined,
-                frontendDesignCustomCss: selectedFrontendTemplate ? frontendDesign?.tokens?.customCss : undefined,
-                frontendDesignBindingHints: selectedFrontendTemplate?.bindingHints,
-                navigationPlacement: formData.navigationPlacement,
-                navigationLabel: formData.navigationLabel.trim() || title,
-                parentPageId: selectedParentPage?.id || undefined,
-                parentPageTitle: selectedParentPage?.title || undefined,
-                collectionDataset: selectedDatasetContract || undefined,
-            },
-            content,
-        };
-
         try {
-            const created = await createPage(formData.siteId, input);
-            let navigationWarning: string | null = null;
-            try {
-                await applyPageNavigationPlacement({
-                    siteId: formData.siteId,
-                    page: created,
-                    placement: formData.navigationPlacement,
-                    label: formData.navigationLabel.trim() || title,
-                    parentPage: selectedParentPage,
-                });
-            } catch (navigationError) {
-                console.warn('Page was created, but navigation placement failed.', navigationError);
-                navigationWarning = navigationError instanceof Error
-                    ? `Page was created, but navigation placement failed: ${navigationError.message}`
-                    : 'Page was created, but navigation placement failed. Update navigation manually from site settings.';
-            }
+            const title = formData.title.trim();
+            const created = await createPage(formData.siteId, buildPageCreateInput());
+            const navigationWarning = await applyNavigationForCreatedPage(created, title);
             clearAutosavedDraft();
             setPages([created, ...pages.filter((page) => page.id !== created.id)]);
             navigate({
@@ -2707,6 +2812,16 @@ function NewPageRoute() {
                         >
                             <Download className="h-4 w-4" />
                             Download JSON
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void handleCreatePreview()}
+                            disabled={isPageCreateBusy || !canCreatePreviewDraft}
+                            title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <Eye className="h-4 w-4" />
+                            {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                         </button>
                         <button
                             type="button"
@@ -3549,6 +3664,17 @@ function NewPageRoute() {
                                 className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleCreatePreview()}
+                                disabled={isPageCreateBusy || !canCreatePreviewDraft}
+                                title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                                aria-disabled={isPageCreateBusy || !canCreatePreviewDraft}
+                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <Eye className="w-4 h-4" />
+                                {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                             </button>
                             <button
                                 type="submit"

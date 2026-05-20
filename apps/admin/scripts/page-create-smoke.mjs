@@ -1294,6 +1294,16 @@ const assertPageCreateSourceContracts = () => {
     'Page create submit readiness must block scheduled pages with non-future publish dates before submit',
   );
   assert(
+    source.includes('createPagePreview') &&
+      source.includes('const handleCreatePreview = async () =>') &&
+      source.includes("createPage(formData.siteId, buildPageCreateInput('draft'))") &&
+      source.includes('window.open(preview.url') &&
+      source.includes('Save draft and preview') &&
+      source.includes('canCreatePreviewDraft') &&
+      source.includes('Your account cannot create page preview links.'),
+    'Page create must provide a backend-backed Save draft and preview action with publish-permission gating',
+  );
+  assert(
     source.includes('normalizedFrontendDesignTemplateSearch') &&
       source.includes('search.frontendDesignTemplateId') &&
       source.includes('search.frontendTemplate') &&

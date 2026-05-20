@@ -483,6 +483,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Blog create now accepts `designTemplate`, `frontendDesignTemplateId`, and `frontendTemplate` query aliases for captured frontend-design blog templates. Template canvas application waits for blog-create edit readiness, so deep-linked custom frontend templates insert their wrapper/content into the canvas instead of only selecting the panel card.
 - Covered by `npm run test:blog-editor --workspace @backy-cms/admin` and `npm run typecheck --workspace @backy-cms/admin`.
 
+### ✅ Page creation preview draft flow
+- Page create now has a backend-backed `Save draft and preview` action matching the blog create workflow: it creates a draft page, applies the selected navigation/hierarchy placement, requests a page preview token, opens the preview URL, and continues into the visual editor.
+- The preview action is gated by `pages.edit`, `pages.publish`, route availability, valid metadata, JSON-LD, dataset readiness, and navigation permissions while still forcing the created record to draft status.
+- Source coverage is guarded by `apps/admin/scripts/page-create-smoke.mjs`, alongside the existing page-create browser and backend template coverage.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.
