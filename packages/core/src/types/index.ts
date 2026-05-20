@@ -598,6 +598,10 @@ export interface SiteFrontendDesignContract {
     id: string;
     type: "page" | "blogPost" | "form" | "product" | "collection" | "section";
     name: string;
+    status?: "active" | "draft" | "deprecated" | "archived" | string;
+    version?: string | number;
+    createdAt?: string;
+    updatedAt?: string;
     routePattern?: string;
     description?: string;
     canvasSize?: { width: number; height: number };

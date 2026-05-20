@@ -305,6 +305,9 @@ assert(
     adminTemplateRegistryRoute.includes('permission: "pages.view"') &&
     templateRegistryLib.includes('schemaVersion: "backy.template-registry.v1"') &&
     templateRegistryLib.includes('cloneField: "frontendDesignTemplateId"') &&
+    templateRegistryLib.includes('backy.template-version-readiness.v1') &&
+    templateRegistryLib.includes('backy.template-registry-action-plan.v1') &&
+    templateRegistryLib.includes('versioning') &&
     templateRegistryLib.includes('cloneTargets') &&
     templateRegistryLib.includes('blogPost: `/api/admin/sites/${siteId}/blog`') &&
     templateRegistryLib.includes('form: `/api/admin/sites/${siteId}/forms`') &&
@@ -317,9 +320,13 @@ assert(
     adminFrontendDesignRoute.includes('templates: `/api/admin/sites/${site.id}/templates`') &&
     adminFrontendDesignRoute.includes('templateRegistry:') &&
     adminFrontendDesignRoute.includes('cloneTargets: templateRegistry.cloneTargets') &&
+    adminFrontendDesignRoute.includes('versionSummary: templateRegistry.versionSummary') &&
+    adminFrontendDesignRoute.includes('actionPlan: templateRegistry.actionPlan') &&
     publicPackage.includes('"test:template-registry": "tsx --tsconfig tsconfig.json scripts/template-registry-smoke.ts"') &&
     templateRegistrySmoke.includes('buildTemplateRegistry("site-template-smoke", frontendDesign') &&
     templateRegistrySmoke.includes('contract: "backy.template-registry.v1"') &&
+    templateRegistrySmoke.includes('backy.template-version-readiness.v1') &&
+    templateRegistrySmoke.includes('backy.template-registry-action-plan.v1') &&
     templateRegistrySmoke.includes('registry.cloneTargets.product') &&
     apiContracts.includes('templateRegistry') &&
     apiContracts.includes('endpoints.templates'),
@@ -327,7 +334,11 @@ assert(
 );
 
 assert(
-  adminSiteDetailPage.includes('frontendDesignTemplateId: template.id') &&
+    adminSiteDetailPage.includes('frontendDesignTemplateId: template.id') &&
+    adminSiteDetailPage.includes('site-template-version-readiness') &&
+    adminSiteDetailPage.includes('site-template-prepare-version-metadata') &&
+    adminSiteDetailPage.includes('site-template-copy-version-plan') &&
+    adminSiteDetailPage.includes('backy.template-registry-version-action-plan.v1') &&
     !adminSiteDetailPage.includes('designTemplate: template.id') &&
     adminSiteDetailPage.includes('search: { siteId: targetSiteId, frontendTemplate: template.id }') &&
     adminSiteDetailPage.includes('draft: "new"') &&

@@ -25,6 +25,11 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('import { EmptyState } from "@/components/ui/EmptyState";'), 'Site detail route must use the shared EmptyState component');
   assert(source.includes('title="No frontend templates captured yet"'), 'Site detail template registry must keep the empty template title visible');
   assert(source.includes('Save a frontend design contract with page, blog, form, product, collection, or section templates to populate this registry.'), 'Site detail template registry empty state must explain how templates are captured');
+  assert(source.includes('data-testid="site-template-version-readiness"'), 'Site detail template registry must expose version readiness for captured templates');
+  assert(source.includes('data-testid="site-template-prepare-version-metadata"'), 'Site detail template registry must expose a version metadata preparation action');
+  assert(source.includes('data-testid="site-template-copy-version-plan"'), 'Site detail template registry must expose a copyable template version action plan');
+  assert(source.includes('backy.template-registry-version-action-plan.v1'), 'Site detail template version handoff must use a named action-plan schema');
+  assert(source.includes('Template versioning'), 'Site workspace readiness must include template versioning as a publish/handoff check');
   assert(
     source.includes('frontendDesignTemplateId: template.id') &&
       !source.includes('designTemplate: template.id'),
@@ -590,6 +595,9 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasCaptureAction: frontendText.includes('Capture current design'),
       hasSaveAction: frontendText.includes('Save contract'),
       hasRegistryTitle: frontendText.includes('Template registry'),
+      hasVersionReadiness: frontendText.includes('Template version readiness'),
+      hasPrepareVersions: frontendText.includes('Prepare versions'),
+      hasCopyVersionPlan: frontendText.includes('Copy version plan'),
       hasCapturedTemplatesLabel: frontendText.includes('Captured templates'),
       hasCloneField: frontendText.includes('frontendDesignTemplateId'),
       hasSchema: frontendText.includes('backy.template-registry.v1'),
@@ -1406,6 +1414,18 @@ const configureFrontendDesignThroughUi = async (client, { frontendLabel, fronten
     '[data-testid="site-template-registry-template-list"]',
     'Open sections',
     'Frontend design template registry section action',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-version-readiness"]',
+    'Template version readiness',
+    'Frontend design template version readiness panel',
+  );
+  await waitForText(
+    client,
+    '[data-testid="site-template-registry-summary"]',
+    'Copy version plan',
+    'Frontend design template version action plan button',
   );
 };
 

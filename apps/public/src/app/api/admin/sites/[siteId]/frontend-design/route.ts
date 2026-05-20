@@ -718,6 +718,8 @@ const responseForSite = (
         supportedTypes: templateRegistry.supportedTypes,
         cloneField: templateRegistry.cloneField,
         cloneTargets: templateRegistry.cloneTargets,
+        versionSummary: templateRegistry.versionSummary,
+        actionPlan: templateRegistry.actionPlan,
       },
       nextSteps: [
         "PATCH a custom frontend design contract after scanning your frontend components.",

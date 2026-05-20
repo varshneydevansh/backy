@@ -23,6 +23,9 @@ const frontendDesign = {
       name: "Landing Page",
       description: "Marketing landing page",
       routePattern: "/",
+      version: 2,
+      status: "active",
+      updatedAt: "2026-05-17T00:00:00.000Z",
       canvasSize: { width: 1440, height: 1200 },
       content: {
         elements: [
@@ -78,6 +81,9 @@ assert.equal(page.type, "page");
 assert.equal(page.contentSummary.elementCount, 2);
 assert.equal(page.contentSummary.bindingHintCount, 1);
 assert.equal(page.contentSummary.hasCanvas, true);
+assert.equal(page.versioning.schemaVersion, "backy.template-version.v1");
+assert.equal(page.versioning.ready, true);
+assert.equal(page.versioning.version, "2");
 assert.deepEqual(page.clone.body, {
   frontendDesignTemplateId: "landing-page",
   title: "Landing Page",
@@ -86,6 +92,8 @@ assert.deepEqual(page.clone.body, {
 const form = registry.byType.form[0];
 assert.equal(form.id, "signup-form");
 assert.equal(form.contentSummary.fieldCount, 2);
+assert.equal(form.versioning.ready, false);
+assert.deepEqual(form.versioning.issues, ["missing-version", "missing-updated-at"]);
 assert.deepEqual(form.clone.body, {
   frontendDesignTemplateId: "signup-form",
   name: "Signup Form",
@@ -95,6 +103,7 @@ assert.deepEqual(form.clone.body, {
 const product = registry.byType.product[0];
 assert.equal(product.id, "product-detail");
 assert.equal(product.version, "3");
+assert.equal(product.versioning.ready, false);
 assert.equal(product.clone.endpoint, registry.cloneTargets.product);
 assert.deepEqual(product.clone.body, {
   frontendDesignTemplateId: "product-detail",
@@ -102,6 +111,15 @@ assert.deepEqual(product.clone.body, {
     title: "Product Detail",
   },
 });
+
+assert.equal(registry.versionSummary.schemaVersion, "backy.template-version-readiness.v1");
+assert.equal(registry.versionSummary.ready, false);
+assert.equal(registry.versionSummary.readyCount, 1);
+assert.equal(registry.versionSummary.missingVersionCount, 1);
+assert.equal(registry.versionSummary.missingUpdatedAtCount, 2);
+assert.equal(registry.actionPlan.schemaVersion, "backy.template-registry-action-plan.v1");
+assert.equal(registry.actionPlan.status, "needs-version-metadata");
+assert(registry.actionPlan.steps.some((step) => step.includes("updatedAt")), "Action plan should name missing updatedAt metadata");
 
 const productOnly = buildTemplateRegistry("site-template-smoke", frontendDesign, {
   type: "product",

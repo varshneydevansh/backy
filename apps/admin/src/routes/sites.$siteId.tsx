@@ -882,6 +882,174 @@ const FRONTEND_TEMPLATE_WORKSPACE_ACTIONS: Record<
   },
 };
 
+type SiteFrontendTemplate = SiteFrontendDesignContract["templates"][number];
+
+const frontendTemplateRecord = (
+  template: SiteFrontendTemplate,
+): Record<string, unknown> => template as Record<string, unknown>;
+
+const frontendTemplateContent = (
+  template: SiteFrontendTemplate,
+): Record<string, unknown> => {
+  const content = frontendTemplateRecord(template).content;
+  return content && typeof content === "object" && !Array.isArray(content)
+    ? (content as Record<string, unknown>)
+    : {};
+};
+
+const frontendTemplateText = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value.trim() : null;
+
+const frontendTemplateVersionText = (
+  template: SiteFrontendTemplate,
+): string | null => {
+  const record = frontendTemplateRecord(template);
+  const content = frontendTemplateContent(template);
+  const rawVersion = record.version ?? content.version;
+  if (typeof rawVersion === "number" && Number.isFinite(rawVersion)) {
+    return String(rawVersion);
+  }
+  return frontendTemplateText(rawVersion);
+};
+
+const getFrontendTemplateVersionState = (template: SiteFrontendTemplate) => {
+  const record = frontendTemplateRecord(template);
+  const content = frontendTemplateContent(template);
+  const version = frontendTemplateVersionText(template);
+  const status = frontendTemplateText(record.status) || "active";
+  const createdAt =
+    frontendTemplateText(record.createdAt) ||
+    frontendTemplateText(content.createdAt);
+  const updatedAt =
+    frontendTemplateText(record.updatedAt) ||
+    frontendTemplateText(content.updatedAt);
+  const issues = [
+    ...(version ? [] : ["missing version"]),
+    ...(updatedAt ? [] : ["missing updated date"]),
+    ...(status ? [] : ["missing status"]),
+  ];
+
+  return {
+    schemaVersion: "backy.template-version.v1",
+    ready: issues.length === 0,
+    status,
+    version,
+    createdAt,
+    updatedAt,
+    issues,
+  };
+};
+
+const buildFrontendTemplateVersionReadiness = (
+  templates: SiteFrontendTemplate[],
+) => {
+  const versionStates = templates.map(getFrontendTemplateVersionState);
+  const readyCount = versionStates.filter((entry) => entry.ready).length;
+  const missingVersionCount = versionStates.filter((entry) =>
+    entry.issues.includes("missing version"),
+  ).length;
+  const missingUpdatedAtCount = versionStates.filter((entry) =>
+    entry.issues.includes("missing updated date"),
+  ).length;
+  const inactiveCount = versionStates.filter(
+    (entry) => !["active", "published"].includes(entry.status),
+  ).length;
+  const latestUpdatedAt =
+    versionStates
+      .map((entry) => entry.updatedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) || null;
+
+  return {
+    schemaVersion: "backy.template-version-readiness.v1",
+    ready: templates.length > 0 && readyCount === templates.length,
+    readyCount,
+    templateCount: templates.length,
+    missingVersionCount,
+    missingUpdatedAtCount,
+    inactiveCount,
+    latestUpdatedAt,
+    versionStates,
+  };
+};
+
+const buildFrontendTemplateVersionActionPlan = (
+  siteId: string,
+  templates: SiteFrontendTemplate[],
+) => {
+  const readiness = buildFrontendTemplateVersionReadiness(templates);
+
+  return {
+    schemaVersion: "backy.template-registry-version-action-plan.v1",
+    siteId,
+    generatedAt: new Date().toISOString(),
+    status:
+      templates.length === 0
+        ? "empty"
+        : readiness.ready
+          ? "ready"
+          : "needs-version-metadata",
+    readiness: {
+      schemaVersion: readiness.schemaVersion,
+      ready: readiness.ready,
+      readyCount: readiness.readyCount,
+      templateCount: readiness.templateCount,
+      missingVersionCount: readiness.missingVersionCount,
+      missingUpdatedAtCount: readiness.missingUpdatedAtCount,
+      inactiveCount: readiness.inactiveCount,
+      latestUpdatedAt: readiness.latestUpdatedAt,
+    },
+    recommendedNextAction:
+      templates.length === 0
+        ? "Capture or import frontend templates before cloning content."
+        : readiness.ready
+          ? "Use frontendDesignTemplateId clone actions for version-aware content creation."
+          : "Prepare template version metadata, save the frontend design contract, then hand this registry to custom frontend builders.",
+    templates: templates.map((template) => {
+      const versionState = getFrontendTemplateVersionState(template);
+      return {
+        id: template.id,
+        type: template.type,
+        name: template.name,
+        routePattern: template.routePattern || null,
+        cloneField: "frontendDesignTemplateId",
+        cloneValue: template.id,
+        version: versionState.version,
+        status: versionState.status,
+        updatedAt: versionState.updatedAt,
+        ready: versionState.ready,
+        issues: versionState.issues,
+      };
+    }),
+  };
+};
+
+const prepareFrontendTemplateVersions = (
+  templates: SiteFrontendTemplate[],
+  timestamp: string,
+): SiteFrontendTemplate[] =>
+  templates.map((template, index) => {
+    const record = frontendTemplateRecord(template);
+    const content = frontendTemplateContent(template);
+    return {
+      ...template,
+      status: frontendTemplateText(record.status) || "active",
+      version:
+        record.version ??
+        content.version ??
+        (index + 1),
+      createdAt:
+        frontendTemplateText(record.createdAt) ||
+        frontendTemplateText(content.createdAt) ||
+        timestamp,
+      updatedAt:
+        frontendTemplateText(record.updatedAt) ||
+        frontendTemplateText(content.updatedAt) ||
+        timestamp,
+    } as SiteFrontendTemplate;
+  });
+
 const formatJsonLd = (jsonLd: AdminSiteSeoSettings["jsonLd"]): string =>
   Array.isArray(jsonLd) && jsonLd.length > 0
     ? JSON.stringify(jsonLd, null, 2)
@@ -2678,6 +2846,60 @@ function EditSitePage() {
     }
   };
 
+  const handlePrepareTemplateVersionMetadata = () => {
+    if (!canConfigureSite) {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        errorMessage: siteConfigureDeniedMessage,
+        notice: null,
+      }));
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    setFrontendDesignState((prev) => {
+      const templates = prepareFrontendTemplateVersions(
+        prev.frontendDesign.templates,
+        timestamp,
+      );
+      return {
+        ...prev,
+        errorMessage: null,
+        notice:
+          "Template version metadata prepared. Save contract to persist it.",
+        frontendDesign: {
+          ...prev.frontendDesign,
+          templates,
+          updatedAt: timestamp,
+        },
+        templatesJson: JSON.stringify(templates, null, 2),
+      };
+    });
+  };
+
+  const handleCopyTemplateVersionActionPlan = async () => {
+    const plan = buildFrontendTemplateVersionActionPlan(
+      siteApiId || siteId,
+      frontendDesignState.frontendDesign.templates,
+    );
+    const planText = JSON.stringify(plan, null, 2);
+
+    try {
+      await navigator.clipboard.writeText(planText);
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        errorMessage: null,
+        notice: "Template version action plan copied.",
+      }));
+    } catch {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        notice: null,
+        errorMessage: planText,
+      }));
+    }
+  };
+
   const loadSiteCommentPolicy = async () => {
     if (!siteApiId) return;
     setCommentPolicyLoading(true);
@@ -4314,6 +4536,13 @@ function EditSitePage() {
       )
     : null;
   const hasCustomDomain = Boolean(savedCustomDomain);
+  const templateVersionReadiness = useMemo(
+    () =>
+      buildFrontendTemplateVersionReadiness(
+        frontendDesignState.frontendDesign.templates,
+      ),
+    [frontendDesignState.frontendDesign.templates],
+  );
   const siteWorkspaceReadiness = useMemo(() => {
     const navigationItems = [
       ...(navigationState.navigation.primary || []),
@@ -4347,6 +4576,9 @@ function EditSitePage() {
     );
     const hasFrontendDesign =
       frontendDesignState.frontendDesign.status !== "unconfigured";
+    const templateVersionReady =
+      templateVersionReadiness.templateCount > 0 &&
+      templateVersionReadiness.ready;
     const hasAutomation =
       state.forms.length > 0 ||
       state.submissionCount > 0 ||
@@ -4416,6 +4648,14 @@ function EditSitePage() {
           ? `${frontendDesignState.frontendDesign.source.type} design with ${frontendDesignState.frontendDesign.templates.length} templates and ${frontendDesignState.frontendDesign.editableMap.length} editable bindings.`
           : "Capture or import a frontend design contract before generating custom-designed pages.",
         ready: hasFrontendDesign,
+      },
+      {
+        label: "Template versioning",
+        detail:
+          templateVersionReadiness.templateCount > 0
+            ? `${templateVersionReadiness.readyCount}/${templateVersionReadiness.templateCount} templates have version and updatedAt metadata.`
+            : "Capture or import templates before production clone handoff.",
+        ready: templateVersionReady,
       },
       {
         label: "Public address",
@@ -4494,6 +4734,9 @@ function EditSitePage() {
     state.contactCount,
     state.forms.length,
     state.submissionCount,
+    templateVersionReadiness.ready,
+    templateVersionReadiness.readyCount,
+    templateVersionReadiness.templateCount,
     themeDraft.colors.background,
     themeDraft.colors.primary,
     themeDraft.fonts.body,
@@ -4548,6 +4791,7 @@ function EditSitePage() {
         publicRender: `${publicSiteApiUrl}/render?path=/`,
         publicOpenApi: `${publicSiteApiUrl}/openapi`,
         frontendDesign: `${adminSiteUrl}/frontend-design`,
+        templateRegistry: `${adminSiteUrl}/templates`,
       },
       frontendDesign: {
         status: frontendDesignState.frontendDesign.status,
@@ -4562,7 +4806,23 @@ function EditSitePage() {
             type: template.type,
             name: template.name,
             routePattern: template.routePattern,
+            versioning: getFrontendTemplateVersionState(template),
           }),
+        ),
+        versionReadiness: {
+          schemaVersion: templateVersionReadiness.schemaVersion,
+          ready: templateVersionReadiness.ready,
+          readyCount: templateVersionReadiness.readyCount,
+          templateCount: templateVersionReadiness.templateCount,
+          missingVersionCount: templateVersionReadiness.missingVersionCount,
+          missingUpdatedAtCount:
+            templateVersionReadiness.missingUpdatedAtCount,
+          inactiveCount: templateVersionReadiness.inactiveCount,
+          latestUpdatedAt: templateVersionReadiness.latestUpdatedAt,
+        },
+        versionActionPlan: buildFrontendTemplateVersionActionPlan(
+          siteApiId || siteId,
+          frontendDesignState.frontendDesign.templates,
         ),
         editableBindings: frontendDesignState.frontendDesign.editableMap,
         notes: frontendDesignState.frontendDesign.notes || "",
@@ -4701,6 +4961,14 @@ function EditSitePage() {
       state.selectedFormId,
       state.submissionCount,
       submissionStatus,
+      templateVersionReadiness.inactiveCount,
+      templateVersionReadiness.latestUpdatedAt,
+      templateVersionReadiness.missingUpdatedAtCount,
+      templateVersionReadiness.missingVersionCount,
+      templateVersionReadiness.ready,
+      templateVersionReadiness.readyCount,
+      templateVersionReadiness.schemaVersion,
+      templateVersionReadiness.templateCount,
       themeDraft,
       webhookState.enabled,
       webhookState.endpoints,
@@ -6377,10 +6645,45 @@ function EditSitePage() {
                   section templates from this design contract.
                 </p>
               </div>
-              <code className="break-all rounded-md bg-background px-2 py-1 text-xs text-muted-foreground">
-                {frontendDesignState.endpoints.templates ||
-                  `/api/admin/sites/${siteApiId || ":siteId"}/templates`}
-              </code>
+              <div className="flex flex-col gap-2 lg:items-end">
+                <code className="break-all rounded-md bg-background px-2 py-1 text-xs text-muted-foreground">
+                  {frontendDesignState.endpoints.templates ||
+                    `/api/admin/sites/${siteApiId || ":siteId"}/templates`}
+                </code>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePrepareTemplateVersionMetadata}
+                    disabled={
+                      !canConfigureSite ||
+                      frontendDesignState.loading ||
+                      frontendDesignState.saving ||
+                      frontendDesignState.capturing ||
+                      frontendDesignState.frontendDesign.templates.length === 0
+                    }
+                    title={
+                      canConfigureSite
+                        ? undefined
+                        : configureSitePermissionTitle
+                    }
+                    data-testid="site-template-prepare-version-metadata"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <History className="size-3.5" />
+                    Prepare versions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyTemplateVersionActionPlan()}
+                    disabled={frontendDesignState.frontendDesign.templates.length === 0}
+                    data-testid="site-template-copy-version-plan"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy version plan
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <div>
@@ -6432,6 +6735,68 @@ function EditSitePage() {
               ))}
             </div>
             <div
+              className="mt-4 rounded-lg border bg-background px-3 py-2"
+              data-testid="site-template-version-readiness"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Template version readiness
+                  </div>
+                  <div className="mt-1 text-sm font-semibold">
+                    {templateVersionReadiness.readyCount}/
+                    {templateVersionReadiness.templateCount} version-ready
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    "inline-flex w-fit items-center gap-1 rounded-full px-2 py-1 text-xs font-medium",
+                    templateVersionReadiness.ready
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-amber-50 text-amber-700",
+                  )}
+                >
+                  {templateVersionReadiness.ready ? (
+                    <CheckCircle className="size-3.5" />
+                  ) : (
+                    <AlertTriangle className="size-3.5" />
+                  )}
+                  {templateVersionReadiness.ready ? "Ready" : "Needs metadata"}
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Missing versions
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {templateVersionReadiness.missingVersionCount}
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Missing updatedAt
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {templateVersionReadiness.missingUpdatedAtCount}
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Latest update
+                  </div>
+                  <div className="truncate text-sm font-semibold">
+                    {templateVersionReadiness.latestUpdatedAt || "Not set"}
+                  </div>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Version metadata lets Backy-created pages, posts, forms, and
+                products keep stable provenance when a custom frontend refreshes
+                its design contract.
+              </p>
+            </div>
+            <div
               className="mt-4 space-y-2"
               data-testid="site-template-registry-template-list"
             >
@@ -6447,6 +6812,8 @@ function EditSitePage() {
                         template.type,
                         frontendDesignState.templateRegistry?.cloneTargets,
                       );
+                      const versionState =
+                        getFrontendTemplateVersionState(template);
                       const workspaceAction =
                         FRONTEND_TEMPLATE_WORKSPACE_ACTIONS[template.type];
                       return (
@@ -6472,6 +6839,32 @@ function EditSitePage() {
                                   {template.routePattern}
                                 </div>
                               )}
+                              <div
+                                className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]"
+                                data-testid={`site-template-version-${template.type}-${template.id}`}
+                              >
+                                <span
+                                  className={cn(
+                                    "rounded-full px-2 py-0.5 font-medium",
+                                    versionState.ready
+                                      ? "bg-emerald-50 text-emerald-700"
+                                      : "bg-amber-50 text-amber-700",
+                                  )}
+                                >
+                                  v{versionState.version || "missing"}
+                                </span>
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+                                  {versionState.status}
+                                </span>
+                                <span className="truncate text-muted-foreground">
+                                  updated {versionState.updatedAt || "not set"}
+                                </span>
+                                {versionState.issues.length > 0 && (
+                                  <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                                    {versionState.issues.join(", ")}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <button
                               type="button"

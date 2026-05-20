@@ -210,6 +210,22 @@ export interface AdminFrontendDesignResponse {
     supportedTypes: Array<NonNullable<SiteSettings['frontendDesign']>['templates'][number]['type']>;
     cloneField: string;
     cloneTargets: Record<string, string>;
+    versionSummary?: {
+      schemaVersion: string;
+      ready: boolean;
+      readyCount: number;
+      templateCount: number;
+      missingVersionCount: number;
+      missingUpdatedAtCount: number;
+      inactiveCount: number;
+      latestUpdatedAt: string | null;
+    };
+    actionPlan?: {
+      schemaVersion: string;
+      status: string;
+      recommendedNextAction: string;
+      steps: string[];
+    };
   };
   nextSteps: string[];
 }

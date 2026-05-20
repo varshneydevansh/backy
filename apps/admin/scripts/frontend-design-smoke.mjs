@@ -113,6 +113,11 @@ const assertTemplateRegistry = async () => {
   assert(registry.templateCount === 6, `Template registry count was unexpected: ${registry.templateCount}`);
   assert(registry.totalTemplateCount === 6, `Template registry total count was unexpected: ${registry.totalTemplateCount}`);
   assert(registry.cloneField === 'frontendDesignTemplateId', `Template registry clone field was unexpected: ${registry.cloneField}`);
+  assert(registry.versionSummary?.schemaVersion === 'backy.template-version-readiness.v1', `Template registry missing version readiness: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
+  assert(registry.versionSummary?.templateCount === 6, `Template registry version readiness count was unexpected: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
+  assert(registry.versionSummary?.missingVersionCount === 6, `Template registry should flag missing template versions: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
+  assert(registry.actionPlan?.schemaVersion === 'backy.template-registry-action-plan.v1', `Template registry missing action plan: ${JSON.stringify(registry.actionPlan).slice(0, 500)}`);
+  assert(registry.actionPlan?.status === 'needs-version-metadata', `Template registry action plan status was unexpected: ${JSON.stringify(registry.actionPlan).slice(0, 500)}`);
   assert(registry.cloneTargets?.page === `/api/admin/sites/${SITE_ID}/pages`, 'Template registry missing page clone target');
   assert(registry.cloneTargets?.blogPost === `/api/admin/sites/${SITE_ID}/blog`, 'Template registry missing blog clone target');
   assert(registry.cloneTargets?.form === `/api/admin/sites/${SITE_ID}/forms`, 'Template registry missing form clone target');
@@ -125,6 +130,7 @@ const assertTemplateRegistry = async () => {
   assert(pageTemplate.clone.body?.frontendDesignTemplateId === 'smoke-page-template', 'Template registry page clone body missing frontendDesignTemplateId');
   assert(pageTemplate.clone.body?.title === 'Smoke Page Template', 'Template registry page clone body missing title');
   assert(pageTemplate.contentSummary?.elementCount > 0, 'Template registry page summary missing element count');
+  assert(pageTemplate.versioning?.schemaVersion === 'backy.template-version.v1', 'Template registry page template missing per-template version contract');
 
   const formTemplate = registry.byType?.form?.[0];
   assert(formTemplate?.clone?.body?.name === 'Smoke Form Template', `Template registry missing form clone name: ${JSON.stringify(formTemplate).slice(0, 500)}`);
@@ -380,6 +386,8 @@ const main = async () => {
     assert(frontendDesignResponse.templateRegistry?.schemaVersion === 'backy.template-registry.v1', 'Frontend design response missing template registry summary');
     assert(frontendDesignResponse.templateRegistry?.templateCount === 6, 'Frontend design response template registry summary had unexpected template count');
     assert(frontendDesignResponse.templateRegistry?.cloneField === 'frontendDesignTemplateId', 'Frontend design response missing template registry clone field');
+    assert(frontendDesignResponse.templateRegistry?.versionSummary?.schemaVersion === 'backy.template-version-readiness.v1', 'Frontend design response missing template version readiness summary');
+    assert(frontendDesignResponse.templateRegistry?.actionPlan?.schemaVersion === 'backy.template-registry-action-plan.v1', 'Frontend design response missing template registry action plan');
     const afterPatch = frontendDesignResponse.frontendDesign;
     assert(afterPatch.tokens?.colors?.primary === '#0f766e', 'GET did not persist patched color token');
     await assertTemplateRegistry();
