@@ -40,7 +40,11 @@ import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
-import { RevisionCanvasVisualDiff } from '@/components/editor/RevisionCanvasVisualDiff';
+import {
+    RevisionCanvasVisualDiff,
+    getRevisionCanvasPixelComparison,
+    type RevisionCanvasPixelComparison,
+} from '@/components/editor/RevisionCanvasVisualDiff';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -211,6 +215,7 @@ type BlogRevisionDiff = {
     snapshotRootLayerCount: number;
     rootLayerDelta: number;
     elementDiff: CanvasRevisionElementDiff;
+    renderedPixelDiff: RevisionCanvasPixelComparison;
 };
 
 type BlogRevisionDiffDetail = {
@@ -303,6 +308,15 @@ const blogRevisionDiff = (
     const changedFields: string[] = [];
     const details: BlogRevisionDiffDetail[] = [];
     const elementDiff = compareCanvasRevisionElements(revision.snapshotElements, input.canvasElements);
+    const renderedPixelDiff = getRevisionCanvasPixelComparison({
+        snapshotElements: revision.snapshotElements,
+        currentElements: input.canvasElements,
+        snapshotCanvasWidth: revision.snapshotCanvas.canvasWidth,
+        snapshotCanvasHeight: revision.snapshotCanvas.canvasHeight,
+        currentCanvasWidth: input.canvasSize.width,
+        currentCanvasHeight: input.canvasSize.height,
+        elementDiff,
+    });
     const addChange = (field: string, label: string, snapshot: string, current: string) => {
         changedFields.push(field);
         details.push({
@@ -398,6 +412,7 @@ const blogRevisionDiff = (
         snapshotRootLayerCount: revision.snapshotCanvas.rootLayerCount,
         rootLayerDelta,
         elementDiff,
+        renderedPixelDiff,
     };
 };
 
@@ -3192,6 +3207,7 @@ function EditBlogPostPage() {
                                                                 currentCanvasWidth={canvasSize.width}
                                                                 currentCanvasHeight={canvasSize.height}
                                                                 elementDiff={revisionDiff.elementDiff}
+                                                                pixelComparison={revisionDiff.renderedPixelDiff}
                                                             />
                                                         ) : null}
                                                         {revisionDiff?.elementDiff.totalChanged ? (

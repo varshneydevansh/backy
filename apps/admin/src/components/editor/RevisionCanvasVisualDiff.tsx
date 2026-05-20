@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasRevisionElementDiff } from '@/lib/revisionCanvasDiff';
 
@@ -25,6 +26,33 @@ type RevisionCanvasVisualPreviewProps = {
   side: 'snapshot' | 'current';
 };
 
+export type RevisionCanvasPixelComparison = {
+  sampleWidth: number;
+  sampleHeight: number;
+  sampledPixels: number;
+  snapshotElementPixels: number;
+  currentElementPixels: number;
+  changedPixels: number;
+  unchangedPixels: number;
+  addedPixels: number;
+  removedPixels: number;
+  updatedPixels: number;
+  changedNeutralPixels: number;
+  changedPixelRatio: number;
+  changedPercentLabel: string;
+  summary: string;
+};
+
+type RevisionCanvasPixelComparisonInput = {
+  snapshotElements: CanvasElement[];
+  currentElements: CanvasElement[];
+  snapshotCanvasWidth?: number | null;
+  snapshotCanvasHeight?: number | null;
+  currentCanvasWidth?: number | null;
+  currentCanvasHeight?: number | null;
+  elementDiff: CanvasRevisionElementDiff;
+};
+
 export type RevisionCanvasVisualDiffProps = {
   testId: string;
   snapshotElements: CanvasElement[];
@@ -34,6 +62,7 @@ export type RevisionCanvasVisualDiffProps = {
   currentCanvasWidth?: number | null;
   currentCanvasHeight?: number | null;
   elementDiff: CanvasRevisionElementDiff;
+  pixelComparison?: RevisionCanvasPixelComparison;
 };
 
 const REVISION_VISUAL_WIDTH = 160;
@@ -94,6 +123,132 @@ const visualStatusClass = (status: RevisionCanvasVisualStatus): string => {
   if (status === 'removed') return 'border-red-500 bg-red-500/25';
   if (status === 'updated') return 'border-amber-500 bg-amber-500/30';
   return 'border-slate-400 bg-slate-400/15';
+};
+
+const visualStatusForElement = (
+  id: string,
+  side: 'snapshot' | 'current',
+  elementDiff: CanvasRevisionElementDiff,
+): RevisionCanvasVisualStatus => {
+  if (side === 'snapshot' && elementDiff.removedIds.includes(id)) return 'removed';
+  if (side === 'current' && elementDiff.addedIds.includes(id)) return 'added';
+  if (elementDiff.updatedIds.includes(id)) return 'updated';
+  return 'unchanged';
+};
+
+const pixelSignature = (
+  element: RevisionCanvasVisualElement,
+  side: 'snapshot' | 'current',
+  elementDiff: CanvasRevisionElementDiff,
+): string => {
+  const status = visualStatusForElement(element.id, side, elementDiff);
+  if (status === 'unchanged') return `unchanged:${element.id}`;
+  if (status === 'updated') return `updated:${side}:${element.id}`;
+  return `${status}:${element.id}`;
+};
+
+const signatureStatus = (signature: string): RevisionCanvasVisualStatus | 'empty' => {
+  if (signature.startsWith('added:')) return 'added';
+  if (signature.startsWith('removed:')) return 'removed';
+  if (signature.startsWith('updated:')) return 'updated';
+  if (signature.startsWith('unchanged:')) return 'unchanged';
+  return 'empty';
+};
+
+const rasterizeVisualPixels = (
+  elements: CanvasElement[],
+  canvasWidth: number | null | undefined,
+  canvasHeight: number | null | undefined,
+  elementDiff: CanvasRevisionElementDiff,
+  side: 'snapshot' | 'current',
+) => {
+  const visualElements = flattenVisualElements(elements)
+    .sort((left, right) => (left.zIndex - right.zIndex) || (left.depth - right.depth));
+  const canvas = visualCanvasSize(visualElements, canvasWidth, canvasHeight);
+  const scale = Math.min(REVISION_VISUAL_WIDTH / canvas.width, REVISION_VISUAL_HEIGHT / canvas.height);
+  const pixels = new Array<string>(REVISION_VISUAL_WIDTH * REVISION_VISUAL_HEIGHT).fill('empty');
+  let elementPixels = 0;
+
+  visualElements.forEach((element) => {
+    const width = Math.max(1, Math.min(REVISION_VISUAL_WIDTH, Math.ceil(element.width * scale)));
+    const height = Math.max(1, Math.min(REVISION_VISUAL_HEIGHT, Math.ceil(element.height * scale)));
+    const left = Math.max(0, Math.min(REVISION_VISUAL_WIDTH - width, Math.floor(element.x * scale)));
+    const top = Math.max(0, Math.min(REVISION_VISUAL_HEIGHT - height, Math.floor(element.y * scale)));
+    const signature = pixelSignature(element, side, elementDiff);
+
+    for (let y = top; y < top + height; y += 1) {
+      for (let x = left; x < left + width; x += 1) {
+        const index = y * REVISION_VISUAL_WIDTH + x;
+        if (pixels[index] === 'empty') {
+          elementPixels += 1;
+        }
+        pixels[index] = signature;
+      }
+    }
+  });
+
+  return { pixels, elementPixels };
+};
+
+export const getRevisionCanvasPixelComparison = ({
+  snapshotElements,
+  currentElements,
+  snapshotCanvasWidth,
+  snapshotCanvasHeight,
+  currentCanvasWidth,
+  currentCanvasHeight,
+  elementDiff,
+}: RevisionCanvasPixelComparisonInput): RevisionCanvasPixelComparison => {
+  const snapshot = rasterizeVisualPixels(snapshotElements, snapshotCanvasWidth, snapshotCanvasHeight, elementDiff, 'snapshot');
+  const current = rasterizeVisualPixels(currentElements, currentCanvasWidth, currentCanvasHeight, elementDiff, 'current');
+  const sampledPixels = snapshot.pixels.length;
+  let changedPixels = 0;
+  let addedPixels = 0;
+  let removedPixels = 0;
+  let updatedPixels = 0;
+  let changedNeutralPixels = 0;
+
+  snapshot.pixels.forEach((snapshotSignature, index) => {
+    const currentSignature = current.pixels[index];
+    if (snapshotSignature === currentSignature) {
+      return;
+    }
+
+    changedPixels += 1;
+    const snapshotStatus = signatureStatus(snapshotSignature);
+    const currentStatus = signatureStatus(currentSignature);
+
+    if (currentStatus === 'added') {
+      addedPixels += 1;
+    } else if (snapshotStatus === 'removed') {
+      removedPixels += 1;
+    } else if (snapshotStatus === 'updated' || currentStatus === 'updated') {
+      updatedPixels += 1;
+    } else {
+      changedNeutralPixels += 1;
+    }
+  });
+
+  const unchangedPixels = Math.max(0, sampledPixels - changedPixels);
+  const changedPixelRatio = sampledPixels ? Number((changedPixels / sampledPixels).toFixed(4)) : 0;
+  const changedPercentLabel = `${(changedPixelRatio * 100).toFixed(changedPixelRatio > 0 && changedPixelRatio < 0.01 ? 2 : 1)}%`;
+
+  return {
+    sampleWidth: REVISION_VISUAL_WIDTH,
+    sampleHeight: REVISION_VISUAL_HEIGHT,
+    sampledPixels,
+    snapshotElementPixels: snapshot.elementPixels,
+    currentElementPixels: current.elementPixels,
+    changedPixels,
+    unchangedPixels,
+    addedPixels,
+    removedPixels,
+    updatedPixels,
+    changedNeutralPixels,
+    changedPixelRatio,
+    changedPercentLabel,
+    summary: `${changedPixels.toLocaleString()} of ${sampledPixels.toLocaleString()} rendered preview pixels changed (${changedPercentLabel}).`,
+  };
 };
 
 const RevisionCanvasVisualPreview = ({
@@ -173,8 +328,30 @@ export const RevisionCanvasVisualDiff = ({
   currentCanvasWidth,
   currentCanvasHeight,
   elementDiff,
+  pixelComparison,
 }: RevisionCanvasVisualDiffProps) => {
   const changeIndexById = new Map(elementDiff.changes.map((change, index) => [change.id, index + 1]));
+  const renderedPixelComparison = useMemo(
+    () => pixelComparison || getRevisionCanvasPixelComparison({
+      snapshotElements,
+      currentElements,
+      snapshotCanvasWidth,
+      snapshotCanvasHeight,
+      currentCanvasWidth,
+      currentCanvasHeight,
+      elementDiff,
+    }),
+    [
+      currentCanvasHeight,
+      currentCanvasWidth,
+      currentElements,
+      elementDiff,
+      pixelComparison,
+      snapshotCanvasHeight,
+      snapshotCanvasWidth,
+      snapshotElements,
+    ],
+  );
 
   return (
     <div className="mt-2 border-t border-border/60 pt-2" data-testid={testId}>
@@ -203,6 +380,29 @@ export const RevisionCanvasVisualDiff = ({
         <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-emerald-500 bg-emerald-500/25" />Added</span>
         <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-red-500 bg-red-500/25" />Removed</span>
         <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-amber-500 bg-amber-500/30" />Updated</span>
+      </div>
+      <div
+        className="mt-2 rounded-md border border-border/70 bg-background px-2 py-1.5"
+        data-testid={`${testId}-pixel-comparison`}
+        data-changed-pixels={renderedPixelComparison.changedPixels}
+        data-changed-ratio={renderedPixelComparison.changedPixelRatio}
+      >
+        <div className="font-medium text-foreground">Rendered pixel comparison</div>
+        <div className="mt-1">{renderedPixelComparison.summary}</div>
+        <div className="mt-2 grid gap-1 sm:grid-cols-4">
+          <span className="rounded bg-emerald-500/10 px-2 py-1 text-emerald-700">
+            Added {renderedPixelComparison.addedPixels.toLocaleString()}px
+          </span>
+          <span className="rounded bg-red-500/10 px-2 py-1 text-red-700">
+            Removed {renderedPixelComparison.removedPixels.toLocaleString()}px
+          </span>
+          <span className="rounded bg-amber-500/10 px-2 py-1 text-amber-700">
+            Updated {renderedPixelComparison.updatedPixels.toLocaleString()}px
+          </span>
+          <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
+            Unchanged {renderedPixelComparison.unchangedPixels.toLocaleString()}px
+          </span>
+        </div>
       </div>
       {elementDiff.changes.length ? (
         <div className="mt-2 grid gap-1" data-testid={`${testId}-focus`}>

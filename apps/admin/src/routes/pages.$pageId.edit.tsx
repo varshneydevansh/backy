@@ -11,7 +11,11 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, EyeOff, History, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
 import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
-import { RevisionCanvasVisualDiff } from '@/components/editor/RevisionCanvasVisualDiff';
+import {
+  RevisionCanvasVisualDiff,
+  getRevisionCanvasPixelComparison,
+  type RevisionCanvasPixelComparison,
+} from '@/components/editor/RevisionCanvasVisualDiff';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
 import {
@@ -138,6 +142,7 @@ type PageRevisionDiff = {
   snapshotRootLayerCount: number;
   rootLayerDelta: number;
   elementDiff: CanvasRevisionElementDiff;
+  renderedPixelDiff: RevisionCanvasPixelComparison;
 };
 
 type PageRevisionDiffDetail = {
@@ -274,6 +279,15 @@ const pageRevisionDiff = (
   const currentMetaTitle = metaStringValue(page.meta, 'title') || page.title;
   const currentMetaDescription = metaStringValue(page.meta, 'description');
   const elementDiff = compareCanvasRevisionElements(revision.snapshotElements, currentElements);
+  const renderedPixelDiff = getRevisionCanvasPixelComparison({
+    snapshotElements: revision.snapshotElements,
+    currentElements,
+    snapshotCanvasWidth: revision.snapshotCanvas.canvasWidth,
+    snapshotCanvasHeight: revision.snapshotCanvas.canvasHeight,
+    currentCanvasWidth: canvasSize.width,
+    currentCanvasHeight: canvasSize.height,
+    elementDiff,
+  });
   const addChange = (field: string, label: string, snapshot: string, current: string) => {
     changedFields.push(field);
     details.push({
@@ -348,6 +362,7 @@ const pageRevisionDiff = (
     snapshotRootLayerCount: revision.snapshotCanvas.rootLayerCount,
     rootLayerDelta,
     elementDiff,
+    renderedPixelDiff,
   };
 };
 
@@ -2128,6 +2143,7 @@ function PageEditorRoute() {
                               currentCanvasWidth={initialCanvasSize.width}
                               currentCanvasHeight={initialCanvasSize.height}
                               elementDiff={revisionDiff.elementDiff}
+                              pixelComparison={revisionDiff.renderedPixelDiff}
                             />
                           ) : null}
                           {revisionDiff?.elementDiff.totalChanged ? (
