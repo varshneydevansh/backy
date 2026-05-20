@@ -804,6 +804,7 @@ const valueForBinding = (
   const source = isRecord(normalized?.source) ? normalized.source : null;
   const collectionId = typeof source?.collectionId === 'string' ? source.collectionId : null;
   const field = typeof source?.field === 'string' ? source.field : null;
+  const targetPath = typeof normalized?.targetPath === 'string' ? normalized.targetPath : '';
 
   if (!source || !collectionId || !field) {
     return undefined;
@@ -817,6 +818,24 @@ const valueForBinding = (
   const record = getBoundCollectionRecord(siteId, collection.id, binding, context);
   if (!record) {
     return undefined;
+  }
+
+  if (field === 'id') {
+    return record.id;
+  }
+  if (field === 'slug') {
+    return targetPath.toLowerCase().includes('href') || targetPath.toLowerCase().includes('url')
+      ? buildCollectionItemPath(collection, record.slug)
+      : record.slug;
+  }
+  if (field === 'status') {
+    return record.status;
+  }
+  if (field === 'createdAt') {
+    return record.createdAt;
+  }
+  if (field === 'updatedAt') {
+    return record.updatedAt;
   }
 
   const sourcePath = typeof source.path === 'string' ? source.path : '';

@@ -5138,6 +5138,7 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
 };
 
 const NON_FIELD_BINDING_SLOT_KEYS = new Set(['record', 'records', 'categories', 'relatedPosts']);
+const VIRTUAL_COLLECTION_FIELD_PATHS = new Set(['id', 'slug', 'status', 'createdAt', 'updatedAt']);
 
 const BINDING_SLOT_FIELD_ALIASES: Record<string, string[]> = {
   title: ['title', 'name', 'label'],
@@ -5169,7 +5170,9 @@ const bindingSlotFieldPath = (
   collection: Collection | null,
   collections: Collection[],
 ): string => (
-  bindingSlotFieldCandidates(slot).find((candidate) => fieldPathExists(collection, collections, candidate)) || ''
+  bindingSlotFieldCandidates(slot).find((candidate) => (
+    VIRTUAL_COLLECTION_FIELD_PATHS.has(candidate) || fieldPathExists(collection, collections, candidate)
+  )) || ''
 );
 
 const bindingUpdateForFieldPath = (fieldPath: string): { fieldKey: string; sourcePath: string } => {
@@ -5181,6 +5184,9 @@ const bindingUpdateForFieldPath = (fieldPath: string): { fieldKey: string; sourc
 };
 
 const getBindingModeForField = (field?: CollectionField | null, targetPath = '') => {
+  const normalizedTargetPath = targetPath.toLowerCase();
+  if (normalizedTargetPath.includes('href') || normalizedTargetPath.includes('url')) return 'url';
+  if (normalizedTargetPath.includes('assetid') || normalizedTargetPath.includes('mediaid') || normalizedTargetPath.includes('src')) return 'image';
   if (field?.type === 'richText' || targetPath === 'props.html') return 'html';
   if (field?.type === 'image') return 'image';
   if (field?.type === 'number') return 'number';
@@ -5554,6 +5560,124 @@ const mergeCollectionBindingPresets = (
     .slice(0, 48);
 };
 
+const collectionBindingForSlot = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  collection: Collection,
+  collections: Collection[],
+  fieldPath: string,
+): Record<string, unknown> => {
+  const { fieldKey, sourcePath } = bindingUpdateForFieldPath(fieldPath);
+  const field = fieldForFieldPath(collection, collections, fieldPath);
+  const binding: Record<string, unknown> = {
+    id: `bind_${element.id}_${slot.id}_${fieldKey}`,
+    datasetId: `dataset_${collection.id}`,
+    targetPath: slot.targetPath,
+    source: {
+      kind: 'collection',
+      collectionId: collection.id,
+      field: fieldKey,
+      ...(sourcePath ? { path: sourcePath } : {}),
+    },
+    mode: slot.mode || getBindingModeForField(field, slot.targetPath),
+  };
+
+  return binding;
+};
+
+const applyCollectionBindingToElement = (
+  element: CanvasElement,
+  binding: Record<string, unknown>,
+): CanvasElement => {
+  const targetPath = typeof binding.targetPath === 'string' ? binding.targetPath : '';
+  const existingBindings = Array.isArray(element.dataBindings) ? element.dataBindings : [];
+  const nextBindings = [
+    ...existingBindings.filter((candidate) => (
+      !(getBindingSource(candidate)?.kind === 'collection' && (candidate as Record<string, unknown>).targetPath === targetPath)
+    )),
+    binding,
+  ];
+
+  return {
+    ...element,
+    dataBindings: nextBindings,
+  };
+};
+
+const bindableSlotsForElement = (
+  element: CanvasElement,
+  collection: Collection | null,
+  collections: Collection[],
+): Array<{ slot: ComponentBindingSlot; fieldPath: string }> => {
+  if (!collection || !Array.isArray(element.bindingSlots)) {
+    return [];
+  }
+
+  return element.bindingSlots
+    .map((slot) => {
+      const fieldPath = bindingSlotFieldPath(slot, collection, collections);
+      const targetAllowed = getTargetPathOptions(element.type).some((option) => option.value === slot.targetPath);
+      return fieldPath && targetAllowed ? { slot, fieldPath } : null;
+    })
+    .filter((entry): entry is { slot: ComponentBindingSlot; fieldPath: string } => entry !== null);
+};
+
+const childBindingSlotSummary = (
+  element: CanvasElement,
+  collection: Collection | null,
+  collections: Collection[],
+): { total: number; applicable: number } => {
+  let total = 0;
+  let applicable = 0;
+  const walk = (items?: CanvasElement[]) => {
+    (items || []).forEach((child) => {
+      const slots = Array.isArray(child.bindingSlots) ? child.bindingSlots : [];
+      total += slots.length;
+      applicable += bindableSlotsForElement(child, collection, collections).length;
+      walk(child.children);
+    });
+  };
+
+  walk(element.children);
+  return { total, applicable };
+};
+
+const applyChildBindingSlots = (
+  element: CanvasElement,
+  collection: Collection,
+  collections: Collection[],
+): { children: CanvasElement[] | undefined; applied: number } => {
+  let applied = 0;
+  const walk = (items?: CanvasElement[]): CanvasElement[] | undefined => {
+    if (!items?.length) {
+      return items;
+    }
+
+    return items.map((child) => {
+      const slotBindings = bindableSlotsForElement(child, collection, collections);
+      const nextChildChildren = walk(child.children);
+      let nextChild: CanvasElement = nextChildChildren !== child.children
+        ? { ...child, children: nextChildChildren }
+        : child;
+
+      slotBindings.forEach(({ slot, fieldPath }) => {
+        nextChild = applyCollectionBindingToElement(
+          nextChild,
+          collectionBindingForSlot(nextChild, slot, collection, collections, fieldPath),
+        );
+        applied += 1;
+      });
+
+      return nextChild;
+    });
+  };
+
+  return {
+    children: walk(element.children),
+    applied,
+  };
+};
+
 function CollectionFilterValueControl({
   testId,
   field,
@@ -5629,27 +5753,35 @@ function CollectionFilterValueControl({
 
 interface PresetBindingSlotsPanelProps {
   element: CanvasElement;
-  selectedCollection: Collection | null;
   collections: Collection[];
+  selectedCollectionId: string;
+  selectedCollection: Collection | null;
+  childSummary: { total: number; applicable: number };
   targetPathOptions: Array<{ value: string; label: string }>;
   selectedFieldKey: string;
   selectedSourcePath: string;
   selectedTargetPath: string;
+  onCollectionChange: (collectionId: string) => void;
   onApplySlot: (slot: ComponentBindingSlot, fieldPath: string) => void;
+  onApplyChildSlots: () => void;
 }
 
 function PresetBindingSlotsPanel({
   element,
-  selectedCollection,
   collections,
+  selectedCollectionId,
+  selectedCollection,
+  childSummary,
   targetPathOptions,
   selectedFieldKey,
   selectedSourcePath,
   selectedTargetPath,
+  onCollectionChange,
   onApplySlot,
+  onApplyChildSlots,
 }: PresetBindingSlotsPanelProps) {
   const slots = Array.isArray(element.bindingSlots) ? element.bindingSlots : [];
-  if (slots.length === 0) {
+  if (slots.length === 0 && childSummary.total === 0) {
     return null;
   }
 
@@ -5657,9 +5789,28 @@ function PresetBindingSlotsPanel({
     <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-slots">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
         <span className="font-medium text-foreground">Preset binding slots</span>
-        <span className="text-muted-foreground">{slots.length} target{slots.length === 1 ? '' : 's'}</span>
+        <span className="text-muted-foreground">
+          {slots.length + childSummary.total} target{slots.length + childSummary.total === 1 ? '' : 's'}
+        </span>
       </div>
       <div className="space-y-2">
+        <select
+          value={selectedCollectionId}
+          onChange={(event) => onCollectionChange(event.target.value)}
+          data-testid="editor-data-binding-slot-collection"
+          className={cn(
+            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+        >
+          <option value="">No collection</option>
+          {collections.map((collection) => (
+            <option key={collection.id} value={collection.id}>
+              {collection.name}
+            </option>
+          ))}
+        </select>
+
         {slots.map((slot) => {
           const fieldCandidates = bindingSlotFieldCandidates(slot);
           const fieldPath = bindingSlotFieldPath(slot, selectedCollection, collections);
@@ -5723,6 +5874,28 @@ function PresetBindingSlotsPanel({
             </div>
           );
         })}
+
+        {childSummary.total > 0 && (
+          <div className="rounded-md border border-border bg-background p-2 text-xs" data-testid="editor-data-child-binding-slots">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate font-medium text-foreground">Child element slots</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  {childSummary.applicable} of {childSummary.total} targets match the selected collection.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onApplyChildSlots}
+                disabled={!selectedCollection || childSummary.applicable === 0}
+                data-testid="editor-data-apply-child-binding-slots"
+                className="shrink-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Apply child slots
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -6484,6 +6657,7 @@ function DataBindingProperties({
   const [savedPresetBusy, setSavedPresetBusy] = useState<'saving' | 'deleting' | null>(null);
   const [savedPresetName, setSavedPresetName] = useState('');
   const [selectedSavedPresetId, setSelectedSavedPresetId] = useState('');
+  const [slotCollectionId, setSlotCollectionId] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -6644,6 +6818,36 @@ function DataBindingProperties({
   const repeaterSelectedCollection = normalizeCanvasElementType(element.type) === 'repeater' && typeof element.props?.collectionId === 'string'
     ? collections.find((collection) => collection.id === element.props.collectionId) || null
     : selectedCollection;
+  const preferredSlotCollectionId = selectedCollectionId || repeaterSelectedCollection?.id || '';
+  const activeSlotCollectionId = collections.some((collection) => collection.id === slotCollectionId)
+    ? slotCollectionId
+    : preferredSlotCollectionId;
+  const activeSlotCollection = collections.find((collection) => collection.id === activeSlotCollectionId)
+    || selectedCollection
+    || repeaterSelectedCollection
+    || null;
+  const activeSlotCollectionSelectValue = activeSlotCollection?.id || '';
+  const childSlotSummary = useMemo(
+    () => childBindingSlotSummary(element, activeSlotCollection, collections),
+    [activeSlotCollection, collections, element],
+  );
+
+  useEffect(() => {
+    if (collections.length === 0) {
+      setSlotCollectionId('');
+      return;
+    }
+
+    setSlotCollectionId((current) => {
+      if (preferredSlotCollectionId && preferredSlotCollectionId !== current) {
+        return preferredSlotCollectionId;
+      }
+      if (current && collections.some((collection) => collection.id === current)) {
+        return current;
+      }
+      return preferredSlotCollectionId || collections[0]?.id || '';
+    });
+  }, [collections, preferredSlotCollectionId]);
 
   useEffect(() => {
     if (!selectedSavedPresetId && savedPresetsForCollection[0]) {
@@ -6758,6 +6962,14 @@ function DataBindingProperties({
       sourcePath: bindingUpdate.sourcePath,
       targetPath: slot.targetPath,
     });
+  };
+
+  const applyChildSlots = () => {
+    if (!activeSlotCollection) return;
+    const result = applyChildBindingSlots(element, activeSlotCollection, collections);
+    if (result.applied > 0) {
+      onChange({ children: result.children });
+    }
   };
 
   const clearBinding = () => {
@@ -6892,13 +7104,17 @@ function DataBindingProperties({
       <div className="space-y-3">
         <PresetBindingSlotsPanel
           element={element}
-          selectedCollection={repeaterSelectedCollection}
           collections={collections}
+          selectedCollectionId={activeSlotCollectionSelectValue}
+          selectedCollection={activeSlotCollection}
+          childSummary={childSlotSummary}
           targetPathOptions={targetPathOptions}
           selectedFieldKey={selectedFieldKey}
           selectedSourcePath={selectedSourcePath}
           selectedTargetPath={selectedTargetPath}
+          onCollectionChange={setSlotCollectionId}
           onApplySlot={applyBindingSlot}
+          onApplyChildSlots={applyChildSlots}
         />
         <RepeaterDataProperties
           element={element}
@@ -6936,13 +7152,17 @@ function DataBindingProperties({
 
       <PresetBindingSlotsPanel
         element={element}
-        selectedCollection={selectedCollection}
         collections={collections}
+        selectedCollectionId={activeSlotCollectionSelectValue}
+        selectedCollection={activeSlotCollection}
+        childSummary={childSlotSummary}
         targetPathOptions={targetPathOptions}
         selectedFieldKey={selectedFieldKey}
         selectedSourcePath={selectedSourcePath}
         selectedTargetPath={selectedTargetPath}
+        onCollectionChange={setSlotCollectionId}
         onApplySlot={applyBindingSlot}
+        onApplyChildSlots={applyChildSlots}
       />
 
       {selectedCollection && (
