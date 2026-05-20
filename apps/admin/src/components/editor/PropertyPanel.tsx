@@ -5130,6 +5130,7 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
       { value: 'props.titleField', label: 'Title field' },
       { value: 'props.descriptionField', label: 'Description field' },
       { value: 'props.imageField', label: 'Image field' },
+      { value: 'props.metaField', label: 'Meta field' },
     ];
   }
   if (normalizedElementType === 'interactiveFigure') {
@@ -5164,11 +5165,13 @@ const REPEATER_BINDING_SLOT_TARGETS = new Set([
   'props.titleField',
   'props.descriptionField',
   'props.imageField',
+  'props.metaField',
 ]);
-const REPEATER_FIELD_BINDING_SLOT_TARGET_PROPS: Record<string, 'titleField' | 'descriptionField' | 'imageField'> = {
+const REPEATER_FIELD_BINDING_SLOT_TARGET_PROPS: Record<string, 'titleField' | 'descriptionField' | 'imageField' | 'metaField'> = {
   'props.titleField': 'titleField',
   'props.descriptionField': 'descriptionField',
   'props.imageField': 'imageField',
+  'props.metaField': 'metaField',
 };
 
 const BINDING_SLOT_FIELD_ALIASES: Record<string, string[]> = {
@@ -5462,6 +5465,7 @@ const repeaterBindingPropsForSlot = (
     const currentTitleField = typeof nextProps.titleField === 'string' ? nextProps.titleField : '';
     const currentDescriptionField = typeof nextProps.descriptionField === 'string' ? nextProps.descriptionField : '';
     const currentImageField = typeof nextProps.imageField === 'string' ? nextProps.imageField : '';
+    const currentMetaField = typeof nextProps.metaField === 'string' ? nextProps.metaField : '';
     const titleField = fieldPathExists(collection, collections, currentTitleField)
       ? currentTitleField
       : defaultFieldKey(collection, ['title', 'name', 'label'], ['text']);
@@ -5471,6 +5475,9 @@ const repeaterBindingPropsForSlot = (
     const imageField = fieldPathExists(collection, collections, currentImageField)
       ? currentImageField
       : defaultFieldKey(collection, ['featuredImage', 'image', 'coverImage', 'thumbnail', 'media'], ['image'], { fallbackToFirst: false });
+    const metaField = fieldPathExists(collection, collections, currentMetaField)
+      ? currentMetaField
+      : defaultFieldKey(collection, ['category', 'categories', 'topic', 'type', 'status'], ['select', 'tags'], { fallbackToFirst: false });
 
     nextProps.titleField = titleField;
     nextProps.descriptionField = descriptionField;
@@ -5478,6 +5485,11 @@ const repeaterBindingPropsForSlot = (
       nextProps.imageField = imageField;
     } else {
       delete nextProps.imageField;
+    }
+    if (metaField) {
+      nextProps.metaField = metaField;
+    } else {
+      delete nextProps.metaField;
     }
 
     return nextProps;
@@ -6290,6 +6302,11 @@ function RepeaterDataProperties({
     : typeof props.repeaterImageField === 'string'
       ? props.repeaterImageField
       : defaultFieldKey(selectedCollection, ['image', 'coverImage', 'thumbnail'], ['image'], { fallbackToFirst: false });
+  const selectedMetaField = typeof props.metaField === 'string'
+    ? props.metaField
+    : typeof props.repeaterMetaField === 'string'
+      ? props.repeaterMetaField
+      : defaultFieldKey(selectedCollection, ['category', 'categories', 'topic', 'type', 'status'], ['select', 'tags'], { fallbackToFirst: false });
   const selectedSearch = typeof query.q === 'string'
     ? query.q
     : typeof query.search === 'string'
@@ -6312,6 +6329,7 @@ function RepeaterDataProperties({
   const selectedGap = normalizedNumberInput(props.gap ?? 16);
   const selectedEmptyMessage = typeof props.emptyMessage === 'string' ? props.emptyMessage : 'No records yet.';
   const repeaterFieldOptions = collectionFieldPathOptions(selectedCollection, collections);
+  const repeaterOptionalFieldOptions = collectionFieldPathOptions(selectedCollection, collections, { includeNone: true });
   const repeaterImageFieldOptions = collectionFieldPathOptions(selectedCollection, collections, { includeNone: true });
   const [previewRecords, setPreviewRecords] = useState<CollectionRecord[]>([]);
   const [previewPagination, setPreviewPagination] = useState<{ total: number; limit: number; offset: number; hasMore: boolean } | null>(null);
@@ -6390,6 +6408,7 @@ function RepeaterDataProperties({
       ...collectionIdsForFieldPath(selectedCollection, collections, selectedTitleField),
       ...collectionIdsForFieldPath(selectedCollection, collections, selectedDescriptionField),
       ...collectionIdsForFieldPath(selectedCollection, collections, selectedImageField),
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedMetaField),
       ...collectionIdsForFieldPath(selectedCollection, collections, selectedFilterField),
       ...collectionIdsForFieldPath(selectedCollection, collections, selectedSortBy),
     ]));
@@ -6432,7 +6451,7 @@ function RepeaterDataProperties({
     return () => {
       cancelled = true;
     };
-  }, [collections, selectedCollection, selectedDescriptionField, selectedFilterField, selectedImageField, selectedSortBy, selectedTitleField, siteId]);
+  }, [collections, selectedCollection, selectedDescriptionField, selectedFilterField, selectedImageField, selectedMetaField, selectedSortBy, selectedTitleField, siteId]);
 
   const clientResolvedPreviewRecords = previewNeedsClientQuery
     ? previewRecords
@@ -6489,6 +6508,9 @@ function RepeaterDataProperties({
     const description = recordPreviewValue(
       resolveRecordFieldPathFromCache(selectedCollection, collections, previewReferenceRecords, record, selectedDescriptionField),
     );
+    const meta = selectedMetaField
+      ? recordPreviewValue(resolveRecordFieldPathFromCache(selectedCollection, collections, previewReferenceRecords, record, selectedMetaField))
+      : '';
     const rawImage = selectedImageField
       ? recordPreviewValue(resolveRecordFieldPathFromCache(selectedCollection, collections, previewReferenceRecords, record, selectedImageField)).trim()
       : '';
@@ -6504,6 +6526,7 @@ function RepeaterDataProperties({
       record,
       title,
       description,
+      meta,
       imageSrc,
     };
   });
@@ -6514,6 +6537,7 @@ function RepeaterDataProperties({
     titleField?: string;
     descriptionField?: string;
     imageField?: string;
+    metaField?: string;
     search?: string;
     filterField?: string;
     filterValue?: string;
@@ -6547,6 +6571,8 @@ function RepeaterDataProperties({
       ?? (fieldPathExists(collection, collections, selectedDescriptionField) ? selectedDescriptionField : defaultFieldKey(collection, ['summary', 'description', 'excerpt', 'body'], ['richText', 'text']));
     const imageField = updates.imageField
       ?? (fieldPathExists(collection, collections, selectedImageField) ? selectedImageField : defaultFieldKey(collection, ['image', 'coverImage', 'thumbnail'], ['image'], { fallbackToFirst: false }));
+    const metaField = updates.metaField
+      ?? (fieldPathExists(collection, collections, selectedMetaField) ? selectedMetaField : defaultFieldKey(collection, ['category', 'categories', 'topic', 'type', 'status'], ['select', 'tags'], { fallbackToFirst: false }));
     const datasetId = (updates.datasetId ?? selectedDatasetId) || `dataset_${collection.id}_${element.id}`;
     const search = updates.search ?? selectedSearch;
     const filterField = updates.filterField ?? selectedFilterField;
@@ -6576,10 +6602,12 @@ function RepeaterDataProperties({
       descriptionField,
       emptyMessage,
       ...(imageField ? { imageField } : {}),
+      ...(metaField ? { metaField } : {}),
       ...(Object.keys(nextQuery).length > 0 ? { query: nextQuery } : {}),
     };
 
     if (!imageField) delete nextProps.imageField;
+    if (!metaField) delete nextProps.metaField;
 
     const parsedLimit = Number.parseInt(limit, 10);
     const parsedOffset = Number.parseInt(offset, 10);
@@ -6698,6 +6726,27 @@ function RepeaterDataProperties({
               )}
             >
               {repeaterImageFieldOptions.map((field) => (
+                <option key={field.value || 'none'} value={field.value}>
+                  {field.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Meta field
+            </label>
+            <select
+              value={fieldPathExists(selectedCollection, collections, selectedMetaField) ? selectedMetaField : ''}
+              onChange={(event) => updateRepeater({ metaField: event.target.value })}
+              data-testid="editor-repeater-meta-field"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              {repeaterOptionalFieldOptions.map((field) => (
                 <option key={field.value || 'none'} value={field.value}>
                   {field.label}
                 </option>
@@ -6886,7 +6935,7 @@ function RepeaterDataProperties({
               </p>
             ) : repeaterPreviewRows.length > 0 ? (
               <div className="space-y-2" data-testid="editor-repeater-record-preview-list">
-                {repeaterPreviewRows.map(({ record, title, description, imageSrc }) => (
+                {repeaterPreviewRows.map(({ record, title, description, meta, imageSrc }) => (
                   <div
                     key={record.id}
                     className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2 rounded-md border border-border bg-background p-2 text-xs"
@@ -6905,6 +6954,9 @@ function RepeaterDataProperties({
                       </div>
                     )}
                     <div className="min-w-0">
+                      {meta && (
+                        <div className="truncate text-[11px] uppercase text-muted-foreground">{meta}</div>
+                      )}
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate font-medium text-foreground">{title}</span>
                         <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-muted-foreground">{record.status}</span>

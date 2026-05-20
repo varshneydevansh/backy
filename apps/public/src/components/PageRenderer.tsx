@@ -2826,6 +2826,7 @@ function RepeaterElement({ element }: ElementRendererProps) {
   const titleField = typeof props.titleField === 'string' ? props.titleField : 'title';
   const descriptionField = typeof props.descriptionField === 'string' ? props.descriptionField : 'summary';
   const imageField = typeof props.imageField === 'string' ? props.imageField : '';
+  const metaField = typeof props.metaField === 'string' ? props.metaField : '';
   const emptyMessage = getNameClass(props.emptyMessage) || 'No records yet.';
 
   return (
@@ -2848,6 +2849,7 @@ function RepeaterElement({ element }: ElementRendererProps) {
         const title = repeaterRecordValue(record, titleField, ['title', 'name', 'label', 'slug']);
         const description = repeaterRecordValue(record, descriptionField, ['summary', 'description', 'excerpt', 'body']);
         const imageSrc = repeaterRecordImageValue(record, imageField, ['image', 'thumbnail', 'photo', 'avatar', 'cover_image']);
+        const meta = repeaterRecordValue(record, metaField, ['category', 'categories', 'topic', 'type', 'status']);
         const href = typeof record.href === 'string' ? record.href : '#';
 
         return (
@@ -2881,6 +2883,11 @@ function RepeaterElement({ element }: ElementRendererProps) {
                 }}
                 loading="lazy"
               />
+            ) : null}
+            {meta ? (
+              <div style={{ marginBottom: 8, fontSize: 12, lineHeight: 1.2, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 0 }}>
+                {meta}
+              </div>
             ) : null}
             <div style={{ fontSize: 18, lineHeight: 1.25, fontWeight: 700, color: '#0f172a' }}>
               {title || getNameClass(record.slug) || 'Untitled'}

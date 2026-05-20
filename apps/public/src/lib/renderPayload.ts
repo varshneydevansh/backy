@@ -1212,8 +1212,13 @@ const hydrateRepeaterElement = (
     : typeof element.props.repeaterImageField === 'string'
       ? element.props.repeaterImageField
       : 'image';
+  const metaField = typeof element.props.metaField === 'string'
+    ? element.props.metaField
+    : typeof element.props.repeaterMetaField === 'string'
+      ? element.props.repeaterMetaField
+      : '';
   const records = collectionRecordsForQuery(siteId, collection.id, query, pagination, context)
-    .map((record) => hydrateRepeaterJoinedRecordValues(siteId, collection, record, [titleField, descriptionField, imageField], context));
+    .map((record) => hydrateRepeaterJoinedRecordValues(siteId, collection, record, [titleField, descriptionField, imageField, metaField], context));
 
   return {
     ...element,
@@ -1234,6 +1239,7 @@ const hydrateRepeaterElement = (
       titleField,
       descriptionField,
       imageField,
+      metaField,
     },
   };
 };
