@@ -26,6 +26,10 @@ export type CanvasRevisionElementDiff = {
   updated: number;
   unchanged: number;
   totalChanged: number;
+  addedIds: string[];
+  removedIds: string[];
+  updatedIds: string[];
+  unchangedIds: string[];
   summary: string;
   changes: CanvasRevisionElementChange[];
 };
@@ -182,7 +186,7 @@ const compareElementProperties = (
 
 const formatChangeCount = (count: number, label: string) => `${count} ${label}`;
 
-const diffSummary = (diff: Omit<CanvasRevisionElementDiff, 'summary' | 'changes'>): string => {
+const diffSummary = (diff: Pick<CanvasRevisionElementDiff, 'added' | 'removed' | 'updated' | 'unchanged' | 'totalChanged'>): string => {
   if (diff.totalChanged === 0) {
     return 'No element-level canvas changes.';
   }
@@ -207,6 +211,10 @@ export const compareCanvasRevisionElements = (
   let removed = 0;
   let updated = 0;
   let unchanged = 0;
+  const addedIds: string[] = [];
+  const removedIds: string[] = [];
+  const updatedIds: string[] = [];
+  const unchangedIds: string[] = [];
   const changes: CanvasRevisionElementChange[] = [];
 
   elementIds.forEach((id) => {
@@ -215,6 +223,7 @@ export const compareCanvasRevisionElements = (
 
     if (!snapshot && current) {
       added += 1;
+      addedIds.push(id);
       if (changes.length < MAX_LISTED_ELEMENT_CHANGES) {
         changes.push({
           id,
@@ -231,6 +240,7 @@ export const compareCanvasRevisionElements = (
 
     if (snapshot && !current) {
       removed += 1;
+      removedIds.push(id);
       if (changes.length < MAX_LISTED_ELEMENT_CHANGES) {
         changes.push({
           id,
@@ -252,10 +262,12 @@ export const compareCanvasRevisionElements = (
     const propertyChanges = compareElementProperties(snapshot, current);
     if (propertyChanges.length === 0) {
       unchanged += 1;
+      unchangedIds.push(id);
       return;
     }
 
     updated += 1;
+    updatedIds.push(id);
     if (changes.length < MAX_LISTED_ELEMENT_CHANGES) {
       changes.push({
         id,
@@ -278,6 +290,10 @@ export const compareCanvasRevisionElements = (
     updated,
     unchanged,
     totalChanged,
+    addedIds,
+    removedIds,
+    updatedIds,
+    unchangedIds,
   };
 
   return {

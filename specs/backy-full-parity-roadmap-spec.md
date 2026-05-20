@@ -220,7 +220,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
    - page/blog revision records with actor/timestamp.
 2. Diff tooling:
    - field-level and content payload diffs for admin.
-   - Page and blog editor revision cards now expose first-pass current-vs-snapshot field rows for title, route, status, SEO, taxonomy/media where applicable, canvas layer count deltas, and canvas element/property change rows for added/removed/updated elements, plus copyable `backy.page-revision-compare.v1` and `backy.blog-revision-compare.v1` briefs for AI/custom frontend handoff. Page and blog editors also expose first-pass `backy.page-revision-graph.v1` / `backy.blog-revision-graph.v1` timeline metadata with newest/oldest node navigation; remaining work is side-by-side visual diffing, deeper property drill-downs, and richer branching revision graph views.
+   - Page and blog editor revision cards now expose first-pass current-vs-snapshot field rows for title, route, status, SEO, taxonomy/media where applicable, canvas layer count deltas, and canvas element/property change rows for added/removed/updated elements, plus copyable `backy.page-revision-compare.v1` and `backy.blog-revision-compare.v1` briefs for AI/custom frontend handoff. Page and blog editors also expose first-pass `backy.page-revision-graph.v1` / `backy.blog-revision-graph.v1` timeline metadata with newest/oldest node navigation, and page editor revision cards now show side-by-side snapshot/current visual canvas maps for added/removed/updated elements; remaining work is blog visual diff parity, deeper property drill-downs, and richer branching revision graph views.
 3. Rollback:
    - restore to prior revision and re-publish guard.
 4. Safety:

@@ -207,6 +207,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes("schema: 'backy.page-revision-compare.v1'") && source.includes('copyPageRevisionCompare') && source.includes('data-testid={`page-editor-copy-revision-compare-${revision.id}`}'), 'Page editor revisions must expose copyable revision comparison briefs');
   assert(source.includes('details: PageRevisionDiffDetail[]') && source.includes('data-testid={`page-editor-revision-diff-details-${revision.id}`}') && source.includes('Snapshot </span>'), 'Page editor revision cards must show field-level diff details, not only summary text');
   assert(source.includes('compareCanvasRevisionElements') && source.includes('elementDiff: CanvasRevisionElementDiff') && source.includes('data-testid={`page-editor-revision-element-diff-${revision.id}`}'), 'Page editor revision cards must show canvas element/property diffs');
+  assert(source.includes('PageRevisionCanvasVisualPreview') && source.includes('data-testid={`page-editor-revision-visual-diff-${revision.id}`}') && source.includes('Visual canvas diff'), 'Page editor revision cards must show side-by-side visual canvas diffs');
   assert(source.includes("schema: 'backy.page-revision-graph.v1'") && source.includes('pageRevisionTimeline') && source.includes('data-testid="page-editor-revision-graph"') && source.includes('data-testid="page-editor-toggle-revision-graph"'), 'Page editor revisions must expose graph timeline navigation and handoff metadata');
 };
 
