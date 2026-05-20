@@ -5210,14 +5210,114 @@ const isRepeaterBindingSlotTarget = (element: CanvasElement, targetPath: string)
   normalizeCanvasElementType(element.type) === 'repeater' && REPEATER_BINDING_SLOT_TARGETS.has(targetPath)
 );
 
-const bindingSlotCanApplyWithoutFieldPath = (element: CanvasElement, slot: ComponentBindingSlot): boolean => (
+const descendantBindingSlotTarget = (targetPath: string): { selector: string; targetPath: string } | null => {
+  const parts = targetPath.split('.');
+  if (parts[0] !== 'children' || parts.length < 3) {
+    return null;
+  }
+
+  const selector = (parts[1] || '').trim();
+  const childTargetPath = parts.slice(2).join('.');
+  return selector && childTargetPath ? { selector, targetPath: childTargetPath } : null;
+};
+
+const normalizedBindingTargetSelector = (value: string): string => (
+  value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+);
+
+const matchesDescendantBindingTarget = (element: CanvasElement, selector: string): boolean => {
+  const normalizedSelector = normalizedBindingTargetSelector(selector);
+  if (!normalizedSelector) return false;
+
+  return [
+    element.id,
+    element.name || '',
+    element.type,
+  ].some((value) => normalizedBindingTargetSelector(String(value)) === normalizedSelector);
+};
+
+const findDescendantBindingTarget = (
+  element: CanvasElement,
+  selector: string,
+): CanvasElement | null => {
+  let match: CanvasElement | null = null;
+  const walk = (items?: CanvasElement[]) => {
+    if (match) return;
+    (items || []).forEach((child) => {
+      if (match) return;
+      if (matchesDescendantBindingTarget(child, selector)) {
+        match = child;
+        return;
+      }
+      walk(child.children);
+    });
+  };
+
+  walk(element.children);
+  return match;
+};
+
+const resolvedDescendantBindingSlot = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+): { element: CanvasElement; slot: ComponentBindingSlot; selector: string } | null => {
+  const target = descendantBindingSlotTarget(slot.targetPath);
+  if (!target) {
+    return null;
+  }
+
+  const targetElement = findDescendantBindingTarget(element, target.selector);
+  return targetElement
+    ? {
+        element: targetElement,
+        slot: { ...slot, targetPath: target.targetPath },
+        selector: target.selector,
+      }
+    : null;
+};
+
+const directBindingSlotCanApplyWithoutFieldPath = (element: CanvasElement, slot: ComponentBindingSlot): boolean => (
   isRepeaterBindingSlotTarget(element, slot.targetPath) && slot.targetPath === 'props.collectionId'
 );
 
-const bindingSlotTargetAllowed = (element: CanvasElement, slot: ComponentBindingSlot): boolean => (
+const bindingSlotCanApplyWithoutFieldPath = (element: CanvasElement, slot: ComponentBindingSlot): boolean => {
+  if (directBindingSlotCanApplyWithoutFieldPath(element, slot)) {
+    return true;
+  }
+
+  const descendant = resolvedDescendantBindingSlot(element, slot);
+  return descendant ? directBindingSlotCanApplyWithoutFieldPath(descendant.element, descendant.slot) : false;
+};
+
+const directBindingSlotTargetAllowed = (element: CanvasElement, slot: ComponentBindingSlot): boolean => (
   isRepeaterBindingSlotTarget(element, slot.targetPath)
   || getTargetPathOptions(element.type).some((option) => option.value === slot.targetPath)
 );
+
+const bindingSlotTargetAllowed = (element: CanvasElement, slot: ComponentBindingSlot): boolean => {
+  if (directBindingSlotTargetAllowed(element, slot)) {
+    return true;
+  }
+
+  const descendant = resolvedDescendantBindingSlot(element, slot);
+  return descendant ? directBindingSlotTargetAllowed(descendant.element, descendant.slot) : false;
+};
+
+const bindingSlotTargetLabel = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  targetPathOptions: Array<{ value: string; label: string }>,
+): string => {
+  const descendant = resolvedDescendantBindingSlot(element, slot);
+  if (descendant) {
+    const descendantOptions = getTargetPathOptions(descendant.element.type);
+    const label = descendantOptions.find((option) => option.value === descendant.slot.targetPath)?.label
+      || descendant.slot.targetPath;
+    return `${descendant.element.name || descendant.selector}: ${label}`;
+  }
+
+  return targetPathOptions.find((option) => option.value === slot.targetPath)?.label || slot.targetPath;
+};
 
 const bindingUpdateForFieldPath = (fieldPath: string): { fieldKey: string; sourcePath: string } => {
   const [fieldKey, ...remainingPath] = fieldPath.split('.').filter(Boolean);
@@ -5413,6 +5513,47 @@ const isRepeaterBindingSlotApplied = (
 
   const targetProp = REPEATER_FIELD_BINDING_SLOT_TARGET_PROPS[slot.targetPath];
   return Boolean(targetProp && fieldPath && props[targetProp] === fieldPath);
+};
+
+const isCollectionBindingSlotApplied = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  collection: Collection | null,
+  fieldPath: string,
+): boolean => {
+  if (!collection || !fieldPath) {
+    return false;
+  }
+
+  const bindingUpdate = bindingUpdateForFieldPath(fieldPath);
+  return (Array.isArray(element.dataBindings) ? element.dataBindings : []).some((binding) => {
+    const source = getBindingSource(binding);
+    return (
+      source?.kind === 'collection'
+      && source.collectionId === collection.id
+      && source.field === bindingUpdate.fieldKey
+      && (typeof source.path === 'string' ? source.path : '') === bindingUpdate.sourcePath
+      && (binding as Record<string, unknown>).targetPath === slot.targetPath
+    );
+  });
+};
+
+const isBindingSlotApplied = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  collection: Collection | null,
+  fieldPath: string,
+): boolean => {
+  const descendant = resolvedDescendantBindingSlot(element, slot);
+  if (descendant) {
+    return isBindingSlotApplied(descendant.element, descendant.slot, collection, fieldPath);
+  }
+
+  if (isRepeaterBindingSlotTarget(element, slot.targetPath)) {
+    return isRepeaterBindingSlotApplied(element, slot, collection, fieldPath);
+  }
+
+  return isCollectionBindingSlotApplied(element, slot, collection, fieldPath);
 };
 
 const normalizedNumberInput = (value: unknown): string => (
@@ -5730,7 +5871,7 @@ const applyCollectionBindingToElement = (
   };
 };
 
-const applyBindingSlotToElement = (
+const applyDirectBindingSlotToElement = (
   element: CanvasElement,
   slot: ComponentBindingSlot,
   collection: Collection,
@@ -5759,6 +5900,50 @@ const applyBindingSlotToElement = (
     ),
     applied: true,
   };
+};
+
+const applyBindingSlotToElement = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  collection: Collection,
+  collections: Collection[],
+  fieldPath: string,
+): { element: CanvasElement; applied: boolean } => {
+  const descendantTarget = descendantBindingSlotTarget(slot.targetPath);
+  if (!descendantTarget) {
+    return applyDirectBindingSlotToElement(element, slot, collection, collections, fieldPath);
+  }
+
+  let applied = false;
+  const walk = (items?: CanvasElement[]): CanvasElement[] | undefined => {
+    if (!items?.length) {
+      return items;
+    }
+
+    return items.map((child) => {
+      if (!applied && matchesDescendantBindingTarget(child, descendantTarget.selector)) {
+        const result = applyDirectBindingSlotToElement(
+          child,
+          { ...slot, targetPath: descendantTarget.targetPath },
+          collection,
+          collections,
+          fieldPath,
+        );
+        applied = result.applied;
+        return result.element;
+      }
+
+      const nextChildren = walk(child.children);
+      return nextChildren !== child.children
+        ? { ...child, children: nextChildren }
+        : child;
+    });
+  };
+
+  const nextChildren = walk(element.children);
+  return applied
+    ? { element: { ...element, children: nextChildren }, applied: true }
+    : { element, applied: false };
 };
 
 const bindableSlotsForElement = (
@@ -5974,18 +6159,17 @@ function PresetBindingSlotsPanel({
           const fieldCandidates = bindingSlotFieldCandidates(slot);
           const fieldPath = bindingSlotFieldPath(slot, selectedCollection, collections);
           const targetAllowed = bindingSlotTargetAllowed(element, slot);
-          const targetLabel = targetPathOptions.find((option) => option.value === slot.targetPath)?.label || slot.targetPath;
+          const targetLabel = bindingSlotTargetLabel(element, slot, targetPathOptions);
           const bindingUpdate = fieldPath ? bindingUpdateForFieldPath(fieldPath) : null;
           const canApplyWithoutFieldPath = bindingSlotCanApplyWithoutFieldPath(element, slot);
           const canApplySlot = Boolean(selectedCollection && targetAllowed && (fieldPath || canApplyWithoutFieldPath));
-          const isApplied = isRepeaterBindingSlotTarget(element, slot.targetPath)
-            ? isRepeaterBindingSlotApplied(element, slot, selectedCollection, fieldPath)
-            : Boolean(
-                bindingUpdate
-                && selectedFieldKey === bindingUpdate.fieldKey
-                && selectedSourcePath === bindingUpdate.sourcePath
-                && selectedTargetPath === slot.targetPath,
-              );
+          const isApplied = isBindingSlotApplied(element, slot, selectedCollection, fieldPath)
+            || Boolean(
+              bindingUpdate
+              && selectedFieldKey === bindingUpdate.fieldKey
+              && selectedSourcePath === bindingUpdate.sourcePath
+              && selectedTargetPath === slot.targetPath,
+            );
           const disabledReason = !selectedCollection
             ? 'Choose a collection first.'
             : !targetAllowed
@@ -7126,12 +7310,14 @@ function DataBindingProperties({
     if (!slot.targetPath) return;
     if (!activeSlotCollection) return;
 
-    if (isRepeaterBindingSlotTarget(element, slot.targetPath)) {
+    if (isRepeaterBindingSlotTarget(element, slot.targetPath) || descendantBindingSlotTarget(slot.targetPath)) {
       const result = applyBindingSlotToElement(element, slot, activeSlotCollection, collections, fieldPath);
       if (result.applied) {
-        onChange({
-          props: result.element.props,
-        });
+        const updates: Partial<CanvasElement> = {};
+        if (result.element.props !== element.props) updates.props = result.element.props;
+        if (result.element.dataBindings !== element.dataBindings) updates.dataBindings = result.element.dataBindings;
+        if (result.element.children !== element.children) updates.children = result.element.children;
+        onChange(updates);
       }
       return;
     }
