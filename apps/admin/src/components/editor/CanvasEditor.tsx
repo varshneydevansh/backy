@@ -551,6 +551,10 @@ const normalizeHistoryElement = (element: CanvasElement): Record<string, unknown
     next.dataBindings = stableComparableValue(element.dataBindings);
   }
 
+  if (element.bindingSlots?.length) {
+    next.bindingSlots = stableComparableValue(element.bindingSlots);
+  }
+
   if (element.children?.length) {
     next.children = element.children.map(normalizeHistoryElement);
   }

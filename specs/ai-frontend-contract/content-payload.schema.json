@@ -60,6 +60,12 @@
             "$ref": "data-bindings.schema.json#/$defs/binding"
           }
         },
+        "bindingSlots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bindingSlot"
+          }
+        },
         "accessibility": {
           "type": "object",
           "additionalProperties": false,
@@ -81,6 +87,21 @@
         }
       },
       "required": ["id", "type", "children", "props"]
+    },
+    "bindingSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "sourceKind": { "type": "string", "minLength": 1 },
+        "fieldKey": { "type": "string", "minLength": 1 },
+        "targetPath": { "type": "string", "minLength": 1 },
+        "mode": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "label", "targetPath"]
     },
     "interactiveControl": {
       "type": "object",

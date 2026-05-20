@@ -162,6 +162,7 @@ export type {
   GeneratedBackyRenderNavigationItem,
   GeneratedBackyRenderNavigationLayout,
   GeneratedBackyPublicRenderPayload,
+  GeneratedBackyPublicRenderPayloadBindingSlot,
   GeneratedBackyPublicRenderPayloadEnvelope,
   GeneratedBackyThemeTokenContract,
   GeneratedBackyThemeTokens,

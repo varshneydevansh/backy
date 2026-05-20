@@ -336,7 +336,12 @@ const assertInteractiveRegistryVersionPinningSource = () => {
 const assertComponentLibraryEmptyStateSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
   const catalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
+  const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
   const typeSource = fs.readFileSync(new URL('../src/types/editor.ts', import.meta.url), 'utf8');
+  const coreContractSource = fs.readFileSync(new URL('../../../packages/core/src/content-contract.ts', import.meta.url), 'utf8');
+  const contentMigrationSource = fs.readFileSync(new URL('../../../packages/core/src/content-migrations.ts', import.meta.url), 'utf8');
+  const renderPayloadSource = fs.readFileSync(new URL('../../../apps/public/src/lib/renderPayload.ts', import.meta.url), 'utf8');
+  const contentPayloadSchema = fs.readFileSync(new URL('../../../specs/ai-frontend-contract/content-payload.schema.json', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor component library must use the shared EmptyState component');
   assert(source.includes('title="No components match this view"'), 'Editor component library empty search state must keep the shared title visible');
   assert(source.includes('Clear the search or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
@@ -345,6 +350,11 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(typeSource.includes('export interface ComponentBindingSlot') && typeSource.includes('bindingSlots?: ComponentBindingSlot[]') && typeSource.includes('defaultBindingSlots?: ComponentBindingSlot[]'), 'Editor component presets must type binding-slot metadata for root and child preset fields');
   assert(catalogSource.includes('const cloneDefaultResponsive =') && catalogSource.includes('responsive: cloneDefaultResponsive(child.responsive)') && catalogSource.includes('responsive: cloneDefaultResponsive(item.defaultResponsive)'), 'Editor catalog must clone responsive defaults for composed presets');
   assert(catalogSource.includes('const cloneDefaultBindingSlots =') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(child.bindingSlots)') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(item.defaultBindingSlots)'), 'Editor catalog must clone binding-slot metadata for composed presets');
+  assert(propertyPanelSource.includes('function PresetBindingSlotsPanel') && propertyPanelSource.includes('data-testid="editor-data-binding-slots"') && propertyPanelSource.includes('applyBindingSlot') && propertyPanelSource.includes('bindingSlotFieldCandidates'), 'Editor Data panel must render preset binding slots and apply matching fields as real data bindings');
+  assert(coreContractSource.includes('export interface BackyComponentBindingSlot') && coreContractSource.includes('bindingSlots?: BackyComponentBindingSlot[]'), 'Core content contract must preserve binding-slot metadata on content elements');
+  assert(contentMigrationSource.includes('normalizeBindingSlots') && contentMigrationSource.includes('bindingSlots = normalizeBindingSlots(rawElement.bindingSlots') && contentMigrationSource.includes('element.bindingSlots = bindingSlots'), 'Core content migration must normalize and preserve element binding slots');
+  assert(renderPayloadSource.includes('bindingSlots?: JsonObject[]') && renderPayloadSource.includes('bindingSlots: Array.isArray(raw.bindingSlots) ? raw.bindingSlots.filter(isRecord) : []'), 'Public render payload must carry binding slots for custom frontend handoff');
+  assert(contentPayloadSchema.includes('"bindingSlots"') && contentPayloadSchema.includes('"bindingSlot"') && contentPayloadSchema.includes('"targetPath"'), 'Public render payload schema must expose binding-slot metadata');
   for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
     assert(catalogSource.includes(`id: '${contentPreset}'`), `Editor catalog must include ${contentPreset}`);
   }

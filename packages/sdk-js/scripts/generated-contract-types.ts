@@ -39,6 +39,7 @@ import type {
   GeneratedBackyEditableMap,
   GeneratedBackyElementAction,
   GeneratedBackyElementActions,
+  GeneratedBackyPublicRenderPayloadBindingSlot,
   GeneratedBackyFrontendDesignContract,
   GeneratedBackyFrontendDesignProvenance,
   GeneratedBackyFrontendManifest,
@@ -385,6 +386,17 @@ const interactiveRenderCapabilities = {
   postMessageProtocol: "backy.interactive-component.v1",
 } satisfies GeneratedBackyInteractiveRenderCapabilities;
 
+const bindingSlot = {
+  id: "slot_post_title",
+  label: "Post title",
+  sourceKind: "blog",
+  fieldKey: "title",
+  targetPath: "props.content",
+  mode: "text",
+  required: true,
+  description: "Connect this heading to the selected post title.",
+} satisfies GeneratedBackyPublicRenderPayloadBindingSlot;
+
 const element = {
   id: "interactive-rounds",
   type: "interactiveFigure",
@@ -398,6 +410,7 @@ const element = {
   fallback: interactiveFallback,
   actions: [action],
   dataBindings: [binding],
+  bindingSlots: [bindingSlot],
   renderCapabilities: interactiveRenderCapabilities,
 } satisfies GeneratedBackyContentElement;
 
@@ -4383,6 +4396,9 @@ const invalidContentStatus = "deleted" satisfies GeneratedBackyContentStatus;
 // @ts-expect-error generated data-binding datasets require a collection id.
 const invalidDataBindingDataset = { ...dataBindingDataset, collectionId: undefined, } satisfies GeneratedBackyDataBindingDataset;
 
+// @ts-expect-error generated binding slots require a target path.
+const invalidBindingSlot = { ...bindingSlot, targetPath: undefined, } satisfies GeneratedBackyPublicRenderPayloadBindingSlot;
+
 // @ts-expect-error render media assets only expose documented media types.
 const invalidRenderMediaAssetType = { ...renderMediaAsset, type: "spreadsheet", } satisfies GeneratedBackyRenderMediaAsset;
 
@@ -5037,6 +5053,7 @@ void invalidAction;
 void invalidRenderPayload;
 void invalidContentStatus;
 void invalidDataBindingDataset;
+void invalidBindingSlot;
 void invalidRenderMediaAssetType;
 void invalidOpenApiMediaAssetType;
 void invalidSdkMediaListOptionType;

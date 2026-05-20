@@ -3,6 +3,7 @@ import {
   createBackyContentDocument,
   validateBackyContentDocument,
   type BackyBreakpoint,
+  type BackyComponentBindingSlot,
   type BackyContentAssetRef,
   type BackyContentDocument,
   type BackyContentElement,
@@ -63,6 +64,13 @@ const BINDING_SOURCE_KINDS = new Set<BackyDataBindingSourceKind>([
   'static',
 ]);
 
+const BINDING_SLOT_SOURCE_KINDS = new Set<string>([
+  ...Array.from(BINDING_SOURCE_KINDS),
+  'blog',
+  'taxonomy',
+  'commerce',
+]);
+
 const RESERVED_ELEMENT_FIELDS = new Set([
   'id',
   'type',
@@ -88,6 +96,7 @@ const RESERVED_ELEMENT_FIELDS = new Set([
   'tokenRefs',
   'actions',
   'dataBindings',
+  'bindingSlots',
   'accessibility',
   'assetIds',
   'permissions',
@@ -468,6 +477,56 @@ const normalizeDataBindings = (
   return bindings.length > 0 ? bindings : undefined;
 };
 
+const normalizeBindingSlots = (
+  value: unknown,
+  elementId: string,
+): BackyComponentBindingSlot[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const slots = value
+    .filter((slot): slot is Record<string, unknown> => isRecord(slot))
+    .map((slot, index): BackyComponentBindingSlot | null => {
+      const targetPath = toString(slot.targetPath);
+      if (!targetPath) {
+        return null;
+      }
+
+      const fieldKey = toString(slot.fieldKey);
+      const rawMode = toString(slot.mode);
+      const rawSourceKind = toString(slot.sourceKind);
+      const required = toBoolean(slot.required);
+      const bindingSlot: BackyComponentBindingSlot = {
+        id: toString(slot.id) || `binding_slot_${elementId}_${index}`,
+        label: toString(slot.label) || fieldKey || targetPath,
+        targetPath,
+      };
+
+      if (rawSourceKind && BINDING_SLOT_SOURCE_KINDS.has(rawSourceKind)) {
+        bindingSlot.sourceKind = rawSourceKind;
+      }
+      if (fieldKey) {
+        bindingSlot.fieldKey = fieldKey;
+      }
+      if (rawMode && BINDING_MODES.has(rawMode as BackyDataBindingMode)) {
+        bindingSlot.mode = rawMode as BackyDataBindingMode;
+      }
+      if (required !== undefined) {
+        bindingSlot.required = required;
+      }
+      const description = toString(slot.description);
+      if (description) {
+        bindingSlot.description = description;
+      }
+
+      return bindingSlot;
+    })
+    .filter((slot): slot is BackyComponentBindingSlot => slot !== null);
+
+  return slots.length > 0 ? slots : undefined;
+};
+
 const normalizeAccessibility = (
   value: unknown,
   props: BackyJsonObject,
@@ -686,6 +745,7 @@ export function normalizeBackyContentElement(
   const tokenRefs = normalizeTokenRefs(rawElement.tokenRefs);
   const actions = normalizeActions(rawElement.actions, id);
   const dataBindings = normalizeDataBindings(rawElement.dataBindings, id);
+  const bindingSlots = normalizeBindingSlots(rawElement.bindingSlots, id);
   const accessibility = normalizeAccessibility(rawElement.accessibility, props);
   const assetIds = normalizeAssetIds(rawElement, props);
   const permissions = normalizePermissions(rawElement.permissions);
@@ -710,6 +770,7 @@ export function normalizeBackyContentElement(
   if (tokenRefs) element.tokenRefs = tokenRefs;
   if (actions) element.actions = actions;
   if (dataBindings) element.dataBindings = dataBindings;
+  if (bindingSlots) element.bindingSlots = bindingSlots;
   if (accessibility) element.accessibility = accessibility;
   if (assetIds) element.assetIds = assetIds;
   if (permissions) element.permissions = permissions;

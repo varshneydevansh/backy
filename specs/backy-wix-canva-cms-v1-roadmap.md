@@ -104,8 +104,9 @@ It explicitly excludes:
 
 1. blog pages currently reuse the same canvas editor component as regular page/blog flows, which is useful for parity but not yet a dedicated blog page template system.
 2. reusable blog/content component presets now exist in the editor catalog for post cards, latest-post/archive sections, category-list navigation, and related-content sections, with tablet/mobile preset geometry carried into inserted canvas elements.
-3. those blog/content presets now seed binding-slot metadata for title, excerpt, media, link, category/taxonomy, and collection-record targets so the Data panel and custom frontend handoff can identify intended fields before a real collection is selected.
-4. remaining blog-page template depth is automating selected blog/taxonomy data into those slots and broadening hosted visual QA, not absence of draggable, responsive, or binding-aware blog section blocks.
+3. those blog/content presets now seed binding-slot metadata for title, excerpt, media, link, category/taxonomy, and collection-record targets, and the editor Data panel surfaces those slots with apply actions that turn matching fields on the selected collection into real `dataBindings`.
+4. binding-slot metadata is preserved through the shared Backy content contract and public render payload schema, so custom frontend handoff can inspect intended fields before or alongside a real collection binding.
+5. remaining blog-page template depth is automating selected blog/taxonomy data across whole composed sections and broadening hosted visual QA, not absence of draggable, responsive, or binding-aware blog section blocks.
 
 ## 4) Current launch maturity risks
 

@@ -113,6 +113,24 @@ export interface BackyDataBinding {
   };
 }
 
+export type BackyComponentBindingSourceKind =
+  | BackyDataBindingSourceKind
+  | 'blog'
+  | 'taxonomy'
+  | 'commerce'
+  | (string & {});
+
+export interface BackyComponentBindingSlot {
+  id: string;
+  label: string;
+  sourceKind?: BackyComponentBindingSourceKind;
+  fieldKey?: string;
+  targetPath: string;
+  mode?: BackyDataBindingMode | (string & {});
+  required?: boolean;
+  description?: string;
+}
+
 export interface BackyElementAccessibility {
   label?: string;
   alt?: string;
@@ -171,6 +189,7 @@ export interface BackyContentElement extends BackyElementLayout {
   tokenRefs?: Record<string, string>;
   actions?: BackyElementAction[];
   dataBindings?: BackyDataBinding[];
+  bindingSlots?: BackyComponentBindingSlot[];
   accessibility?: BackyElementAccessibility;
   assetIds?: string[];
   permissions?: Record<string, boolean>;

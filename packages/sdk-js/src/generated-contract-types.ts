@@ -2193,6 +2193,7 @@ export type GeneratedBackyContentElement = {
   responsive?: Record<string, Record<string, unknown>>;
   actions?: Array<GeneratedBackyElementAction>;
   dataBindings?: Array<GeneratedBackyDataBinding>;
+  bindingSlots?: Array<GeneratedBackyPublicRenderPayloadBindingSlot>;
   accessibility?: {
     label?: string;
     alt?: string;
@@ -2201,6 +2202,17 @@ export type GeneratedBackyContentElement = {
   };
   permissions?: Record<string, boolean>;
   [key: string]: unknown;
+};
+
+export type GeneratedBackyPublicRenderPayloadBindingSlot = {
+  id: string;
+  label: string;
+  sourceKind?: string;
+  fieldKey?: string;
+  targetPath: string;
+  mode?: string;
+  required?: boolean;
+  description?: string;
 };
 
 export type GeneratedBackyInteractiveControl = {

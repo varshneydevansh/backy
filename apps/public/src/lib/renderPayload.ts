@@ -47,6 +47,7 @@ interface RenderElement extends JsonObject {
   styles?: JsonObject;
   actions?: JsonObject[];
   dataBindings?: JsonObject[];
+  bindingSlots?: JsonObject[];
 }
 
 interface DatasetManifest extends JsonObject {
@@ -168,6 +169,7 @@ const normalizeElement = (raw: unknown): RenderElement | null => {
     styles: isRecord(raw.styles) ? raw.styles : {},
     actions: Array.isArray(raw.actions) ? raw.actions.filter(isRecord) : [],
     dataBindings: Array.isArray(raw.dataBindings) ? raw.dataBindings.filter(isRecord) : [],
+    bindingSlots: Array.isArray(raw.bindingSlots) ? raw.bindingSlots.filter(isRecord) : [],
   };
 };
 

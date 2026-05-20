@@ -34,7 +34,7 @@ import { EmojiPickerModal } from './EmojiPickerModal';
 import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { RichTextFormatting } from './RichTextFormatting';
 import { AnimationBuilder, type AnimationConfig } from './AnimationBuilder';
-import type { CanvasElement, ElementProps } from '@/types/editor';
+import type { CanvasElement, ComponentBindingSlot, ElementProps } from '@/types/editor';
 import {
   listCollectionBindingPresets,
   listCollections,
@@ -5137,6 +5137,49 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
   ];
 };
 
+const NON_FIELD_BINDING_SLOT_KEYS = new Set(['record', 'records', 'categories', 'relatedPosts']);
+
+const BINDING_SLOT_FIELD_ALIASES: Record<string, string[]> = {
+  title: ['title', 'name', 'label'],
+  name: ['name', 'title', 'label'],
+  excerpt: ['excerpt', 'summary', 'description', 'body'],
+  summary: ['summary', 'excerpt', 'description', 'body'],
+  description: ['description', 'summary', 'excerpt', 'body'],
+  featuredImage: ['featuredImage', 'image', 'coverImage', 'thumbnail', 'media'],
+  image: ['image', 'featuredImage', 'coverImage', 'thumbnail', 'media'],
+  category: ['category', 'categories', 'topic', 'type'],
+  slug: ['slug', 'url', 'href', 'link'],
+  url: ['url', 'href', 'link', 'slug'],
+};
+
+const bindingSlotFieldCandidates = (slot: ComponentBindingSlot): string[] => {
+  const fieldKey = typeof slot.fieldKey === 'string' ? slot.fieldKey.trim() : '';
+  if (!fieldKey || NON_FIELD_BINDING_SLOT_KEYS.has(fieldKey)) {
+    return [];
+  }
+
+  return Array.from(new Set([
+    fieldKey,
+    ...(BINDING_SLOT_FIELD_ALIASES[fieldKey] || []),
+  ]));
+};
+
+const bindingSlotFieldPath = (
+  slot: ComponentBindingSlot,
+  collection: Collection | null,
+  collections: Collection[],
+): string => (
+  bindingSlotFieldCandidates(slot).find((candidate) => fieldPathExists(collection, collections, candidate)) || ''
+);
+
+const bindingUpdateForFieldPath = (fieldPath: string): { fieldKey: string; sourcePath: string } => {
+  const [fieldKey, ...remainingPath] = fieldPath.split('.').filter(Boolean);
+  return {
+    fieldKey: fieldKey || fieldPath,
+    sourcePath: remainingPath.length > 0 ? fieldPath : '',
+  };
+};
+
 const getBindingModeForField = (field?: CollectionField | null, targetPath = '') => {
   if (field?.type === 'richText' || targetPath === 'props.html') return 'html';
   if (field?.type === 'image') return 'image';
@@ -5580,6 +5623,107 @@ function CollectionFilterValueControl({
         placeholder={field ? `Filter ${field.label}` : 'Exact value'}
       />
       {currentRecordButton}
+    </div>
+  );
+}
+
+interface PresetBindingSlotsPanelProps {
+  element: CanvasElement;
+  selectedCollection: Collection | null;
+  collections: Collection[];
+  targetPathOptions: Array<{ value: string; label: string }>;
+  selectedFieldKey: string;
+  selectedSourcePath: string;
+  selectedTargetPath: string;
+  onApplySlot: (slot: ComponentBindingSlot, fieldPath: string) => void;
+}
+
+function PresetBindingSlotsPanel({
+  element,
+  selectedCollection,
+  collections,
+  targetPathOptions,
+  selectedFieldKey,
+  selectedSourcePath,
+  selectedTargetPath,
+  onApplySlot,
+}: PresetBindingSlotsPanelProps) {
+  const slots = Array.isArray(element.bindingSlots) ? element.bindingSlots : [];
+  if (slots.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-slots">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium text-foreground">Preset binding slots</span>
+        <span className="text-muted-foreground">{slots.length} target{slots.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="space-y-2">
+        {slots.map((slot) => {
+          const fieldCandidates = bindingSlotFieldCandidates(slot);
+          const fieldPath = bindingSlotFieldPath(slot, selectedCollection, collections);
+          const targetAllowed = targetPathOptions.some((option) => option.value === slot.targetPath);
+          const targetLabel = targetPathOptions.find((option) => option.value === slot.targetPath)?.label || slot.targetPath;
+          const bindingUpdate = fieldPath ? bindingUpdateForFieldPath(fieldPath) : null;
+          const isApplied = Boolean(
+            bindingUpdate
+            && selectedFieldKey === bindingUpdate.fieldKey
+            && selectedSourcePath === bindingUpdate.sourcePath
+            && selectedTargetPath === slot.targetPath,
+          );
+          const disabledReason = !selectedCollection
+            ? 'Choose a collection first.'
+            : !targetAllowed
+              ? 'This slot is handled by specialized element controls.'
+              : fieldCandidates.length === 0
+                ? 'This slot documents a record-level connection.'
+                : !fieldPath
+                  ? 'No matching field exists in the selected collection.'
+                  : '';
+
+          return (
+            <div
+              key={slot.id}
+              className={cn(
+                'rounded-md border bg-background p-2 text-xs',
+                isApplied ? 'border-primary' : 'border-border'
+              )}
+              data-testid={`editor-data-binding-slot-${slot.id}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-foreground">{slot.label}</div>
+                  <div className="mt-0.5 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                    {slot.sourceKind && <span className="rounded bg-muted px-1.5 py-0.5">{slot.sourceKind}</span>}
+                    {slot.fieldKey && <span className="rounded bg-muted px-1.5 py-0.5">{slot.fieldKey}</span>}
+                    {slot.mode && <span className="rounded bg-muted px-1.5 py-0.5">{slot.mode}</span>}
+                    {slot.required && <span className="rounded bg-muted px-1.5 py-0.5">required</span>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fieldPath && targetAllowed && onApplySlot(slot, fieldPath)}
+                  disabled={Boolean(disabledReason)}
+                  title={disabledReason || `Apply ${slot.label}`}
+                  data-testid={`editor-data-binding-slot-apply-${slot.id}`}
+                  className="shrink-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isApplied ? 'Applied' : 'Apply'}
+                </button>
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                {fieldPath ? `${fieldPath} -> ${targetLabel}` : slot.description || disabledReason}
+              </div>
+              {disabledReason && (
+                <div className="mt-1 text-[11px] text-muted-foreground" data-testid={`editor-data-binding-slot-reason-${slot.id}`}>
+                  {disabledReason}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -6497,6 +6641,9 @@ function DataBindingProperties({
   const selectedSavedPreset = savedPresetsForCollection.find((preset) => preset.id === selectedSavedPresetId)
     || savedPresetsForCollection[0]
     || null;
+  const repeaterSelectedCollection = normalizeCanvasElementType(element.type) === 'repeater' && typeof element.props?.collectionId === 'string'
+    ? collections.find((collection) => collection.id === element.props.collectionId) || null
+    : selectedCollection;
 
   useEffect(() => {
     if (!selectedSavedPresetId && savedPresetsForCollection[0]) {
@@ -6600,6 +6747,16 @@ function DataBindingProperties({
           ...(Object.keys(pagination).length > 0 ? { pagination } : {}),
         },
       ],
+    });
+  };
+
+  const applyBindingSlot = (slot: ComponentBindingSlot, fieldPath: string) => {
+    if (!slot.targetPath) return;
+    const bindingUpdate = bindingUpdateForFieldPath(fieldPath);
+    updateBinding({
+      fieldKey: bindingUpdate.fieldKey,
+      sourcePath: bindingUpdate.sourcePath,
+      targetPath: slot.targetPath,
     });
   };
 
@@ -6732,12 +6889,24 @@ function DataBindingProperties({
 
   if (normalizeCanvasElementType(element.type) === 'repeater') {
     return (
-      <RepeaterDataProperties
-        element={element}
-        siteId={siteId}
-        collections={collections}
-        onChange={onChange}
-      />
+      <div className="space-y-3">
+        <PresetBindingSlotsPanel
+          element={element}
+          selectedCollection={repeaterSelectedCollection}
+          collections={collections}
+          targetPathOptions={targetPathOptions}
+          selectedFieldKey={selectedFieldKey}
+          selectedSourcePath={selectedSourcePath}
+          selectedTargetPath={selectedTargetPath}
+          onApplySlot={applyBindingSlot}
+        />
+        <RepeaterDataProperties
+          element={element}
+          siteId={siteId}
+          collections={collections}
+          onChange={onChange}
+        />
+      </div>
     );
   }
 
@@ -6764,6 +6933,17 @@ function DataBindingProperties({
           ))}
         </select>
       </div>
+
+      <PresetBindingSlotsPanel
+        element={element}
+        selectedCollection={selectedCollection}
+        collections={collections}
+        targetPathOptions={targetPathOptions}
+        selectedFieldKey={selectedFieldKey}
+        selectedSourcePath={selectedSourcePath}
+        selectedTargetPath={selectedTargetPath}
+        onApplySlot={applyBindingSlot}
+      />
 
       {selectedCollection && (
         <>
