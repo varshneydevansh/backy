@@ -19,6 +19,10 @@ const EDITOR_TEMPLATE_SCREENSHOT_DIR = process.env.BACKY_PAGE_CREATE_EDITOR_TEMP
 const FRONTEND_DESIGN_TEMPLATE_ID = 'smoke-page-contract-template';
 const FRONTEND_DESIGN_TEMPLATE_NAME = 'Smoke Contract Landing';
 let apiAdminSessionToken = '';
+const STARTER_TEMPLATE_BACKEND_FILTER = (process.env.BACKY_PAGE_CREATE_STARTER_FILTER || '')
+  .split(',')
+  .map((template) => template.trim())
+  .filter(Boolean);
 
 const EDITOR_SCREENSHOT_THRESHOLDS = {
   minClipWidth: 280,
@@ -1269,6 +1273,12 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
   },
 ];
 
+const getStarterTemplateBackendCases = () => {
+  if (STARTER_TEMPLATE_BACKEND_FILTER.length === 0) return STARTER_TEMPLATE_BACKEND_CASES;
+  const filter = new Set(STARTER_TEMPLATE_BACKEND_FILTER);
+  return STARTER_TEMPLATE_BACKEND_CASES.filter((testCase) => filter.has(testCase.template));
+};
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const assert = (condition, message) => {
@@ -1285,6 +1295,21 @@ const assertPageCreateSourceContracts = () => {
     source.includes('&& selectedSite') &&
       source.includes("if (!selectedSite) return 'Select a target site before creating this page.';"),
     'Page create submit readiness must require a resolved target site, not just a stale siteId',
+  );
+  assert(
+    source.includes('data-testid="page-create-submit-button"') &&
+      source.includes('const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy || isPermissionMatrixPending;') &&
+      source.includes('const isPageCreateBusy = isPageCreateMutating || isCheckingPages;') &&
+      source.includes('const templateSelectionDisabled = isPageCreateMutating;') &&
+      source.includes('const pageCreateBusyState = [') &&
+      source.includes("data-busy-state={pageCreateBusyState}") &&
+      source.includes("data-template-selection-disabled={String(templateSelectionDisabled)}") &&
+      source.includes('options?: { allowDuringRouteCheck?: boolean }') &&
+      source.includes('const draftLocked = options?.allowDuringRouteCheck ? isPageCreateMutating : isPageCreateBusy;') &&
+      source.includes('if (templateSelectionDisabled || !canEditPages) return;') &&
+      source.includes('{ allowDuringRouteCheck: true }') &&
+      source.includes('disabled={templateSelectionDisabled}'),
+    'Page create template selection must stay available during route checks while create, preview, mutation, and permission locks still apply.',
   );
   assert(
     source.includes('const loadPageCreatePermissions = useCallback(() => {') &&
@@ -2788,10 +2813,13 @@ const assertTemplateSwitching = async (client) => {
           (input.closest('label') || input).click();
         }
         const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
+        const commandCenter = document.querySelector('[data-testid="page-creation-command-center"]');
         return {
           clicked: !input.disabled,
           disabled: input.disabled,
           template: ${JSON.stringify(testCase.template)},
+          busyState: commandCenter?.getAttribute('data-busy-state') || '',
+          templateSelectionDisabled: commandCenter?.getAttribute('data-template-selection-disabled') || '',
           selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
           activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-${testCase.template}"]')?.getAttribute('data-active') || '',
           navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
@@ -2856,6 +2884,8 @@ const waitForPageCreateControls = async (client, slug, title, navLabel, seo, par
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
+      busyState: document.querySelector('[data-testid="page-creation-command-center"]')?.getAttribute('data-busy-state') || '',
+      templateSelectionDisabled: document.querySelector('[data-testid="page-creation-command-center"]')?.getAttribute('data-template-selection-disabled') || '',
       nav: Boolean(document.querySelector('[data-testid="page-navigation-placement"]')),
       title: document.querySelector('#page-title')?.value || '',
       slug: document.querySelector('#page-slug')?.value || '',
@@ -2892,6 +2922,7 @@ const waitForPageCreateControls = async (client, slug, title, navLabel, seo, par
       && state.noIndex === true
       && state.noFollow === true
       && state.templatePreviewCount >= STARTER_TEMPLATE_BACKEND_CASES.length
+      && state.templateSelectionDisabled === 'false'
       && state.activeTemplatePreview === 'true'
       && state.activeTemplateBlockCount > 0
       && state.selectedTemplatePreview === 'about'
@@ -2987,9 +3018,7 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
-      const createButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').includes('Create Page')
-      ));
+      const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
         title: document.querySelector('#page-title')?.value || '',
@@ -3048,9 +3077,7 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
-      const createButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').includes('Create Page')
-      ));
+      const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
         frontendPanel: Boolean(document.querySelector('[data-testid="page-frontend-template-options"]')),
@@ -3113,9 +3140,7 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
-      const createButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').includes('Create Page')
-      ));
+      const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
       const importPanel = document.querySelector('[data-testid="page-create-dataset-import"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
@@ -3847,8 +3872,13 @@ const frontendDesignResponsiveRenderCase = () => ({
 
 const createStarterTemplateBackends = async (client, createdPageIds) => {
   const summaries = [];
+  const starterCases = getStarterTemplateBackendCases();
+  assert(
+    starterCases.length > 0,
+    `No starter template backend cases matched BACKY_PAGE_CREATE_STARTER_FILTER=${STARTER_TEMPLATE_BACKEND_FILTER.join(',')}`,
+  );
 
-  for (const [index, testCase] of STARTER_TEMPLATE_BACKEND_CASES.entries()) {
+  for (const [index, testCase] of starterCases.entries()) {
     const slug = `${testCase.slugBase}-${Date.now().toString(36)}-${index}`;
     const routeState = await navigateToStarterTemplateCreate(client, testCase, slug);
     const editState = await createPageFromUi(client);
@@ -3922,9 +3952,7 @@ const createPageFromUi = async (client) => {
   let clicked = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     clicked = await evaluate(client, `(() => {
-      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').includes('Create Page')
-      ));
+      const button = document.querySelector('[data-testid="page-create-submit-button"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
         return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
       }

@@ -429,6 +429,7 @@ function PageEditorRoute() {
   const viewCollectionsPermissionTitle = canViewCollections ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'collections.view');
   const editPageDeniedMessage = `Your account needs pages.edit to change this page. ${editPagePermissionTitle}`;
   const publishPageDeniedMessage = `Your account needs pages.publish to preview or publish this page. ${publishPagePermissionTitle}`;
+  const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy || isPermissionMatrixPending;
   const isPageEditorWorkflowBusy = isWorkflowBusy || isPreviewBusy || readinessLoading;
   const isPageEditorSaveBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy;
   const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy || isPermissionMatrixPending;
@@ -1283,7 +1284,7 @@ function PageEditorRoute() {
   };
 
   const setWorkspaceFocusRoute = (focused: boolean) => {
-    if (isPageEditorBusy) return;
+    if (workspaceFocusDisabled) return;
 
     setIsWorkspaceFocus(focused);
     navigate({
@@ -1457,7 +1458,7 @@ function PageEditorRoute() {
           type="button"
           variant="outline"
           onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
-          disabled={isPageEditorBusy}
+          disabled={workspaceFocusDisabled}
           iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
         >
           {isWorkspaceFocus ? 'Show page panels' : 'Focus canvas'}
@@ -1748,7 +1749,7 @@ function PageEditorRoute() {
                 variant="outline"
                 size="sm"
                 onClick={() => setWorkspaceFocusRoute(false)}
-                disabled={isPageEditorBusy}
+                disabled={workspaceFocusDisabled}
                 iconStart={<Minimize2 className="size-4" />}
               >
                 Show panels

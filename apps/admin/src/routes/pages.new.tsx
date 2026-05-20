@@ -1255,7 +1255,15 @@ function NewPageRoute() {
     const sitesConfigurePermissionTitle = canConfigureSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const sitesCreatePermissionTitle = canCreateSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canApplyNavigationPlacement = canViewSites && canConfigureSites;
-    const isPageCreateBusy = isLoading || isPreviewAfterCreateBusy || isCheckingPages || isPermissionMatrixPending;
+    const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy || isPermissionMatrixPending;
+    const isPageCreateBusy = isPageCreateMutating || isCheckingPages;
+    const templateSelectionDisabled = isPageCreateMutating;
+    const pageCreateBusyState = [
+        isLoading ? 'creating' : '',
+        isPreviewAfterCreateBusy ? 'previewing' : '',
+        isCheckingPages ? 'checking-pages' : '',
+        isPermissionMatrixPending ? 'permissions' : '',
+    ].filter(Boolean).join(' ') || 'idle';
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
@@ -1312,8 +1320,9 @@ function NewPageRoute() {
         collectionId: nextFormData.collectionId,
         datasetMode: nextFormData.datasetMode || undefined,
     });
-    const updatePageDraft = (next: Partial<typeof formData>) => {
-        if (isPageCreateBusy || !canEditPages) return;
+    const updatePageDraft = (next: Partial<typeof formData>, options?: { allowDuringRouteCheck?: boolean }) => {
+        const draftLocked = options?.allowDuringRouteCheck ? isPageCreateMutating : isPageCreateBusy;
+        if (draftLocked || !canEditPages) return;
 
         const nextFormData = {
             ...formData,
@@ -1671,7 +1680,7 @@ function NewPageRoute() {
     }, [formData.designTemplateId, frontendDesign, frontendPageTemplates]);
 
     const handleTemplateChange = (nextTemplate: PageTemplate) => {
-        if (isPageCreateBusy || !canEditPages) return;
+        if (templateSelectionDisabled || !canEditPages) return;
 
         const currentDefaults = TEMPLATE_DEFAULTS[formData.template];
         const nextDefaults = TEMPLATE_DEFAULTS[nextTemplate];
@@ -1679,33 +1688,39 @@ function NewPageRoute() {
         const shouldApplySlug = !formData.slug.trim() || formData.slug === currentDefaults.slug;
         const shouldApplyDescription = !formData.description.trim() || formData.description === currentDefaults.description;
 
-        updatePageDraft({
-            template: nextTemplate,
-            title: shouldApplyTitle ? nextDefaults.title : formData.title,
-            slug: formData.isHomepage ? 'index' : shouldApplySlug ? nextDefaults.slug : formData.slug,
-            description: shouldApplyDescription ? nextDefaults.description : formData.description,
-            navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
-            navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
-            seoTitle: shouldApplyTitle ? nextDefaults.title : formData.seoTitle || formData.title,
-            designTemplateId: '',
-        });
+        updatePageDraft(
+            {
+                template: nextTemplate,
+                title: shouldApplyTitle ? nextDefaults.title : formData.title,
+                slug: formData.isHomepage ? 'index' : shouldApplySlug ? nextDefaults.slug : formData.slug,
+                description: shouldApplyDescription ? nextDefaults.description : formData.description,
+                navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
+                navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
+                seoTitle: shouldApplyTitle ? nextDefaults.title : formData.seoTitle || formData.title,
+                designTemplateId: '',
+            },
+            { allowDuringRouteCheck: true },
+        );
     };
     const handleFrontendTemplateChange = (template: SiteFrontendDesignTemplate) => {
-        if (isPageCreateBusy || !canEditPages) return;
+        if (templateSelectionDisabled || !canEditPages) return;
 
         const shouldApplyTitle = !formData.title.trim() || formData.title === TEMPLATE_DEFAULTS[formData.template].title;
         const routeSlug = routeSlugFromPattern(template.routePattern);
         const shouldApplySlug = Boolean(routeSlug) && (!formData.slug.trim() || formData.slug === TEMPLATE_DEFAULTS[formData.template].slug);
         const shouldApplyDescription = !formData.description.trim() || formData.description === TEMPLATE_DEFAULTS[formData.template].description;
 
-        updatePageDraft({
-            designTemplateId: template.id,
-            title: shouldApplyTitle ? template.name : formData.title,
-            slug: formData.isHomepage ? 'index' : shouldApplySlug ? routeSlug : formData.slug,
-            description: shouldApplyDescription ? template.description || formData.description : formData.description,
-            navigationLabel: shouldApplyTitle ? template.name : formData.navigationLabel || formData.title,
-            seoTitle: shouldApplyTitle ? template.name : formData.seoTitle || formData.title,
-        });
+        updatePageDraft(
+            {
+                designTemplateId: template.id,
+                title: shouldApplyTitle ? template.name : formData.title,
+                slug: formData.isHomepage ? 'index' : shouldApplySlug ? routeSlug : formData.slug,
+                description: shouldApplyDescription ? template.description || formData.description : formData.description,
+                navigationLabel: shouldApplyTitle ? template.name : formData.navigationLabel || formData.title,
+                seoTitle: shouldApplyTitle ? template.name : formData.seoTitle || formData.title,
+            },
+            { allowDuringRouteCheck: true },
+        );
     };
     const handleDatasetCollectionChange = (collectionId: string) => {
         if (isPageCreateBusy || !canEditPages) return;
@@ -2798,7 +2813,12 @@ function NewPageRoute() {
             }
             className="w-full min-w-0"
         >
-            <section className="mb-6 min-w-0 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-creation-command-center">
+            <section
+                className="mb-6 min-w-0 rounded-lg border border-border bg-card p-5 shadow-sm"
+                data-testid="page-creation-command-center"
+                data-busy-state={pageCreateBusyState}
+                data-template-selection-disabled={String(templateSelectionDisabled)}
+            >
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -3532,7 +3552,7 @@ function NewPageRoute() {
                                                 key={template.id}
                                                 type="button"
                                                 onClick={() => handleFrontendTemplateChange(template)}
-                                                disabled={isPageCreateBusy}
+                                                disabled={templateSelectionDisabled}
                                                 data-testid={`page-frontend-template-${template.id}`}
                                                 data-active={formData.designTemplateId === template.id}
                                                 className={cn(
@@ -3574,7 +3594,7 @@ function NewPageRoute() {
                                         className={cn(
                                             'flex cursor-pointer flex-col rounded-lg border p-3 transition-all hover:shadow-sm',
                                             formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
-                                            isPageCreateBusy && 'cursor-not-allowed opacity-70'
+                                            templateSelectionDisabled && 'cursor-not-allowed opacity-70'
                                         )}
                                     >
                                         <input
@@ -3583,7 +3603,7 @@ function NewPageRoute() {
                                             value={tmpl.id}
                                             checked={formData.template === tmpl.id}
                                             onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
-                                            disabled={isPageCreateBusy}
+                                            disabled={templateSelectionDisabled}
                                             className="sr-only"
                                         />
                                         <div className="mb-1 flex items-center gap-2">
@@ -3712,6 +3732,7 @@ function NewPageRoute() {
                             </button>
                             <button
                                 type="submit"
+                                data-testid="page-create-submit-button"
                                 disabled={isPageCreateBusy || !canSubmit}
                                 title={submitBlockerMessage || 'Create page and open the visual editor'}
                                 aria-disabled={isPageCreateBusy || !canSubmit}
