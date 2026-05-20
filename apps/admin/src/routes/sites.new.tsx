@@ -2,8 +2,8 @@
  * BACKY CMS - NEW SITE PAGE
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, CreditCard, Download, FileText, Globe, Layers3, Link2, Rocket, Save, ShieldCheck } from 'lucide-react';
 import { AdminContentApiError, createPage, createSite, getAdminApiBase, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
 import { useAuthStore, type User } from '@/stores/authStore';
@@ -564,7 +564,7 @@ function NewSitePage() {
   ]);
   const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
 
-  useEffect(() => {
+  const loadSiteCreatePermissions = useCallback(() => {
     let cancelled = false;
     setPermissionError(null);
 
@@ -600,6 +600,8 @@ function NewSitePage() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadSiteCreatePermissions(), [loadSiteCreatePermissions]);
 
   const copyCreationText = async (value: string, label: string) => {
     if (isCreateBusy) return;
@@ -1008,15 +1010,46 @@ function NewSitePage() {
             </div>
           )}
           {(permissionError || isPermissionMatrixPending || !canCreateSites || (starterPagesSelected && !canSeedStarterPages)) && (
-            <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {permissionError
-                || (isPermissionMatrixPending
-                  ? 'Loading site creation permissions...'
-                  : !canCreateSites
-                    ? `Your account needs sites.create to create a site. ${createPermissionTitle}`
-                    : starterPagesSelected && !canEditPages
-                      ? `Starter page seeding needs pages.edit. ${editPagesPermissionTitle}`
-                      : `Published starter page seeding needs pages.publish. ${publishPagesPermissionTitle}`)}
+            <div
+              role="alert"
+              data-testid="site-create-permission-state"
+              className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            >
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Site creation permissions need attention</p>
+                    <p className="mt-1 leading-6">
+                      {permissionError
+                        || (isPermissionMatrixPending
+                          ? 'Loading site creation permissions...'
+                          : !canCreateSites
+                            ? `Your account needs sites.create to create a site. ${createPermissionTitle}`
+                            : starterPagesSelected && !canEditPages
+                              ? `Starter page seeding needs pages.edit. ${editPagesPermissionTitle}`
+                              : `Published starter page seeding needs pages.publish. ${publishPagesPermissionTitle}`)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={loadSiteCreatePermissions}
+                    disabled={isPermissionsLoading}
+                    aria-label="Retry loading site creation permissions"
+                    className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Retry permissions
+                  </button>
+                  <Link
+                    to="/users"
+                    className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+                  >
+                    Review users
+                  </Link>
+                </div>
+              </div>
             </div>
           )}
           {createdSiteRecovery && (

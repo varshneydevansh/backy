@@ -53,6 +53,16 @@ const assertSitesRouteSourceContract = () => {
     createSource.includes('Published starter page seeding needs pages.publish.'),
     'Site create route must explain the pages.publish requirement for published starter pages',
   );
+  assert(
+    createSource.includes('const loadSiteCreatePermissions = useCallback(() => {') &&
+      createSource.includes('data-testid="site-create-permission-state"') &&
+      createSource.includes('Site creation permissions need attention') &&
+      createSource.includes('aria-label="Retry loading site creation permissions"') &&
+      createSource.includes('Retry permissions') &&
+      createSource.includes('to="/users"') &&
+      createSource.includes('Review users'),
+    'Site create permission state must expose retryable permission recovery and user-access handoff',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

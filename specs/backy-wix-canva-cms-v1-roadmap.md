@@ -131,7 +131,7 @@ It explicitly excludes:
 1. `/` dashboard: connect real KPIs and onboarding hints
 2. `/login`: secure auth, session middleware, reset flow
 3. `/sites`: create/list/edit site with ownership and domain assignment
-4. `/sites.new`: schema validation + backend success/fail states
+4. `/sites.new`: schema validation, retryable permission recovery, and backend success/fail states
 5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, theme-token editing, navigation/redirect/SEO editors, form/comment operations, loaded-comment bulk moderation summaries, frontend handoff, site-level comment policy controls, and backend permission/ownership scoping; remaining work is live domain/deploy execution and deeper workflow polish
 6. `/pages`: persisted filtering, paging, search, status chips
 7. `/pages.new`: slug uniqueness, template starter, validation, scheduled publish checks, and retryable permission recovery

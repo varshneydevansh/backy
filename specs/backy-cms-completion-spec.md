@@ -100,6 +100,7 @@ Legend:
 
 #### `/sites.new` (`sites.new.tsx`)
 - ✅ Form UI and API-backed site creation flow exist for the current audit scope.
+- ✅ Site creation permission failures now expose alert semantics, retryable permission loading, and a user-access handoff before creating a workspace.
 - ⚠️ Provider-side domain/project provisioning still depends on external certification.
 
 #### `/sites/$siteId` (`sites.$siteId.tsx`)
@@ -453,6 +454,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Consistent status vocabulary and badges across pages.
 - Empty-state / error-state placeholders for every admin list.
   - `/sites` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and permission retry actions.
+  - `/sites/new` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/pages` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/media` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
