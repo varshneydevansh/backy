@@ -6308,6 +6308,7 @@ function PresetBindingSlotsPanel({
   onApplyChildSlots,
 }: PresetBindingSlotsPanelProps) {
   const slots = Array.isArray(element.bindingSlots) ? element.bindingSlots : [];
+  const [coverageCopyState, setCoverageCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   if (slots.length === 0 && childSummary.total === 0) {
     return null;
   }
@@ -6326,6 +6327,46 @@ function PresetBindingSlotsPanel({
   const unresolvedCoverageItems = coverageSummary.items
     .filter((item) => !item.applied)
     .slice(0, 3);
+  const coverageBrief = {
+    schema: 'backy.editor.binding-slot-coverage.v1',
+    element: {
+      id: element.id,
+      type: normalizeCanvasElementType(element.type),
+      name: element.name || null,
+    },
+    collection: selectedCollection
+      ? {
+          id: selectedCollection.id,
+          name: selectedCollection.name,
+          slug: selectedCollection.slug,
+        }
+      : null,
+    coverage: {
+      total: coverageSummary.total,
+      applicable: coverageSummary.applicable,
+      applied: coverageSummary.applied,
+      missingRequired: coverageSummary.missingRequired,
+      boundTargets: clearableBindingCount,
+    },
+    slots: coverageSummary.items.map((item) => ({
+      label: item.label,
+      target: item.targetLabel,
+      fieldPath: item.fieldPath || null,
+      applied: item.applied,
+      applicable: item.applicable,
+      required: item.required,
+      reason: item.reason || null,
+    })),
+  };
+  const copyCoverageBrief = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(coverageBrief, null, 2));
+      setCoverageCopyState('copied');
+      window.setTimeout(() => setCoverageCopyState('idle'), 1600);
+    } catch {
+      setCoverageCopyState('failed');
+    }
+  };
 
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-slots">
@@ -6396,6 +6437,14 @@ function PresetBindingSlotsPanel({
               <span>{coverageSummary.missingRequired} required</span>
               <span>{clearableBindingCount} bound</span>
             </div>
+            <button
+              type="button"
+              onClick={() => void copyCoverageBrief()}
+              data-testid="editor-data-copy-binding-slot-coverage"
+              className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
+            >
+              {coverageCopyState === 'copied' ? 'Copied brief' : coverageCopyState === 'failed' ? 'Copy failed' : 'Copy brief'}
+            </button>
             {unresolvedCoverageItems.length > 0 && (
               <div className="mt-2 space-y-1">
                 {unresolvedCoverageItems.map((item) => (
