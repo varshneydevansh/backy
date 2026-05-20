@@ -68,6 +68,10 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('Upload or ingest media provider metrics to compare Backy-served requests, storage bytes, and direct CDN activity.'), 'Media provider analytics empty state must explain what populates provider rows');
   assert(source.includes('title="No provider ROI data yet"'), 'Media provider ROI panel must keep the shared empty-state title visible');
   assert(source.includes('Provider ROI appears after CDN/storage analytics include requests, conversions, or attributed value.'), 'Media provider ROI empty state must explain conversion/value analytics');
+  assert(source.includes("schemaVersion: 'backy.media-handoff.v1'"), 'Media handoff manifest must expose a named schema version');
+  assert(source.includes("schemaVersion: 'backy.media-operation-action-plan.v1'"), 'Media handoff manifest must expose the operation action-plan schema');
+  assert(source.includes('data-testid="media-operation-action-plan"') && source.includes('operationActionPlan: mediaOperationActionPlan'), 'Media command center must render and export the operation action plan');
+  assert(source.includes('providerAttributionRows') && source.includes('data-testid="media-attribution-sources"'), 'Media analytics must expose cross-channel attribution source rows');
   assert(source.includes('title="No media quota data yet"'), 'Media runtime quota panel must keep the shared empty-state title visible');
   assert(source.includes('Quota data will appear after the media API responds with workspace storage usage and limits.'), 'Media runtime quota empty state must explain API-backed usage data');
   assert(
@@ -1125,6 +1129,9 @@ const assertMediaLayout = async (client, expectedText) => {
     hasStorageSecretManager: document.body?.innerText?.includes('Secret plan') &&
       document.body?.innerText?.includes('Promote secrets') &&
       document.body?.innerText?.includes('Revoke NEXT vars'),
+    hasOperationActionPlan: Boolean(document.querySelector('[data-testid="media-operation-action-plan"]')) &&
+      document.body?.innerText?.includes('Media operation action plan') &&
+      document.body?.innerText?.includes('backy.media-operation-action-plan.v1'),
     hasScannerRuntime: Boolean(document.querySelector('[data-testid="media-scanner-runtime"]')) &&
       document.body?.innerText?.includes('Upload scanner'),
     hasScannerEnvContract: Boolean(document.querySelector('[data-testid="media-scanner-env-contract"]')) &&
@@ -1144,7 +1151,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasOperationActionPlan && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -1349,7 +1356,11 @@ const assertProviderRoiDashboard = async (client) => {
       const text = panel?.textContent || '';
       return {
         ready: Boolean(panel) &&
+          Boolean(document.querySelector('[data-testid="media-attribution-sources"]')) &&
           text.includes('Provider ROI') &&
+          text.includes('Attribution sources') &&
+          text.includes('media-smoke-provider-ingest') &&
+          text.includes('view-through-7d') &&
           text.includes('USD 166.25') &&
           text.includes('5 conv') &&
           text.includes('10% CVR') &&

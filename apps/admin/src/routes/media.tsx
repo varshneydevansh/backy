@@ -98,6 +98,33 @@ interface MediaLibraryLoadOptions {
   offset?: number;
 }
 
+type MediaOperationActionKey =
+  | 'configure-storage'
+  | 'run-provisioning-probe'
+  | 'enable-scanner'
+  | 'review-quota'
+  | 'ingest-attribution'
+  | 'organize-assets'
+  | 'publish-fonts';
+type MediaOperationActionMode = 'ready' | 'operator-action' | 'blocked';
+interface MediaOperationAction {
+  key: MediaOperationActionKey;
+  label: string;
+  mode: MediaOperationActionMode;
+  ready: boolean;
+  reason: string;
+  href: string;
+}
+interface MediaOperationActionPlan {
+  schemaVersion: 'backy.media-operation-action-plan.v1';
+  attention: boolean;
+  recommendedAction: MediaOperationActionKey | 'none';
+  summary: string;
+  readyCount: number;
+  totalCount: number;
+  actions: MediaOperationAction[];
+}
+
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
 const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced', 'quarantined'];
@@ -1397,9 +1424,52 @@ function MediaPage() {
     uploadVisibility,
   ]);
   const scannerRuntime = runtimeMediaScanner || DEFAULT_MEDIA_SCANNER_RUNTIME;
+  const storageSettings = settingsIntegrations?.storage || {};
+  const supabaseSettings = settingsIntegrations?.supabase || {};
+  const storageSecretReferenceCount = [
+    storageSettings.accessKeyIdSecretRef,
+    storageSettings.secretAccessKeySecretRef,
+    storageSettings.supabaseKeySecretRef,
+  ].filter(Boolean).length;
+  const selectedStorageProvider: MediaStorageProvider = (
+    storageSettings.provider === 'supabase' ||
+    storageSettings.provider === 's3' ||
+    storageSettings.provider === 'local'
+      ? storageSettings.provider
+      : runtimeStorage?.provider === 'supabase' || runtimeStorage?.provider === 's3' || runtimeStorage?.provider === 'local'
+        ? runtimeStorage.provider
+        : 'local'
+  );
+  const mediaOperationActionPlan = useMemo(() => buildMediaOperationActionPlan({
+    runtimeStorage,
+    runtimeSupabase,
+    scannerRuntime,
+    mediaQuota,
+    mediaAnalytics,
+    storageProvider: selectedStorageProvider,
+    storageSecretReferenceCount,
+    fontFamilyCount: fontGroups.length,
+  }), [
+    fontGroups.length,
+    mediaAnalytics,
+    mediaQuota,
+    runtimeStorage,
+    runtimeSupabase,
+    scannerRuntime,
+    selectedStorageProvider,
+    storageSecretReferenceCount,
+  ]);
   const mediaHandoff = useMemo(() => ({
+    schemaVersion: 'backy.media-handoff.v1',
     siteId,
     generatedAt: new Date().toISOString(),
+    operationActionPlan: mediaOperationActionPlan,
+    readiness: {
+      schemaVersion: 'backy.media-readiness.v1',
+      score: mediaLibraryReadiness.score,
+      checks: mediaLibraryReadiness.checks,
+      workflow: mediaLibraryReadiness.workflow,
+    },
     storage: runtimeStorage
       ? {
           provider: runtimeStorage.provider,
@@ -1522,6 +1592,20 @@ function MediaPage() {
         currency: row.providerCurrency || mediaAnalytics.providerCurrency || 'USD',
         lastSyncedAt: row.providerLastSyncedAt,
       })),
+      attributionRows: mediaAnalytics.providerAttributionRows.map((row) => ({
+        source: row.source,
+        attributionWindow: row.attributionWindow,
+        providers: row.providers,
+        assetCount: row.assetCount,
+        requests: row.providerRequests,
+        bytesServed: row.providerBytesServed,
+        conversions: row.providerConversions,
+        conversionValue: row.providerConversionValue,
+        conversionRate: row.providerConversionRate,
+        valuePerRequest: row.providerValuePerRequest,
+        currency: row.providerCurrency || mediaAnalytics.providerCurrency || 'USD',
+        lastSyncedAt: row.providerLastSyncedAt,
+      })),
     },
     folders: folderOptions.map((folder) => ({
       id: folder.id,
@@ -1590,6 +1674,7 @@ function MediaPage() {
     mediaAnalytics.unusedAssets,
     mediaAnalytics.providerRows,
     mediaAnalytics.providerRoiRows,
+    mediaAnalytics.providerAttributionRows,
     mediaAnalytics.providerRequests,
     mediaAnalytics.providerConversions,
     mediaAnalytics.providerConversionValue,
@@ -1597,6 +1682,8 @@ function MediaPage() {
     mediaAnalytics.providerValuePerRequest,
     mediaAnalytics.providerCurrency,
     mediaQuota,
+    mediaLibraryReadiness,
+    mediaOperationActionPlan,
     publicMediaDetailUrl,
     publicMediaFontsUrl,
     publicMediaFileUrl,
@@ -1616,25 +1703,9 @@ function MediaPage() {
     visibilityFilter,
   ]);
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
-  const storageSettings = settingsIntegrations?.storage || {};
-  const supabaseSettings = settingsIntegrations?.supabase || {};
   const storageSettingsControlsDisabled = isSavingStorageSettings || !settingsIntegrations || !canConfigureMediaStorage;
-  const selectedStorageProvider: MediaStorageProvider = (
-    storageSettings.provider === 'supabase' ||
-    storageSettings.provider === 's3' ||
-    storageSettings.provider === 'local'
-      ? storageSettings.provider
-      : runtimeStorage?.provider === 'supabase' || runtimeStorage?.provider === 's3' || runtimeStorage?.provider === 'local'
-        ? runtimeStorage.provider
-        : 'local'
-  );
   const storageEnvContract = useMemo(() => MEDIA_STORAGE_ENV_CONTRACT[selectedStorageProvider], [selectedStorageProvider]);
   const missingStorageEnv = new Set(runtimeStorage?.provider === selectedStorageProvider ? runtimeStorage.missing || [] : []);
-  const storageSecretReferenceCount = [
-    storageSettings.accessKeyIdSecretRef,
-    storageSettings.secretAccessKeySecretRef,
-    storageSettings.supabaseKeySecretRef,
-  ].filter(Boolean).length;
   const selectedProviderInsight = useMemo(
     () => selectedAsset ? getMediaProviderInsight(selectedAsset, runtimeStorage, storageSettings) : undefined,
     [runtimeStorage, selectedAsset, storageSettings],
@@ -3582,6 +3653,52 @@ function MediaPage() {
           </div>
         </div>
 
+        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="media-operation-action-plan">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Media operation action plan</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Turns storage, scanner, quota, attribution, organization, and font readiness into the same handoff contract used by custom frontends.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-semibold',
+                mediaOperationActionPlan.attention ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+              )}
+              >
+                {mediaOperationActionPlan.readyCount}/{mediaOperationActionPlan.totalCount} ready
+              </span>
+              <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+                {mediaOperationActionPlan.schemaVersion}
+              </span>
+            </div>
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            {mediaOperationActionPlan.summary}
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {mediaOperationActionPlan.actions.map((action) => (
+              <a
+                key={action.key}
+                href={action.href}
+                className={cn(
+                  'rounded-md border px-3 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  action.ready ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70',
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-xs font-semibold text-foreground">{action.label}</span>
+                  <span className="shrink-0 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    {action.mode}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{action.reason}</p>
+              </a>
+            ))}
+          </div>
+        </div>
+
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <div>
             <h3 className="text-sm font-semibold">Media control map</h3>
@@ -4920,6 +5037,34 @@ function MediaPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="media-attribution-sources">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Attribution sources</div>
+                        <div className="mt-1 text-xs text-muted-foreground">Grouped by analytics source and attribution window for cross-channel reporting.</div>
+                      </div>
+                      <span className="rounded bg-background px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                        {mediaAnalytics.providerAttributionRows.length} channel{mediaAnalytics.providerAttributionRows.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {mediaAnalytics.providerAttributionRows.map((row) => (
+                        <div key={`${row.source}:${row.attributionWindow}`} className="grid gap-2 rounded-md border border-border bg-background px-3 py-2 md:grid-cols-[minmax(0,1fr)_120px_120px_120px] md:items-center">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium">{row.source}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {row.attributionWindow} · {row.providers.join(', ')} · {row.assetCount} asset{row.assetCount === 1 ? '' : 's'}
+                            </div>
+                          </div>
+                          <div className="font-mono text-xs text-muted-foreground">{row.providerRequests} req</div>
+                          <div className="font-mono text-xs text-muted-foreground">{row.providerConversions} conv</div>
+                          <div className="font-mono text-xs text-muted-foreground">
+                            {formatProviderAnalyticsValue(row.providerConversionValue, row.providerCurrency)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -8200,6 +8345,20 @@ type MediaAnalytics = {
     providerCurrency?: string;
     providerLastSyncedAt?: string;
   }>;
+  providerAttributionRows: Array<{
+    source: string;
+    attributionWindow: string;
+    providers: string[];
+    assetCount: number;
+    providerRequests: number;
+    providerBytesServed: number;
+    providerConversions: number;
+    providerConversionValue: number;
+    providerConversionRate: number;
+    providerValuePerRequest: number;
+    providerCurrency?: string;
+    providerLastSyncedAt?: string;
+  }>;
   providerRequests: number;
   providerConversions: number;
   providerConversionValue: number;
@@ -8542,6 +8701,18 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
     providerLastSyncedAt?: string;
     lastDeliveredAt?: string;
   }>();
+  const byAttribution = new Map<string, {
+    source: string;
+    attributionWindow: string;
+    providers: Set<string>;
+    assetCount: number;
+    providerRequests: number;
+    providerBytesServed: number;
+    providerConversions: number;
+    providerConversionValue: number;
+    providerCurrency?: string;
+    providerLastSyncedAt?: string;
+  }>();
   let publicAssets = 0;
   let privateAssets = 0;
   let referencedAssets = 0;
@@ -8576,6 +8747,35 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       lastDeliveredAt: undefined,
     };
     const providerDelivery = getMediaProviderDeliveryAnalytics(asset.metadata);
+    if (providerDelivery) {
+      const attributionKey = `${providerDelivery.source}::${providerDelivery.attributionWindow}`;
+      const currentAttribution = byAttribution.get(attributionKey) || {
+        source: providerDelivery.source,
+        attributionWindow: providerDelivery.attributionWindow,
+        providers: new Set<string>(),
+        assetCount: 0,
+        providerRequests: 0,
+        providerBytesServed: 0,
+        providerConversions: 0,
+        providerConversionValue: 0,
+        providerCurrency: undefined,
+        providerLastSyncedAt: undefined,
+      };
+      currentAttribution.providers.add(provider);
+      byAttribution.set(attributionKey, {
+        ...currentAttribution,
+        assetCount: currentAttribution.assetCount + 1,
+        providerRequests: currentAttribution.providerRequests + providerDelivery.totalRequests,
+        providerBytesServed: currentAttribution.providerBytesServed + providerDelivery.bytesServed,
+        providerConversions: currentAttribution.providerConversions + providerDelivery.conversions,
+        providerConversionValue: currentAttribution.providerConversionValue + providerDelivery.conversionValue,
+        providerCurrency: providerDelivery.currency || currentAttribution.providerCurrency,
+        providerLastSyncedAt: [currentAttribution.providerLastSyncedAt, providerDelivery.lastSyncedAt]
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+          .sort()
+          .at(-1),
+      });
+    }
     byProvider.set(provider, {
       count: currentProvider.count + 1,
       publicCount: currentProvider.publicCount + (asset.visibility === 'private' ? 0 : 1),
@@ -8628,6 +8828,26 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       b.providerConversions - a.providerConversions ||
       b.providerRequests - a.providerRequests
     ));
+  const providerAttributionRows = Array.from(byAttribution.values())
+    .map((value) => ({
+      source: value.source,
+      attributionWindow: value.attributionWindow,
+      providers: Array.from(value.providers).sort((a, b) => a.localeCompare(b)),
+      assetCount: value.assetCount,
+      providerRequests: value.providerRequests,
+      providerBytesServed: value.providerBytesServed,
+      providerConversions: value.providerConversions,
+      providerConversionValue: value.providerConversionValue,
+      providerConversionRate: value.providerRequests > 0 ? Number(((value.providerConversions / value.providerRequests) * 100).toFixed(4)) : 0,
+      providerValuePerRequest: value.providerRequests > 0 ? value.providerConversionValue / value.providerRequests : 0,
+      providerCurrency: value.providerCurrency,
+      providerLastSyncedAt: value.providerLastSyncedAt,
+    }))
+    .sort((a, b) => (
+      b.providerConversionValue - a.providerConversionValue ||
+      b.providerConversions - a.providerConversions ||
+      b.providerRequests - a.providerRequests
+    ));
   const providerRequests = providerRoiRows.reduce((total, row) => total + row.providerRequests, 0);
   const providerConversions = providerRoiRows.reduce((total, row) => total + row.providerConversions, 0);
   const providerConversionValue = providerRoiRows.reduce((total, row) => total + row.providerConversionValue, 0);
@@ -8658,6 +8878,7 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       .sort((a, b) => b.bytes - a.bytes)
       .slice(0, 4),
     providerRoiRows,
+    providerAttributionRows,
     providerRequests,
     providerConversions,
     providerConversionValue,
@@ -8665,6 +8886,137 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
     providerValuePerRequest: providerRequests > 0 ? providerConversionValue / providerRequests : 0,
     providerCurrency,
     providerRows,
+  };
+};
+
+const buildMediaOperationActionPlan = ({
+  runtimeStorage,
+  runtimeSupabase,
+  scannerRuntime,
+  mediaQuota,
+  mediaAnalytics,
+  storageProvider,
+  storageSecretReferenceCount,
+  fontFamilyCount,
+}: {
+  runtimeStorage: SiteSettingsInput['runtimeStorage'] | undefined;
+  runtimeSupabase: SiteSettingsInput['runtimeSupabase'] | undefined;
+  scannerRuntime: NonNullable<SiteSettingsInput['runtimeMediaScanner']>;
+  mediaQuota: MediaQuota | undefined;
+  mediaAnalytics: MediaAnalytics;
+  storageProvider: MediaStorageProvider;
+  storageSecretReferenceCount: number;
+  fontFamilyCount: number;
+}): MediaOperationActionPlan => {
+  const storageConfigured = runtimeStorage?.configured === true;
+  const storageMissing = runtimeStorage?.missing || [];
+  const supabaseConfigured = runtimeSupabase?.configured === true || storageProvider !== 'supabase';
+  const scannerReady = !scannerRuntime.enabled || scannerRuntime.configured === true;
+  const quotaReady = mediaQuota ? mediaQuota.remainingBytes > 0 : false;
+  const quotaUsageRatio = mediaQuota && mediaQuota.limitBytes > 0 ? mediaQuota.usedBytes / mediaQuota.limitBytes : 0;
+  const quotaRisk = quotaUsageRatio >= 0.9;
+  const attributionReady = mediaAnalytics.providerAttributionRows.length > 0;
+  const organizationReady = mediaAnalytics.totalAssets === 0 || (
+    mediaAnalytics.quarantinedAssets === 0 &&
+    mediaAnalytics.unusedAssets === 0 &&
+    mediaAnalytics.rootAssets === 0
+  );
+  const fontsReady = fontFamilyCount > 0 || mediaAnalytics.totalAssets === 0;
+
+  const actions: MediaOperationAction[] = [
+    {
+      key: 'configure-storage',
+      label: 'Configure storage',
+      mode: storageConfigured && supabaseConfigured ? 'ready' : 'blocked',
+      ready: storageConfigured && supabaseConfigured,
+      href: '#media-storage',
+      reason: storageConfigured
+        ? storageProvider === 'supabase' && !supabaseConfigured
+          ? 'Supabase storage metadata is saved, but runtime Supabase credentials or project metadata are incomplete.'
+          : `${runtimeStorage?.provider || storageProvider} storage is configured for uploads and delivery with ${storageSecretReferenceCount} saved secret reference${storageSecretReferenceCount === 1 ? '' : 's'}.`
+        : `Storage runtime is missing ${storageMissing.length > 0 ? storageMissing.join(', ') : 'provider configuration'}.`,
+    },
+    {
+      key: 'run-provisioning-probe',
+      label: 'Run provisioning probe',
+      mode: storageConfigured ? 'ready' : 'operator-action',
+      ready: storageConfigured,
+      href: '#media-storage',
+      reason: storageConfigured
+        ? 'Provisioning probe can verify bucket/path, lifecycle cleanup, and replacement credential readiness.'
+        : 'Run the provisioning probe after storage env values are configured.',
+    },
+    {
+      key: 'enable-scanner',
+      label: 'Review scanner',
+      mode: scannerReady ? 'ready' : 'blocked',
+      ready: scannerReady,
+      href: '#media-storage',
+      reason: scannerRuntime.enabled
+        ? scannerRuntime.configured
+          ? `${scannerRuntime.provider} scanning is configured for uploads and replacements.`
+          : `Scanner is enabled but missing ${scannerRuntime.missing?.join(', ') || 'runtime configuration'}.`
+        : 'Scanner is optional and currently disabled; enable it for stricter pre-storage media safety.',
+    },
+    {
+      key: 'review-quota',
+      label: 'Review quota',
+      mode: quotaReady && !quotaRisk ? 'ready' : 'operator-action',
+      ready: quotaReady && !quotaRisk,
+      href: '#media-storage',
+      reason: mediaQuota
+        ? quotaRisk
+          ? `${formatBytes(mediaQuota.remainingBytes)} remains; review storage quota before more uploads.`
+          : `${formatBytes(mediaQuota.remainingBytes)} remains for this site.`
+        : 'Quota evidence has not loaded from the media API yet.',
+    },
+    {
+      key: 'ingest-attribution',
+      label: 'Ingest attribution',
+      mode: attributionReady ? 'ready' : 'operator-action',
+      ready: attributionReady,
+      href: '#media-analytics',
+      reason: attributionReady
+        ? `${mediaAnalytics.providerAttributionRows.length} attribution source${mediaAnalytics.providerAttributionRows.length === 1 ? '' : 's'} are available for ROI dashboards.`
+        : 'Upload or ingest CDN/storage analytics with conversions, value, source, and attribution window.',
+    },
+    {
+      key: 'organize-assets',
+      label: 'Organize assets',
+      mode: organizationReady ? 'ready' : 'operator-action',
+      ready: organizationReady,
+      href: '#media-bulk',
+      reason: organizationReady
+        ? 'Loaded media is foldered, referenced, and clear of quarantine blockers.'
+        : `${mediaAnalytics.rootAssets} root, ${mediaAnalytics.unusedAssets} unused, and ${mediaAnalytics.quarantinedAssets} quarantined asset${mediaAnalytics.quarantinedAssets === 1 ? '' : 's'} need review.`,
+    },
+    {
+      key: 'publish-fonts',
+      label: 'Publish fonts',
+      mode: fontsReady ? 'ready' : 'operator-action',
+      ready: fontsReady,
+      href: '#media-fonts',
+      reason: fontsReady
+        ? fontFamilyCount > 0
+          ? `${fontFamilyCount} font famil${fontFamilyCount === 1 ? 'y is' : 'ies are'} registered for editor and frontend manifests.`
+          : 'No fonts are required yet.'
+        : 'Upload public font files to expose typography in editors and custom frontend manifests.',
+    },
+  ];
+  const readyCount = actions.filter((action) => action.ready).length;
+  const recommendedAction = actions.find((action) => !action.ready)?.key || 'none';
+  const attention = recommendedAction !== 'none';
+
+  return {
+    schemaVersion: 'backy.media-operation-action-plan.v1',
+    attention,
+    recommendedAction,
+    summary: attention
+      ? `${actions.length - readyCount} media operation${actions.length - readyCount === 1 ? '' : 's'} need operator attention before this library is production-ready.`
+      : 'Media storage, delivery, attribution, organization, and font operations are ready for the loaded library.',
+    readyCount,
+    totalCount: actions.length,
+    actions,
   };
 };
 
