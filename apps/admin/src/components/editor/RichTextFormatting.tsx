@@ -190,13 +190,23 @@ export function RichTextFormatting({
     );
   }, [elementId]);
 
+  const isTargetEditorMountedEditable = useCallback(() => {
+    if (typeof document === 'undefined' || !elementId) {
+      return false;
+    }
+
+    return !!document.querySelector(
+      `[data-element-id="${elementId}"] [data-backy-text-editor][data-backy-text-editor-editable="true"]`
+    );
+  }, [elementId]);
+
   const isTargetEditorInEditableMode = useCallback(() => {
     return isTargetEditorActive() && isTargetEditorFocused();
   }, [isTargetEditorActive, isTargetEditorFocused]);
 
   const canTargetEditorControlContent = useCallback(() => {
-    return canInteractWithEditor() && isTargetEditorActive();
-  }, [canInteractWithEditor, isTargetEditorActive]);
+    return canInteractWithEditor() && isTargetEditorActive() && isTargetEditorMountedEditable();
+  }, [canInteractWithEditor, isTargetEditorActive, isTargetEditorMountedEditable]);
 
   const isTargetEditorUsable = useCallback(() => {
     return isTargetEditorInEditableMode() && canInteractWithEditor();
@@ -1251,7 +1261,15 @@ export function RichTextFormatting({
         return true;
       }
 
-      const shouldSplitStyleRange = format === 'backgroundColor' || format === 'color' || format === 'fontFamily' || format === 'fontSize';
+      const shouldSplitStyleRange = format === 'backgroundColor' ||
+        format === 'color' ||
+        format === 'fontFamily' ||
+        format === 'fontSize' ||
+        format === 'underline' ||
+        format === 'strikethrough';
+      const selectionRef = shouldSplitStyleRange && !SlateRange.isCollapsed(editor.selection)
+        ? Editor.rangeRef(editor as any, editor.selection, { affinity: 'outward' })
+        : null;
       if (shouldSplitStyleRange) {
         if (shouldRemove) {
           Transforms.unsetNodes(editor as any, [format], {
@@ -1265,6 +1283,16 @@ export function RichTextFormatting({
             match: Text.isText,
             split: true,
           });
+        }
+
+        const nextSelection = selectionRef?.unref();
+        if (
+          nextSelection &&
+          SlateRange.isRange(nextSelection) &&
+          Node.has(editor as any, nextSelection.anchor.path) &&
+          Node.has(editor as any, nextSelection.focus.path)
+        ) {
+          Transforms.select(editor as any, nextSelection);
         }
       } else if (shouldRemove) {
         Editor.removeMark(editor as any, format);
@@ -1629,6 +1657,7 @@ export function RichTextFormatting({
   }, [adjustElementListIndent]);
 
   const moveListItemAtSelection = useCallback((direction: -1 | 1) => {
+    restoreSelection({ requireTextSelection: false });
     const selectedListItemIndentSnapshot = readSelectedListItemIndentSnapshot();
     const editorBeforeMove = getActiveEditor();
     const selectedTextBeforeMove = selectedListItemIndentSnapshot?.text || (
@@ -1702,6 +1731,7 @@ export function RichTextFormatting({
     moveListItemUp,
     onElementContentChange,
     readSelectedListItemIndentSnapshot,
+    restoreSelection,
     restoreSelectedListItemIndentSnapshot,
     runOrActivateTextEditor,
     syncActiveEditorContentAfterCommand,
@@ -1830,8 +1860,35 @@ export function RichTextFormatting({
   ]);
 
   const runSelectedTextCommand = useCallback((actionName: string, action: () => void) => {
+    const retrySelectedTextCommandAfterActivation = () => {
+      activateTextEditor();
+      if (typeof window === 'undefined') {
+        if (restoreSelection({ requireTextSelection: false })) {
+          action();
+        }
+        return;
+      }
+
+      let attempts = 0;
+      const retry = () => {
+        attempts += 1;
+        if (restoreSelection({ requireTextSelection: false })) {
+          action();
+          return;
+        }
+        if (attempts < 10) {
+          window.setTimeout(retry, 60);
+        }
+      };
+
+      window.setTimeout(retry, 60);
+    };
+
     const execute = () => {
-      restoreSelection({ requireTextSelection: false });
+      if (!restoreSelection({ requireTextSelection: false })) {
+        retrySelectedTextCommandAfterActivation();
+        return;
+      }
       action();
     };
 
@@ -1841,7 +1898,7 @@ export function RichTextFormatting({
     }
 
     runContentProperty(actionName, execute);
-  }, [canTargetEditorControlContent, restoreSelection, runContentProperty]);
+  }, [activateTextEditor, canTargetEditorControlContent, restoreSelection, runContentProperty]);
 
   const insertTextAtSelection = useCallback((text: string) => {
     if (!text) {
@@ -2167,107 +2224,98 @@ export function RichTextFormatting({
     runOrActivateTextEditor,
   ]);
 
-  const insertTableAtSelection = useCallback(() => {
-    runOrActivateTextEditor('insert-table', () => {
-      insertTable();
+  const runTableCommandAtSelection = useCallback((actionName: string, command: () => boolean) => {
+    runOrActivateTextEditor(actionName, () => {
+      if (command()) {
+        return;
+      }
+
+      activateTextEditor();
+      if (typeof window === 'undefined') {
+        command();
+        return;
+      }
+
+      let attempts = 0;
+      const retryTableCommandAfterActivation = () => {
+        attempts += 1;
+        if (command() || attempts >= 10) {
+          return;
+        }
+        window.setTimeout(retryTableCommandAfterActivation, 60);
+      };
+
+      window.setTimeout(retryTableCommandAfterActivation, 60);
     });
-  }, [insertTable, runOrActivateTextEditor]);
+  }, [activateTextEditor, runOrActivateTextEditor]);
+
+  const insertTableAtSelection = useCallback(() => {
+    runTableCommandAtSelection('insert-table', insertTable);
+  }, [insertTable, runTableCommandAtSelection]);
 
   const addTableRowAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-add-row', () => {
-      addTableRow();
-    });
-  }, [addTableRow, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-add-row', addTableRow);
+  }, [addTableRow, runTableCommandAtSelection]);
 
   const addTableColumnAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-add-column', () => {
-      addTableColumn();
-    });
-  }, [addTableColumn, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-add-column', addTableColumn);
+  }, [addTableColumn, runTableCommandAtSelection]);
 
   const removeTableRowAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-remove-row', () => {
-      removeTableRow();
-    });
-  }, [removeTableRow, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-remove-row', removeTableRow);
+  }, [removeTableRow, runTableCommandAtSelection]);
 
   const removeTableColumnAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-remove-column', () => {
-      removeTableColumn();
-    });
-  }, [removeTableColumn, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-remove-column', removeTableColumn);
+  }, [removeTableColumn, runTableCommandAtSelection]);
 
   const duplicateTableRowAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-duplicate-row', () => {
-      duplicateTableRow();
-    });
-  }, [duplicateTableRow, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-duplicate-row', duplicateTableRow);
+  }, [duplicateTableRow, runTableCommandAtSelection]);
 
   const duplicateTableColumnAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-duplicate-column', () => {
-      duplicateTableColumn();
-    });
-  }, [duplicateTableColumn, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-duplicate-column', duplicateTableColumn);
+  }, [duplicateTableColumn, runTableCommandAtSelection]);
 
   const moveTableRowUpAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-move-row-up', () => {
-      moveTableRowUp();
-    });
-  }, [moveTableRowUp, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-move-row-up', moveTableRowUp);
+  }, [moveTableRowUp, runTableCommandAtSelection]);
 
   const moveTableRowDownAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-move-row-down', () => {
-      moveTableRowDown();
-    });
-  }, [moveTableRowDown, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-move-row-down', moveTableRowDown);
+  }, [moveTableRowDown, runTableCommandAtSelection]);
 
   const moveTableColumnLeftAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-move-column-left', () => {
-      moveTableColumnLeft();
-    });
-  }, [moveTableColumnLeft, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-move-column-left', moveTableColumnLeft);
+  }, [moveTableColumnLeft, runTableCommandAtSelection]);
 
   const moveTableColumnRightAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-move-column-right', () => {
-      moveTableColumnRight();
-    });
-  }, [moveTableColumnRight, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-move-column-right', moveTableColumnRight);
+  }, [moveTableColumnRight, runTableCommandAtSelection]);
 
   const toggleTableHeaderRowAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-toggle-header-row', () => {
-      toggleTableHeaderRow();
-    });
-  }, [runOrActivateTextEditor, toggleTableHeaderRow]);
+    runTableCommandAtSelection('table-toggle-header-row', toggleTableHeaderRow);
+  }, [runTableCommandAtSelection, toggleTableHeaderRow]);
 
   const toggleTableHeaderColumnAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-toggle-header-column', () => {
-      toggleTableHeaderColumn();
-    });
-  }, [runOrActivateTextEditor, toggleTableHeaderColumn]);
+    runTableCommandAtSelection('table-toggle-header-column', toggleTableHeaderColumn);
+  }, [runTableCommandAtSelection, toggleTableHeaderColumn]);
 
   const toggleTableHeaderCellAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-toggle-header-cell', () => {
-      toggleTableHeaderCell();
-    });
-  }, [runOrActivateTextEditor, toggleTableHeaderCell]);
+    runTableCommandAtSelection('table-toggle-header-cell', toggleTableHeaderCell);
+  }, [runTableCommandAtSelection, toggleTableHeaderCell]);
 
   const mergeTableCellRightAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-merge-cell-right', () => {
-      mergeTableCellRight();
-    });
-  }, [mergeTableCellRight, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-merge-cell-right', mergeTableCellRight);
+  }, [mergeTableCellRight, runTableCommandAtSelection]);
 
   const mergeTableCellDownAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-merge-cell-down', () => {
-      mergeTableCellDown();
-    });
-  }, [mergeTableCellDown, runOrActivateTextEditor]);
+    runTableCommandAtSelection('table-merge-cell-down', mergeTableCellDown);
+  }, [mergeTableCellDown, runTableCommandAtSelection]);
 
   const splitTableCellAtSelection = useCallback(() => {
-    runOrActivateTextEditor('table-split-cell', () => {
-      splitTableCell();
-    });
-  }, [runOrActivateTextEditor, splitTableCell]);
+    runTableCommandAtSelection('table-split-cell', splitTableCell);
+  }, [runTableCommandAtSelection, splitTableCell]);
 
   const readSelectedTableCaption = useCallback(() => {
     const editor = getActiveEditor();
@@ -2341,8 +2389,7 @@ export function RichTextFormatting({
 
   const updateTableCellFillAtSelection = useCallback((color: string) => {
     setSelectedTableCellFillValue(color);
-    if (canTargetEditorControlContent()) {
-      setTableCellBackgroundColor(color);
+    if (canTargetEditorControlContent() && setTableCellBackgroundColor(color)) {
       return;
     }
     runOrActivateTextEditor('table-cell-fill', () => {
@@ -2352,8 +2399,7 @@ export function RichTextFormatting({
 
   const updateTableCellBorderAtSelection = useCallback((color: string) => {
     setSelectedTableCellBorderValue(color);
-    if (canTargetEditorControlContent()) {
-      setTableCellBorderColor(color);
+    if (canTargetEditorControlContent() && setTableCellBorderColor(color)) {
       return;
     }
     runOrActivateTextEditor('table-cell-border', () => {
@@ -2363,8 +2409,7 @@ export function RichTextFormatting({
 
   const updateTableCellVerticalAlignAtSelection = useCallback((align: 'top' | 'middle' | 'bottom') => {
     setSelectedTableCellVerticalAlignValue(align);
-    if (canTargetEditorControlContent()) {
-      setTableCellVerticalAlign(align);
+    if (canTargetEditorControlContent() && setTableCellVerticalAlign(align)) {
       return;
     }
     runOrActivateTextEditor('table-cell-vertical-align', () => {
@@ -2765,6 +2810,7 @@ export function RichTextFormatting({
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            storeSelection();
             moveListItemAtSelection(-1);
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
@@ -2778,6 +2824,7 @@ export function RichTextFormatting({
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            storeSelection();
             moveListItemAtSelection(1);
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"

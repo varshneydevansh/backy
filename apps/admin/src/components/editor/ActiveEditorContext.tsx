@@ -579,7 +579,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
 
     Transforms.insertNodes(editor as any, rowNode, { at: nextRowPath, select: true });
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, [...nextRowPath, 0]));
+      const nextCellPath = [...nextRowPath, 0];
+      Transforms.select(editor as any, {
+        anchor: Editor.start(editor as any, nextCellPath),
+        focus: Editor.end(editor as any, nextCellPath),
+      });
     } catch {
       // Selection is best-effort after row insertion.
     }
@@ -644,7 +648,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       const nextRowNode = Node.get(editor as any, context.rowPath) as any;
       const nextRowChildren = Array.isArray(nextRowNode?.children) ? nextRowNode.children : [];
       const nextCellIndex = Math.max(0, Math.min(selectedRowInsertIndex, nextRowChildren.length - 1));
-      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, nextCellIndex]));
+      const nextCellPath = [...context.rowPath, nextCellIndex];
+      Transforms.select(editor as any, {
+        anchor: Editor.start(editor as any, nextCellPath),
+        focus: Editor.end(editor as any, nextCellPath),
+      });
     } catch {
       // Selection is best-effort after column insertion.
     }
@@ -1098,7 +1106,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     });
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      Transforms.select(editor as any, {
+        anchor: Editor.start(editor as any, context.cellPath),
+        focus: Editor.end(editor as any, context.cellPath),
+      });
     } catch {
       // Selection is best-effort after header-row toggle.
     }
@@ -1143,7 +1154,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      Transforms.select(editor as any, {
+        anchor: Editor.start(editor as any, context.cellPath),
+        focus: Editor.end(editor as any, context.cellPath),
+      });
     } catch {
       // Selection is best-effort after header-column toggle.
     }
@@ -1166,7 +1180,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     });
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      Transforms.select(editor as any, {
+        anchor: Editor.start(editor as any, context.cellPath),
+        focus: Editor.end(editor as any, context.cellPath),
+      });
     } catch {
       // Selection is best-effort after header-cell toggle.
     }
@@ -1380,6 +1397,9 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const normalizedColor = color.trim();
+    const selectionRef = editor.selection && Range.isRange(editor.selection)
+      ? Editor.rangeRef(editor as any, editor.selection, { affinity: 'outward' })
+      : null;
     const cellPaths = getSelectedTableCellPaths(editor);
     for (const cellPath of cellPaths) {
       if (normalizedColor) {
@@ -1394,9 +1414,19 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      const nextSelection = selectionRef?.unref();
+      if (
+        nextSelection &&
+        Range.isRange(nextSelection) &&
+        Node.has(editor as any, nextSelection.anchor.path) &&
+        Node.has(editor as any, nextSelection.focus.path)
+      ) {
+        Transforms.select(editor as any, nextSelection);
+      } else {
+        Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      }
     } catch {
-      // Selection is best-effort after cell style changes.
+      // Selection is best-effort after table cell style changes.
     }
     return true;
   }, [getSelectedTableCellPaths, getSelectedTableContext]);
@@ -1408,6 +1438,9 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const normalizedColor = color.trim();
+    const selectionRef = editor.selection && Range.isRange(editor.selection)
+      ? Editor.rangeRef(editor as any, editor.selection, { affinity: 'outward' })
+      : null;
     const cellPaths = getSelectedTableCellPaths(editor);
     for (const cellPath of cellPaths) {
       if (normalizedColor) {
@@ -1422,9 +1455,19 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      const nextSelection = selectionRef?.unref();
+      if (
+        nextSelection &&
+        Range.isRange(nextSelection) &&
+        Node.has(editor as any, nextSelection.anchor.path) &&
+        Node.has(editor as any, nextSelection.focus.path)
+      ) {
+        Transforms.select(editor as any, nextSelection);
+      } else {
+        Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      }
     } catch {
-      // Selection is best-effort after cell style changes.
+      // Selection is best-effort after table cell style changes.
     }
     return true;
   }, [getSelectedTableCellPaths, getSelectedTableContext]);
@@ -1435,6 +1478,9 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
 
+    const selectionRef = editor.selection && Range.isRange(editor.selection)
+      ? Editor.rangeRef(editor as any, editor.selection, { affinity: 'outward' })
+      : null;
     const cellPaths = getSelectedTableCellPaths(editor);
     for (const cellPath of cellPaths) {
       Transforms.setNodes(editor as any, { verticalAlign: align } as any, {
@@ -1443,9 +1489,19 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      const nextSelection = selectionRef?.unref();
+      if (
+        nextSelection &&
+        Range.isRange(nextSelection) &&
+        Node.has(editor as any, nextSelection.anchor.path) &&
+        Node.has(editor as any, nextSelection.focus.path)
+      ) {
+        Transforms.select(editor as any, nextSelection);
+      } else {
+        Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      }
     } catch {
-      // Selection is best-effort after cell style changes.
+      // Selection is best-effort after table cell style changes.
     }
     return true;
   }, [getSelectedTableCellPaths, getSelectedTableContext]);
@@ -1547,10 +1603,13 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       && storedSelectionElementId.current === normalizedElementId
       && storedRange
       && Range.isRange(storedRange)
-      && !Range.isCollapsed(storedRange)
       && Node.has(editor as any, storedRange.anchor.path)
       && Node.has(editor as any, storedRange.focus.path)
-      && (!incomingSelection || !Range.isRange(incomingSelection) || Range.isCollapsed(incomingSelection));
+      && (
+        !incomingSelection ||
+        !Range.isRange(incomingSelection) ||
+        (!Range.isCollapsed(storedRange) && Range.isCollapsed(incomingSelection))
+      );
 
     debug('setActiveEditor', {
       hasEditor: !!editor,
@@ -2575,8 +2634,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           const rootChildren = JSON.parse(JSON.stringify((editor as any).children || []));
           const currentListIndex = parentPath[0] || 0;
           const adjacentListIndex = adjacentListPath[0] || 0;
-          rootChildren[currentListIndex] = direction > 0 ? adjacentListClone : currentListClone;
-          rootChildren[adjacentListIndex] = direction > 0 ? currentListClone : adjacentListClone;
+          rootChildren[currentListIndex] = adjacentListClone;
+          rootChildren[adjacentListIndex] = currentListClone;
           (editor as any).children = rootChildren;
           try {
             (editor as any).onChange?.();
