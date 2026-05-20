@@ -173,6 +173,10 @@ Legend:
 - ✅ Product catalog workspace covers schema setup, product records, pricing, inventory, media, variants, SEO, provider handoff, CSV import/export, fixed filtered-card bulk selection, and future-date scheduled product validation.
 - ⚠️ Live commerce provider certification remains required before production certification.
 
+#### `/orders` (`orders.tsx`)
+- ✅ Orders workspace bulk workflow applies paid/processing/fulfilled/cancelled actions to every selected loaded order, including selections outside the active filtered view.
+- ⚠️ Live payment, refund, shipping, fulfillment, tracking, and reconciliation provider certification remains required before production certification.
+
 ### 3.2 Public routes
 
 #### `/` (`apps/public/src/app/page.tsx`)

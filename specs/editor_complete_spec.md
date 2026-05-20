@@ -504,6 +504,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - This keeps publish/draft/archive/delete/export actions reachable from an empty selection after filtering the catalog.
 - Source coverage is guarded by `apps/admin/scripts/commerce-smoke.mjs`.
 
+### ✅ Orders bulk workflow selection
+- Orders bulk workflow actions now apply to every selected loaded order, including selections outside the current filtered view.
+- The selection summary shows total selected orders plus the visible/outside-view split, so paid/processing/fulfilled/cancelled actions match the operator-visible selection.
+- Source coverage is guarded by `apps/admin/scripts/orders-smoke.mjs`.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.

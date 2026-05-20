@@ -2577,7 +2577,7 @@ function OrdersRoute() {
       return;
     }
 
-    const selectedOrders = selectedVisibleOrders;
+    const selectedOrders = selectedLoadedOrders;
     if (selectedOrders.length === 0) {
       setError('Select at least one order before applying a bulk action.');
       setNotice(null);
@@ -4119,7 +4119,8 @@ function OrdersRoute() {
                         className="size-4 rounded border-border"
                       />
                       <span data-testid="orders-bulk-selection-summary">
-                        {selectedVisibleOrders.length} visible selected
+                        {selectedLoadedOrders.length} selected
+                        {selectedVisibleOrders.length !== selectedLoadedOrders.length ? ` · ${selectedVisibleOrders.length} visible` : ''}
                         {hiddenSelectedOrderCount > 0 ? ` · ${hiddenSelectedOrderCount} outside this view` : ''}
                       </span>
                     </label>
@@ -4140,7 +4141,7 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('paid')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
                         title={!canEditOrders ? editPermissionTitle : undefined}
                         iconStart={<CreditCard className="size-4" />}
                       >
@@ -4150,7 +4151,7 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('processing')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
                         title={!canEditOrders ? editPermissionTitle : undefined}
                         iconStart={<Truck className="size-4" />}
                       >
@@ -4160,7 +4161,7 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('fulfilled')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
                         title={!canEditOrders ? editPermissionTitle : undefined}
                         iconStart={<PackageCheck className="size-4" />}
                       >
@@ -4170,7 +4171,7 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('cancelled')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
                         title={!canEditOrders ? editPermissionTitle : undefined}
                         iconStart={<Archive className="size-4" />}
                       >
