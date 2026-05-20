@@ -4353,30 +4353,50 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 430,
                 props: { backgroundColor: '#0f172a', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 600 },
+                    mobile: { width: 375, height: 820 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 72, {
                         id: 'landing-hero-heading',
                         width: 560,
                         height: 120,
                         props: { content: title, level: 'h1', fontSize: 54, fontWeight: '800', lineHeight: 1.05, color: '#ffffff' },
+                        responsive: {
+                            tablet: { x: 54, y: 64, width: 360, height: 132, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 64, width: 327, height: 170, props: { fontSize: 36 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 210, {
                         id: 'landing-hero-copy',
                         width: 520,
                         height: 90,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#cbd5e1' },
+                        responsive: {
+                            tablet: { x: 56, y: 224, width: 340, height: 112, props: { fontSize: 17 } },
+                            mobile: { x: 26, y: 264, width: 323, height: 126, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('button', 76, 326, {
                         id: 'landing-hero-button',
                         width: 180,
                         height: 52,
                         props: { label: 'Get started', backgroundColor: '#14b8a6', color: '#042f2e', borderRadius: 8, fontSize: 16, fontWeight: '700' },
+                        responsive: {
+                            tablet: { x: 56, y: 374, width: 168, height: 52 },
+                            mobile: { x: 26, y: 424, width: 164, height: 52 },
+                        },
                     }),
                     createCanvasElement('box', 720, 76, {
                         id: 'landing-hero-media',
                         width: 360,
                         height: 260,
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#334155', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 438, y: 94, width: 276, height: 260 },
+                            mobile: { x: 24, y: 524, width: 327, height: 240 },
+                        },
                     }),
                 ],
             }),
@@ -4385,23 +4405,39 @@ function buildTemplateElements(input: {
                 width: 1200,
                 height: 330,
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 600, width: 768, height: 430 },
+                    mobile: { y: 820, width: 375, height: 630 },
+                },
                 children: ['Design freely', 'Bind content', 'Publish faster'].map((item, index) => createCanvasElement('box', 72 + index * 360, 76, {
                     id: `landing-feature-${index}`,
                     width: 320,
                     height: 160,
                     props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                    responsive: {
+                        tablet: { x: 54 + index * 230, y: 86, width: 196, height: 220 },
+                        mobile: { x: 24, y: 50 + index * 184, width: 327, height: 154 },
+                    },
                     children: [
                         createCanvasElement('heading', 22, 24, {
                             id: `landing-feature-heading-${index}`,
                             width: 260,
                             height: 40,
                             props: { content: item, level: 'h3', fontSize: 22, fontWeight: '750', color: '#0f172a' },
+                            responsive: {
+                                tablet: { width: 152, height: 52, props: { fontSize: 18, lineHeight: 1.18 } },
+                                mobile: { width: 246, props: { fontSize: 20 } },
+                            },
                         }),
                         createCanvasElement('paragraph', 22, 80, {
                             id: `landing-feature-copy-${index}`,
                             width: 250,
                             height: 60,
                             props: { content: 'Edit this block, save it as a section, or connect it to Backy data.', fontSize: 14, lineHeight: 1.5, color: '#475569' },
+                            responsive: {
+                                tablet: { y: 90, width: 152, height: 84 },
+                                mobile: { y: 72, width: 260, height: 58 },
+                            },
                         }),
                     ],
                 })),

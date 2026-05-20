@@ -1402,6 +1402,20 @@ const assertPageCreateSourceContracts = () => {
     'Page create must keep safe member, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog-post, team, careers, newsletter, and survey starters',
   );
   assert(
+    source.includes("id: 'landing-hero-section'") &&
+      source.includes("tablet: { width: 768, height: 600 }") &&
+      source.includes("id: 'landing-hero-heading'") &&
+      source.includes("mobile: { x: 24, y: 64, width: 327, height: 170, props: { fontSize: 36 } }") &&
+      source.includes("id: 'landing-hero-media'") &&
+      source.includes("mobile: { x: 24, y: 524, width: 327, height: 240 }") &&
+      source.includes("id: 'landing-feature-section'") &&
+      source.includes("mobile: { y: 820, width: 375, height: 630 }") &&
+      source.includes("id: `landing-feature-${index}`") &&
+      source.includes("tablet: { x: 54 + index * 230, y: 86, width: 196, height: 220 }") &&
+      source.includes("mobile: { x: 24, y: 50 + index * 184, width: 327, height: 154 }"),
+    'Landing page starter must seed explicit tablet/mobile responsive overrides for the hero, media placeholder, CTA, and feature cards.',
+  );
+  assert(
     source.includes("id: 'storefront-hero-section'") &&
       source.includes("tablet: { width: 768, height: 620 }") &&
       source.includes("id: 'storefront-heading'") &&
