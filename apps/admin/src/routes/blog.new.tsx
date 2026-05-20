@@ -2,8 +2,8 @@
  * BACKY CMS - NEW BLOG POST (HYBRID LAYOUT)
  */
 
-import { useEffect, useState, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useCallback, useEffect, useState, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
@@ -748,7 +748,7 @@ function NewBlogPostPage() {
         setNotice((current) => current ? null : current);
     };
 
-    useEffect(() => {
+    const loadBlogCreatePermissions = useCallback(() => {
         let cancelled = false;
         setPermissionError(null);
 
@@ -785,6 +785,8 @@ function NewBlogPostPage() {
             cancelled = true;
         };
     }, [user?.id]);
+
+    useEffect(() => loadBlogCreatePermissions(), [loadBlogCreatePermissions]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1955,8 +1957,35 @@ function NewBlogPostPage() {
                     </Notice>
                 )}
                 {permissionError && (
-                    <Notice tone="warning" className="mb-4">
-                        {permissionError}
+                    <Notice
+                        tone="warning"
+                        title="Blog creation permissions could not be verified"
+                        className="mb-4"
+                        role="alert"
+                        data-testid="blog-create-permission-state"
+                    >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{permissionError}</span>
+                            <div className="flex shrink-0 flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={loadBlogCreatePermissions}
+                                    disabled={isPermissionsLoading}
+                                    aria-label="Retry loading blog creation permissions"
+                                    iconStart={<RefreshCw className={cn('size-3.5', isPermissionsLoading && 'animate-spin')} />}
+                                >
+                                    Retry permissions
+                                </Button>
+                                <Link
+                                    to="/users"
+                                    className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring"
+                                >
+                                    Review users
+                                </Link>
+                            </div>
+                        </div>
                     </Notice>
                 )}
                 {draftRecovery && (

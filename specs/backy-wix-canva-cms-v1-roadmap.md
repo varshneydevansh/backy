@@ -137,7 +137,7 @@ It explicitly excludes:
 7. `/pages.new`: slug uniqueness, template starter, validation, scheduled publish checks, and retryable permission recovery
 8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring for `interactiveFigure`/`codeComponent` blocks; uploaded/signed custom component bundles, hostile-bundle browser security fixtures, component usage governance, and production repository smoke are now covered for the current platform scope
 9. `/blog`: status controls, tag/category UI, list filters, retryable permission recovery, and filtered full-result bulk selection
-10. `/blog.new`: post metadata + publish path
+10. `/blog.new`: post metadata, retryable permission recovery, and publish path
 11. `/blog.$postId`: revisioning and publication state
 12. `/media`: upload -> validation -> metadata edit -> storage urls
 13. `/collections`: backend-backed dynamic CMS schema and record workspace with collection templates, relationship fields, public/admin API handoff, dynamic list/detail template wiring, record import/export, filtered full-result bulk record selection, and smoke coverage through `test:collections`; current Collections scope is Ready, with broader Supabase/Postgres certification tracked globally

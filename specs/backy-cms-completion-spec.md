@@ -127,7 +127,7 @@ Legend:
 - ⚠️ continue hardening filter ergonomics, audit-event UI polish, and live DB service smoke.
 
 #### `/blog.new` (`blog.new.tsx`)
-- ✅ rich form/editor scaffold with backend create, category/tag/author assignment, SEO, frontend-template seeding, autosave, and future-date scheduled publish validation.
+- ✅ rich form/editor scaffold with backend create, category/tag/author assignment, SEO, frontend-template seeding, autosave, future-date scheduled publish validation, and retryable permission recovery.
 - ⚠️ continue hardening relation-based publish flow and broader external-provider certification.
 
 #### `/blog.$postId` (`blog.$postId.tsx`)
@@ -469,14 +469,14 @@ Use this file as the persistent baseline before any implementation pass.
 ### 10.1 Current implemented scope
 - Blog authoring is implemented through the dedicated admin blog surfaces:
   - `apps/admin/src/routes/blog.tsx` for list, taxonomy, authors, SEO/comment row controls, revisions, bulk workflows, CSV export, and handoff JSON.
-  - `apps/admin/src/routes/blog.new.tsx` for post creation with article-specific fields, featured media, taxonomy/author assignment, SEO/social metadata, scheduling validation, autosave, and frontend-design template seeding.
+  - `apps/admin/src/routes/blog.new.tsx` for post creation with article-specific fields, featured media, taxonomy/author assignment, SEO/social metadata, scheduling validation, autosave, retryable permission recovery, and frontend-design template seeding.
   - `apps/admin/src/routes/blog.$postId.tsx` for post editing with `CanvasEditor`, focus mode, featured/taxonomy/readiness/publish/comments/handoff/revision panels, optimistic save guards, preview, publish, archive, rollback, and read-only fallback behavior when backend loading fails.
 - Blog templates are represented by frontend design templates with `templateType: "blogPost"` and persisted provenance (`frontendDesignTemplateId`, source/chrome/tokens/binding hints) on created posts instead of a separate legacy `Template` entity.
 - Public blog output is served from the same content contract family as pages: public list/detail APIs, render/resolve payloads, preview-token reads, RSS/feed discovery, taxonomy/author filters, scheduled visibility rules, and frontend-design metadata are contract-tested for custom frontends.
 
 ### 10.2 Current coverage
 - `apps/admin/scripts/blog-list-smoke.mjs` covers backend list workflows, taxonomy CRUD, author filters, revision summaries, row SEO/comment controls, scheduled-state health, error/permission states, filtered full-result bulk selection, bulk publish readiness preflight, CSV/handoff export, and public taxonomy feed visibility.
-- `apps/admin/scripts/blog-create-smoke.mjs` covers frontend blog template selection, template canvas seeding, autosave/recovery, featured media picker, article metadata, future-date scheduling validation, backend create, and persisted frontend-design provenance.
+- `apps/admin/scripts/blog-create-smoke.mjs` covers frontend blog template selection, template canvas seeding, autosave/recovery, featured media picker, article metadata, future-date scheduling validation, retryable permission recovery, backend create, and persisted frontend-design provenance.
 - `apps/admin/scripts/blog-editor-smoke.mjs` covers editor fallback read-only mode, scheduled save validation, unsaved workflow guards, optimistic publish/save requests, comments and revision empty states, and guarded publish workflow behavior.
 
 ### 10.3 Remaining work

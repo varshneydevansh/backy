@@ -45,6 +45,16 @@ const assertBlogCreateSourceContract = () => {
       source.includes('Choose a future publish date before scheduling.'),
     'Blog create route must block scheduled posts with non-future publish dates before submit',
   );
+  assert(
+    source.includes('const loadBlogCreatePermissions = useCallback(() => {') &&
+      source.includes('data-testid="blog-create-permission-state"') &&
+      source.includes('Blog creation permissions could not be verified') &&
+      source.includes('aria-label="Retry loading blog creation permissions"') &&
+      source.includes('Retry permissions') &&
+      source.includes('to="/users"') &&
+      source.includes('Review users'),
+    'Blog create permission alert must expose retryable permission recovery and user-access handoff',
+  );
 };
 
 const isIgnorableBrowserLogError = (event) => (
