@@ -184,6 +184,141 @@ const getMetaArray = (meta: Record<string, any> | undefined, key: string): unkno
     return Array.isArray(value) ? value : [];
 };
 
+type BlogCanvasTreeStats = {
+    rootLayerCount: number;
+    totalLayerCount: number;
+    containerLayerCount: number;
+    maxDepth: number;
+};
+
+type BlogRevisionDiff = {
+    id: string;
+    changedFields: string[];
+    summary: string;
+    currentLayerCount: number;
+    snapshotLayerCount: number;
+    layerDelta: number;
+    currentRootLayerCount: number;
+    snapshotRootLayerCount: number;
+    rootLayerDelta: number;
+};
+
+const getBlogCanvasTreeStats = (elements: CanvasElement[]): BlogCanvasTreeStats => {
+    let totalLayerCount = 0;
+    let containerLayerCount = 0;
+    let maxDepth = 0;
+
+    const visit = (nodes: CanvasElement[], depth: number) => {
+        nodes.forEach((element) => {
+            totalLayerCount += 1;
+            maxDepth = Math.max(maxDepth, depth);
+
+            if (element.children?.length) {
+                containerLayerCount += 1;
+                visit(element.children, depth + 1);
+            }
+        });
+    };
+
+    visit(elements, elements.length > 0 ? 1 : 0);
+
+    return {
+        rootLayerCount: elements.length,
+        totalLayerCount,
+        containerLayerCount,
+        maxDepth,
+    };
+};
+
+const sortedIds = (values: string[]) => [...values].sort((a, b) => a.localeCompare(b));
+
+const sameIdSet = (left: string[], right: string[]) => {
+    const sortedLeft = sortedIds(left);
+    const sortedRight = sortedIds(right);
+    return sortedLeft.length === sortedRight.length && sortedLeft.every((value, index) => value === sortedRight[index]);
+};
+
+const blogRevisionDiff = (
+    revision: ContentRevision,
+    input: {
+        title: string;
+        slug: string;
+        status: ContentStatus;
+        excerpt: string;
+        seoTitle: string;
+        seoDescription: string;
+        featuredImageId: string | null;
+        selectedAuthorId: string;
+        selectedCategoryIds: string[];
+        selectedTagIds: string[];
+        canvasSize: CanvasSize;
+        canvasStats: BlogCanvasTreeStats;
+    },
+): BlogRevisionDiff => {
+    const changedFields: string[] = [];
+
+    if (revision.snapshotTitle !== input.title) {
+        changedFields.push('title');
+    }
+
+    if (revision.snapshotSlug !== input.slug) {
+        changedFields.push('route');
+    }
+
+    if (revision.snapshotStatus !== input.status) {
+        changedFields.push('status');
+    }
+
+    if ((revision.snapshotExcerpt || '') !== input.excerpt) {
+        changedFields.push('excerpt');
+    }
+
+    if (
+        (revision.snapshotMetaTitle || revision.snapshotTitle) !== (input.seoTitle || input.title) ||
+        (revision.snapshotMetaDescription || revision.snapshotExcerpt || '') !== (input.seoDescription || input.excerpt)
+    ) {
+        changedFields.push('SEO');
+    }
+
+    if ((revision.snapshotFeaturedImageId || '') !== (input.featuredImageId || '')) {
+        changedFields.push('featured media');
+    }
+
+    if (
+        (revision.snapshotAuthorId || '') !== input.selectedAuthorId ||
+        !sameIdSet(revision.snapshotCategoryIds, input.selectedCategoryIds) ||
+        !sameIdSet(revision.snapshotTagIds, input.selectedTagIds)
+    ) {
+        changedFields.push('taxonomy');
+    }
+
+    const layerDelta = input.canvasStats.totalLayerCount - revision.snapshotCanvas.totalLayerCount;
+    const rootLayerDelta = input.canvasStats.rootLayerCount - revision.snapshotCanvas.rootLayerCount;
+    const canvasSizeChanged = (
+        revision.snapshotCanvas.canvasWidth !== null &&
+        revision.snapshotCanvas.canvasHeight !== null &&
+        (revision.snapshotCanvas.canvasWidth !== input.canvasSize.width || revision.snapshotCanvas.canvasHeight !== input.canvasSize.height)
+    );
+
+    if (layerDelta !== 0 || rootLayerDelta !== 0 || canvasSizeChanged) {
+        changedFields.push('canvas');
+    }
+
+    return {
+        id: revision.id,
+        changedFields,
+        summary: changedFields.length
+            ? `${changedFields.length} changed area${changedFields.length === 1 ? '' : 's'}: ${changedFields.join(', ')}.`
+            : 'Matches the current saved post summary.',
+        currentLayerCount: input.canvasStats.totalLayerCount,
+        snapshotLayerCount: revision.snapshotCanvas.totalLayerCount,
+        layerDelta,
+        currentRootLayerCount: input.canvasStats.rootLayerCount,
+        snapshotRootLayerCount: revision.snapshotCanvas.rootLayerCount,
+        rootLayerDelta,
+    };
+};
+
 function EditBlogPostPage() {
     const navigate = useNavigate();
     const { postId } = Route.useParams();
@@ -520,6 +655,38 @@ function EditBlogPostPage() {
 
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(savedCanvasSize);
+    const canvasTreeStats = useMemo(() => getBlogCanvasTreeStats(canvasElements), [canvasElements]);
+    const revisionDiffById = useMemo(() => new Map(revisions.map((revision) => [
+        revision.id,
+        blogRevisionDiff(revision, {
+            title,
+            slug,
+            status,
+            excerpt,
+            seoTitle,
+            seoDescription,
+            featuredImageId,
+            selectedAuthorId,
+            selectedCategoryIds,
+            selectedTagIds,
+            canvasSize,
+            canvasStats: canvasTreeStats,
+        }),
+    ])), [
+        canvasSize,
+        canvasTreeStats,
+        excerpt,
+        featuredImageId,
+        revisions,
+        selectedAuthorId,
+        selectedCategoryIds,
+        selectedTagIds,
+        seoDescription,
+        seoTitle,
+        slug,
+        status,
+        title,
+    ]);
     const interactiveReadinessIssues = useMemo(
       () => collectInteractiveReadinessIssues(canvasElements),
       [canvasElements],
@@ -1433,6 +1600,18 @@ function EditBlogPostPage() {
             note: revision.note,
             createdAt: revision.createdAt,
             status: revision.snapshotStatus,
+            snapshot: {
+                title: revision.snapshotTitle,
+                slug: revision.snapshotSlug,
+                updatedAt: revision.snapshotUpdatedAt,
+                excerpt: revision.snapshotExcerpt,
+                authorId: revision.snapshotAuthorId,
+                featuredImageId: revision.snapshotFeaturedImageId,
+                categoryIds: revision.snapshotCategoryIds,
+                tagIds: revision.snapshotTagIds,
+                canvas: revision.snapshotCanvas,
+            },
+            compareToCurrent: revisionDiffById.get(revision.id),
         })),
         preview: previewUrl
             ? {
@@ -2602,27 +2781,44 @@ function EditBlogPostPage() {
                                     />
                                 ) : (
                                     <div className="grid gap-2">
-                                        {revisions.slice(0, 6).map((revision) => (
-                                            <div key={revision.id} className="rounded-lg border border-border px-3 py-2">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="min-w-0">
-                                                        <div className="truncate text-sm font-medium">{revision.note || 'Revision snapshot'}</div>
-                                                        <div className="text-xs text-muted-foreground">
-                                                            {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                                        {revisions.slice(0, 6).map((revision) => {
+                                            const revisionDiff = revisionDiffById.get(revision.id);
+                                            const layerDelta = revisionDiff?.layerDelta || 0;
+
+                                            return (
+                                                <div key={revision.id} className="rounded-lg border border-border px-3 py-2">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <div className="truncate text-sm font-medium">{revision.note || 'Revision snapshot'}</div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
+                                                            onClick={() => setPendingRestoreRevision(revision)}
+                                                            className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
+                                                        >
+                                                            <RotateCcw className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+
+                                                    <div
+                                                        className="mt-2 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] leading-5 text-muted-foreground"
+                                                        data-testid={`blog-editor-revision-diff-${revision.id}`}
+                                                    >
+                                                        <div className="font-medium text-foreground">{revisionDiff?.summary}</div>
+                                                        <div>
+                                                            Snapshot: {revision.snapshotCanvas.totalLayerCount} layer{revision.snapshotCanvas.totalLayerCount === 1 ? '' : 's'}
+                                                            {' '}({revision.snapshotCanvas.rootLayerCount} root, depth {revision.snapshotCanvas.maxDepth || 0}).
+                                                            {' '}Current delta: {layerDelta === 0 ? 'no layer change' : `${layerDelta > 0 ? '+' : ''}${layerDelta} layer${Math.abs(layerDelta) === 1 ? '' : 's'}`}.
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
-                                                        onClick={() => setPendingRestoreRevision(revision)}
-                                                        className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                                        title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
-                                                    >
-                                                        <RotateCcw className="w-4 h-4" />
-                                                    </button>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </PanelContent>

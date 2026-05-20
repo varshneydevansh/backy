@@ -33,6 +33,7 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog editor must use the shared EmptyState component for sidebar empty states');
   assert(source.includes('Public comments for this post will appear here for quick review'), 'Blog editor comments empty state must explain how post comments populate');
   assert(source.includes('create a restorable revision snapshot'), 'Blog editor revision empty state must explain how revisions populate');
+  assert(source.includes('blogRevisionDiff') && source.includes('data-testid={`blog-editor-revision-diff-${revision.id}`}') && source.includes('compareToCurrent: revisionDiffById.get(revision.id)'), 'Blog editor revisions must expose current-vs-snapshot diff summaries in the UI and handoff manifest');
   assert(
     source.includes('getScheduledBlogEditorDateError') &&
       source.includes('Date.parse(scheduledAt)') &&
@@ -692,6 +693,11 @@ const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
 
 const main = async () => {
   assertBlogEditorFallbackIsReadOnly();
+  if (process.env.BACKY_BLOG_EDITOR_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'blog-editor-source' }));
+    return;
+  }
+
   await loginAdminApi();
   const slug = `blog-editor-smoke-${Date.now().toString(36)}`;
   const post = await assertBlogUpdateConflict(await createBlogPost(slug));

@@ -3363,6 +3363,11 @@ export interface ContentRevision {
   snapshotSlug: string;
   snapshotStatus: Page['status'] | BlogPost['status'];
   snapshotUpdatedAt: string | null;
+  snapshotExcerpt: string | null;
+  snapshotAuthorId: string | null;
+  snapshotFeaturedImageId: string | null;
+  snapshotCategoryIds: string[];
+  snapshotTagIds: string[];
   snapshotMetaTitle: string | null;
   snapshotMetaDescription: string | null;
   snapshotCanvas: ContentRevisionCanvasSummary;
@@ -4153,8 +4158,14 @@ const stringRecordValue = (record: Record<string, unknown>, key: string): string
   return typeof value === 'string' && value.trim() ? value : null;
 };
 
+const stringArrayRecordValue = (record: Record<string, unknown>, key: string): string[] => {
+  const value = record[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+};
+
 const toContentRevision = (revision: ApiRevision): ContentRevision => {
   const snapshot = revision.snapshot;
+  const snapshotRecord = snapshot as unknown as Record<string, unknown>;
   const snapshotMeta = isApiRecord(snapshot.meta) ? snapshot.meta : {};
   return {
     id: revision.id,
@@ -4166,6 +4177,11 @@ const toContentRevision = (revision: ApiRevision): ContentRevision => {
     snapshotSlug: typeof snapshot.slug === 'string' ? snapshot.slug : '',
     snapshotStatus: toContentStatus(snapshot.status, snapshot.status === 'published'),
     snapshotUpdatedAt: snapshot.updatedAt || snapshot.createdAt || null,
+    snapshotExcerpt: stringRecordValue(snapshotRecord, 'excerpt'),
+    snapshotAuthorId: stringRecordValue(snapshotRecord, 'authorId'),
+    snapshotFeaturedImageId: stringRecordValue(snapshotRecord, 'featuredImageId'),
+    snapshotCategoryIds: stringArrayRecordValue(snapshotRecord, 'categoryIds'),
+    snapshotTagIds: stringArrayRecordValue(snapshotRecord, 'tagIds'),
     snapshotMetaTitle: stringRecordValue(snapshotMeta, 'title'),
     snapshotMetaDescription: stringRecordValue(snapshotMeta, 'description'),
     snapshotCanvas: getRevisionCanvasSummary(snapshot.content),
