@@ -70,6 +70,16 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('Provider ROI appears after CDN/storage analytics include requests, conversions, or attributed value.'), 'Media provider ROI empty state must explain conversion/value analytics');
   assert(source.includes('title="No media quota data yet"'), 'Media runtime quota panel must keep the shared empty-state title visible');
   assert(source.includes('Quota data will appear after the media API responds with workspace storage usage and limits.'), 'Media runtime quota empty state must explain API-backed usage data');
+  assert(
+    source.includes('const loadMediaPermissions = useCallback(() => {') &&
+      source.includes('data-testid="media-permission-state"') &&
+      source.includes('Media permissions could not be verified') &&
+      source.includes('aria-label="Retry loading media permissions"') &&
+      source.includes('Retry permissions') &&
+      source.includes('to="/users"') &&
+      source.includes('Review users'),
+    'Media workspace permission alert must expose retryable permission recovery and user-access handoff',
+  );
   assert(source.includes('title="No runtime storage data yet"'), 'Media runtime storage panel must keep the shared empty-state title visible');
   assert(source.includes('Runtime storage data appears when admin settings report the current upload provider, bucket, path, and public URL.'), 'Media runtime storage empty state must explain provider metadata');
   assert(source.includes('title="No Backy delivery requests"'), 'Media asset delivery empty state must keep the shared title visible');

@@ -139,7 +139,7 @@ It explicitly excludes:
 9. `/blog`: status controls, tag/category UI, list filters, retryable permission recovery, and filtered full-result bulk selection
 10. `/blog.new`: post metadata, retryable permission recovery, and publish path
 11. `/blog.$postId`: revisioning, retryable permission recovery, and publication state
-12. `/media`: upload -> validation -> metadata edit -> storage urls
+12. `/media`: upload, validation, metadata edit, retryable permission recovery, and storage URLs
 13. `/collections`: backend-backed dynamic CMS schema and record workspace with collection templates, relationship fields, public/admin API handoff, dynamic list/detail template wiring, record import/export, filtered full-result bulk record selection, and smoke coverage through `test:collections`; current Collections scope is Ready, with broader Supabase/Postgres certification tracked globally
 14. `/users`: backend-backed access command center with users API handoff, search/role/status/access-review filters, inline role/status updates, selected actionable-user bulk status/delete summaries, invite/password-reset/MFA/session flows, permission summaries, registration handoff links, team-scoped access checks, audit activity, billing-limit enforcement, and smoke coverage through `test:users`; current user-management scope is Ready, with only broader production auth-provider certification tracked globally
 15. `/users.new`: invite command center with readiness checks, role/status selection, access preview, API payload preview, backend user creation through `POST /api/admin/users`, generated invite delivery metadata, invite acceptance flow, billing seat-limit enforcement, and browser/API coverage through `test:users`; current invite creation scope is Ready

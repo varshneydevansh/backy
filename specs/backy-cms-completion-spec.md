@@ -152,7 +152,7 @@ Legend:
 - ⚠️ Remaining editor work should be treated as regression hardening and new-control coverage, not as a currently counted Partial gate.
 
 #### `/media` (`media.tsx`)
-- ✅ Central media browser, upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, and binding-aware previews are implemented.
+- ✅ Central media browser, upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, retryable permission recovery, and binding-aware previews are implemented.
 - ⚠️ Provider-account automation, secret rotation execution, and cross-channel attribution beyond provider feeds remain external/provider hardening work.
 
 #### `/users` (`users.tsx`)
@@ -442,7 +442,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Keep right-pane rich-text selection, media/link sub-actions, and nested block confidence covered whenever related controls are changed.
 
 ### 9.2 Media/asset UX gaps
-- Current media coverage includes centralized upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, and binding-aware previews.
+- Current media coverage includes centralized upload/listing, folders, metadata, replacement/version flows, safety scanning, signed/private delivery, quotas, provider diagnostics, retryable permission recovery, and binding-aware previews.
 - The Media workspace now exposes copyable public list, filtered public list, font manifest, file delivery, transform, upload, folder, and provider analytics URLs in its frontend handoff manifest so custom frontends can mirror the current library view without reverse-engineering admin filters.
 - Remaining media work is provider-account automation, secret rotation execution, and cross-channel attribution beyond provider feeds.
 - Accessibility and discoverability:
@@ -455,6 +455,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/sites` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and permission retry actions.
   - `/pages` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
+  - `/media` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/collections` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, permission-contract retry actions, and filtered full-result record bulk selection summaries.
   - `/forms` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
   - `/products` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.

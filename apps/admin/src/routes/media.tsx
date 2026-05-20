@@ -852,7 +852,7 @@ function MediaPage() {
     mediaPaginationRef.current = mediaPagination;
   }, [mediaPagination]);
 
-  useEffect(() => {
+  const loadMediaPermissions = useCallback(() => {
     let cancelled = false;
 
     if (!currentAdmin?.id) {
@@ -890,6 +890,8 @@ function MediaPage() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadMediaPermissions(), [loadMediaPermissions]);
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -3418,8 +3420,35 @@ function MediaPage() {
     >
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="media-library-command-center">
         {permissionError && (
-          <Notice tone="warning" className="mb-4">
-            {permissionError}
+          <Notice
+            tone="warning"
+            title="Media permissions could not be verified"
+            className="mb-4"
+            role="alert"
+            data-testid="media-permission-state"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>{permissionError}</span>
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={loadMediaPermissions}
+                  disabled={isPermissionsLoading}
+                  aria-label="Retry loading media permissions"
+                  iconStart={<RefreshCw className={cn('size-3.5', isPermissionsLoading && 'animate-spin')} />}
+                >
+                  Retry permissions
+                </Button>
+                <Link
+                  to="/users"
+                  className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring"
+                >
+                  Review users
+                </Link>
+              </div>
+            </div>
           </Notice>
         )}
         {isPermissionMatrixPending && (
