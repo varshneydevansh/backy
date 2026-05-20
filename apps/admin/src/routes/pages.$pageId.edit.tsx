@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
+import { compareCanvasRevisionElements, type CanvasRevisionElementDiff } from '@/lib/revisionCanvasDiff';
 import {
   createCanvasElement,
   normalizeSavedCanvasContent,
@@ -129,6 +130,7 @@ type PageRevisionDiff = {
   currentRootLayerCount: number;
   snapshotRootLayerCount: number;
   rootLayerDelta: number;
+  elementDiff: CanvasRevisionElementDiff;
 };
 
 type PageRevisionDiffDetail = {
@@ -237,11 +239,13 @@ const pageRevisionDiff = (
   revision: ContentRevision,
   stats: CanvasTreeStats,
   canvasSize: CanvasSize,
+  currentElements: CanvasElement[],
 ): PageRevisionDiff => {
   const changedFields: string[] = [];
   const details: PageRevisionDiffDetail[] = [];
   const currentMetaTitle = metaStringValue(page.meta, 'title') || page.title;
   const currentMetaDescription = metaStringValue(page.meta, 'description');
+  const elementDiff = compareCanvasRevisionElements(revision.snapshotElements, currentElements);
   const addChange = (field: string, label: string, snapshot: string, current: string) => {
     changedFields.push(field);
     details.push({
@@ -293,6 +297,15 @@ const pageRevisionDiff = (
     );
   }
 
+  if (elementDiff.totalChanged > 0) {
+    addChange(
+      'canvas elements',
+      'Elements',
+      `${elementDiff.snapshotElementCount} elements`,
+      `${elementDiff.currentElementCount} elements; ${elementDiff.summary}`,
+    );
+  }
+
   return {
     id: revision.id,
     changedFields,
@@ -306,6 +319,7 @@ const pageRevisionDiff = (
     currentRootLayerCount: stats.rootLayerCount,
     snapshotRootLayerCount: revision.snapshotCanvas.rootLayerCount,
     rootLayerDelta,
+    elementDiff,
   };
 };
 
@@ -630,9 +644,9 @@ function PageEditorRoute() {
   const revisionDiffById = useMemo(() => page
     ? new Map(revisions.map((revision) => [
         revision.id,
-        pageRevisionDiff(page, revision, canvasTreeStats, initialCanvasSize),
+        pageRevisionDiff(page, revision, canvasTreeStats, initialCanvasSize, editorElements),
       ]))
-    : new Map<string, PageRevisionDiff>(), [canvasTreeStats, initialCanvasSize, page, revisions]);
+    : new Map<string, PageRevisionDiff>(), [canvasTreeStats, editorElements, initialCanvasSize, page, revisions]);
   const interactiveReadinessIssues = useMemo(
     () => collectInteractiveReadinessIssues(editorElements),
     [editorElements],
@@ -1911,6 +1925,39 @@ function PageEditorRoute() {
                                   </span>
                                 </div>
                               ))}
+                            </div>
+                          ) : null}
+                          {revisionDiff?.elementDiff.totalChanged ? (
+                            <div className="mt-2 border-t border-border/60 pt-2" data-testid={`page-editor-revision-element-diff-${revision.id}`}>
+                              <div className="font-medium text-foreground">Canvas elements: {revisionDiff.elementDiff.summary}</div>
+                              <div className="mt-1 grid gap-1">
+                                {revisionDiff.elementDiff.changes.map((change) => (
+                                  <div key={`${change.kind}-${change.id}`} className="grid gap-1 border-t border-border/60 pt-1 first:border-t-0">
+                                    <div className="flex flex-wrap items-center gap-1 text-foreground">
+                                      <span className="font-semibold capitalize">{change.kind}</span>
+                                      <span className="font-mono">{change.type}</span>
+                                      <span className="min-w-0 [overflow-wrap:anywhere]">{change.label}</span>
+                                    </div>
+                                    <div className="grid gap-1 pl-2">
+                                      {change.properties.slice(0, 3).map((property) => (
+                                        <div key={property.property} className="min-w-0 [overflow-wrap:anywhere]">
+                                          <span className="font-mono text-foreground">{property.property}</span>
+                                          <span className="text-muted-foreground"> Snapshot </span>
+                                          <span>{property.snapshot}</span>
+                                          <span className="text-muted-foreground">{' -> Current '}</span>
+                                          <span>{property.current}</span>
+                                        </div>
+                                      ))}
+                                      {change.propertyChangeCount > 3 ? (
+                                        <div>{change.propertyChangeCount - 3} more changed propert{change.propertyChangeCount - 3 === 1 ? 'y' : 'ies'} summarized by the diff totals.</div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))}
+                                {revisionDiff.elementDiff.totalChanged > revisionDiff.elementDiff.changes.length ? (
+                                  <div>{revisionDiff.elementDiff.totalChanged - revisionDiff.elementDiff.changes.length} more changed element{revisionDiff.elementDiff.totalChanged - revisionDiff.elementDiff.changes.length === 1 ? '' : 's'} summarized by the diff totals.</div>
+                                ) : null}
+                              </div>
                             </div>
                           ) : null}
                           <div>

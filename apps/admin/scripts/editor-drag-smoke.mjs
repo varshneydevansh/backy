@@ -206,6 +206,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('pageRevisionDiff') && source.includes('data-testid={`page-editor-revision-diff-${revision.id}`}') && source.includes('compareToCurrent: revisionDiffById.get(revision.id)'), 'Page editor revisions must expose current-vs-snapshot diff summaries in the UI and handoff manifest');
   assert(source.includes("schema: 'backy.page-revision-compare.v1'") && source.includes('copyPageRevisionCompare') && source.includes('data-testid={`page-editor-copy-revision-compare-${revision.id}`}'), 'Page editor revisions must expose copyable revision comparison briefs');
   assert(source.includes('details: PageRevisionDiffDetail[]') && source.includes('data-testid={`page-editor-revision-diff-details-${revision.id}`}') && source.includes('Snapshot </span>'), 'Page editor revision cards must show field-level diff details, not only summary text');
+  assert(source.includes('compareCanvasRevisionElements') && source.includes('elementDiff: CanvasRevisionElementDiff') && source.includes('data-testid={`page-editor-revision-element-diff-${revision.id}`}'), 'Page editor revision cards must show canvas element/property diffs');
 };
 
 const assertCanvasEditorShortcutSource = () => {

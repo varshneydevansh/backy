@@ -52,6 +52,7 @@ import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
+import { compareCanvasRevisionElements, type CanvasRevisionElementDiff } from '@/lib/revisionCanvasDiff';
 import {
   createCanvasElement,
   normalizeSavedCanvasContent,
@@ -202,6 +203,7 @@ type BlogRevisionDiff = {
     currentRootLayerCount: number;
     snapshotRootLayerCount: number;
     rootLayerDelta: number;
+    elementDiff: CanvasRevisionElementDiff;
 };
 
 type BlogRevisionDiffDetail = {
@@ -267,10 +269,12 @@ const blogRevisionDiff = (
         selectedTagIds: string[];
         canvasSize: CanvasSize;
         canvasStats: BlogCanvasTreeStats;
+        canvasElements: CanvasElement[];
     },
 ): BlogRevisionDiff => {
     const changedFields: string[] = [];
     const details: BlogRevisionDiffDetail[] = [];
+    const elementDiff = compareCanvasRevisionElements(revision.snapshotElements, input.canvasElements);
     const addChange = (field: string, label: string, snapshot: string, current: string) => {
         changedFields.push(field);
         details.push({
@@ -343,6 +347,15 @@ const blogRevisionDiff = (
         );
     }
 
+    if (elementDiff.totalChanged > 0) {
+        addChange(
+            'canvas elements',
+            'Elements',
+            `${elementDiff.snapshotElementCount} elements`,
+            `${elementDiff.currentElementCount} elements; ${elementDiff.summary}`,
+        );
+    }
+
     return {
         id: revision.id,
         changedFields,
@@ -356,6 +369,7 @@ const blogRevisionDiff = (
         currentRootLayerCount: input.canvasStats.rootLayerCount,
         snapshotRootLayerCount: revision.snapshotCanvas.rootLayerCount,
         rootLayerDelta,
+        elementDiff,
     };
 };
 
@@ -711,8 +725,10 @@ function EditBlogPostPage() {
             selectedTagIds,
             canvasSize,
             canvasStats: canvasTreeStats,
+            canvasElements,
         }),
     ])), [
+        canvasElements,
         canvasSize,
         canvasTreeStats,
         excerpt,
@@ -2944,6 +2960,39 @@ function EditBlogPostPage() {
                                                                         </span>
                                                                     </div>
                                                                 ))}
+                                                            </div>
+                                                        ) : null}
+                                                        {revisionDiff?.elementDiff.totalChanged ? (
+                                                            <div className="mt-2 border-t border-border/60 pt-2" data-testid={`blog-editor-revision-element-diff-${revision.id}`}>
+                                                                <div className="font-medium text-foreground">Canvas elements: {revisionDiff.elementDiff.summary}</div>
+                                                                <div className="mt-1 grid gap-1">
+                                                                    {revisionDiff.elementDiff.changes.map((change) => (
+                                                                        <div key={`${change.kind}-${change.id}`} className="grid gap-1 border-t border-border/60 pt-1 first:border-t-0">
+                                                                            <div className="flex flex-wrap items-center gap-1 text-foreground">
+                                                                                <span className="font-semibold capitalize">{change.kind}</span>
+                                                                                <span className="font-mono">{change.type}</span>
+                                                                                <span className="min-w-0 [overflow-wrap:anywhere]">{change.label}</span>
+                                                                            </div>
+                                                                            <div className="grid gap-1 pl-2">
+                                                                                {change.properties.slice(0, 3).map((property) => (
+                                                                                    <div key={property.property} className="min-w-0 [overflow-wrap:anywhere]">
+                                                                                        <span className="font-mono text-foreground">{property.property}</span>
+                                                                                        <span className="text-muted-foreground"> Snapshot </span>
+                                                                                        <span>{property.snapshot}</span>
+                                                                                        <span className="text-muted-foreground">{' -> Current '}</span>
+                                                                                        <span>{property.current}</span>
+                                                                                    </div>
+                                                                                ))}
+                                                                                {change.propertyChangeCount > 3 ? (
+                                                                                    <div>{change.propertyChangeCount - 3} more changed propert{change.propertyChangeCount - 3 === 1 ? 'y' : 'ies'} summarized by the diff totals.</div>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    {revisionDiff.elementDiff.totalChanged > revisionDiff.elementDiff.changes.length ? (
+                                                                        <div>{revisionDiff.elementDiff.totalChanged - revisionDiff.elementDiff.changes.length} more changed element{revisionDiff.elementDiff.totalChanged - revisionDiff.elementDiff.changes.length === 1 ? '' : 's'} summarized by the diff totals.</div>
+                                                                    ) : null}
+                                                                </div>
                                                             </div>
                                                         ) : null}
                                                         <div>

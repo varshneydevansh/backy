@@ -3371,6 +3371,7 @@ export interface ContentRevision {
   snapshotMetaTitle: string | null;
   snapshotMetaDescription: string | null;
   snapshotCanvas: ContentRevisionCanvasSummary;
+  snapshotElements: CanvasElement[];
 }
 
 export interface ContentRevisionCanvasSummary {
@@ -4085,6 +4086,62 @@ const numericRecordValue = (record: Record<string, unknown> | null | undefined, 
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 };
 
+const numericRecordValueOrDefault = (record: Record<string, unknown>, key: string, fallback = 0): number => (
+  numericRecordValue(record, key) ?? fallback
+);
+
+const optionalNumericRecordValue = (record: Record<string, unknown>, key: string): number | undefined => {
+  const value = numericRecordValue(record, key);
+  return value === null ? undefined : value;
+};
+
+const optionalBooleanRecordValue = (record: Record<string, unknown>, key: string): boolean | undefined => (
+  typeof record[key] === 'boolean' ? record[key] : undefined
+);
+
+const normalizeRevisionCanvasElement = (value: unknown): CanvasElement | null => {
+  if (!isApiRecord(value) || typeof value.id !== 'string' || typeof value.type !== 'string') {
+    return null;
+  }
+
+  const children = Array.isArray(value.children)
+    ? value.children
+        .map(normalizeRevisionCanvasElement)
+        .filter((child): child is CanvasElement => Boolean(child))
+    : undefined;
+
+  const element: CanvasElement = {
+    id: value.id,
+    type: value.type as CanvasElement['type'],
+    name: typeof value.name === 'string' ? value.name : undefined,
+    x: numericRecordValueOrDefault(value, 'x'),
+    y: numericRecordValueOrDefault(value, 'y'),
+    width: numericRecordValueOrDefault(value, 'width'),
+    height: numericRecordValueOrDefault(value, 'height'),
+    rotation: optionalNumericRecordValue(value, 'rotation'),
+    zIndex: numericRecordValueOrDefault(value, 'zIndex'),
+    visible: optionalBooleanRecordValue(value, 'visible'),
+    locked: optionalBooleanRecordValue(value, 'locked'),
+    parentId: typeof value.parentId === 'string' ? value.parentId : undefined,
+    props: isApiRecord(value.props) ? value.props as CanvasElement['props'] : {},
+    styles: isApiRecord(value.styles) ? value.styles as CanvasElement['styles'] : undefined,
+    responsive: isApiRecord(value.responsive) ? value.responsive as CanvasElement['responsive'] : undefined,
+    animation: isApiRecord(value.animation) ? value.animation as unknown as CanvasElement['animation'] : undefined,
+    dataBindings: Array.isArray(value.dataBindings) ? value.dataBindings.filter(isApiRecord) : undefined,
+    bindingSlots: Array.isArray(value.bindingSlots) ? value.bindingSlots as CanvasElement['bindingSlots'] : undefined,
+    children,
+  };
+
+  return element;
+};
+
+const getRevisionCanvasElements = (content: unknown): CanvasElement[] => {
+  const payload = parseRevisionContentPayload(content);
+  return getRevisionContentElements(payload)
+    .map(normalizeRevisionCanvasElement)
+    .filter((element): element is CanvasElement => Boolean(element));
+};
+
 const getRevisionCanvasSize = (payload: unknown): { width: number | null; height: number | null } => {
   const contentDocument = getRevisionContentDocument(payload);
   const topLevelCanvasSize = isApiRecord(payload) && isApiRecord(payload.canvasSize) ? payload.canvasSize : null;
@@ -4185,6 +4242,7 @@ const toContentRevision = (revision: ApiRevision): ContentRevision => {
     snapshotMetaTitle: stringRecordValue(snapshotMeta, 'title'),
     snapshotMetaDescription: stringRecordValue(snapshotMeta, 'description'),
     snapshotCanvas: getRevisionCanvasSummary(snapshot.content),
+    snapshotElements: getRevisionCanvasElements(snapshot.content),
   };
 };
 
