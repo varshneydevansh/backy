@@ -57,6 +57,7 @@ import { compareCanvasRevisionElements, type CanvasRevisionElementDiff } from '@
 import {
     getContentRevisionActionLabel,
     getContentRevisionActorLabel,
+    getContentRevisionGraphNodeLabel,
     getContentRevisionSnapshotUpdatedLabel,
 } from '@/lib/revisionMetadata';
 import {
@@ -224,6 +225,14 @@ type BlogRevisionTimelineNode = {
     position: number;
     total: number;
     label: string;
+    summary: string;
+    createdAt: string;
+    createdBy: string | null;
+    actor: string;
+    action: string;
+    status: ContentRevision['snapshotStatus'];
+    snapshotUpdatedAt: string | null;
+    snapshotUpdatedLabel: string;
     newerId: string | null;
     olderId: string | null;
     isLatest: boolean;
@@ -768,6 +777,14 @@ function EditBlogPostPage() {
         position: index + 1,
         total: revisions.length,
         label: `Revision ${index + 1} of ${revisions.length}`,
+        summary: getContentRevisionGraphNodeLabel(revision, index + 1, revisions.length),
+        createdAt: revision.createdAt,
+        createdBy: revision.createdBy,
+        actor: getContentRevisionActorLabel(revision),
+        action: getContentRevisionActionLabel(revision),
+        status: revision.snapshotStatus,
+        snapshotUpdatedAt: revision.snapshotUpdatedAt,
+        snapshotUpdatedLabel: getContentRevisionSnapshotUpdatedLabel(revision),
         newerId: revisions[index - 1]?.id || null,
         olderId: revisions[index + 1]?.id || null,
         isLatest: index === 0,
@@ -3002,6 +3019,10 @@ function EditBlogPostPage() {
                                                             key={node.id}
                                                             href={`#blog-editor-revision-${node.id}`}
                                                             className={nodeClassName}
+                                                            title={node.summary}
+                                                            aria-label={node.summary}
+                                                            data-action={node.action}
+                                                            data-actor={node.actor}
                                                             data-testid={`blog-editor-revision-graph-node-${node.id}`}
                                                         >
                                                             {node.position}
@@ -3013,12 +3034,27 @@ function EditBlogPostPage() {
                                                             className={nodeClassName}
                                                             onClick={() => expandRevisionTimelineTo(node.id)}
                                                             disabled={editorActionBusy}
+                                                            title={node.summary}
+                                                            aria-label={node.summary}
+                                                            data-action={node.action}
+                                                            data-actor={node.actor}
                                                             data-testid={`blog-editor-revision-graph-node-${node.id}`}
                                                         >
                                                             {node.position}
                                                         </button>
                                                     );
                                                 })}
+                                            </div>
+                                            <div className="mt-2 grid gap-1" data-testid="blog-editor-revision-graph-summary">
+                                                {blogRevisionTimeline.slice(0, 3).map((node) => (
+                                                    <div key={node.id} className="flex flex-wrap items-center gap-1">
+                                                        <span className="font-mono text-foreground">#{node.position}</span>
+                                                        <span>{node.action}</span>
+                                                        <span>by {node.actor}</span>
+                                                        <span className="rounded bg-background px-1.5 py-0.5">{node.status}</span>
+                                                        <span>updated {node.snapshotUpdatedLabel}</span>
+                                                    </div>
+                                                ))}
                                             </div>
                                             {hiddenRevisionCount > 0 ? (
                                                 <div className="mt-1">Showing latest {visibleRevisions.length}; {hiddenRevisionCount} older revision{hiddenRevisionCount === 1 ? '' : 's'} remain in the graph.</div>

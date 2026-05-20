@@ -30,3 +30,11 @@ export const getContentRevisionActionLabel = (revision: RevisionMetadataInput) =
 export const getContentRevisionSnapshotUpdatedLabel = (revision: RevisionMetadataInput) => (
   revision.snapshotUpdatedAt ? new Date(revision.snapshotUpdatedAt).toLocaleString() : 'Unknown snapshot update time'
 );
+
+export const getContentRevisionGraphNodeLabel = (
+  revision: RevisionMetadataInput,
+  position: number,
+  total: number,
+) => (
+  `Revision ${position} of ${total} - ${getContentRevisionActionLabel(revision)} by ${getContentRevisionActorLabel(revision)} (${revision.snapshotStatus})`
+);
