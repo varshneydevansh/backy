@@ -75,6 +75,9 @@ const cloneDefaultStyles = (value?: CSSProperties): CSSProperties | undefined =>
 const cloneDefaultResponsive = (value?: CanvasElement['responsive']): CanvasElement['responsive'] | undefined =>
   value ? JSON.parse(JSON.stringify(value)) as CanvasElement['responsive'] : undefined;
 
+const cloneDefaultBindingSlots = (value?: CanvasElement['bindingSlots']): CanvasElement['bindingSlots'] | undefined =>
+  value ? JSON.parse(JSON.stringify(value)) as CanvasElement['bindingSlots'] : undefined;
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
@@ -778,6 +781,18 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       tablet: { width: 340, height: 430 },
       mobile: { width: 335, height: 452 },
     },
+    defaultBindingSlots: [
+      {
+        id: 'post-card-record',
+        label: 'Blog post record',
+        sourceKind: 'blog',
+        fieldKey: 'record',
+        targetPath: 'children',
+        mode: 'json',
+        required: true,
+        description: 'Connect this card to a blog post or collection record before publishing.',
+      },
+    ],
     description: 'Reusable article card with media, taxonomy, excerpt, and read-more link',
     defaultChildren: [
       {
@@ -792,6 +807,24 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           objectFit: 'cover',
           borderRadius: 6,
         },
+        bindingSlots: [
+          {
+            id: 'post-card-featured-image',
+            label: 'Featured image',
+            sourceKind: 'blog',
+            fieldKey: 'featuredImage',
+            targetPath: 'props.src',
+            mode: 'image',
+          },
+          {
+            id: 'post-card-featured-image-alt',
+            label: 'Image alt text',
+            sourceKind: 'blog',
+            fieldKey: 'title',
+            targetPath: 'props.alt',
+            mode: 'text',
+          },
+        ],
         responsive: {
           tablet: { x: 16, y: 16, width: 308, height: 166 },
           mobile: { x: 16, y: 16, width: 303, height: 162 },
@@ -810,6 +843,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           color: '#2563eb',
           textTransform: 'uppercase',
         },
+        bindingSlots: [
+          {
+            id: 'post-card-meta',
+            label: 'Category and reading time',
+            sourceKind: 'blog',
+            fieldKey: 'category',
+            targetPath: 'props.content',
+            mode: 'text',
+          },
+        ],
         responsive: {
           tablet: { x: 18, y: 202, width: 296, height: 24 },
           mobile: { x: 18, y: 198, width: 292, height: 24 },
@@ -829,6 +872,17 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '800',
           color: '#111827',
         },
+        bindingSlots: [
+          {
+            id: 'post-card-title',
+            label: 'Post title',
+            sourceKind: 'blog',
+            fieldKey: 'title',
+            targetPath: 'props.content',
+            mode: 'text',
+            required: true,
+          },
+        ],
         responsive: {
           tablet: { x: 18, y: 236, width: 292, height: 68, props: { fontSize: 22 } },
           mobile: { x: 18, y: 232, width: 292, height: 76, props: { fontSize: 22, lineHeight: 1.18 } },
@@ -846,6 +900,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           lineHeight: 1.45,
           color: '#475569',
         },
+        bindingSlots: [
+          {
+            id: 'post-card-excerpt',
+            label: 'Post excerpt',
+            sourceKind: 'blog',
+            fieldKey: 'excerpt',
+            targetPath: 'props.content',
+            mode: 'text',
+          },
+        ],
         responsive: {
           tablet: { x: 18, y: 316, width: 292, height: 54 },
           mobile: { x: 18, y: 320, width: 292, height: 62 },
@@ -865,6 +929,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '700',
           underline: false,
         },
+        bindingSlots: [
+          {
+            id: 'post-card-url',
+            label: 'Post URL',
+            sourceKind: 'blog',
+            fieldKey: 'slug',
+            targetPath: 'props.href',
+            mode: 'url',
+          },
+        ],
         responsive: {
           tablet: { x: 18, y: 386, width: 132, height: 24 },
           mobile: { x: 18, y: 404, width: 132, height: 24 },
@@ -889,6 +963,18 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       tablet: { width: 768, height: 690 },
       mobile: { width: 375, height: 870 },
     },
+    defaultBindingSlots: [
+      {
+        id: 'latest-posts-records',
+        label: 'Latest posts collection',
+        sourceKind: 'blog',
+        fieldKey: 'records',
+        targetPath: 'children.Latest post repeater.props.collectionId',
+        mode: 'json',
+        required: true,
+        description: 'Connect the repeater to the posts collection in the Data panel.',
+      },
+    ],
     description: 'Blog archive section with editable intro copy and a collection-ready repeater',
     defaultChildren: [
       {
@@ -949,6 +1035,41 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           borderRadius: 8,
           padding: 0,
         },
+        bindingSlots: [
+          {
+            id: 'latest-posts-repeater-records',
+            label: 'Posts collection',
+            sourceKind: 'blog',
+            fieldKey: 'records',
+            targetPath: 'props.collectionId',
+            mode: 'json',
+            required: true,
+          },
+          {
+            id: 'latest-posts-title-field',
+            label: 'Post title field',
+            sourceKind: 'blog',
+            fieldKey: 'title',
+            targetPath: 'props.titleField',
+            mode: 'text',
+          },
+          {
+            id: 'latest-posts-excerpt-field',
+            label: 'Post excerpt field',
+            sourceKind: 'blog',
+            fieldKey: 'excerpt',
+            targetPath: 'props.descriptionField',
+            mode: 'text',
+          },
+          {
+            id: 'latest-posts-image-field',
+            label: 'Featured image field',
+            sourceKind: 'blog',
+            fieldKey: 'featuredImage',
+            targetPath: 'props.imageField',
+            mode: 'image',
+          },
+        ],
         responsive: {
           tablet: { x: 40, y: 205, width: 688, height: 340, props: { columns: 2, limit: 4, gap: 16 } },
           mobile: { x: 20, y: 205, width: 335, height: 520, props: { columns: 1, limit: 3, gap: 14 } },
@@ -992,6 +1113,17 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       tablet: { width: 768, height: 500 },
       mobile: { width: 375, height: 665 },
     },
+    defaultBindingSlots: [
+      {
+        id: 'category-list-taxonomy',
+        label: 'Taxonomy collection',
+        sourceKind: 'taxonomy',
+        fieldKey: 'categories',
+        targetPath: 'children',
+        mode: 'json',
+        description: 'Bind category cards to blog, help, product, or resource taxonomy data.',
+      },
+    ],
     description: 'Editable taxonomy navigation block for blog, help, product, or resource hubs',
     defaultChildren: [
       {
@@ -1065,6 +1197,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontWeight: '800',
               color,
             },
+            bindingSlots: [
+              {
+                id: `category-card-${index + 1}-title`,
+                label: 'Category label',
+                sourceKind: 'taxonomy' as const,
+                fieldKey: 'name',
+                targetPath: 'props.content',
+                mode: 'text' as const,
+              },
+            ],
             responsive: {
               tablet: { width: 245, height: 30 },
               mobile: { x: 18, y: 18, width: 285, height: 30 },
@@ -1082,6 +1224,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               lineHeight: 1.4,
               color: '#334155',
             },
+            bindingSlots: [
+              {
+                id: `category-card-${index + 1}-description`,
+                label: 'Category description',
+                sourceKind: 'taxonomy' as const,
+                fieldKey: 'description',
+                targetPath: 'props.content',
+                mode: 'text' as const,
+              },
+            ],
             responsive: {
               tablet: { width: 245, height: 38 },
               mobile: { x: 18, y: 58, width: 285, height: 40 },
@@ -1108,6 +1260,17 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       tablet: { width: 768, height: 680 },
       mobile: { width: 375, height: 950 },
     },
+    defaultBindingSlots: [
+      {
+        id: 'related-content-records',
+        label: 'Related content records',
+        sourceKind: 'blog',
+        fieldKey: 'relatedPosts',
+        targetPath: 'children',
+        mode: 'json',
+        description: 'Bind related cards to related posts, docs, or resource records.',
+      },
+    ],
     description: 'Post-detail section for related articles, next reads, or product education',
     defaultChildren: [
       {
@@ -1177,6 +1340,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               color: '#2563eb',
               textTransform: 'uppercase',
             },
+            bindingSlots: [
+              {
+                id: `related-card-${index + 1}-eyebrow`,
+                label: 'Related content category',
+                sourceKind: 'blog' as const,
+                fieldKey: 'category',
+                targetPath: 'props.content',
+                mode: 'text' as const,
+              },
+            ],
             responsive: {
               tablet: { width: 220, height: 22 },
               mobile: { x: 18, y: 18, width: 280, height: 22 },
@@ -1196,6 +1369,17 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontWeight: '800',
               color: '#111827',
             },
+            bindingSlots: [
+              {
+                id: `related-card-${index + 1}-title`,
+                label: 'Related content title',
+                sourceKind: 'blog' as const,
+                fieldKey: 'title',
+                targetPath: 'props.content',
+                mode: 'text' as const,
+                required: true,
+              },
+            ],
             responsive: {
               tablet: { width: 250, height: 60, props: { fontSize: 20 } },
               mobile: { x: 18, y: 52, width: 292, height: 58, props: { fontSize: 20 } },
@@ -1213,6 +1397,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               lineHeight: 1.45,
               color: '#475569',
             },
+            bindingSlots: [
+              {
+                id: `related-card-${index + 1}-excerpt`,
+                label: 'Related content excerpt',
+                sourceKind: 'blog' as const,
+                fieldKey: 'excerpt',
+                targetPath: 'props.content',
+                mode: 'text' as const,
+              },
+            ],
             responsive: {
               tablet: { width: 250, height: 48 },
               mobile: { x: 18, y: 124, width: 292, height: 48 },
@@ -1232,6 +1426,16 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontWeight: '800',
               underline: false,
             },
+            bindingSlots: [
+              {
+                id: `related-card-${index + 1}-url`,
+                label: 'Related content URL',
+                sourceKind: 'blog' as const,
+                fieldKey: 'slug',
+                targetPath: 'props.href',
+                mode: 'url' as const,
+              },
+            ],
             responsive: {
               tablet: { x: 18, y: 184, width: 120, height: 22 },
               mobile: { x: 18, y: 178, width: 120, height: 22 },
@@ -1768,6 +1972,7 @@ const createPresetChild = (child: ComponentLibraryChild, zIndex: number): Canvas
   props: cloneDefaultProps(child.props || {}),
   styles: cloneDefaultStyles(child.styles),
   responsive: cloneDefaultResponsive(child.responsive),
+  bindingSlots: cloneDefaultBindingSlots(child.bindingSlots),
   children: child.children?.map((nestedChild, index) => createPresetChild(nestedChild, index + 1)),
 });
 
@@ -1806,6 +2011,8 @@ const cloneReusableElement = (
     zIndex: options.root ? options.zIndex : element.zIndex,
     props: nextProps,
     styles: cloneDefaultStyles(element.styles),
+    responsive: cloneDefaultResponsive(element.responsive),
+    bindingSlots: cloneDefaultBindingSlots(element.bindingSlots),
     children: element.children?.map((child) => cloneReusableElement(child, {
       ...options,
       root: false,
@@ -1889,6 +2096,7 @@ export function createCanvasElementFromLibraryItem(
     props: cloneDefaultProps(item.defaultProps || {}),
     styles: cloneDefaultStyles(item.defaultStyles),
     responsive: cloneDefaultResponsive(item.defaultResponsive),
+    bindingSlots: cloneDefaultBindingSlots(item.defaultBindingSlots),
   });
 
   return {

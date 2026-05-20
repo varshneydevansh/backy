@@ -41,6 +41,36 @@ export interface ResponsiveElementOverride {
   styles?: CSSProperties;
 }
 
+export type ComponentBindingSourceKind =
+  | 'collection'
+  | 'blog'
+  | 'taxonomy'
+  | 'site'
+  | 'page'
+  | 'commerce'
+  | 'static';
+
+export type ComponentBindingMode =
+  | 'text'
+  | 'html'
+  | 'image'
+  | 'url'
+  | 'number'
+  | 'boolean'
+  | 'json';
+
+/** Metadata describing an intended CMS/data binding target for composed presets. */
+export interface ComponentBindingSlot {
+  id: string;
+  label: string;
+  sourceKind?: ComponentBindingSourceKind;
+  fieldKey?: string;
+  targetPath: string;
+  mode?: ComponentBindingMode;
+  required?: boolean;
+  description?: string;
+}
+
 /** Supported element types in the canvas */
 export type ElementType =
   | 'text'
@@ -119,6 +149,9 @@ export interface CanvasElement {
 
   // Optional public render bindings for collection-backed content.
   dataBindings?: Record<string, unknown>[];
+
+  // Optional editor metadata for wiring preset fields to real data bindings.
+  bindingSlots?: ComponentBindingSlot[];
 }
 
 // ============================================
@@ -137,6 +170,7 @@ export interface ComponentLibraryItem {
   defaultSize?: { width: number; height: number }; // Default size
   defaultStyles?: CSSProperties; // Default root styles
   defaultResponsive?: CanvasElement['responsive']; // Breakpoint defaults for composed presets
+  defaultBindingSlots?: ComponentBindingSlot[]; // CMS/data binding targets for composed presets
   defaultChildren?: ComponentLibraryChild[]; // Nested preset elements
   reusableContent?: ReusableSectionContent; // Saved section/template content from the backend
 }
@@ -166,6 +200,7 @@ export interface ComponentLibraryChild {
   props?: Record<string, unknown>;
   styles?: CSSProperties;
   responsive?: CanvasElement['responsive'];
+  bindingSlots?: ComponentBindingSlot[];
   children?: ComponentLibraryChild[];
 }
 

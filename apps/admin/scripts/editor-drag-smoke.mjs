@@ -342,11 +342,15 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(source.includes('Clear the search or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
   assert(source.includes("{ id: 'content', name: 'Content'") && source.includes("case 'BookmarkPlus':"), 'Editor component library must expose a content category and icon mapping for blog/content presets');
   assert(typeSource.includes("defaultResponsive?: CanvasElement['responsive']") && typeSource.includes("responsive?: CanvasElement['responsive']"), 'Editor component presets must type root and child responsive override defaults');
+  assert(typeSource.includes('export interface ComponentBindingSlot') && typeSource.includes('bindingSlots?: ComponentBindingSlot[]') && typeSource.includes('defaultBindingSlots?: ComponentBindingSlot[]'), 'Editor component presets must type binding-slot metadata for root and child preset fields');
   assert(catalogSource.includes('const cloneDefaultResponsive =') && catalogSource.includes('responsive: cloneDefaultResponsive(child.responsive)') && catalogSource.includes('responsive: cloneDefaultResponsive(item.defaultResponsive)'), 'Editor catalog must clone responsive defaults for composed presets');
+  assert(catalogSource.includes('const cloneDefaultBindingSlots =') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(child.bindingSlots)') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(item.defaultBindingSlots)'), 'Editor catalog must clone binding-slot metadata for composed presets');
   for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
     assert(catalogSource.includes(`id: '${contentPreset}'`), `Editor catalog must include ${contentPreset}`);
   }
   assert(catalogSource.includes("contentRole: 'latest-posts'") && catalogSource.includes("datasetId: 'dataset_latest_posts'"), 'Latest posts preset must carry content role and collection-ready repeater metadata');
+  assert(catalogSource.includes("id: 'post-card-title'") && catalogSource.includes("fieldKey: 'title'") && catalogSource.includes("targetPath: 'props.content'"), 'Blog post card preset must expose binding slots for title content');
+  assert(catalogSource.includes("id: 'latest-posts-records'") && catalogSource.includes("sourceKind: 'blog'") && catalogSource.includes("targetPath: 'children.Latest post repeater.props.collectionId'"), 'Latest posts preset must expose collection binding-slot metadata');
   assert(catalogSource.includes('defaultResponsive:') && catalogSource.includes('mobile: { width: 375, height: 870 }') && catalogSource.includes("mobile: { x: 20, y: 205, width: 335, height: 520, props: { columns: 1, limit: 3, gap: 14 } }"), 'Latest posts preset must include mobile responsive section and repeater geometry');
   assert(catalogSource.includes("contentRole: 'related-content'") && catalogSource.includes('mobile: { width: 375, height: 950 }'), 'Related content preset must include mobile responsive geometry');
 };
