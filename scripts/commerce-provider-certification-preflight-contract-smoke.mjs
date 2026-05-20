@@ -47,6 +47,8 @@ const sdkRuntimeSmoke = read('../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../packages/sdk-js/scripts/generated-contract-types.ts');
 const productsRoute = read('../apps/admin/src/routes/products.tsx');
 const ordersRoute = read('../apps/admin/src/routes/orders.tsx');
+const subscriptionLifecycleRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/route.ts');
+const subscriptionActionRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/[orderId]/action/route.ts');
 const commerceSmoke = read('../apps/admin/scripts/commerce-smoke.mjs');
 const ordersSmoke = read('../apps/admin/scripts/orders-smoke.mjs');
 const audit = read('../specs/page-completion-audit/backy-page-surface-audit.md');
@@ -498,6 +500,8 @@ includesAll(
     'provider: "magento"',
     'Magento/Adobe Commerce REST API products',
     'backy.product-subscription-execution-readiness.v1` provider readiness for Stripe, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, generic HTTP, and manual handoff actions',
+    'per-action `actionExecutionModes`',
+    'HTTP adapter as the provider-specific fallback for Adyen and Mollie lifecycle actions',
     'executes Razorpay subscription pause/resume/cancel with Basic auth',
     'BACKY_RAZORPAY_KEY_ID',
     'BACKY_RAZORPAY_KEY_SECRET',
@@ -616,6 +620,32 @@ includesAll(
 );
 
 includesAll(
+  subscriptionLifecycleRoute,
+  [
+    'razorpayCredentialsConfigured',
+    'subscriptionActionExecutionModes',
+    'actionExecutionModes',
+    'httpFallbackActions',
+    'nativeDirectActions',
+    "'razorpay-api'",
+    "provider: 'razorpay'",
+  ],
+  'Product subscription lifecycle provider execution matrix',
+);
+
+includesAll(
+  subscriptionActionRoute,
+  [
+    'executeRazorpaySubscriptionAction',
+    'httpFallbackActions',
+    'providerTarget',
+    '["adyen", "mollie"].includes(normalizedProvider)',
+    '"razorpay-api"',
+  ],
+  'Product subscription action provider execution matrix',
+);
+
+includesAll(
   productsRoute,
   [
     "schemaVersion: 'backy.commerce-provider-certification-handoff.v1'",
@@ -727,6 +757,8 @@ includesAll(
     'shippingProvider: "easypost"',
     'Shippo',
     'Razorpay subscription',
+    'Adyen HTTP fallback subscription action',
+    'Mollie HTTP fallback subscription action',
   ],
   'Commerce provider mock smoke coverage',
 );
@@ -784,6 +816,7 @@ includesAll(
     'explicitly selected payment, tax, shipping, discount, catalog, subscription, and webhook provider families',
     'repeatable mock coverage remains `npm run ci:commerce-provider-smoke`',
     'real provider-family execution and selected credential/input readiness',
+    'Adyen/Mollie pause/resume now execute through the configured generic HTTP lifecycle adapter',
   ],
   'Commerce provider certification audit evidence',
 );

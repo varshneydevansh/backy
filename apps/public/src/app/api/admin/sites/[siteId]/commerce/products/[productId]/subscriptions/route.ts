@@ -29,7 +29,10 @@ interface SourceRecord {
 const ORDERS_COLLECTION_SLUG = 'orders';
 const SCHEMA_VERSION = 'backy.product-subscription-lifecycle.v1';
 const ORDER_LIMIT = 1000;
-type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
+type SubscriptionLifecycleOperatorAction = 'pause' | 'resume' | 'cancel';
+type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
+
+const SUBSCRIPTION_OPERATOR_ACTIONS: SubscriptionLifecycleOperatorAction[] = ['pause', 'resume', 'cancel'];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -205,6 +208,11 @@ const adyenSubscriptionConfigured = () => (
 
 const mollieApiKeyConfigured = () => Boolean(envValue(['BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY']));
 
+const razorpayCredentialsConfigured = () => (
+  Boolean(envValue(['BACKY_RAZORPAY_KEY_ID', 'RAZORPAY_KEY_ID'])) &&
+  Boolean(envValue(['BACKY_RAZORPAY_KEY_SECRET', 'RAZORPAY_KEY_SECRET']))
+);
+
 const subscriptionActionProviderUrl = (): string => {
   const commerce = toRecord(toRecord(getAdminSettings().integrations).commerce);
   const configuredUrl = envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'])
@@ -261,7 +269,21 @@ const mollieTargetReady = (values: Record<string, unknown>, subscriptionReferenc
   return Boolean(customerId && subscriptionId);
 };
 
-const subscriptionActionExecutionMode = (provider: string, subscriptionReference: string, values: Record<string, unknown>): SubscriptionActionExecutionMode => {
+const httpSubscriptionActionFallbackEnabled = (provider: string): boolean => {
+  const normalizedProvider = provider.toLowerCase();
+  return (
+    Boolean(subscriptionActionProviderUrl()) &&
+    (['http', 'generic-http', 'custom-http'].includes(normalizedProvider) ||
+      ['adyen', 'mollie'].includes(normalizedProvider))
+  );
+};
+
+const subscriptionActionExecutionModeForAction = (
+  provider: string,
+  subscriptionReference: string,
+  values: Record<string, unknown>,
+  action: SubscriptionLifecycleOperatorAction,
+): SubscriptionActionExecutionMode => {
   const normalizedProvider = provider.toLowerCase();
   if (normalizedProvider === 'stripe' && stripeSecretConfigured() && subscriptionReference.startsWith('sub_')) {
     return 'stripe-api';
@@ -275,17 +297,49 @@ const subscriptionActionExecutionMode = (provider: string, subscriptionReference
   if (normalizedProvider === 'square' && squareAccessTokenConfigured() && subscriptionReference) {
     return 'square-api';
   }
-  if (normalizedProvider === 'adyen' && adyenSubscriptionConfigured() && adyenTargetReady(values, subscriptionReference)) {
+  if (normalizedProvider === 'adyen' && action === 'cancel' && adyenSubscriptionConfigured() && adyenTargetReady(values, subscriptionReference)) {
     return 'adyen-api';
   }
-  if (normalizedProvider === 'mollie' && mollieApiKeyConfigured() && mollieTargetReady(values, subscriptionReference)) {
+  if (normalizedProvider === 'mollie' && action === 'cancel' && mollieApiKeyConfigured() && mollieTargetReady(values, subscriptionReference)) {
     return 'mollie-api';
   }
-  if (['http', 'generic-http', 'custom-http'].includes(normalizedProvider) && subscriptionActionProviderUrl()) {
+  if (normalizedProvider === 'razorpay' && razorpayCredentialsConfigured() && subscriptionReference) {
+    return 'razorpay-api';
+  }
+  if (httpSubscriptionActionFallbackEnabled(normalizedProvider)) {
     return 'http-api';
   }
   return 'handoff';
 };
+
+const subscriptionActionExecutionModes = (
+  provider: string,
+  subscriptionReference: string,
+  values: Record<string, unknown>,
+): Record<SubscriptionLifecycleOperatorAction, SubscriptionActionExecutionMode> => ({
+  pause: subscriptionActionExecutionModeForAction(provider, subscriptionReference, values, 'pause'),
+  resume: subscriptionActionExecutionModeForAction(provider, subscriptionReference, values, 'resume'),
+  cancel: subscriptionActionExecutionModeForAction(provider, subscriptionReference, values, 'cancel'),
+});
+
+const preferredSubscriptionActionExecutionMode = (
+  modes: Record<SubscriptionLifecycleOperatorAction, SubscriptionActionExecutionMode>,
+): SubscriptionActionExecutionMode => (
+  modes.cancel !== 'handoff'
+    ? modes.cancel
+    : modes.pause !== 'handoff'
+      ? modes.pause
+      : modes.resume
+);
+
+const subscriptionHasExecutionMode = (
+  subscription: { actionExecutionModes: Record<SubscriptionLifecycleOperatorAction, SubscriptionActionExecutionMode> },
+  mode: SubscriptionActionExecutionMode,
+): boolean => SUBSCRIPTION_OPERATOR_ACTIONS.some((action) => subscription.actionExecutionModes[action] === mode);
+
+const subscriptionHasExecutableAction = (
+  subscription: { actionExecutionModes: Record<SubscriptionLifecycleOperatorAction, SubscriptionActionExecutionMode> },
+): boolean => SUBSCRIPTION_OPERATOR_ACTIONS.some((action) => subscription.actionExecutionModes[action] !== 'handoff');
 
 const timestampValue = (record: SourceRecord): number => {
   const timestamp = Date.parse(record.updatedAt || record.createdAt || '');
@@ -340,7 +394,8 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
 
       const subscriptionReference = textValue(values.paymentreference);
       const paymentProvider = inferSubscriptionProvider(values, subscriptionReference);
-      const actionExecutionMode = subscriptionActionExecutionMode(paymentProvider, subscriptionReference, values);
+      const actionExecutionModes = subscriptionActionExecutionModes(paymentProvider, subscriptionReference, values);
+      const actionExecutionMode = preferredSubscriptionActionExecutionMode(actionExecutionModes);
       const actionHistory = subscriptionActionHistory(values.subscriptionactionhistory, subscriptionReference);
 
       return {
@@ -355,6 +410,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         lifecycleStatus: status,
         subscriptionReference,
         actionExecutionMode,
+        actionExecutionModes,
         actionHistory,
         lastAction: actionHistory[0] || null,
         checkoutSessionId: textValue(values.checkoutsessionid),
@@ -374,17 +430,21 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
       };
     });
 
+  const httpActionAdapterConfigured = Boolean(subscriptionActionProviderUrl());
+  const adyenSupportedActions = httpActionAdapterConfigured ? SUBSCRIPTION_OPERATOR_ACTIONS : ['cancel'];
+  const mollieSupportedActions = httpActionAdapterConfigured ? SUBSCRIPTION_OPERATOR_ACTIONS : ['cancel'];
+
   const execution = {
     schemaVersion: 'backy.product-subscription-execution-readiness.v1',
     actionEndpoint: '/api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action',
-    supportedActions: ['pause', 'resume', 'cancel'],
+    supportedActions: SUBSCRIPTION_OPERATOR_ACTIONS,
     providers: [
       {
         provider: 'stripe',
         executionMode: 'stripe-api',
         configured: stripeSecretConfigured(),
         referencePattern: 'sub_*',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'stripe-api').length,
+        executableSubscriptions: subscriptions.filter((subscription) => subscriptionHasExecutionMode(subscription, 'stripe-api')).length,
         blocker: stripeSecretConfigured() ? '' : 'Configure BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY for direct Stripe subscription actions.',
       },
       {
@@ -392,7 +452,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         executionMode: 'paypal-api',
         configured: paypalAccessTokenConfigured(),
         referencePattern: 'I-*',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'paypal-api').length,
+        executableSubscriptions: subscriptions.filter((subscription) => subscriptionHasExecutionMode(subscription, 'paypal-api')).length,
         blocker: paypalAccessTokenConfigured() ? '' : 'Configure BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN for direct PayPal subscription actions.',
       },
       {
@@ -400,7 +460,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         executionMode: 'paddle-api',
         configured: paddleApiKeyConfigured(),
         referencePattern: 'sub_*',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'paddle-api').length,
+        executableSubscriptions: subscriptions.filter((subscription) => subscriptionHasExecutionMode(subscription, 'paddle-api')).length,
         blocker: paddleApiKeyConfigured() ? '' : 'Configure BACKY_PADDLE_API_KEY or PADDLE_API_KEY for direct Paddle subscription actions.',
       },
       {
@@ -408,45 +468,75 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         executionMode: 'square-api',
         configured: squareAccessTokenConfigured(),
         referencePattern: 'Square subscription id',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'square-api').length,
+        executableSubscriptions: subscriptions.filter((subscription) => subscriptionHasExecutionMode(subscription, 'square-api')).length,
         blocker: squareAccessTokenConfigured() ? '' : 'Configure BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN for direct Square subscription actions.',
       },
       {
         provider: 'adyen',
         executionMode: 'adyen-api',
-        configured: adyenSubscriptionConfigured(),
+        configured: adyenSubscriptionConfigured() || httpActionAdapterConfigured,
+        nativeConfigured: adyenSubscriptionConfigured(),
+        httpFallbackConfigured: httpActionAdapterConfigured,
+        nativeDirectActions: ['cancel'],
+        httpFallbackActions: httpActionAdapterConfigured ? SUBSCRIPTION_OPERATOR_ACTIONS : [],
+        supportedActions: adyenSupportedActions,
         referencePattern: 'shopperReference or shopperReference:recurringDetailReference',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'adyen-api').length,
-        blocker: adyenSubscriptionConfigured() ? 'Adyen direct subscription execution supports cancellation through Recurring disable; pause/resume remain handoff actions.' : 'Configure BACKY_ADYEN_API_KEY/ADYEN_API_KEY and BACKY_ADYEN_MERCHANT_ACCOUNT/ADYEN_MERCHANT_ACCOUNT for Adyen cancellation actions.',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.paymentProvider === 'adyen' && (subscriptionHasExecutionMode(subscription, 'adyen-api') || subscriptionHasExecutionMode(subscription, 'http-api'))).length,
+        blocker: adyenSubscriptionConfigured()
+          ? httpActionAdapterConfigured
+            ? 'Adyen cancellation uses Recurring disable; pause/resume use the configured HTTP subscription action adapter.'
+            : 'Adyen direct subscription execution supports cancellation through Recurring disable; configure an HTTP subscription action adapter for pause/resume.'
+          : httpActionAdapterConfigured
+            ? 'Adyen lifecycle actions use the configured HTTP subscription action adapter until native Adyen cancellation credentials are configured.'
+            : 'Configure BACKY_ADYEN_API_KEY/ADYEN_API_KEY and BACKY_ADYEN_MERCHANT_ACCOUNT/ADYEN_MERCHANT_ACCOUNT for Adyen cancellation actions, or configure BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL for custom lifecycle actions.',
       },
       {
         provider: 'mollie',
         executionMode: 'mollie-api',
-        configured: mollieApiKeyConfigured(),
+        configured: mollieApiKeyConfigured() || httpActionAdapterConfigured,
+        nativeConfigured: mollieApiKeyConfigured(),
+        httpFallbackConfigured: httpActionAdapterConfigured,
+        nativeDirectActions: ['cancel'],
+        httpFallbackActions: httpActionAdapterConfigured ? SUBSCRIPTION_OPERATOR_ACTIONS : [],
+        supportedActions: mollieSupportedActions,
         referencePattern: 'customerId:subscriptionId or customerId/subscriptionId',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'mollie-api').length,
-        blocker: mollieApiKeyConfigured() ? 'Mollie direct subscription execution supports cancellation; pause/resume remain handoff actions.' : 'Configure BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY for Mollie cancellation actions.',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.paymentProvider === 'mollie' && (subscriptionHasExecutionMode(subscription, 'mollie-api') || subscriptionHasExecutionMode(subscription, 'http-api'))).length,
+        blocker: mollieApiKeyConfigured()
+          ? httpActionAdapterConfigured
+            ? 'Mollie cancellation uses the Mollie API; pause/resume use the configured HTTP subscription action adapter.'
+            : 'Mollie direct subscription execution supports cancellation; configure an HTTP subscription action adapter for pause/resume.'
+          : httpActionAdapterConfigured
+            ? 'Mollie lifecycle actions use the configured HTTP subscription action adapter until native Mollie cancellation credentials are configured.'
+            : 'Configure BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY for Mollie cancellation actions, or configure BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL for custom lifecycle actions.',
+      },
+      {
+        provider: 'razorpay',
+        executionMode: 'razorpay-api',
+        configured: razorpayCredentialsConfigured(),
+        referencePattern: 'Razorpay subscription id',
+        executableSubscriptions: subscriptions.filter((subscription) => subscriptionHasExecutionMode(subscription, 'razorpay-api')).length,
+        blocker: razorpayCredentialsConfigured() ? '' : 'Configure BACKY_RAZORPAY_KEY_ID/RAZORPAY_KEY_ID and BACKY_RAZORPAY_KEY_SECRET/RAZORPAY_KEY_SECRET for direct Razorpay subscription actions.',
       },
       {
         provider: 'http',
         executionMode: 'http-api',
-        configured: Boolean(subscriptionActionProviderUrl()),
+        configured: httpActionAdapterConfigured,
         referencePattern: 'provider supplied',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'http-api').length,
-        blocker: subscriptionActionProviderUrl() ? '' : 'Configure BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL, COMMERCE_SUBSCRIPTION_ACTION_URL, or Settings commerce subscriptionActionProviderUrl.',
+        executableSubscriptions: subscriptions.filter((subscription) => subscriptionHasExecutionMode(subscription, 'http-api')).length,
+        blocker: httpActionAdapterConfigured ? '' : 'Configure BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL, COMMERCE_SUBSCRIPTION_ACTION_URL, or Settings commerce subscriptionActionProviderUrl.',
       },
       {
         provider: 'manual',
         executionMode: 'handoff',
         configured: true,
         referencePattern: 'any',
-        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'handoff').length,
+        executableSubscriptions: subscriptions.filter((subscription) => !subscriptionHasExecutableAction(subscription)).length,
         blocker: '',
       },
     ],
     summary: {
-      executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode !== 'handoff').length,
-      handoffSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'handoff').length,
+      executableSubscriptions: subscriptions.filter((subscription) => subscriptionHasExecutableAction(subscription)).length,
+      handoffSubscriptions: subscriptions.filter((subscription) => !subscriptionHasExecutableAction(subscription)).length,
     },
   };
 

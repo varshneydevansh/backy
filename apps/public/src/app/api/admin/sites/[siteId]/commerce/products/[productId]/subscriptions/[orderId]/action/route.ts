@@ -512,9 +512,14 @@ const subscriptionActionProviderUrl = (): string => {
   }
 };
 
-const canExecuteHttpSubscriptionAction = (provider: string) =>
-  ["http", "generic-http", "custom-http"].includes(provider.toLowerCase()) &&
-  Boolean(subscriptionActionProviderUrl());
+const canExecuteHttpSubscriptionAction = (provider: string) => {
+  const normalizedProvider = provider.toLowerCase();
+  return (
+    Boolean(subscriptionActionProviderUrl()) &&
+    (["http", "generic-http", "custom-http"].includes(normalizedProvider) ||
+      ["adyen", "mollie"].includes(normalizedProvider))
+  );
+};
 
 const canExecuteAdyenSubscriptionAction = (
   provider: string,
@@ -1091,6 +1096,7 @@ const executeHttpSubscriptionAction = async (input: {
   subscriptionReference: string;
   reason: string;
   provider: string;
+  providerTarget?: Record<string, unknown>;
   product: ReturnType<typeof productRecordToCommerceProduct>;
   order: SourceRecord;
 }) => {
@@ -1108,6 +1114,7 @@ const executeHttpSubscriptionAction = async (input: {
       provider: input.provider,
       idempotencyKey: input.actionId,
       reason: input.reason,
+      providerTarget: input.providerTarget || null,
       product: {
         id: input.product.id,
         slug: input.product.slug,
@@ -1441,6 +1448,9 @@ const buildSubscriptionActionUpdate = async (
     subscriptionReference,
   );
   const shouldExecuteHttp = canExecuteHttpSubscriptionAction(provider);
+  const httpSubscriptionActionFallbackConfigured = Boolean(
+    subscriptionActionProviderUrl(),
+  );
   const executionMode: SubscriptionLifecycleAction["executionMode"] =
     shouldExecuteStripe
       ? "stripe-api"
@@ -1473,9 +1483,18 @@ const buildSubscriptionActionUpdate = async (
     idempotencyKey: actionId,
   };
   if (provider === "adyen") {
+    const supportedDirectActions = httpSubscriptionActionFallbackConfigured
+      ? ["pause", "resume", "cancel"]
+      : ["cancel"];
     providerPayload.adapter = {
-      supportedDirectActions: ["cancel"],
-      unsupportedAction: actionName === "cancel" ? "" : actionName,
+      nativeDirectActions: ["cancel"],
+      httpFallbackActions: httpSubscriptionActionFallbackConfigured
+        ? ["pause", "resume", "cancel"]
+        : [],
+      supportedDirectActions,
+      unsupportedAction: supportedDirectActions.includes(actionName)
+        ? ""
+        : actionName,
       shopperReference: adyenSubscriptionTarget(
         subscriptionReference,
         values,
@@ -1492,9 +1511,18 @@ const buildSubscriptionActionUpdate = async (
       values,
       body,
     );
+    const supportedDirectActions = httpSubscriptionActionFallbackConfigured
+      ? ["pause", "resume", "cancel"]
+      : ["cancel"];
     providerPayload.adapter = {
-      supportedDirectActions: ["cancel"],
-      unsupportedAction: actionName === "cancel" ? "" : actionName,
+      nativeDirectActions: ["cancel"],
+      httpFallbackActions: httpSubscriptionActionFallbackConfigured
+        ? ["pause", "resume", "cancel"]
+        : [],
+      supportedDirectActions,
+      unsupportedAction: supportedDirectActions.includes(actionName)
+        ? ""
+        : actionName,
       customerId: target.customerId,
       subscriptionId: target.subscriptionId,
     };
@@ -1699,6 +1727,12 @@ const buildSubscriptionActionUpdate = async (
       subscriptionReference,
       reason,
       provider,
+      providerTarget:
+        provider === "adyen"
+          ? adyenSubscriptionTarget(subscriptionReference, values, body)
+          : provider === "mollie"
+            ? mollieSubscriptionTarget(subscriptionReference, values, body)
+            : undefined,
       product,
       order: orderRecord,
     });

@@ -1084,7 +1084,9 @@ const assertProductsApiContractsSource = () => {
   assert(
     lifecycleSource.includes("publicContractJson") &&
       lifecycleSource.includes("lifecycleResponse") &&
-      lifecycleSource.includes("backy.product-subscription-lifecycle.v1"),
+      lifecycleSource.includes("backy.product-subscription-lifecycle.v1") &&
+      lifecycleSource.includes("actionExecutionModes") &&
+      lifecycleSource.includes("razorpayCredentialsConfigured"),
     "Product subscription lifecycle endpoint must emit Backy contract/cache headers",
   );
   assert(
@@ -1097,7 +1099,9 @@ const assertProductsApiContractsSource = () => {
     actionSource.includes('"razorpay-api"') &&
       actionSource.includes("executeRazorpaySubscriptionAction") &&
       actionSource.includes("BACKY_RAZORPAY_KEY_ID") &&
-      actionSource.includes("BACKY_RAZORPAY_KEY_SECRET"),
+      actionSource.includes("BACKY_RAZORPAY_KEY_SECRET") &&
+      actionSource.includes("httpFallbackActions") &&
+      actionSource.includes("providerTarget"),
     "Product subscription action endpoint must keep the Razorpay subscription adapter wired",
   );
 };
@@ -6117,6 +6121,12 @@ const assertStripeCheckoutExecution = async ({
       `Product subscription lifecycle did not expose Stripe execution readiness: ${JSON.stringify(stripeLifecycleEntry)}`,
     );
     assert(
+      stripeLifecycleEntry?.actionExecutionModes?.pause === "stripe-api" &&
+        stripeLifecycleEntry?.actionExecutionModes?.resume === "stripe-api" &&
+        stripeLifecycleEntry?.actionExecutionModes?.cancel === "stripe-api",
+      `Product subscription lifecycle did not expose per-action execution readiness: ${JSON.stringify(stripeLifecycleEntry)}`,
+    );
+    assert(
       lifecycle.execution?.schemaVersion ===
         "backy.product-subscription-execution-readiness.v1",
       `Product subscription execution readiness schema was unexpected: ${JSON.stringify(lifecycle?.execution)}`,
@@ -6173,7 +6183,8 @@ const assertStripeCheckoutExecution = async ({
           (provider) =>
             provider.provider === "adyen" &&
             provider.configured === true &&
-            provider.executionMode === "adyen-api",
+            provider.executionMode === "adyen-api" &&
+            Array.isArray(provider.nativeDirectActions),
         ),
         `Product subscription execution readiness omitted Adyen provider state: ${JSON.stringify(lifecycle?.execution)}`,
       );
@@ -6184,9 +6195,21 @@ const assertStripeCheckoutExecution = async ({
           (provider) =>
             provider.provider === "mollie" &&
             provider.configured === true &&
-            provider.executionMode === "mollie-api",
+            provider.executionMode === "mollie-api" &&
+            Array.isArray(provider.nativeDirectActions),
         ),
         `Product subscription execution readiness omitted Mollie provider state: ${JSON.stringify(lifecycle?.execution)}`,
+      );
+    }
+    if (razorpaySubscriptionExecutionEnabled()) {
+      assert(
+        lifecycle.execution?.providers?.some(
+          (provider) =>
+            provider.provider === "razorpay" &&
+            provider.configured === true &&
+            provider.executionMode === "razorpay-api",
+        ),
+        `Product subscription execution readiness omitted Razorpay provider state: ${JSON.stringify(lifecycle?.execution)}`,
       );
     }
     if (httpSubscriptionExecutionEnabled()) {
@@ -6626,6 +6649,90 @@ const assertStripeCheckoutExecution = async ({
     }
 
     if (httpSubscriptionExecutionEnabled()) {
+      const beforeAdyenHttpActionRequests = commerceProviderMock.requests.length;
+      const adyenHttpActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "pause",
+            provider: "adyen",
+            subscriptionReference: `shopper_${slug}:adyen_recurring_${slug}`,
+            reason: "Smoke Adyen subscription HTTP fallback pause action.",
+          }),
+        },
+      );
+      const adyenHttpSubscriptionAction =
+        adyenHttpActionPayload.data?.action || adyenHttpActionPayload.action;
+      assert(
+        adyenHttpSubscriptionAction?.status === "succeeded",
+        `Adyen HTTP fallback subscription action did not execute against mock: ${JSON.stringify(adyenHttpActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        adyenHttpSubscriptionAction.executionMode === "http-api",
+        `Adyen HTTP fallback subscription action did not use HTTP execution: ${JSON.stringify(adyenHttpSubscriptionAction)}`,
+      );
+      const adyenHttpActionRequest = commerceProviderMock.requests
+        .slice(beforeAdyenHttpActionRequests)
+        .find(
+          (request) =>
+            request.method === "POST" &&
+            request.url === "/subscription/action" &&
+            request.payload?.provider === "adyen",
+        );
+      assert(
+        adyenHttpActionRequest,
+        `HTTP provider mock did not receive Adyen fallback subscription action: ${JSON.stringify(commerceProviderMock.requests.slice(beforeAdyenHttpActionRequests))}`,
+      );
+      assert(
+        adyenHttpActionRequest.payload?.providerTarget?.shopperReference ===
+          `shopper_${slug}`,
+        `Adyen HTTP fallback did not include provider target: ${JSON.stringify(adyenHttpActionRequest.payload)}`,
+      );
+
+      const beforeMollieHttpActionRequests = commerceProviderMock.requests.length;
+      const mollieHttpActionPayload = await requestApi(
+        `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "resume",
+            provider: "mollie",
+            subscriptionReference: `cst_${slug}:sub_mollie_${slug}`,
+            reason: "Smoke Mollie subscription HTTP fallback resume action.",
+          }),
+        },
+      );
+      const mollieHttpSubscriptionAction =
+        mollieHttpActionPayload.data?.action || mollieHttpActionPayload.action;
+      assert(
+        mollieHttpSubscriptionAction?.status === "succeeded",
+        `Mollie HTTP fallback subscription action did not execute against mock: ${JSON.stringify(mollieHttpActionPayload).slice(0, 500)}`,
+      );
+      assert(
+        mollieHttpSubscriptionAction.executionMode === "http-api",
+        `Mollie HTTP fallback subscription action did not use HTTP execution: ${JSON.stringify(mollieHttpSubscriptionAction)}`,
+      );
+      const mollieHttpActionRequest = commerceProviderMock.requests
+        .slice(beforeMollieHttpActionRequests)
+        .find(
+          (request) =>
+            request.method === "POST" &&
+            request.url === "/subscription/action" &&
+            request.payload?.provider === "mollie",
+        );
+      assert(
+        mollieHttpActionRequest,
+        `HTTP provider mock did not receive Mollie fallback subscription action: ${JSON.stringify(commerceProviderMock.requests.slice(beforeMollieHttpActionRequests))}`,
+      );
+      assert(
+        mollieHttpActionRequest.payload?.providerTarget?.customerId ===
+          `cst_${slug}` &&
+          mollieHttpActionRequest.payload?.providerTarget?.subscriptionId ===
+            `sub_mollie_${slug}`,
+        `Mollie HTTP fallback did not include provider target: ${JSON.stringify(mollieHttpActionRequest.payload)}`,
+      );
+
       const beforeHttpSubscriptionRequests =
         commerceProviderMock.requests.length;
       const httpActionPayload = await requestApi(

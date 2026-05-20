@@ -1593,7 +1593,8 @@ export interface ProductSubscriptionLifecycle {
     fulfillmentStatus: string;
     lifecycleStatus: 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
     subscriptionReference: string;
-    actionExecutionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
+    actionExecutionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
+    actionExecutionModes?: Record<'pause' | 'resume' | 'cancel', 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff'>;
     actionHistory: Array<{
       id: string;
       schemaVersion: string;
@@ -1639,8 +1640,13 @@ export interface ProductSubscriptionLifecycle {
     supportedActions: Array<'pause' | 'resume' | 'cancel'>;
     providers: Array<{
       provider: 'stripe' | 'paypal' | 'http' | 'manual' | string;
-      executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
+      executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
       configured: boolean;
+      nativeConfigured?: boolean;
+      httpFallbackConfigured?: boolean;
+      nativeDirectActions?: Array<'pause' | 'resume' | 'cancel'>;
+      httpFallbackActions?: Array<'pause' | 'resume' | 'cancel'>;
+      supportedActions?: Array<'pause' | 'resume' | 'cancel'>;
       referencePattern: string;
       executableSubscriptions: number;
       blocker: string;
@@ -1664,7 +1670,7 @@ export interface ProductSubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'http-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;

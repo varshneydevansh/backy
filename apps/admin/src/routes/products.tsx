@@ -5960,6 +5960,11 @@ function ProductsRoute() {
                             <div className="font-medium text-foreground">{subscription.lifecycleStatus.replace(/_/g, ' ')}</div>
                             <div className="mt-0.5 text-muted-foreground">{formatMoney(subscription.productRevenue, subscription.currency)} · {subscription.productUnits} unit{subscription.productUnits === 1 ? '' : 's'}</div>
                             <div className="mt-0.5 text-muted-foreground">{subscription.paymentProvider || 'manual'} · {subscription.actionExecutionMode}</div>
+                            {subscription.actionExecutionModes ? (
+                              <div className="mt-0.5 max-w-72 break-words text-muted-foreground">
+                                pause {subscription.actionExecutionModes.pause} · resume {subscription.actionExecutionModes.resume} · cancel {subscription.actionExecutionModes.cancel}
+                              </div>
+                            ) : null}
                             {subscription.lastAction ? (
                               <div className="mt-0.5 text-muted-foreground">
                                 Last action {subscription.lastAction.action} {subscription.lastAction.status} via {subscription.lastAction.executionMode}
