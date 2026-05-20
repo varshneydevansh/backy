@@ -866,6 +866,10 @@ const assertProductsApiContractsSource = () => {
     ),
     "utf8",
   );
+  const adminContentApiSource = fs.readFileSync(
+    new URL("../src/lib/adminContentApi.ts", import.meta.url),
+    "utf8",
+  );
   assert(
     source.includes("import { EmptyState } from '@/components/ui/EmptyState';"),
     "Products route must use the shared EmptyState component",
@@ -1106,8 +1110,21 @@ const assertProductsApiContractsSource = () => {
   assert(
     providerSyncSource.includes("publicContractJson") &&
       providerSyncSource.includes("productSyncResponse") &&
-      providerSyncSource.includes("PROVIDER_SYNC_SCHEMA_VERSION"),
-    "Product provider-sync endpoint must emit Backy contract/cache headers",
+      providerSyncSource.includes("PROVIDER_SYNC_SCHEMA_VERSION") &&
+      providerSyncSource.includes("export async function GET") &&
+      providerSyncSource.includes("buildProductProviderCertification") &&
+      providerSyncSource.includes("source: \"admin-product-provider-sync-api\"") &&
+      providerSyncSource.includes("schemaVersion: \"backy.product-provider-certification-evidence.v1\"") &&
+      providerSyncSource.includes("PRODUCT_PROVIDER_CERTIFICATION_SCENARIOS") &&
+      providerSyncSource.includes("providerCertification,") &&
+      providerSyncSource.includes("Product provider certification evidence reports scenario names, counts, gates, and non-secret provider families only"),
+    "Product provider-sync endpoint must emit Backy contract/cache headers and provider certification evidence",
+  );
+  assert(
+    adminContentApiSource.includes("export interface ProductProviderCertificationHandoff") &&
+      adminContentApiSource.includes("providerCertification?: ProductProviderCertificationHandoff") &&
+      adminContentApiSource.includes("getCommerceProductProviderSync"),
+    "Admin content API must type and expose the product provider-sync certification handoff",
   );
   assert(
     providerSyncSource.includes('"etsy"') &&
@@ -4838,9 +4855,35 @@ const assertProductProviderSync = async ({
   );
   const sync = payload.data?.sync || payload.sync;
   const updated = payload.data?.product || payload.product;
+  const providerCertification = payload.data?.providerCertification || payload.providerCertification;
   assert(
     sync?.provider === "stripe",
     `Product provider sync did not return Stripe metadata: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
+  assert(
+    providerCertification?.schemaVersion === "backy.commerce-provider-certification-handoff.v1",
+    `Product provider sync did not return provider certification handoff: ${JSON.stringify(payload).slice(0, 700)}`,
+  );
+  assert(
+    providerCertification.source === "admin-product-provider-sync-api" &&
+      providerCertification.syncSchemaVersion === "backy.commerce-product-sync.v1",
+    `Product provider certification handoff did not identify the provider-sync API source: ${JSON.stringify(providerCertification).slice(0, 700)}`,
+  );
+  assert(
+    providerCertification.operatorGate === "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
+    `Product provider certification handoff missing operator gate: ${JSON.stringify(providerCertification).slice(0, 700)}`,
+  );
+  assert(
+    providerCertification.certificationEvidence?.schemaVersion === "backy.product-provider-certification-evidence.v1" &&
+      providerCertification.certificationEvidence.coverage?.total === 8 &&
+      providerCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === "provider-catalog-sync") &&
+      providerCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === "customer-signal"),
+    `Product provider certification handoff missing scenario evidence: ${JSON.stringify(providerCertification).slice(0, 700)}`,
+  );
+  assert(
+    typeof providerCertification.secretHandling === "string" &&
+      providerCertification.secretHandling.includes("Provider credentials stay in server environment/configuration"),
+    `Product provider certification handoff must preserve non-secret boundary: ${JSON.stringify(providerCertification).slice(0, 700)}`,
   );
   assert(
     ["handoff", "synced", "failed"].includes(sync.status),
@@ -4863,6 +4906,15 @@ const assertProductProviderSync = async ({
   assert(
     persisted.status === sync.status,
     `Persisted provider sync status differed: ${JSON.stringify({ persisted, sync })}`,
+  );
+  const readbackPayload = await requestApi(
+    `/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`,
+  );
+  const readbackCertification = readbackPayload.data?.providerCertification || readbackPayload.providerCertification;
+  assert(
+    readbackPayload.data?.sync?.requestId === sync.requestId &&
+      readbackCertification?.certificationEvidence?.schemaVersion === "backy.product-provider-certification-evidence.v1",
+    `Product provider-sync GET did not return persisted sync and certification evidence: ${JSON.stringify(readbackPayload).slice(0, 700)}`,
   );
 
   if (stripeCheckoutExecutionEnabled()) {

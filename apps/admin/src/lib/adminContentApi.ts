@@ -1587,14 +1587,87 @@ export interface CommerceProductProviderSyncResult {
   };
 }
 
+export interface ProductProviderCertificationHandoff {
+  schemaVersion: 'backy.commerce-provider-certification-handoff.v1';
+  status: 'external-live-provider-gate';
+  localMockGate: 'ci:commerce-provider-smoke';
+  liveCertificationGate: 'ci:commerce-provider-certification';
+  requiredFor: 'live-commerce-provider-launch';
+  selectedSiteId?: string;
+  selectedProductId?: string;
+  source?: string;
+  operatorGate?: string;
+  syncSchemaVersion?: 'backy.commerce-product-sync.v1';
+  operatorCommandTemplate?: {
+    command: string;
+    envTemplate?: string;
+    envTemplateSchemaVersion?: string;
+    providerChoices?: Record<string, string[]>;
+    requiredInputs: string[];
+    targetInputs?: string[];
+    secretHandling?: string;
+  };
+  operatorEnvTemplate?: {
+    schemaVersion: string;
+    format: string;
+    fileName: string;
+    body: string;
+    secretHandling: string;
+  };
+  runtime?: {
+    paymentConfigured: boolean;
+    taxConfigured: boolean;
+    shippingConfigured: boolean;
+    discountConfigured: boolean;
+    catalogSyncConfigured: boolean;
+    subscriptionConfigured: boolean;
+    webhookSecretConfigured: boolean;
+    configuredFamilies: string[];
+    missingFamilies: string[];
+    secretHandling: string;
+  };
+  catalogEvidence?: Record<string, unknown>;
+  endpointEvidence?: Record<string, string>;
+  providerSync?: Record<string, unknown> | null;
+  certificationEvidence?: {
+    schemaVersion: 'backy.product-provider-certification-evidence.v1';
+    status: 'ready' | 'attention';
+    requiredGate: string;
+    coverage: {
+      covered: number;
+      total: number;
+      missing: string[];
+    };
+    scenarios: Array<{
+      key: string;
+      label: string;
+      expectedEvidence: readonly string[];
+      nextAction: string;
+      evidenceCount: number;
+      status: 'covered' | 'missing';
+    }>;
+    secretHandling: string;
+  };
+  groups?: Array<{
+    family: string;
+    providers: string[];
+    gate: 'ci:commerce-provider-certification' | 'ci:commerce-provider-smoke';
+    requiredInputs: string[];
+    evidence: string;
+  }>;
+  secretHandling: string;
+}
+
 interface ApiCommerceProductProviderSyncResponse {
   success: boolean;
   data?: {
-    sync: CommerceProductProviderSyncResult;
+    sync?: CommerceProductProviderSyncResult | null;
     product: ApiCollectionRecord;
+    providerCertification?: ProductProviderCertificationHandoff;
   };
-  sync?: CommerceProductProviderSyncResult;
+  sync?: CommerceProductProviderSyncResult | null;
   product?: ApiCollectionRecord;
+  providerCertification?: ProductProviderCertificationHandoff;
   error?: {
     code?: string;
     message?: string;
@@ -7320,7 +7393,11 @@ export async function syncCommerceProductProvider(
   siteId: string,
   productId: string,
   input: { provider?: string } = {},
-): Promise<{ sync: CommerceProductProviderSyncResult; product: CollectionRecord }> {
+): Promise<{
+  sync: CommerceProductProviderSyncResult;
+  product: CollectionRecord;
+  providerCertification?: ProductProviderCertificationHandoff;
+}> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/products/${productId}/provider-sync`, {
     method: 'POST',
     headers: {
@@ -7339,6 +7416,30 @@ export async function syncCommerceProductProvider(
   return {
     sync,
     product: toCollectionRecord(product),
+    providerCertification: payload.data?.providerCertification || payload.providerCertification,
+  };
+}
+
+export async function getCommerceProductProviderSync(
+  siteId: string,
+  productId: string,
+): Promise<{
+  sync: CommerceProductProviderSyncResult | null;
+  product: CollectionRecord;
+  providerCertification?: ProductProviderCertificationHandoff;
+}> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/products/${productId}/provider-sync`);
+  const payload = await readJson<ApiCommerceProductProviderSyncResponse>(response);
+  const product = payload.data?.product || payload.product;
+
+  if (!response.ok || !payload.success || !product) {
+    throw adminContentApiError(payload, 'Unable to load product provider catalog sync');
+  }
+
+  return {
+    sync: payload.data?.sync ?? payload.sync ?? null,
+    product: toCollectionRecord(product),
+    providerCertification: payload.data?.providerCertification || payload.providerCertification,
   };
 }
 

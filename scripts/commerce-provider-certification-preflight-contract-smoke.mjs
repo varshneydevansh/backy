@@ -47,6 +47,7 @@ const sdkRuntimeSmoke = read('../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../packages/sdk-js/scripts/generated-contract-types.ts');
 const productsRoute = read('../apps/admin/src/routes/products.tsx');
 const ordersRoute = read('../apps/admin/src/routes/orders.tsx');
+const productProviderSyncRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/provider-sync/route.ts');
 const orderAnalyticsRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/orders/analytics/route.ts');
 const subscriptionLifecycleRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/route.ts');
 const subscriptionActionRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/[orderId]/action/route.ts');
@@ -725,6 +726,25 @@ includesAll(
 );
 
 includesAll(
+  productProviderSyncRoute,
+  [
+    'export async function GET',
+    'buildProductProviderCertification',
+    'source: "admin-product-provider-sync-api"',
+    'syncSchemaVersion: PROVIDER_SYNC_SCHEMA_VERSION',
+    'PRODUCT_PROVIDER_CERTIFICATION_SCENARIOS',
+    'backy.product-provider-certification-evidence.v1',
+    'provider-catalog-sync',
+    'customer-signal',
+    'buildCommerceStorefrontContract',
+    'providerCertification,',
+    'Product provider certification evidence reports scenario names, counts, gates, and non-secret provider families only',
+    'Provider credentials stay in server environment/configuration; product provider-sync responses expose only non-secret readiness',
+  ],
+  'Product provider-sync certification API handoff',
+);
+
+includesAll(
   ordersRoute,
   [
     "schemaVersion: 'backy.commerce-provider-certification-handoff.v1'",
@@ -817,6 +837,9 @@ includesAll(
     'Razorpay subscription',
     'Adyen HTTP fallback subscription action',
     'Mollie HTTP fallback subscription action',
+    'providerCertification',
+    'admin-product-provider-sync-api',
+    'backy.product-provider-certification-evidence.v1',
   ],
   'Commerce provider mock smoke coverage',
 );

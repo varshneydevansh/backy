@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { BackyJsonObject, BackyJsonValue, Site } from "@backy-cms/core";
 import {
   PRODUCT_COLLECTION_SLUG,
+  buildCommerceStorefrontContract,
   productRecordToCommerceProduct,
   type CommerceProduct,
   type CommerceSourceRecord,
@@ -47,6 +48,68 @@ type ProductSyncProvider =
 
 const PROVIDER_SYNC_FIELD = "providersync";
 const PROVIDER_SYNC_SCHEMA_VERSION = "backy.commerce-product-sync.v1";
+const ORDERS_COLLECTION_SLUG = "orders";
+const PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_GATE =
+  "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification";
+
+const PRODUCT_PROVIDER_CERTIFICATION_SCENARIOS = [
+  {
+    key: "catalog-publication",
+    label: "Catalog publication",
+    expectedEvidence: ["published product", "public catalog response", "storefront API handoff"],
+    nextAction:
+      "Publish a product and verify the public catalog/detail APIs expose the storefront-safe product contract.",
+  },
+  {
+    key: "checkout-settlement",
+    label: "Checkout settlement",
+    expectedEvidence: ["checkout-ready product", "payment provider reference", "private order record"],
+    nextAction:
+      "Run a live checkout and verify Backy records the private paid order with provider reference evidence.",
+  },
+  {
+    key: "quote-adjustments",
+    label: "Quote adjustments",
+    expectedEvidence: ["tax quote", "shipping rate", "discount adjustment"],
+    nextAction:
+      "Refresh a checkout/order quote through the selected tax, shipping, and discount providers.",
+  },
+  {
+    key: "provider-catalog-sync",
+    label: "Provider catalog sync",
+    expectedEvidence: ["provider product id", "provider price id", "sync status"],
+    nextAction:
+      "Run provider catalog sync for a selected product and attach the non-secret sync result.",
+  },
+  {
+    key: "webhook-settlement",
+    label: "Webhook settlement",
+    expectedEvidence: ["signed commerce webhook", "idempotent order update", "commerce-webhook event"],
+    nextAction:
+      "Replay signed settlement webhooks against the configured provider and verify idempotent updates.",
+  },
+  {
+    key: "subscription-lifecycle",
+    label: "Subscription lifecycle",
+    expectedEvidence: ["settled subscription checkout", "renewal/dunning", "pause/resume/cancel action"],
+    nextAction:
+      "Run the product subscription lifecycle certification scenarios for the selected provider family.",
+  },
+  {
+    key: "inventory-automation",
+    label: "Inventory automation",
+    expectedEvidence: ["inventory reservation", "low-stock event", "commerce-product event"],
+    nextAction:
+      "Trigger checkout inventory reservation and low-stock automation for a physical product.",
+  },
+  {
+    key: "customer-signal",
+    label: "Customer and performance signal",
+    expectedEvidence: ["private customer profile", "paid order line", "product performance row"],
+    nextAction:
+      "Run checkout/customer profile intake and verify the catalog page shows product performance signal.",
+  },
+] as const;
 
 const makeRequestId = () =>
   `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -177,6 +240,35 @@ const jsonRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+
+const countEvidence = (...checks: boolean[]): number =>
+  checks.filter(Boolean).length;
+
+const hasPublicOrderCollectionAccess = (permissions: {
+  publicRead?: boolean;
+  publicCreate?: boolean;
+  publicUpdate?: boolean;
+  publicDelete?: boolean;
+}) =>
+  permissions.publicRead === true ||
+  permissions.publicCreate === true ||
+  permissions.publicUpdate === true ||
+  permissions.publicDelete === true;
+
+const hasPrivateOrderIntake = (collection: {
+  status?: string;
+  permissions?: {
+    publicRead?: boolean;
+    publicCreate?: boolean;
+    publicUpdate?: boolean;
+    publicDelete?: boolean;
+  };
+} | null | undefined) =>
+  Boolean(
+    collection &&
+      collection.status === "published" &&
+      !hasPublicOrderCollectionAccess(collection.permissions || {}),
+  );
 
 const settingsCommerce = (settings: unknown): Record<string, unknown> => {
   const root = jsonRecord(settings);
@@ -2603,6 +2695,173 @@ const commerceProductRecordWebhookSnapshot = (record: {
   };
 };
 
+const productProviderSyncFromRecord = (record: {
+  values: Record<string, unknown>;
+}): Record<string, unknown> | null => {
+  const sync = jsonRecord(record.values?.[PROVIDER_SYNC_FIELD]);
+  return Object.keys(sync).length ? sync : null;
+};
+
+const buildProductProviderCertificationEvidence = ({
+  product,
+  sync,
+  runtime,
+  hasCatalog,
+  hasOrderIntake,
+}: {
+  product: CommerceProduct;
+  sync: Record<string, unknown> | null;
+  runtime: ReturnType<typeof buildCommerceStorefrontContract>["providerCertification"]["runtime"];
+  hasCatalog: boolean;
+  hasOrderIntake: boolean;
+}) => {
+  const syncStatus = textValue(sync?.status);
+  const syncProduct = jsonRecord(sync?.product);
+  const syncPrice = jsonRecord(sync?.price);
+  const evidenceCounts: Record<string, number> = {
+    "catalog-publication": countEvidence(
+      hasCatalog,
+      product.status === "published",
+      Boolean(product.title),
+      product.price > 0,
+    ),
+    "checkout-settlement": countEvidence(
+      hasOrderIntake,
+      product.checkout.enabled,
+      Boolean(product.checkout.url),
+    ),
+    "quote-adjustments": countEvidence(
+      runtime.taxConfigured && product.delivery.taxable,
+      runtime.shippingConfigured && product.delivery.shippingRequired,
+      runtime.discountConfigured,
+    ),
+    "provider-catalog-sync": countEvidence(
+      runtime.catalogSyncConfigured,
+      syncStatus === "synced" || syncStatus === "handoff",
+      Boolean(textValue(syncProduct.id)),
+      Boolean(textValue(syncPrice.id)),
+    ),
+    "webhook-settlement": countEvidence(runtime.webhookSecretConfigured),
+    "subscription-lifecycle": countEvidence(
+      product.subscription.enabled,
+      runtime.subscriptionConfigured,
+    ),
+    "inventory-automation": countEvidence(
+      product.productType === "physical",
+      product.inventory.quantity > 0,
+      product.inventory.lowStockThreshold > 0,
+      product.inventory.lowStock,
+    ),
+    "customer-signal": 0,
+  };
+  const scenarios = PRODUCT_PROVIDER_CERTIFICATION_SCENARIOS.map((scenario) => {
+    const evidenceCount = evidenceCounts[scenario.key] || 0;
+    return {
+      ...scenario,
+      evidenceCount,
+      status: evidenceCount > 0 ? "covered" as const : "missing" as const,
+    };
+  });
+  const covered = scenarios.filter((scenario) => scenario.status === "covered").length;
+
+  return {
+    schemaVersion: "backy.product-provider-certification-evidence.v1",
+    status: covered === scenarios.length ? "ready" as const : "attention" as const,
+    requiredGate: PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+    coverage: {
+      covered,
+      total: scenarios.length,
+      missing: scenarios
+        .filter((scenario) => scenario.status === "missing")
+        .map((scenario) => scenario.key),
+    },
+    scenarios,
+    secretHandling:
+      "Product provider certification evidence reports scenario names, counts, gates, and non-secret provider families only; product payloads, customer payloads, private orders, and provider secrets stay private.",
+  };
+};
+
+const buildProductProviderCertification = ({
+  site,
+  productRecord,
+  collection,
+  ordersCollection,
+  settings,
+}: {
+  site: Site;
+  productRecord: Parameters<typeof sourceRecordFromRecord>[0];
+  collection: { status?: string };
+  ordersCollection?: {
+    status?: string;
+    permissions?: {
+      publicRead?: boolean;
+      publicCreate?: boolean;
+      publicUpdate?: boolean;
+      publicDelete?: boolean;
+    };
+  } | null;
+  settings: unknown;
+}) => {
+  const product = productRecordToCommerceProduct(
+    sourceRecordFromRecord(productRecord),
+  );
+  const hasCatalog = collection.status === "published";
+  const hasOrderIntake = hasPrivateOrderIntake(ordersCollection);
+  const commerce = buildCommerceStorefrontContract({
+    siteId: site.id,
+    settings: settingsCommerce(settings),
+    hasCatalog,
+    hasOrderIntake,
+  });
+  const sync = productProviderSyncFromRecord(productRecord);
+  const siteRecord = site as unknown as { status?: unknown };
+  const siteStatus =
+    typeof siteRecord.status === "string"
+      ? siteRecord.status
+      : undefined;
+
+  return {
+    ...commerce.providerCertification,
+    generatedAt: new Date().toISOString(),
+    selectedSiteId: site.id,
+    selectedProductId: product.id,
+    source: "admin-product-provider-sync-api",
+    operatorGate: PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+    syncSchemaVersion: PROVIDER_SYNC_SCHEMA_VERSION,
+    site: {
+      id: site.id,
+      slug: site.slug,
+      name: site.name,
+      status: siteStatus,
+    },
+    catalogEvidence: {
+      hasCatalog,
+      hasOrderIntake,
+      productStatus: product.status,
+      productTitleConfigured: Boolean(product.title),
+      priceConfigured: product.price > 0,
+      subscriptionEnabled: product.subscription.enabled,
+      inventoryQuantity: product.inventory.quantity,
+    },
+    endpointEvidence: {
+      providerSync: `/api/admin/sites/${site.id}/commerce/products/${product.id}/provider-sync`,
+      productSubscriptions: `/api/admin/sites/${site.id}/commerce/products/${product.id}/subscriptions`,
+      commerceCatalog: `/api/sites/${site.id}/commerce/catalog`,
+      commerceOrderCreate: `/api/sites/${site.id}/commerce/orders`,
+    },
+    providerSync: sync,
+    certificationEvidence: buildProductProviderCertificationEvidence({
+      product,
+      sync,
+      runtime: commerce.providerCertification.runtime,
+      hasCatalog,
+      hasOrderIntake,
+    }),
+    secretHandling:
+      "Provider credentials stay in server environment/configuration; product provider-sync responses expose only non-secret readiness, scenario counts, endpoint names, and provider-family metadata.",
+  };
+};
+
 const providerSyncWebhookSnapshot = (sync: unknown): BackyJsonObject => {
   const source = jsonRecord(sync);
   const product = jsonRecord(source.product);
@@ -2663,6 +2922,167 @@ const deliverCommerceProductProviderSyncWebhook = async (params: {
     },
   });
 
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "commerce.view",
+  });
+  if (access instanceof NextResponse) {
+    return access;
+  }
+
+  try {
+    const { siteId, productId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site =
+        (await repositories.sites.getById(siteId)) ||
+        (await repositories.sites.getBySlug(siteId));
+      if (!site) {
+        return errorResponse(
+          404,
+          "SITE_NOT_FOUND",
+          "Site not found",
+          requestId,
+        );
+      }
+
+      const [collection, ordersCollection, settings] = await Promise.all([
+        repositories.collections.getBySlug(site.id, PRODUCT_COLLECTION_SLUG),
+        repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG),
+        repositories.settings.get(),
+      ]);
+      if (!collection) {
+        return errorResponse(
+          404,
+          "PRODUCT_CATALOG_NOT_FOUND",
+          "Product catalog not found",
+          requestId,
+        );
+      }
+
+      const record =
+        (await repositories.collections.getRecordById(
+          site.id,
+          collection.id,
+          productId,
+        )) ||
+        (await repositories.collections.getRecordBySlug(
+          site.id,
+          collection.id,
+          productId,
+        ));
+      if (!record) {
+        return errorResponse(
+          404,
+          "PRODUCT_NOT_FOUND",
+          "Product not found",
+          requestId,
+        );
+      }
+
+      const providerCertification = buildProductProviderCertification({
+        site,
+        productRecord: record,
+        collection,
+        ordersCollection,
+        settings,
+      });
+      const sync = productProviderSyncFromRecord(record);
+
+      return productSyncResponse(
+        {
+          success: true,
+          requestId,
+          schemaVersion: PROVIDER_SYNC_SCHEMA_VERSION,
+          data: {
+            sync,
+            product: record,
+            providerCertification,
+          },
+          sync,
+          product: record,
+          providerCertification,
+        },
+        requestId,
+        site.id,
+      );
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
+    }
+    const collection = getCollectionByIdOrSlug(
+      site.id,
+      PRODUCT_COLLECTION_SLUG,
+      { includeUnpublished: true },
+    );
+    if (!collection) {
+      return errorResponse(
+        404,
+        "PRODUCT_CATALOG_NOT_FOUND",
+        "Product catalog not found",
+        requestId,
+      );
+    }
+    const record = getCollectionRecordByIdOrSlug(
+      site.id,
+      collection.id,
+      productId,
+      { includeUnpublished: true },
+    );
+    if (!record) {
+      return errorResponse(
+        404,
+        "PRODUCT_NOT_FOUND",
+        "Product not found",
+        requestId,
+      );
+    }
+    const ordersCollection = getCollectionByIdOrSlug(
+      site.id,
+      ORDERS_COLLECTION_SLUG,
+      { includeUnpublished: true },
+    );
+    const providerCertification = buildProductProviderCertification({
+      site: site as unknown as Site,
+      productRecord: record,
+      collection,
+      ordersCollection,
+      settings: getAdminSettings(),
+    });
+    const sync = productProviderSyncFromRecord(record);
+
+    return productSyncResponse(
+      {
+        success: true,
+        requestId,
+        schemaVersion: PROVIDER_SYNC_SCHEMA_VERSION,
+        data: {
+          sync,
+          product: record,
+          providerCertification,
+        },
+        sync,
+        product: record,
+        providerCertification,
+      },
+      requestId,
+      site.id,
+    );
+  } catch (error) {
+    console.error("Admin commerce product provider sync API error:", error);
+    return errorResponse(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Internal server error",
+      requestId,
+    );
+  }
+}
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get("x-request-id") || makeRequestId();
   const access = await requireAdminAccess(request, requestId, {
@@ -2703,6 +3123,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           requestId,
         );
       }
+      const ordersCollection = await repositories.collections.getBySlug(
+        site.id,
+        ORDERS_COLLECTION_SLUG,
+      );
 
       const record =
         (await repositories.collections.getRecordById(
@@ -2796,6 +3220,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         actor: access.session?.user.id,
       });
+      const providerCertification = buildProductProviderCertification({
+        site,
+        productRecord: updated,
+        collection,
+        ordersCollection,
+        settings,
+      });
 
       return productSyncResponse(
         {
@@ -2806,9 +3237,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             sync,
             product: updated,
             cacheInvalidation,
+            providerCertification,
           },
           sync,
           product: updated,
+          providerCertification,
         },
         requestId,
         site.id,
@@ -2832,6 +3265,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       );
     }
+    const ordersCollection = getCollectionByIdOrSlug(
+      site.id,
+      ORDERS_COLLECTION_SLUG,
+      { includeUnpublished: true },
+    );
     const record = getCollectionRecordByIdOrSlug(
       site.id,
       collection.id,
@@ -2912,6 +3350,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
       actor: access.session?.user.id,
     });
+    const providerCertification = buildProductProviderCertification({
+      site: site as unknown as Site,
+      productRecord: updated,
+      collection,
+      ordersCollection,
+      settings,
+    });
 
     return productSyncResponse(
       {
@@ -2921,9 +3366,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         data: {
           sync,
           product: updated,
+          providerCertification,
         },
         sync,
         product: updated,
+        providerCertification,
       },
       requestId,
       site.id,
