@@ -155,17 +155,23 @@ assert(
 assert(
   manifestRoute.includes('buildManifestLiveManagementDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.live-management.v1'") &&
+    manifestRoute.includes("post: `/api/sites/${siteId}/manage/blog/{postId}`") &&
     manifestRoute.includes("requiredPermissions:") &&
     manifestRoute.includes("read: 'pages.view'") &&
     manifestRoute.includes("update: 'pages.edit'") &&
     manifestRoute.includes("conflict: 'PAGE_VERSION_CONFLICT'") &&
+    manifestRoute.includes("postConflict: 'BLOG_VERSION_CONFLICT'") &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(input.site.id)') &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(site.id)') &&
     frontendManifestSchema.includes('"backy.live-management.v1"') &&
+    frontendManifestSchema.includes('"postConflict"') &&
     frontendManifestSchema.includes('"optimisticConcurrency"') &&
     frontendManifestSchema.includes('"PAGE_VERSION_CONFLICT"') &&
+    frontendManifestSchema.includes('"BLOG_VERSION_CONFLICT"') &&
     sdkSource.includes('BackyManifestLiveManagementModule') &&
+    sdkSource.includes('post: string;') &&
     sdkSmoke.includes('manifest() missing live-management discovery module') &&
+    sdkSmoke.includes('manifest() live-management blog post endpoint drifted') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestLiveManagementDiscovery'),
   'Frontend manifest and SDK must expose structured live-management discovery for inline custom frontend editing.',
 );
@@ -204,16 +210,20 @@ assert(
 );
 
 assert(
-  manifestRoute.includes('buildManifestBlogDiscovery') &&
+    manifestRoute.includes('buildManifestBlogDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.blog-discovery.v1'") &&
+    manifestRoute.includes("liveManage: `/api/sites/${siteId}/manage/blog/{postId}`") &&
     manifestRoute.includes("draftPreviewRequiresToken: true") &&
     manifestRoute.includes("notFound: 'POST_NOT_FOUND'") &&
     manifestRoute.includes('blogRuntime: buildManifestBlogDiscovery(input.site.id, input.posts, input.categories, input.tags, input.authors, blogFeeds)') &&
     manifestRoute.includes('blogRuntime: buildManifestBlogDiscovery(site.id, posts, categories, tags, authors, blogFeeds)') &&
     frontendManifestSchema.includes('"backy.blog-discovery.v1"') &&
+    frontendManifestSchema.includes('"liveManageUpdate"') &&
     frontendManifestSchema.includes('"INVALID_BLOG_ARCHIVE_MONTH"') &&
     sdkSource.includes('BackyManifestBlogRuntimeModule') &&
+    sdkSource.includes('liveManagement: boolean;') &&
     sdkSmoke.includes('manifest() missing blog runtime discovery module') &&
+    sdkSmoke.includes('manifest() blog runtime live manage endpoint drifted') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestBlogRuntimeDiscovery'),
   'Frontend manifest and SDK must expose structured blog runtime discovery for custom frontend blog index/detail UIs.',
 );

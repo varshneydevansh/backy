@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation';
 import type { BackyCollection, BackyCollectionRecord, BackyPost, Site } from '@backy-cms/core';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
+import LivePageManagementOverlay from '@/components/LivePageManagementOverlay';
 import { getBlogPosts, getMediaList, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 import { resolveElementDataBindings, type RenderDataSource } from '@/lib/renderPayload';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
@@ -35,11 +36,23 @@ interface PageProps {
   }>;
   searchParams?: Promise<{
     previewToken?: string | string[];
+    backyManage?: string | string[];
+    manage?: string | string[];
   }>;
 }
 
 const firstParam = (value: string | string[] | undefined): string | undefined => (
   Array.isArray(value) ? value[0] : value
+);
+
+const isLiveManageRequested = (value: string | undefined): boolean => (
+  value === '1' || value === 'true' || value === 'yes'
+);
+
+const adminAppUrl = () => (
+  process.env.BACKY_ADMIN_APP_URL ||
+  process.env.NEXT_PUBLIC_BACKY_ADMIN_APP_URL ||
+  ''
 );
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -416,7 +429,11 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
 
 export default async function BlogPostPage({ params, searchParams }: PageProps) {
   const { subdomain, slug } = await params;
-  const previewToken = firstParam((await searchParams)?.previewToken);
+  const resolvedSearchParams = await searchParams;
+  const previewToken = firstParam(resolvedSearchParams?.previewToken);
+  const liveManageEnabled = isLiveManageRequested(
+    firstParam(resolvedSearchParams?.backyManage) || firstParam(resolvedSearchParams?.manage),
+  );
   const hostedSite = await getSite(subdomain);
 
   if (!hostedSite) {
@@ -457,6 +474,13 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
           postId={post.id}
           pageSlug={`blog/${post.slug}`}
         />
+        <LivePageManagementOverlay
+          enabled={liveManageEnabled}
+          siteId={site.id}
+          postId={post.id}
+          resourceType="post"
+          adminAppUrl={adminAppUrl()}
+        />
         <AnimationHydrator />
       </>
     );
@@ -489,6 +513,13 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
         siteId={site.id}
         postId={post.id}
         pageSlug={`blog/${post.slug}`}
+      />
+      <LivePageManagementOverlay
+        enabled={liveManageEnabled}
+        siteId={site.id}
+        postId={post.id}
+        resourceType="post"
+        adminAppUrl={adminAppUrl()}
       />
       <AnimationHydrator />
     </>

@@ -430,6 +430,7 @@ const adminEndpoints = (siteId: string) => ({
   site: `/api/admin/sites/${siteId}`,
   pages: `/api/admin/sites/${siteId}/pages`,
   liveManagePage: `/api/sites/${siteId}/manage/pages/{pageId}`,
+  liveManagePost: `/api/sites/${siteId}/manage/blog/{postId}`,
   blog: `/api/admin/sites/${siteId}/blog`,
   collections: `/api/admin/sites/${siteId}/collections`,
   forms: `/api/admin/sites/${siteId}/forms`,
@@ -825,6 +826,7 @@ const buildManifestLiveManagementDiscovery = (siteId: string) => ({
   enabled: true,
   endpoints: {
     page: `/api/sites/${siteId}/manage/pages/{pageId}`,
+    post: `/api/sites/${siteId}/manage/blog/{postId}`,
     render: `/api/sites/${siteId}/render?path={path}`,
     editableMapSchema: 'https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json',
   },
@@ -843,6 +845,7 @@ const buildManifestLiveManagementDiscovery = (siteId: string) => ({
   },
   capabilities: {
     pageMetadata: true,
+    postMetadata: true,
     contentDocument: true,
     canvasElements: true,
     editableMap: true,
@@ -872,12 +875,14 @@ const buildManifestLiveManagementDiscovery = (siteId: string) => ({
     'visibility.locked',
   ],
   updateBody: {
-    expectedUpdatedAt: 'Use the current page updatedAt value for optimistic conflict protection.',
+    expectedUpdatedAt: 'Use the current page or post updatedAt value for optimistic conflict protection.',
     content: 'Send the full Backy content document or canvas content object after applying editable-map changes.',
   },
   errors: {
     conflict: 'PAGE_VERSION_CONFLICT',
+    postConflict: 'BLOG_VERSION_CONFLICT',
     forbidden: 'FORBIDDEN_LIVE_MANAGE_SITE_SCOPE',
+    postForbidden: 'FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE',
     validation: 'VALIDATION_ERROR',
   },
 });
@@ -964,6 +969,7 @@ const buildManifestBlogDiscovery = (
   endpoints: {
     list: `/api/sites/${siteId}/blog`,
     detail: `/api/sites/${siteId}/blog?slug={slug}`,
+    liveManage: `/api/sites/${siteId}/manage/blog/{postId}`,
     rss: `/api/sites/${siteId}/blog/rss`,
     categories: `/api/sites/${siteId}/blog/categories`,
     tags: `/api/sites/${siteId}/blog/tags`,
@@ -974,6 +980,8 @@ const buildManifestBlogDiscovery = (
   methods: {
     list: 'GET',
     detail: 'GET',
+    liveManageRead: 'GET',
+    liveManageUpdate: 'PATCH',
     rss: 'GET',
     categories: 'GET',
     tags: 'GET',
@@ -992,6 +1000,7 @@ const buildManifestBlogDiscovery = (
     routeResolve: true,
     frontendDesignProvenance: posts.some((post) => Boolean(contentFrontendDesign(post))),
     previewTokens: true,
+    liveManagement: true,
     conditionalRequests: true,
     cacheablePosts: true,
   },
@@ -1479,6 +1488,7 @@ const buildRepositoryManifest = (
         mediaTransform: `/api/sites/${input.site.id}/media/{mediaId}/transform?width={width}`,
         pages: `/api/sites/${input.site.id}/pages`,
         liveManagePage: `/api/sites/${input.site.id}/manage/pages/{pageId}`,
+        liveManagePost: `/api/sites/${input.site.id}/manage/blog/{postId}`,
         blog: `/api/sites/${input.site.id}/blog`,
         blogRss: `/api/sites/${input.site.id}/blog/rss`,
         blogCategories: `/api/sites/${input.site.id}/blog/categories`,
@@ -1540,6 +1550,7 @@ const buildRepositoryManifest = (
             path: `/blog/${post.slug}`,
             status: post.status,
             renderUrl: `/api/sites/${input.site.id}/render?path=${encodeURIComponent(`/blog/${post.slug}`)}`,
+            liveManageUrl: `/api/sites/${input.site.id}/manage/blog/${post.id}`,
             frontendDesign: contentFrontendDesign(post),
           })),
           categories: input.categories.map((category) => ({
@@ -1817,6 +1828,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           mediaTransform: `/api/sites/${site.id}/media/{mediaId}/transform?width={width}`,
           pages: `/api/sites/${site.id}/pages`,
           liveManagePage: `/api/sites/${site.id}/manage/pages/{pageId}`,
+          liveManagePost: `/api/sites/${site.id}/manage/blog/{postId}`,
           blog: `/api/sites/${site.id}/blog`,
           blogRss: `/api/sites/${site.id}/blog/rss`,
           blogCategories: `/api/sites/${site.id}/blog/categories`,
@@ -1878,6 +1890,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               path: `/blog/${post.slug}`,
               status: post.status,
               renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(`/blog/${post.slug}`)}`,
+              liveManageUrl: `/api/sites/${site.id}/manage/blog/${post.id}`,
               frontendDesign: contentFrontendDesign(post),
             })),
             categories: categories.map((category) => ({

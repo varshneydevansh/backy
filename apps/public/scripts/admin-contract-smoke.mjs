@@ -328,8 +328,16 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/sites/[siteId]/manage/pages/[pageId]/route.ts', import.meta.url),
     'utf8',
   );
+  const publicLiveManageBlogRoute = fs.readFileSync(
+    new URL('../src/app/api/sites/[siteId]/manage/blog/[postId]/route.ts', import.meta.url),
+    'utf8',
+  );
   const hostedPageRoute = fs.readFileSync(
     new URL('../src/app/sites/[subdomain]/[[...path]]/page.tsx', import.meta.url),
+    'utf8',
+  );
+  const hostedBlogPostRoute = fs.readFileSync(
+    new URL('../src/app/sites/[subdomain]/blog/[slug]/page.tsx', import.meta.url),
     'utf8',
   );
   const liveManageOverlay = fs.readFileSync(
@@ -342,6 +350,10 @@ function assertAdminPageContentValidationSource() {
   );
   const adminPageEditorRoute = fs.readFileSync(
     new URL('../../../apps/admin/src/routes/pages.$pageId.edit.tsx', import.meta.url),
+    'utf8',
+  );
+  const adminBlogEditorRoute = fs.readFileSync(
+    new URL('../../../apps/admin/src/routes/blog.$postId.tsx', import.meta.url),
     'utf8',
   );
   const adminCanvasEditor = fs.readFileSync(
@@ -542,9 +554,20 @@ function assertAdminPageContentValidationSource() {
   assert(publicLiveManagePageRoute.includes('FORBIDDEN_LIVE_MANAGE_SITE_SCOPE'), 'live manage page route must return a distinct live-management scope error');
   assert(publicLiveManagePageRoute.includes('getAdminPage') && publicLiveManagePageRoute.includes('patchAdminPage'), 'live manage page route must delegate to the admin page detail behavior');
   assert(hostedPageRoute.includes('backyManage') && hostedPageRoute.includes('LivePageManagementOverlay'), 'hosted page route must expose opt-in live management overlay wiring');
+  assert(publicLiveManageBlogRoute.includes("'pages.view'"), 'live manage blog route must require pages.view for reads');
+  assert(publicLiveManageBlogRoute.includes("'pages.edit'"), 'live manage blog route must require pages.edit for mutations');
+  assert(publicLiveManageBlogRoute.includes('requireAdminTeamScopeAccess'), 'live manage blog route must enforce site team scope');
+  assert(publicLiveManageBlogRoute.includes('FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE'), 'live manage blog route must return a distinct live-management blog scope error');
+  assert(publicLiveManageBlogRoute.includes('getAdminPost') && publicLiveManageBlogRoute.includes('patchAdminPost'), 'live manage blog route must delegate to the admin blog detail behavior');
+  assert(hostedBlogPostRoute.includes('backyManage') && hostedBlogPostRoute.includes('LivePageManagementOverlay'), 'hosted blog route must expose opt-in live management overlay wiring');
+  assert(hostedBlogPostRoute.includes('resourceType="post"') && hostedBlogPostRoute.includes('postId={post.id}'), 'hosted blog route must wire the overlay to the selected blog post resource');
   assert(liveManageOverlay.includes("credentials: 'include'"), 'live management overlay must rely on admin session credentials');
   assert(liveManageOverlay.includes('expectedUpdatedAt'), 'live management overlay must preserve optimistic conflict checks');
   assert(liveManageOverlay.includes('data-backy-live-management-overlay="page"'), 'live management overlay must expose a stable test hook');
+  assert(liveManageOverlay.includes("data-backy-live-management-resource={managedResourceType}"), 'live management overlay must expose a stable managed-resource hook');
+  assert(liveManageOverlay.includes('data-backy-live-post-management-overlay'), 'live management overlay must expose a blog post management hook');
+  assert(liveManageOverlay.includes("managedResourceType === 'post' ? 'blog' : 'pages'"), 'live management overlay must route blog posts to the blog live-management bridge');
+  assert(liveManageOverlay.includes('/blog/${encodeURIComponent(managedResourceId)}'), 'live management overlay must hand blog post selections to the admin blog editor');
   assert(liveManageOverlay.includes('data-backy-live-element-list="page"'), 'live management overlay must expose rendered element inspection');
   assert(liveManageOverlay.includes('contentElementTargets') && liveManageOverlay.includes("source: 'content'"), 'live management overlay must include content-backed element targets for hidden element recovery');
   assert(liveManageOverlay.includes('data-backy-live-inline-editor="page"'), 'live management overlay must expose inline element text editing');
@@ -565,14 +588,19 @@ function assertAdminPageContentValidationSource() {
   assert(liveManageOverlay.includes('updateElementAppearance'), 'live management overlay must patch selected element appearance props');
   assert(publicPageRenderer.includes('data-backy-element-id'), 'public renderer must expose stable element ids for live inspection');
   assert(adminPageEditorRoute.includes('elementId') && adminCanvasEditor.includes('initialSelectedElementId'), 'admin page editor must accept live inspector element handoff');
+  assert(adminBlogEditorRoute.includes('elementId') && adminBlogEditorRoute.includes('initialSelectedElementId={routeSearch.elementId}'), 'admin blog editor must accept live inspector element handoff');
   const publicOpenApiRouteSource = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url),
     'utf8',
   );
   assert(publicOpenApiRouteSource.includes('/manage/pages/{pageId}'), 'OpenAPI route must advertise the live page management endpoint');
+  assert(publicOpenApiRouteSource.includes('/manage/blog/{postId}'), 'OpenAPI route must advertise the live blog management endpoint');
   assert(publicOpenApiRouteSource.includes('PageUpdateRequest'), 'OpenAPI route must document the live page update payload');
+  assert(publicOpenApiRouteSource.includes('BlogPostUpdateRequest'), 'OpenAPI route must document the live blog update payload');
   assert(publicOpenApiRouteSource.includes('getBackyLiveManagedPage') && publicOpenApiRouteSource.includes('updateBackyLiveManagedPage'), 'OpenAPI route must name live page management operations');
+  assert(publicOpenApiRouteSource.includes('getBackyLiveManagedBlogPost') && publicOpenApiRouteSource.includes('updateBackyLiveManagedBlogPost'), 'OpenAPI route must name live blog management operations');
   assert(publicManifestRoute.includes('liveManagePage'), 'frontend manifest must advertise the live page management endpoint');
+  assert(publicManifestRoute.includes('liveManagePost'), 'frontend manifest must advertise the live blog management endpoint');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_LIMIT'"), 'public page comments route must reject invalid limit filters');
   assert(publicPageCommentsRoute.includes("'INVALID_PAGE_COMMENT_OFFSET'"), 'public page comments route must reject invalid offset filters');
   assert(publicPageCommentsRoute.includes('parseBoundedInteger'), 'public page comments route must parse pagination filters strictly');

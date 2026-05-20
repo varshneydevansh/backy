@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
 type ManagedPageStatus = 'draft' | 'published' | 'scheduled' | 'archived';
+type LiveManagedResourceType = 'page' | 'post';
 
 interface ManagedPage {
   id: string;
+  resourceType: LiveManagedResourceType;
   title?: string;
   slug?: string;
   status?: ManagedPageStatus;
@@ -26,6 +28,8 @@ interface LivePageManagementOverlayProps {
   enabled: boolean;
   siteId?: string;
   pageId?: string;
+  postId?: string;
+  resourceType?: LiveManagedResourceType;
   adminAppUrl?: string;
 }
 
@@ -80,21 +84,27 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 );
 
 const managedPageFromResponse = (payload: unknown): ManagedPage | null => {
-  if (!isRecord(payload) || !isRecord(payload.data) || !isRecord(payload.data.page)) {
+  if (!isRecord(payload) || !isRecord(payload.data)) {
     return null;
   }
 
-  const page = payload.data.page;
-  const status = page.status;
+  const resourceType: LiveManagedResourceType = isRecord(payload.data.post) ? 'post' : 'page';
+  const resource = resourceType === 'post' ? payload.data.post : payload.data.page;
+  if (!isRecord(resource)) {
+    return null;
+  }
+
+  const status = resource.status;
 
   return {
-    id: typeof page.id === 'string' ? page.id : '',
-    title: typeof page.title === 'string' ? page.title : '',
-    slug: typeof page.slug === 'string' ? page.slug : '',
+    id: typeof resource.id === 'string' ? resource.id : '',
+    resourceType,
+    title: typeof resource.title === 'string' ? resource.title : '',
+    slug: typeof resource.slug === 'string' ? resource.slug : '',
     status: STATUS_OPTIONS.includes(status as ManagedPageStatus) ? status as ManagedPageStatus : 'draft',
-    isHomepage: page.isHomepage === true,
-    updatedAt: typeof page.updatedAt === 'string' ? page.updatedAt : '',
-    content: isRecord(page.content) ? { ...page.content } : undefined,
+    isHomepage: resource.isHomepage === true,
+    updatedAt: typeof resource.updatedAt === 'string' ? resource.updatedAt : '',
+    content: isRecord(resource.content) ? { ...resource.content } : undefined,
   };
 };
 
@@ -515,6 +525,8 @@ export function LivePageManagementOverlay({
   enabled,
   siteId,
   pageId,
+  postId,
+  resourceType,
   adminAppUrl,
 }: LivePageManagementOverlayProps) {
   const [page, setPage] = useState<ManagedPage | null>(null);
@@ -568,20 +580,31 @@ export function LivePageManagementOverlay({
   const [inlineLayoutVisible, setInlineLayoutVisible] = useState(true);
   const [inlineLayoutLocked, setInlineLayoutLocked] = useState(false);
   const [inlineLayoutSaving, setInlineLayoutSaving] = useState(false);
+  const managedResourceType: LiveManagedResourceType = resourceType || (postId ? 'post' : 'page');
+  const managedResourceId = managedResourceType === 'post' ? postId : pageId;
+  const managedResourceLabel = managedResourceType === 'post' ? 'Post' : 'Page';
 
   const manageEndpoint = useMemo(() => {
-    if (!siteId || !pageId) return '';
-    return `/api/sites/${encodeURIComponent(siteId)}/manage/pages/${encodeURIComponent(pageId)}`;
-  }, [pageId, siteId]);
+    if (!siteId || !managedResourceId) return '';
+    const resourcePath = managedResourceType === 'post' ? 'blog' : 'pages';
+    return `/api/sites/${encodeURIComponent(siteId)}/manage/${resourcePath}/${encodeURIComponent(managedResourceId)}`;
+  }, [managedResourceId, managedResourceType, siteId]);
 
   const editorHref = useMemo(() => {
-    if (!siteId || !pageId) return '';
+    if (!siteId || !managedResourceId) return '';
     const selectedElementQuery = selectedElementId ? `&elementId=${encodeURIComponent(selectedElementId)}` : '';
+    if (managedResourceType === 'post') {
+      return joinedAdminUrl(
+        adminAppUrl,
+        `/blog/${encodeURIComponent(managedResourceId)}?siteId=${encodeURIComponent(siteId)}&focus=canvas${selectedElementQuery}`,
+      );
+    }
+
     return joinedAdminUrl(
       adminAppUrl,
-      `/pages/${encodeURIComponent(pageId)}/edit?siteId=${encodeURIComponent(siteId)}&focus=canvas${selectedElementQuery}`,
+      `/pages/${encodeURIComponent(managedResourceId)}/edit?siteId=${encodeURIComponent(siteId)}&focus=canvas${selectedElementQuery}`,
     );
-  }, [adminAppUrl, pageId, selectedElementId, siteId]);
+  }, [adminAppUrl, managedResourceId, managedResourceType, selectedElementId, siteId]);
 
   useEffect(() => {
     if (!enabled || !manageEndpoint) {
@@ -604,7 +627,7 @@ export function LivePageManagementOverlay({
         }
 
         if (!response.ok) {
-          throw new Error(errorMessageFromResponse(payload, 'Unable to load live page management.'));
+          throw new Error(errorMessageFromResponse(payload, 'Unable to load live management.'));
         }
 
         return managedPageFromResponse(payload);
@@ -618,7 +641,7 @@ export function LivePageManagementOverlay({
       })
       .catch((loadError) => {
         if (controller.signal.aborted) return;
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load live page management.');
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load live management.');
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -780,6 +803,15 @@ export function LivePageManagementOverlay({
     setMessage('');
 
     try {
+      const body: Record<string, unknown> = {
+        title: title.trim(),
+        status,
+        expectedUpdatedAt: page.updatedAt,
+      };
+      if (managedResourceType === 'page') {
+        body.isHomepage = isHomepage;
+      }
+
       const response = await fetch(manageEndpoint, {
         method: 'PATCH',
         credentials: 'include',
@@ -787,17 +819,12 @@ export function LivePageManagementOverlay({
           accept: 'application/json',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          title: title.trim(),
-          status,
-          isHomepage,
-          expectedUpdatedAt: page.updatedAt,
-        }),
+        body: JSON.stringify(body),
       });
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(errorMessageFromResponse(payload, 'Unable to save the live page changes.'));
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the live changes.'));
       }
 
       const updatedPage = managedPageFromResponse(payload);
@@ -809,7 +836,7 @@ export function LivePageManagementOverlay({
       }
       setMessage('Saved. Reload the page to see delivery changes.');
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save the live page changes.');
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the live changes.');
     } finally {
       setSaving(false);
     }
@@ -1115,8 +1142,10 @@ export function LivePageManagementOverlay({
         />
       ) : null}
       <section
-        aria-label="Backy live page management"
+        aria-label={`Backy live ${managedResourceType === 'post' ? 'blog post' : 'page'} management`}
         data-backy-live-management-overlay="page"
+        data-backy-live-management-resource={managedResourceType}
+        data-backy-live-post-management-overlay={managedResourceType === 'post' ? 'post' : undefined}
         style={{
           position: 'fixed',
           right: 16,
@@ -1172,7 +1201,7 @@ export function LivePageManagementOverlay({
           {page ? (
             <>
               <label style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 700, color: '#334155' }}>
-                Page title
+                {managedResourceLabel} title
                 <input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
@@ -1191,14 +1220,16 @@ export function LivePageManagementOverlay({
                   ))}
                 </select>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155' }}>
-                <input
-                  type="checkbox"
-                  checked={isHomepage}
-                  onChange={(event) => setIsHomepage(event.target.checked)}
-                />
-                Set as homepage
-              </label>
+              {managedResourceType === 'page' ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155' }}>
+                  <input
+                    type="checkbox"
+                    checked={isHomepage}
+                    onChange={(event) => setIsHomepage(event.target.checked)}
+                  />
+                  Set as homepage
+                </label>
+              ) : null}
               <div style={{ display: 'grid', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Canvas elements</span>

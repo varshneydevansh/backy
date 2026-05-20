@@ -359,6 +359,8 @@
             "mediaFile": { "type": "string", "minLength": 1 },
             "mediaTransform": { "type": "string", "minLength": 1 },
             "pages": { "type": "string", "minLength": 1 },
+            "liveManagePage": { "type": "string", "minLength": 1 },
+            "liveManagePost": { "type": "string", "minLength": 1 },
             "blog": { "type": "string", "minLength": 1 },
             "blogRss": { "type": "string", "minLength": 1 },
             "blogCategories": { "type": "string", "minLength": 1 },
@@ -551,10 +553,11 @@
                   "additionalProperties": true,
                   "properties": {
                     "page": { "type": "string", "minLength": 1 },
+                    "post": { "type": "string", "minLength": 1 },
                     "render": { "type": "string", "minLength": 1 },
                     "editableMapSchema": { "type": "string", "minLength": 1 }
                   },
-                  "required": ["page", "render", "editableMapSchema"]
+                  "required": ["page", "post", "render", "editableMapSchema"]
                 },
                 "methods": {
                   "type": "object",
@@ -595,6 +598,7 @@
                   "additionalProperties": true,
                   "properties": {
                     "pageMetadata": { "type": "boolean" },
+                    "postMetadata": { "type": "boolean" },
                     "contentDocument": { "type": "boolean" },
                     "canvasElements": { "type": "boolean" },
                     "editableMap": { "type": "boolean" },
@@ -603,7 +607,7 @@
                     "auditTrail": { "type": "boolean" },
                     "webhookDelivery": { "type": "boolean" }
                   },
-                  "required": ["pageMetadata", "contentDocument", "canvasElements", "editableMap", "optimisticConcurrency", "cacheInvalidation", "auditTrail", "webhookDelivery"]
+                  "required": ["pageMetadata", "postMetadata", "contentDocument", "canvasElements", "editableMap", "optimisticConcurrency", "cacheInvalidation", "auditTrail", "webhookDelivery"]
                 },
                 "editableTargets": {
                   "type": "array",
@@ -623,10 +627,12 @@
                   "additionalProperties": true,
                   "properties": {
                     "conflict": { "const": "PAGE_VERSION_CONFLICT" },
+                    "postConflict": { "const": "BLOG_VERSION_CONFLICT" },
                     "forbidden": { "const": "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE" },
+                    "postForbidden": { "const": "FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE" },
                     "validation": { "const": "VALIDATION_ERROR" }
                   },
-                  "required": ["conflict", "forbidden", "validation"]
+                  "required": ["conflict", "postConflict", "forbidden", "postForbidden", "validation"]
                 }
               },
               "required": ["schemaVersion", "enabled", "endpoints", "methods", "auth", "capabilities", "editableTargets", "updateBody", "errors"]
@@ -906,6 +912,7 @@
                   "properties": {
                     "list": { "type": "string", "minLength": 1 },
                     "detail": { "type": "string", "minLength": 1 },
+                    "liveManage": { "type": "string", "minLength": 1 },
                     "rss": { "type": "string", "minLength": 1 },
                     "categories": { "type": "string", "minLength": 1 },
                     "tags": { "type": "string", "minLength": 1 },
@@ -913,7 +920,7 @@
                     "resolve": { "type": "string", "minLength": 1 },
                     "render": { "type": "string", "minLength": 1 }
                   },
-                  "required": ["list", "detail", "rss", "categories", "tags", "authors", "resolve", "render"]
+                  "required": ["list", "detail", "liveManage", "rss", "categories", "tags", "authors", "resolve", "render"]
                 },
                 "methods": {
                   "type": "object",
@@ -921,6 +928,8 @@
                   "properties": {
                     "list": { "const": "GET" },
                     "detail": { "const": "GET" },
+                    "liveManageRead": { "const": "GET" },
+                    "liveManageUpdate": { "const": "PATCH" },
                     "rss": { "const": "GET" },
                     "categories": { "const": "GET" },
                     "tags": { "const": "GET" },
@@ -928,7 +937,7 @@
                     "resolve": { "const": "GET" },
                     "render": { "const": "GET" }
                   },
-                  "required": ["list", "detail", "rss", "categories", "tags", "authors", "resolve", "render"]
+                  "required": ["list", "detail", "liveManageRead", "liveManageUpdate", "rss", "categories", "tags", "authors", "resolve", "render"]
                 },
                 "capabilities": {
                   "type": "object",
@@ -944,10 +953,11 @@
                     "routeResolve": { "type": "boolean" },
                     "frontendDesignProvenance": { "type": "boolean" },
                     "previewTokens": { "type": "boolean" },
+                    "liveManagement": { "type": "boolean" },
                     "conditionalRequests": { "type": "boolean" },
                     "cacheablePosts": { "type": "boolean" }
                   },
-                  "required": ["publicList", "publicDetail", "taxonomyFilters", "archiveFilters", "searchFilters", "rssFeed", "renderPayload", "routeResolve", "frontendDesignProvenance", "previewTokens", "conditionalRequests", "cacheablePosts"]
+                  "required": ["publicList", "publicDetail", "taxonomyFilters", "archiveFilters", "searchFilters", "rssFeed", "renderPayload", "routeResolve", "frontendDesignProvenance", "previewTokens", "liveManagement", "conditionalRequests", "cacheablePosts"]
                 },
                 "cache": {
                   "type": "object",

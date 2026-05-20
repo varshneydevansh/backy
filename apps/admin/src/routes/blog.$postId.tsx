@@ -73,6 +73,7 @@ import {
 interface BlogEditorSearch {
     siteId?: string;
     focus?: 'canvas';
+    elementId?: string;
 }
 
 const normalizedSearchString = (value: unknown): string | undefined => {
@@ -85,6 +86,7 @@ export const Route = createFileRoute('/blog/$postId')({
     validateSearch: (search: Record<string, unknown>): BlogEditorSearch => ({
         siteId: normalizedSearchString(search.siteId),
         focus: search.focus === 'canvas' ? 'canvas' : undefined,
+        elementId: normalizedSearchString(search.elementId),
     }),
     component: EditBlogPostPage,
 });
@@ -2467,6 +2469,7 @@ function EditBlogPostPage() {
                                     initialElements={initialElements}
                                     initialSettings={dummySettings}
                                     initialSize={canvasSize}
+                                    initialSelectedElementId={routeSearch.elementId}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
                                         if (editorBusy || !canEditBlog || isUsingLocalPostCopy) return;

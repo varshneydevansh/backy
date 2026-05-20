@@ -1036,6 +1036,107 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             },
           },
+          [`/api/sites/${site.id}/manage/blog/{postId}`]: {
+            get: {
+              tags: ["Live Management"],
+              summary: "Read one blog post for authenticated live-site management",
+              operationId: "getBackyLiveManagedBlogPost",
+              description:
+                "Requires an admin session or admin API key with pages.view and site team-scope access.",
+              parameters: [
+                pathParameter("postId", "Blog post id"),
+              ],
+              responses: {
+                "200": {
+                  description: "Authenticated blog post detail",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/BlogPostEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing page permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site or blog post not found",
+                },
+              },
+            },
+            patch: {
+              tags: ["Live Management"],
+              summary: "Update one blog post from an authenticated live-site management client",
+              operationId: "updateBackyLiveManagedBlogPost",
+              description:
+                "Requires an admin session or admin API key with pages.edit and site team-scope access. Uses the same validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery as the admin blog post detail endpoint.",
+              parameters: [
+                pathParameter("postId", "Blog post id"),
+              ],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/BlogPostUpdateRequest" },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Updated blog post detail",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/BlogPostEnvelope" },
+                    },
+                  },
+                },
+                "400": {
+                  description: "Invalid blog post payload or readiness blocked",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing page permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "409": {
+                  description: "Slug or blog post version conflict",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           [`/api/sites/${site.id}/blog`]: {
             get: {
               tags: ["Content"],
@@ -4360,6 +4461,54 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 post: { $ref: "#/components/schemas/BlogPostResource" },
               },
             }),
+            BlogPostUpdateRequest: {
+              type: "object",
+              additionalProperties: true,
+              properties: {
+                expectedUpdatedAt: { type: "string", format: "date-time" },
+                title: { type: "string" },
+                slug: { type: "string" },
+                excerpt: { type: ["string", "null"] },
+                status: {
+                  type: "string",
+                  enum: ["draft", "published", "scheduled", "archived"],
+                },
+                scheduledAt: { type: ["string", "null"], format: "date-time" },
+                featuredImageId: { type: ["string", "null"] },
+                authorId: { type: ["string", "null"] },
+                categoryIds: { type: "array", items: { type: "string" } },
+                tagIds: { type: "array", items: { type: "string" } },
+                meta: { type: "object", additionalProperties: true },
+                content: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/BackyContentDocument" },
+                    {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        elements: {
+                          type: "array",
+                          items: { type: "object", additionalProperties: true },
+                        },
+                        canvasSize: {
+                          type: "object",
+                          required: ["width", "height"],
+                          properties: {
+                            width: { type: "number", exclusiveMinimum: 0 },
+                            height: { type: "number", exclusiveMinimum: 0 },
+                          },
+                        },
+                        customCSS: { type: "string" },
+                      },
+                    },
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                  ],
+                },
+              },
+            },
             BlogFeedDiscovery: {
               type: "object",
               additionalProperties: true,
@@ -5366,6 +5515,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "object",
                   additionalProperties: true,
                   description: "Alias accepted for legacy submitters.",
+                },
+                contactShareOverride: {
+                  type: "object",
+                  additionalProperties: true,
+                  description:
+                    "Optional per-submit contact sharing override for generated form integrations.",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    nameField: { type: "string" },
+                    emailField: { type: "string" },
+                    phoneField: { type: "string" },
+                    notesField: { type: "string" },
+                    dedupeByEmail: { type: "boolean" },
+                  },
                 },
                 requestId: { type: "string" },
                 pageId: { type: "string" },

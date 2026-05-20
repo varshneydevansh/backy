@@ -143,11 +143,13 @@ This document defines how custom frontends, admin UI, and public renderer intera
 
 - `GET /api/sites/:siteId/manage/pages/:pageId`
 - `PATCH /api/sites/:siteId/manage/pages/:pageId`
+- `GET /api/sites/:siteId/manage/blog/:postId`
+- `PATCH /api/sites/:siteId/manage/blog/:postId`
   - Authenticated live-site page management bridge for custom frontends and hosted editing surfaces.
-  - `GET` requires an admin session or admin API key with `pages.view`; `PATCH` requires `pages.edit`.
-  - Both methods enforce site team scope before delegating to the admin page detail route, so validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery match the normal admin API.
-  - The endpoint is advertised by the public manifest as `endpoints.liveManagePage` and by the site-scoped OpenAPI document with `getBackyLiveManagedPage` and `updateBackyLiveManagedPage` operation ids.
-  - Hosted page routes can opt into the first live management overlay with `?backyManage=1` or `?manage=1`; the client overlay silently hides for unauthenticated visitors, reads through the bridge with admin session credentials, saves title/status/homepage changes with `expectedUpdatedAt` conflict protection, and lists rendered `data-backy-element-id` targets plus content-backed targets for hidden/not-rendered elements.
+  - `GET` requires an admin session or admin API key with `pages.view`; `PATCH` requires `pages.edit` for page and blog-post resources.
+  - Both methods enforce site team scope before delegating to the corresponding admin page or blog detail route, so validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery match the normal admin API.
+  - The endpoints are advertised by the public manifest as `endpoints.liveManagePage` and `endpoints.liveManagePost`, by `data.modules.liveManagement`, by the blog/pages runtime discovery modules, and by the site-scoped OpenAPI document with live-managed page and blog operation ids.
+  - Hosted page and blog post routes can opt into the live management overlay with `?backyManage=1` or `?manage=1`; the client overlay silently hides for unauthenticated visitors, reads through the bridge with admin session credentials, saves title/status/homepage page changes or blog post title/status changes with `expectedUpdatedAt` conflict protection, and lists rendered `data-backy-element-id` targets plus content-backed targets for hidden/not-rendered elements.
   - Simple text-like rendered elements (`text`, `heading`, `paragraph`, `quote`, `button`, `link`) can be edited inline from the overlay; the overlay patches the selected element content through the live page bridge so the admin route still enforces content validation and optimistic conflicts.
   - `button` and `link` elements also expose inline destination controls for `href`, target, and safe `_blank` rel metadata.
   - `image` elements expose inline source, alt text, title, and object-fit controls for quick delivery/accessibility fixes without opening the full canvas editor.

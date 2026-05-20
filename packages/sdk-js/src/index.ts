@@ -2194,6 +2194,7 @@ export interface BackyManifestBlogRuntimeModule {
   endpoints: {
     list: string;
     detail: string;
+    liveManage: string;
     rss: string;
     categories: string;
     tags: string;
@@ -2205,6 +2206,8 @@ export interface BackyManifestBlogRuntimeModule {
   methods: {
     list: "GET";
     detail: "GET";
+    liveManageRead: "GET";
+    liveManageUpdate: "PATCH";
     rss: "GET";
     categories: "GET";
     tags: "GET";
@@ -2224,6 +2227,7 @@ export interface BackyManifestBlogRuntimeModule {
     routeResolve: boolean;
     frontendDesignProvenance: boolean;
     previewTokens: boolean;
+    liveManagement: boolean;
     conditionalRequests: boolean;
     cacheablePosts: boolean;
     [key: string]: unknown;
@@ -2517,6 +2521,7 @@ export interface BackyManifestLiveManagementModule {
   enabled: boolean;
   endpoints: {
     page: string;
+    post: string;
     render: string;
     editableMapSchema: string;
     [key: string]: unknown;
@@ -2539,6 +2544,7 @@ export interface BackyManifestLiveManagementModule {
   };
   capabilities: {
     pageMetadata: boolean;
+    postMetadata: boolean;
     contentDocument: boolean;
     canvasElements: boolean;
     editableMap: boolean;
@@ -2556,7 +2562,9 @@ export interface BackyManifestLiveManagementModule {
   };
   errors: {
     conflict: "PAGE_VERSION_CONFLICT";
+    postConflict: "BLOG_VERSION_CONFLICT";
     forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE";
+    postForbidden: "FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE";
     validation: "VALIDATION_ERROR";
     [key: string]: unknown;
   };

@@ -834,6 +834,8 @@ const manifest = {
     mediaTransform:
       "/api/sites/site_demo/media/{mediaId}/transform?width={width}",
     pages: "/api/sites/site_demo/pages",
+    liveManagePage: "/api/sites/site_demo/manage/pages/{pageId}",
+    liveManagePost: "/api/sites/site_demo/manage/blog/{postId}",
     blog: "/api/sites/site_demo/blog",
     blogRss: "/api/sites/site_demo/blog/rss",
     blogCategories: "/api/sites/site_demo/blog/categories",
@@ -920,6 +922,7 @@ const manifest = {
       enabled: true,
       endpoints: {
         page: "/api/sites/site_demo/manage/pages/{pageId}",
+        post: "/api/sites/site_demo/manage/blog/{postId}",
         render: "/api/sites/site_demo/render?path={path}",
         editableMapSchema:
           "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
@@ -939,6 +942,7 @@ const manifest = {
       },
       capabilities: {
         pageMetadata: true,
+        postMetadata: true,
         contentDocument: true,
         canvasElements: true,
         editableMap: true,
@@ -954,7 +958,9 @@ const manifest = {
       },
       errors: {
         conflict: "PAGE_VERSION_CONFLICT",
+        postConflict: "BLOG_VERSION_CONFLICT",
         forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE",
+        postForbidden: "FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE",
         validation: "VALIDATION_ERROR",
       },
     },
@@ -1062,6 +1068,7 @@ const manifest = {
       endpoints: {
         list: "/api/sites/site_demo/blog",
         detail: "/api/sites/site_demo/blog?slug={slug}",
+        liveManage: "/api/sites/site_demo/manage/blog/{postId}",
         rss: "/api/sites/site_demo/blog/rss",
         categories: "/api/sites/site_demo/blog/categories",
         tags: "/api/sites/site_demo/blog/tags",
@@ -1072,6 +1079,8 @@ const manifest = {
       methods: {
         list: "GET",
         detail: "GET",
+        liveManageRead: "GET",
+        liveManageUpdate: "PATCH",
         rss: "GET",
         categories: "GET",
         tags: "GET",
@@ -1090,6 +1099,7 @@ const manifest = {
         routeResolve: true,
         frontendDesignProvenance: true,
         previewTokens: true,
+        liveManagement: true,
         conditionalRequests: true,
         cacheablePosts: true,
       },
@@ -2003,6 +2013,7 @@ const sdkManifestBlogRuntime = {
   endpoints: {
     list: "/api/sites/site_demo/blog",
     detail: "/api/sites/site_demo/blog?slug={slug}",
+    liveManage: "/api/sites/site_demo/manage/blog/{postId}",
     rss: "/api/sites/site_demo/blog/rss",
     categories: "/api/sites/site_demo/blog/categories",
     tags: "/api/sites/site_demo/blog/tags",
@@ -2013,6 +2024,8 @@ const sdkManifestBlogRuntime = {
   methods: {
     list: "GET",
     detail: "GET",
+    liveManageRead: "GET",
+    liveManageUpdate: "PATCH",
     rss: "GET",
     categories: "GET",
     tags: "GET",
@@ -2031,6 +2044,7 @@ const sdkManifestBlogRuntime = {
     routeResolve: true,
     frontendDesignProvenance: true,
     previewTokens: true,
+    liveManagement: true,
     conditionalRequests: true,
     cacheablePosts: true,
   },
@@ -2411,6 +2425,7 @@ const sdkManifestLiveManagement = {
   enabled: true,
   endpoints: {
     page: "/api/sites/site_demo/manage/pages/{pageId}",
+    post: "/api/sites/site_demo/manage/blog/{postId}",
     render: "/api/sites/site_demo/render?path={path}",
     editableMapSchema:
       "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
@@ -2430,6 +2445,7 @@ const sdkManifestLiveManagement = {
   },
   capabilities: {
     pageMetadata: true,
+    postMetadata: true,
     contentDocument: true,
     canvasElements: true,
     editableMap: true,
@@ -2445,7 +2461,9 @@ const sdkManifestLiveManagement = {
   },
   errors: {
     conflict: "PAGE_VERSION_CONFLICT",
+    postConflict: "BLOG_VERSION_CONFLICT",
     forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE",
+    postForbidden: "FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE",
     validation: "VALIDATION_ERROR",
   },
 } satisfies BackyManifestLiveManagementModule;
