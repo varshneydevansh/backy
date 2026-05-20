@@ -478,6 +478,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Public/admin media filters return global assets plus assets explicitly scoped or bound to the requested page/post, while `global=true` isolates reusable global assets.
 - Page/post scoped uploads now require `scopeTargetId`, and admin media updates write the same scope, target, `pageIds`, and `postIds` metadata through both demo-store and DB-backed runtimes.
 - Central media bulk management can now load every asset matching the current search/type/visibility/folder/tag/usage filters and select that full loaded set before applying folder moves, visibility changes, quarantine/release, tag edits, or deletion.
+- The central Media command center now exports a copyable `backy.media-attribution-handoff.v1` block inside the media handoff manifest, packaging provider coverage, channel/source/window metrics, conversion value, missing evidence, and provider-analytics ingestion next steps for custom frontend ROI dashboards.
 - Covered by `npm run test:media-scope --workspace @backy/public` and `npm run typecheck --workspace @backy/public`.
 
 ### ✅ Blog post editor flow

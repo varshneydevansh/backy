@@ -124,6 +124,52 @@ interface MediaOperationActionPlan {
   totalCount: number;
   actions: MediaOperationAction[];
 }
+type MediaAttributionHandoffStatus = 'ready' | 'partial' | 'needs-provider-ingest';
+interface MediaAttributionHandoff {
+  schemaVersion: 'backy.media-attribution-handoff.v1';
+  status: MediaAttributionHandoffStatus;
+  ready: boolean;
+  summary: string;
+  ingestionEndpoint: string;
+  publicMediaListEndpoint: string;
+  metrics: {
+    providers: number;
+    channels: number;
+    requests: number;
+    conversions: number;
+    conversionValue: number;
+    conversionRate: number;
+    valuePerRequest: number;
+    currency: string;
+  };
+  channels: Array<{
+    source: string;
+    attributionWindow: string;
+    providers: string[];
+    assetCount: number;
+    requests: number;
+    bytesServed: number;
+    conversions: number;
+    conversionValue: number;
+    conversionRate: number;
+    valuePerRequest: number;
+    currency: string;
+    lastSyncedAt?: string;
+  }>;
+  providerCoverage: Array<{
+    provider: string;
+    assets: number;
+    publicAssets: number;
+    privateAssets: number;
+    backyRequests: number;
+    providerRequests: number;
+    providerConversions: number;
+    providerConversionValue: number;
+    lastSyncedAt?: string;
+  }>;
+  missingEvidence: string[];
+  nextSteps: string[];
+}
 
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
@@ -1459,11 +1505,21 @@ function MediaPage() {
     selectedStorageProvider,
     storageSecretReferenceCount,
   ]);
+  const mediaAttributionHandoff = useMemo(() => buildMediaAttributionHandoff({
+    mediaAnalytics,
+    adminMediaProviderAnalyticsUrl,
+    publicMediaListUrl,
+  }), [
+    adminMediaProviderAnalyticsUrl,
+    mediaAnalytics,
+    publicMediaListUrl,
+  ]);
   const mediaHandoff = useMemo(() => ({
     schemaVersion: 'backy.media-handoff.v1',
     siteId,
     generatedAt: new Date().toISOString(),
     operationActionPlan: mediaOperationActionPlan,
+    attributionHandoff: mediaAttributionHandoff,
     readiness: {
       schemaVersion: 'backy.media-readiness.v1',
       score: mediaLibraryReadiness.score,
@@ -1683,6 +1739,7 @@ function MediaPage() {
     mediaAnalytics.providerCurrency,
     mediaQuota,
     mediaLibraryReadiness,
+    mediaAttributionHandoff,
     mediaOperationActionPlan,
     publicMediaDetailUrl,
     publicMediaFontsUrl,
@@ -1703,6 +1760,7 @@ function MediaPage() {
     visibilityFilter,
   ]);
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
+  const mediaAttributionHandoffText = useMemo(() => JSON.stringify(mediaAttributionHandoff, null, 2), [mediaAttributionHandoff]);
   const storageSettingsControlsDisabled = isSavingStorageSettings || !settingsIntegrations || !canConfigureMediaStorage;
   const storageEnvContract = useMemo(() => MEDIA_STORAGE_ENV_CONTRACT[selectedStorageProvider], [selectedStorageProvider]);
   const missingStorageEnv = new Set(runtimeStorage?.provider === selectedStorageProvider ? runtimeStorage.missing || [] : []);
@@ -3358,6 +3416,14 @@ function MediaPage() {
     }
     await copyMediaApiText(mediaHandoffText, 'Media handoff manifest');
   };
+  const copyMediaAttributionHandoff = async () => {
+    if (!canExportMediaActivity) {
+      setBulkNotice(null);
+      setError(deniedExportMessage);
+      return;
+    }
+    await copyMediaApiText(mediaAttributionHandoffText, 'Media attribution handoff');
+  };
   const downloadMediaHandoff = () => {
     if (!canExportMediaActivity) {
       setBulkNotice(null);
@@ -3697,6 +3763,85 @@ function MediaPage() {
               </a>
             ))}
           </div>
+        </div>
+
+        <div
+          className="mt-4 rounded-lg border border-border bg-background p-4"
+          data-testid="media-attribution-handoff"
+          data-attribution-schema={mediaAttributionHandoff.schemaVersion}
+          data-attribution-status={mediaAttributionHandoff.status}
+          data-attribution-channels={mediaAttributionHandoff.metrics.channels}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Attribution handoff</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Packages provider, CDN, and campaign-channel evidence for custom frontend media ROI dashboards.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-semibold capitalize',
+                mediaAttributionHandoff.status === 'ready'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : mediaAttributionHandoff.status === 'partial'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-muted text-muted-foreground',
+              )}
+              >
+                {mediaAttributionHandoff.status.replace(/-/g, ' ')}
+              </span>
+              <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+                {mediaAttributionHandoff.schemaVersion}
+              </span>
+              <button
+                type="button"
+                onClick={() => void copyMediaAttributionHandoff()}
+                disabled={isMediaLibraryBusy || !canExportMediaActivity}
+                title={!canExportMediaActivity ? activityPermissionTitle : 'Copy media attribution handoff'}
+                aria-label="Copy media attribution handoff"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Copy className="size-3.5" />
+                Copy attribution
+              </button>
+            </div>
+          </div>
+          <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            {mediaAttributionHandoff.summary}
+          </p>
+          <div className="mt-3 grid gap-2 md:grid-cols-4">
+            <MediaApiStat label="Channels" value={`${mediaAttributionHandoff.metrics.channels}`} />
+            <MediaApiStat label="Provider req" value={`${mediaAttributionHandoff.metrics.requests}`} />
+            <MediaApiStat label="Conversions" value={`${mediaAttributionHandoff.metrics.conversions}`} />
+            <MediaApiStat
+              label="Value"
+              value={formatProviderAnalyticsValue(
+                mediaAttributionHandoff.metrics.conversionValue,
+                mediaAttributionHandoff.metrics.currency,
+              )}
+            />
+          </div>
+          {mediaAttributionHandoff.missingEvidence.length > 0 ? (
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              {mediaAttributionHandoff.missingEvidence.slice(0, 3).map((item) => (
+                <div key={item} className="rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900">
+                  {item}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              {mediaAttributionHandoff.channels.slice(0, 3).map((channel) => (
+                <div key={`${channel.source}:${channel.attributionWindow}`} className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+                  <div className="truncate font-semibold text-foreground">{channel.source}</div>
+                  <div className="mt-1 text-muted-foreground">
+                    {channel.attributionWindow} · {channel.conversions} conv · {formatProviderAnalyticsValue(channel.conversionValue, channel.currency)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
@@ -9017,6 +9162,94 @@ const buildMediaOperationActionPlan = ({
     readyCount,
     totalCount: actions.length,
     actions,
+  };
+};
+
+const buildMediaAttributionHandoff = ({
+  mediaAnalytics,
+  adminMediaProviderAnalyticsUrl,
+  publicMediaListUrl,
+}: {
+  mediaAnalytics: MediaAnalytics;
+  adminMediaProviderAnalyticsUrl: string;
+  publicMediaListUrl: string;
+}): MediaAttributionHandoff => {
+  const hasProviderAnalytics = mediaAnalytics.providerRows.some((row) => (
+    row.providerRequests > 0 ||
+    row.providerBytesServed > 0 ||
+    row.providerConversions > 0 ||
+    row.providerConversionValue > 0
+  ));
+  const hasChannelAttribution = mediaAnalytics.providerAttributionRows.length > 0;
+  const hasConversionValue = mediaAnalytics.providerConversions > 0 || mediaAnalytics.providerConversionValue > 0;
+  const missingEvidence = [
+    ...(!hasProviderAnalytics ? ['Ingest CDN/storage provider metrics with requests and byte counts.'] : []),
+    ...(!hasChannelAttribution ? ['Include source and attributionWindow fields so channels can be grouped across providers.'] : []),
+    ...(!hasConversionValue ? ['Include conversion and value fields when media assets participate in campaigns or commerce funnels.'] : []),
+  ];
+  const status: MediaAttributionHandoffStatus = hasChannelAttribution && hasConversionValue
+    ? 'ready'
+    : hasChannelAttribution || hasProviderAnalytics
+      ? 'partial'
+      : 'needs-provider-ingest';
+
+  return {
+    schemaVersion: 'backy.media-attribution-handoff.v1',
+    status,
+    ready: status === 'ready',
+    summary: status === 'ready'
+      ? `${mediaAnalytics.providerAttributionRows.length} attribution channel${mediaAnalytics.providerAttributionRows.length === 1 ? '' : 's'} include provider requests, conversions, and value for custom frontend reporting.`
+      : status === 'partial'
+        ? 'Provider analytics are present, but channel grouping or conversion/value evidence is incomplete.'
+        : 'No cross-channel media attribution evidence has been ingested yet.',
+    ingestionEndpoint: adminMediaProviderAnalyticsUrl,
+    publicMediaListEndpoint: publicMediaListUrl,
+    metrics: {
+      providers: mediaAnalytics.providerRows.length,
+      channels: mediaAnalytics.providerAttributionRows.length,
+      requests: mediaAnalytics.providerRequests,
+      conversions: mediaAnalytics.providerConversions,
+      conversionValue: mediaAnalytics.providerConversionValue,
+      conversionRate: mediaAnalytics.providerConversionRate,
+      valuePerRequest: mediaAnalytics.providerValuePerRequest,
+      currency: mediaAnalytics.providerCurrency || 'USD',
+    },
+    channels: mediaAnalytics.providerAttributionRows.map((row) => ({
+      source: row.source,
+      attributionWindow: row.attributionWindow,
+      providers: row.providers,
+      assetCount: row.assetCount,
+      requests: row.providerRequests,
+      bytesServed: row.providerBytesServed,
+      conversions: row.providerConversions,
+      conversionValue: row.providerConversionValue,
+      conversionRate: row.providerConversionRate,
+      valuePerRequest: row.providerValuePerRequest,
+      currency: row.providerCurrency || mediaAnalytics.providerCurrency || 'USD',
+      lastSyncedAt: row.providerLastSyncedAt,
+    })),
+    providerCoverage: mediaAnalytics.providerRows.map((row) => ({
+      provider: row.provider,
+      assets: row.count,
+      publicAssets: row.publicCount,
+      privateAssets: row.privateCount,
+      backyRequests: row.requests,
+      providerRequests: row.providerRequests,
+      providerConversions: row.providerConversions,
+      providerConversionValue: row.providerConversionValue,
+      lastSyncedAt: row.providerLastSyncedAt,
+    })),
+    missingEvidence,
+    nextSteps: missingEvidence.length > 0
+      ? [
+          `POST attribution batches to ${adminMediaProviderAnalyticsUrl}.`,
+          'Pass mediaId, storagePath, or url with source, attributionWindow, requests, conversions, and conversionValue.',
+          'Use the public media list endpoint to join channel evidence back to assets in generated frontends.',
+        ]
+      : [
+          'Use channels for custom frontend media ROI dashboards.',
+          'Keep provider analytics ingestion on the same attribution window names used by marketing and commerce tools.',
+        ],
   };
 };
 

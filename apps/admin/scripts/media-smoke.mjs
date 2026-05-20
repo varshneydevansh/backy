@@ -71,6 +71,8 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes("schemaVersion: 'backy.media-handoff.v1'"), 'Media handoff manifest must expose a named schema version');
   assert(source.includes("schemaVersion: 'backy.media-operation-action-plan.v1'"), 'Media handoff manifest must expose the operation action-plan schema');
   assert(source.includes('data-testid="media-operation-action-plan"') && source.includes('operationActionPlan: mediaOperationActionPlan'), 'Media command center must render and export the operation action plan');
+  assert(source.includes("schemaVersion: 'backy.media-attribution-handoff.v1'") && source.includes('attributionHandoff: mediaAttributionHandoff'), 'Media handoff manifest must export the attribution handoff schema');
+  assert(source.includes('data-testid="media-attribution-handoff"') && source.includes('copyMediaAttributionHandoff') && source.includes('Copy attribution'), 'Media command center must render and copy a dedicated attribution handoff');
   assert(source.includes('providerAttributionRows') && source.includes('data-testid="media-attribution-sources"'), 'Media analytics must expose cross-channel attribution source rows');
   assert(source.includes('title="No media quota data yet"'), 'Media runtime quota panel must keep the shared empty-state title visible');
   assert(source.includes('Quota data will appear after the media API responds with workspace storage usage and limits.'), 'Media runtime quota empty state must explain API-backed usage data');
@@ -1132,6 +1134,10 @@ const assertMediaLayout = async (client, expectedText) => {
     hasOperationActionPlan: Boolean(document.querySelector('[data-testid="media-operation-action-plan"]')) &&
       document.body?.innerText?.includes('Media operation action plan') &&
       document.body?.innerText?.includes('backy.media-operation-action-plan.v1'),
+    hasAttributionHandoff: Boolean(document.querySelector('[data-testid="media-attribution-handoff"]')) &&
+      document.body?.innerText?.includes('Attribution handoff') &&
+      document.body?.innerText?.includes('backy.media-attribution-handoff.v1') &&
+      Boolean(document.querySelector('[aria-label="Copy media attribution handoff"]')),
     hasScannerRuntime: Boolean(document.querySelector('[data-testid="media-scanner-runtime"]')) &&
       document.body?.innerText?.includes('Upload scanner'),
     hasScannerEnvContract: Boolean(document.querySelector('[data-testid="media-scanner-env-contract"]')) &&
@@ -1151,7 +1157,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasOperationActionPlan && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -1353,10 +1359,13 @@ const assertProviderRoiDashboard = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const panel = document.querySelector('[data-testid="media-provider-roi"]');
+      const handoff = document.querySelector('[data-testid="media-attribution-handoff"]');
       const text = panel?.textContent || '';
       return {
         ready: Boolean(panel) &&
           Boolean(document.querySelector('[data-testid="media-attribution-sources"]')) &&
+          handoff?.getAttribute('data-attribution-schema') === 'backy.media-attribution-handoff.v1' &&
+          handoff?.getAttribute('data-attribution-status') === 'ready' &&
           text.includes('Provider ROI') &&
           text.includes('Attribution sources') &&
           text.includes('media-smoke-provider-ingest') &&
@@ -1367,6 +1376,7 @@ const assertProviderRoiDashboard = async (client) => {
           text.includes('USD 3.33/req') &&
           text.includes('50 provider requests'),
         text: text.slice(0, 1600),
+        handoff: handoff?.textContent?.slice(0, 1000) || '',
       };
     })()`);
     if (state.ready) {

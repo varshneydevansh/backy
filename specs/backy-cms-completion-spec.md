@@ -583,6 +583,9 @@ Minimal API behavior (admin/public split):
 - `GET /api/sites/:siteId/media/:mediaId/transform`
   - returns prepared responsive transform metadata for renderers.
 
+Admin Media handoff:
+- `/media` exports `backy.media-handoff.v1` with `backy.media-readiness.v1`, `backy.media-operation-action-plan.v1`, and copyable `backy.media-attribution-handoff.v1` evidence for custom frontend media libraries, font pickers, provider ROI dashboards, and operator attribution-ingest runbooks.
+
 ### 13.2 Form blocks and user submissions
 
 The editor must support a form component with structured fields.
