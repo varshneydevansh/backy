@@ -977,6 +977,7 @@ const assertProductsApiContractsSource = () => {
   assert(
     source.includes('data-testid="products-provider-certification-download-button"') &&
       source.includes('data-testid="products-provider-certification-copy-button"') &&
+      source.includes('data-testid="products-provider-certification-command-copy-button"') &&
       source.includes("providerCertificationHandoffText") &&
       source.includes("catalogEvidence") &&
       source.includes("endpointEvidence") &&
@@ -991,7 +992,11 @@ const assertProductsApiContractsSource = () => {
       source.includes("requiredFor: 'live-commerce-provider-launch'") &&
       source.includes("ci:commerce-provider-smoke") &&
       source.includes("ci:commerce-provider-certification") &&
+      source.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification") &&
+      source.includes("npm run test:commerce-provider-certification-preflight-contract") &&
+      source.includes("BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification") &&
       source.includes('data-testid="products-provider-runtime-evidence"') &&
+      source.includes('data-testid="products-provider-certification-runbook"') &&
       source.includes("Provider secret values are never returned") &&
       source.includes("requiredInputs"),
     "Products handoff manifest must expose mock and live provider certification gates",
@@ -1010,6 +1015,10 @@ const assertProductsApiContractsSource = () => {
     "BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL",
     "BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL",
     "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
+    "BACKY_COMMERCE_CERTIFY_CATALOG=1 with BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER",
+    "selected provider-family flags",
+    "credentialed provider readiness check output",
+    "Copy CI command",
     "Required inputs",
   ]) {
     assert(
