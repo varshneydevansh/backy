@@ -31,6 +31,45 @@ function regexOccurrenceCount(source, pattern) {
   return Array.from(source.matchAll(pattern)).length;
 }
 
+const publicRouteStateSource = read("apps/public/src/components/PublicRouteState.tsx");
+const publicNotFoundSource = read("apps/public/src/app/not-found.tsx");
+const publicUnauthorizedSource = read("apps/public/src/app/unauthorized.tsx");
+const publicForbiddenSource = read("apps/public/src/app/forbidden.tsx");
+const publicErrorSource = read("apps/public/src/app/error.tsx");
+
+for (const needle of [
+  "data-backy-public-route-state",
+  "data-backy-error-status",
+  "data-backy-error-code",
+  'data-backy-route-state-contract="backy.public-route-state.v1"',
+  "aria-live={kind === 'not-found' ? 'polite' : 'assertive'}",
+  "Public API clients receive the matching normalized error code through Backy JSON endpoints.",
+]) {
+  assertIncludes(
+    publicRouteStateSource,
+    needle,
+    "public hosted route states must expose stable recovery and API-contract hooks",
+  );
+}
+
+for (const [label, source, status, code, kind] of [
+  ["not-found", publicNotFoundSource, "404", "NOT_FOUND", 'kind="not-found"'],
+  ["unauthorized", publicUnauthorizedSource, "401", "AUTH_REQUIRED", 'kind="auth-required"'],
+  ["forbidden", publicForbiddenSource, "403", "FORBIDDEN", 'kind="forbidden"'],
+  ["error", publicErrorSource, "500", "INTERNAL_SERVER_ERROR", 'kind="error"'],
+]) {
+  assertIncludes(source, "PublicRouteState", `public ${label} route boundary must use shared Backy state UI`);
+  assertIncludes(source, `statusCode={${status}}`, `public ${label} route boundary must expose ${status}`);
+  assertIncludes(source, `code="${code}"`, `public ${label} route boundary must expose ${code}`);
+  assertIncludes(source, kind, `public ${label} route boundary must expose stable route-state kind`);
+}
+
+assertIncludes(
+  publicErrorSource,
+  "onRetry={reset}",
+  "public runtime error boundary must expose a retry action instead of a dead end",
+);
+
 const sdkClientSource = read("packages/sdk-js/src/index.ts");
 assertIncludes(
   sdkClientSource,
@@ -819,7 +858,12 @@ assertIncludes(
 );
 assertIncludes(
   publicFormSubmissionRoute,
-  "normalizeFormSubmissionValues(form, parsed.values)",
+  "normalizeFrontendSubmissionValueKeys(form, parsed.values)",
+  "public form submission route must map trusted frontend field aliases before filtering",
+);
+assertIncludes(
+  publicFormSubmissionRoute,
+  "normalizeFormSubmissionValues(form, frontendNormalizedValues)",
   "public form submission route must strip undeclared submission keys before storage and routing",
 );
 assertIncludes(
@@ -852,7 +896,14 @@ assert(
 assert(
   occurrenceCount(
     publicFormSubmissionRoute,
-    "const submissionValues = normalizeFormSubmissionValues(form, parsed.values);",
+    "const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values);",
+  ) >= 2,
+  "public form submission route must normalize frontend field aliases in repository and demo branches",
+);
+assert(
+  occurrenceCount(
+    publicFormSubmissionRoute,
+    "const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues);",
   ) >= 2,
   "public form submission route must normalize declared submission fields in repository and demo branches",
 );
@@ -874,7 +925,7 @@ assert(
   occurrenceCount(publicFormSubmissionRoute, "parsed.values") ===
     occurrenceCount(
       publicFormSubmissionRoute,
-      "normalizeFormSubmissionValues(form, parsed.values)",
+      "normalizeFrontendSubmissionValueKeys(form, parsed.values)",
     ),
   "public form submission route must not pass raw parsed submission values beyond normalization",
 );
