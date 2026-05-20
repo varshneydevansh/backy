@@ -44,6 +44,7 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(
     source.includes('data-testid="forms-persistence-certification-download-button"') &&
       source.includes('data-testid="forms-persistence-certification-copy-button"') &&
+      source.includes('data-testid="forms-persistence-certification-command-copy-button"') &&
       source.includes('formPersistenceCertificationText') &&
       source.includes('-backy-forms-persistence-certification.json') &&
       source.includes('Forms persistence certification handoff downloaded.'),
@@ -318,6 +319,9 @@ const assertFormsPersistenceCertificationSource = () => {
     'npm run test:repositories --workspace @backy/db',
     'npm run test:forms-postgres --workspace @backy/db',
     'npm run ci:forms-postgres',
+    'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres',
+    'npm run test:forms-postgres-preflight-contract',
+    'npm run test:forms-postgres-disposable-guard',
     '.github/workflows/forms-postgres-contract.yml',
     'BACKY_DATABASE_URL',
     'DATABASE_URL',
@@ -327,8 +331,12 @@ const assertFormsPersistenceCertificationSource = () => {
     'disposable migrated Supabase/Postgres database',
     'disposable_database_confirmed=true',
     'external-database-gate',
+    'forms-persistence-certification-runbook',
     'forms-persistence-runtime-evidence',
+    'Copy CI command',
     'Runtime evidence',
+    'preflight contract output',
+    'DB-backed Forms smoke output',
     'readyForCertification',
     'databaseUrlConfigured',
     'Database URLs and credentials are never returned',
@@ -345,6 +353,8 @@ const assertFormsPersistenceCertificationResponse = (payload) => {
   assert(certification.schemaVersion === 'backy.forms-persistence-certification.v1', `Unexpected Forms persistence certification schema: ${JSON.stringify(certification)}`);
   assert(certification.status === 'external-database-gate', `Unexpected Forms persistence certification status: ${JSON.stringify(certification)}`);
   assert(certification.selectedSiteId === SITE_ID, `Forms persistence certification must identify the selected site: ${JSON.stringify(certification)}`);
+  assert(certification.operatorGate === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres', `Forms persistence certification missing operator gate: ${JSON.stringify(certification)}`);
+  assert(Array.isArray(certification.preflightGates) && certification.preflightGates.includes('npm run test:forms-postgres-preflight-contract') && certification.preflightGates.includes('npm run test:forms-postgres-disposable-guard'), `Forms persistence certification missing preflight gates: ${JSON.stringify(certification)}`);
   assert(certification.databaseGate === 'npm run test:forms-postgres --workspace @backy/db', `Forms persistence certification missing database gate: ${JSON.stringify(certification)}`);
   assert(certification.ciGate === 'npm run ci:forms-postgres', `Forms persistence certification missing CI gate: ${JSON.stringify(certification)}`);
   assert(certification.workflow === '.github/workflows/forms-postgres-contract.yml', `Forms persistence certification missing workflow: ${JSON.stringify(certification)}`);
@@ -352,6 +362,7 @@ const assertFormsPersistenceCertificationResponse = (payload) => {
   assert(certification.requiredConfirmationEnv === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', `Forms persistence certification missing disposable confirmation env: ${JSON.stringify(certification)}`);
   assert(Array.isArray(certification.targetGuards) && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') && certification.targetGuards.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), `Forms persistence certification missing target guards: ${JSON.stringify(certification)}`);
   assert(Array.isArray(certification.requires) && certification.requires.includes('disposable migrated Supabase/Postgres database') && certification.requires.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') && certification.requires.includes('disposable_database_confirmed=true'), `Forms persistence certification missing disposable database requirements: ${JSON.stringify(certification)}`);
+  assert(Array.isArray(certification.evidenceExpectations) && certification.evidenceExpectations.includes('preflight contract output') && certification.evidenceExpectations.includes('DB-backed Forms smoke output'), `Forms persistence certification missing operator evidence expectations: ${JSON.stringify(certification)}`);
   assert(certification.runtime && typeof certification.runtime.databaseUrlConfigured === 'boolean' && Object.prototype.hasOwnProperty.call(certification.runtime, 'databaseUrlAlias'), `Forms persistence certification must expose non-secret database URL runtime state: ${JSON.stringify(certification)}`);
   assert(typeof certification.runtime.dataMode === 'string' && typeof certification.runtime.databaseType === 'string', `Forms persistence certification must expose non-secret runtime mode/type defaults: ${JSON.stringify(certification)}`);
   assert(typeof certification.runtime.disposableConfirmed === 'boolean' && typeof certification.runtime.readyForCertification === 'boolean', `Forms persistence certification must expose disposable confirmation readiness: ${JSON.stringify(certification)}`);

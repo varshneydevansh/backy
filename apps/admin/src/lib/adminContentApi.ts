@@ -802,11 +802,14 @@ export interface FormsPersistenceCertification {
   requiredDatabaseEnv: string[];
   requiredConfirmationEnv: string;
   localEvidence: string[];
+  operatorGate?: string;
+  preflightGates?: string[];
   databaseGate: string;
   ciGate: string;
   workflow: string;
   targetGuards: string[];
   requires: string[];
+  evidenceExpectations?: string[];
   coverage?: string[];
   runtime?: {
     dataMode?: string;

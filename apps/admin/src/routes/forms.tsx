@@ -489,6 +489,18 @@ const FORM_PERSISTENCE_CERTIFICATION_CHECKS = [
   },
 ] as const;
 
+const FORM_PERSISTENCE_OPERATOR_GATE = 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres';
+const FORM_PERSISTENCE_PREFLIGHT_GATES = [
+  'npm run test:forms-postgres-preflight-contract',
+  'npm run test:forms-postgres-disposable-guard',
+] as const;
+const FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS = [
+  'preflight contract output',
+  'disposable target guard output',
+  'DB-backed Forms smoke output',
+  'non-secret workflow summary with disposable database confirmation',
+] as const;
+
 const FORM_EXPORT_COLUMNS = [
   'form_id',
   'active_site_id',
@@ -935,6 +947,8 @@ function FormsRoute() {
     requiredDatabaseEnv: ['BACKY_DATABASE_URL', 'DATABASE_URL'],
     requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
     localEvidence: ['npm run test:forms --workspace @backy-cms/admin', 'npm run test:repositories --workspace @backy/db'],
+    operatorGate: formsPersistenceCertification?.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE,
+    preflightGates: formsPersistenceCertification?.preflightGates || [...FORM_PERSISTENCE_PREFLIGHT_GATES],
     databaseGate: 'npm run test:forms-postgres --workspace @backy/db',
     ciGate: 'npm run ci:forms-postgres',
     workflow: '.github/workflows/forms-postgres-contract.yml',
@@ -956,10 +970,18 @@ function FormsRoute() {
       'contact merge and promotion metadata',
       'consent/spam settings persistence',
     ],
+    evidenceExpectations: formsPersistenceCertification?.evidenceExpectations || [...FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS],
     runtime: formsPersistenceCertification?.runtime || null,
     secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
     checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
-  }), [activeSiteId, formsPersistenceCertification?.coverage, formsPersistenceCertification?.runtime]);
+  }), [
+    activeSiteId,
+    formsPersistenceCertification?.coverage,
+    formsPersistenceCertification?.evidenceExpectations,
+    formsPersistenceCertification?.operatorGate,
+    formsPersistenceCertification?.preflightGates,
+    formsPersistenceCertification?.runtime,
+  ]);
   const formsTemplatePack = useMemo(() => ({
     schemaVersion: 'backy.form-template-pack.v1',
     generatedAt: new Date().toISOString(),
@@ -1150,6 +1172,7 @@ function FormsRoute() {
     selectedFormSubmitUrl,
   ]);
   const formsTemplatePackText = useMemo(() => JSON.stringify(formsTemplatePack, null, 2), [formsTemplatePack]);
+  const formPersistenceOperatorGate = formPersistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE;
   const formPersistenceCertificationText = useMemo(() => JSON.stringify(formPersistenceCertification, null, 2), [formPersistenceCertification]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
   const formsRouteSearch = useMemo<FormsSearch>(() => ({
@@ -2899,6 +2922,17 @@ function FormsRoute() {
               <Button
                 size="sm"
                 variant="outline"
+                onClick={() => void copyFormApiText(formPersistenceOperatorGate, 'Forms persistence CI command')}
+                disabled={isFormsBusy || !canExportForms}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Copy className="size-4" />}
+                data-testid="forms-persistence-certification-command-copy-button"
+              >
+                Copy CI command
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={downloadFormPersistenceCertification}
                 disabled={isFormsBusy || !canExportForms}
                 title={!canExportForms ? exportPermissionTitle : undefined}
@@ -2939,6 +2973,30 @@ function FormsRoute() {
             </div>
             <div className="mt-1">
               Target guards: {formPersistenceCertification.targetGuards.join(', ')}; requires {formPersistenceCertification.requires.slice(0, 2).join(' and ')}.
+            </div>
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="forms-persistence-certification-runbook">
+            <div className="font-medium text-foreground">Disposable database runbook</div>
+            <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+              {formPersistenceOperatorGate}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preflight gates</div>
+                <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                  {(formPersistenceCertification.preflightGates || FORM_PERSISTENCE_PREFLIGHT_GATES).map((gate) => (
+                    <li key={gate} className="font-mono">{gate}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence to attach</div>
+                <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                  {(formPersistenceCertification.evidenceExpectations || FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS).map((expectation) => (
+                    <li key={expectation}>{expectation}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
           <div className="mt-3 rounded-md border border-border bg-card px-3 py-2 text-xs" data-testid="forms-persistence-runtime-evidence">
