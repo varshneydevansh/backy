@@ -121,6 +121,7 @@ type FulfillmentDispatchStatus = 'none' | 'requested' | 'succeeded' | 'failed' |
 type ProviderRefundStatus = 'none' | 'requested' | 'succeeded' | 'failed' | 'requires_action';
 type OrderOperationActionKey = 'refresh-quote' | 'prepare-label' | 'refresh-tracking' | 'dispatch-fulfillment' | 'provider-refund' | 'refresh-provider-refund';
 type OrderOperationExecutionMode = 'provider-ready' | 'manual-handoff' | 'blocked';
+type OrderStatusHandoffStatus = 'ready' | 'attention' | 'blocked';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
@@ -148,6 +149,75 @@ interface OrderOperationActionPlan {
   handoffRequired: boolean;
   executableNow: boolean;
   availableActions: OrderOperationAction[];
+}
+interface OrderStatusHandoffCheck {
+  key: string;
+  label: string;
+  status: OrderStatusHandoffStatus;
+  detail: string;
+}
+interface OrderStatusHandoff {
+  schemaVersion: 'backy.order-status-handoff.v1';
+  generatedAt: string;
+  status: OrderStatusHandoffStatus;
+  score: number;
+  selectedSiteId: string;
+  order: {
+    id: string;
+    slug: string;
+    orderNumber: string;
+    recordStatus: ContentStatus;
+    total: number;
+    currency: string;
+    itemCount: number;
+    orderStatus: OrderWorkflowStatus;
+    paymentStatus: PaymentStatus;
+    fulfillmentStatus: FulfillmentStatus;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  customer: {
+    displayName: string;
+    maskedEmail: string;
+    maskedPhone: string;
+    customerProfileId: string;
+    customerProfileSlug: string;
+    customerProfileStatus: string;
+  } | null;
+  tracking: {
+    carrier: string;
+    trackingNumber: string;
+    trackingUrl: string;
+    trackingStatus: string;
+    trackingLastCheckedAt: string;
+    fulfilledAt: string;
+    shippingLabelStatus: ShippingLabelStatus;
+    shippingLabelProvider: string;
+    shippingLabelId: string;
+  } | null;
+  refund: {
+    refundAmount: number | null;
+    refundReasonPresent: boolean;
+    providerRefundStatus: ProviderRefundStatus;
+    providerRefundProvider: string;
+    providerRefundId: string;
+    providerRefundRequestedAt: string;
+    providerRefundCompletedAt: string;
+  } | null;
+  endpoints: {
+    checkoutIntake: string;
+    adminOrderDetail: string;
+    adminTracking: string;
+    adminProviderRefund: string;
+  };
+  privacy: {
+    publicCollectionReadBlocked: boolean;
+    customerSafeFieldsOnly: boolean;
+    excludedFields: string[];
+  };
+  actionPlan: OrderOperationActionPlan | null;
+  checks: OrderStatusHandoffCheck[];
+  nextSteps: string[];
 }
 type OrderPermissionKey =
   | 'commerce.view'
@@ -1700,6 +1770,23 @@ function OrdersRoute() {
     runtimeCommerce,
     totalOrderCount,
   ]);
+  const selectedOrderStatusHandoff = useMemo<OrderStatusHandoff>(() => buildOrderStatusHandoff({
+    activeSiteId,
+    adminOrderDetailApiUrl,
+    publicOrderIntakeUrl,
+    order: selectedOrder,
+    customerProfile: linkedCustomerProfile,
+    orderOperationPlan: selectedOrder ? orderOperationPlans.get(selectedOrder.id) || null : null,
+    ordersApiReady,
+  }), [
+    activeSiteId,
+    adminOrderDetailApiUrl,
+    linkedCustomerProfile,
+    orderOperationPlans,
+    ordersApiReady,
+    publicOrderIntakeUrl,
+    selectedOrder,
+  ]);
   const orderHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1825,6 +1912,7 @@ function OrdersRoute() {
       checks: providerReadinessChecks,
     },
     providerCertification: providerCertificationSummary,
+    selectedOrderStatusHandoff,
     deliveryEvents: orderDeliveryEvents.map((event) => ({
       id: event.id,
       status: event.status,
@@ -1950,10 +2038,12 @@ function OrdersRoute() {
     publicOrdersApiUrl,
     runtimeCommerce,
     searchQuery,
+    selectedOrderStatusHandoff,
     sourceFilter,
     totalOrderCount,
   ]);
   const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
+  const selectedOrderStatusHandoffText = useMemo(() => JSON.stringify(selectedOrderStatusHandoff, null, 2), [selectedOrderStatusHandoff]);
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationSummary, null, 2), [providerCertificationSummary]);
   const ordersRouteSearch = useMemo<OrdersSearch>(() => ({
     siteId: activeSiteId,
@@ -3164,6 +3254,21 @@ function OrdersRoute() {
       setNotice('Order handoff manifest copied.');
     } catch {
       setNotice(orderHandoffText);
+    }
+  };
+
+  const copySelectedOrderStatusHandoff = async () => {
+    if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(selectedOrderStatusHandoffText);
+      setNotice('Order status handoff copied.');
+    } catch {
+      setNotice(selectedOrderStatusHandoffText);
     }
   };
 
@@ -5208,6 +5313,109 @@ function OrdersRoute() {
                     </>
                   ) : null}
                 </div>
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-status-handoff">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-semibold text-foreground">Order status handoff</div>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                          selectedOrderStatusHandoff.status === 'ready'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : selectedOrderStatusHandoff.status === 'attention'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-destructive/10 text-destructive',
+                        )}
+                        >
+                          {selectedOrderStatusHandoff.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Copy a customer-safe order status and tracking payload for storefront order-confirmation pages, customer portals, and support widgets.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                        {selectedOrderStatusHandoff.schemaVersion}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copySelectedOrderStatusHandoff()}
+                        disabled={isOrdersAccessBusy || !canExportOrders}
+                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="orders-status-handoff-copy-button"
+                      >
+                        Copy status JSON
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-4">
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Selected order</div>
+                      <div className="mt-1 truncate font-semibold text-foreground">
+                        {selectedOrderStatusHandoff.order?.orderNumber || 'No order selected'}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Payment status</div>
+                      <div className="mt-1 font-semibold capitalize text-foreground">
+                        {selectedOrderStatusHandoff.order?.paymentStatus || 'pending'}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Fulfillment and tracking</div>
+                      <div className="mt-1 truncate font-semibold text-foreground">
+                        {selectedOrderStatusHandoff.tracking?.trackingNumber || selectedOrderStatusHandoff.order?.fulfillmentStatus || 'unavailable'}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Customer-safe score</div>
+                      <div className="mt-1 font-semibold text-foreground">{selectedOrderStatusHandoff.score}%</div>
+                    </div>
+                  </div>
+
+                  <div
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-xs',
+                      selectedOrderStatusHandoff.actionPlan?.attention
+                        ? 'border-amber-200 bg-amber-50 text-amber-900'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-800',
+                    )}
+                    data-testid="orders-status-handoff-action-plan"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold">
+                        {selectedOrderStatusHandoff.actionPlan
+                          ? `Recommended operation: ${
+                              selectedOrderStatusHandoff.actionPlan.recommendedAction === 'none'
+                                ? 'No operation'
+                                : selectedOrderStatusHandoff.actionPlan.availableActions.find((action) => action.key === selectedOrderStatusHandoff.actionPlan?.recommendedAction)?.label || selectedOrderStatusHandoff.actionPlan.recommendedAction
+                            }`
+                          : 'Recommended operation: Select or save an order'}
+                      </span>
+                      <span className="font-mono text-[11px]">
+                        {selectedOrderStatusHandoff.actionPlan?.schemaVersion || 'backy.order-operation-action-plan.v1'}
+                      </span>
+                    </div>
+                    <div className="mt-1 leading-5">
+                      {selectedOrderStatusHandoff.actionPlan?.recommendation || 'Select an order before exporting customer status handoff data.'}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {selectedOrderStatusHandoff.checks.map((check) => (
+                      <OrderStatusHandoffCheckCard key={check.key} check={check} />
+                    ))}
+                  </div>
+
+                  <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    <div className="font-semibold text-foreground">Next steps</div>
+                    <div className="mt-1 leading-5">{selectedOrderStatusHandoff.nextSteps.join(' ')}</div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Provider">
                     <input
@@ -6270,6 +6478,28 @@ function ProviderReadinessPill({ title, mode, ready, detail }: { title: string; 
   );
 }
 
+function OrderStatusHandoffCheckCard({ check }: { check: OrderStatusHandoffCheck }) {
+  return (
+    <div className={cn(
+      'rounded-md border px-3 py-2 text-xs',
+      check.status === 'ready'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : check.status === 'attention'
+          ? 'border-amber-200 bg-amber-50 text-amber-900'
+          : 'border-destructive/30 bg-destructive/10 text-destructive',
+    )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-semibold">{check.label}</span>
+        <span className="shrink-0 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] capitalize">
+          {check.status}
+        </span>
+      </div>
+      <div className="mt-1 leading-5 opacity-90">{check.detail}</div>
+    </div>
+  );
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
@@ -6399,6 +6629,270 @@ const readOrderValue = (
 ): unknown => (
   values[normalizedKey] ?? values[camelizeOrderKey(normalizedKey)] ?? fallback
 );
+
+const maskCustomerEmail = (email: string): string => {
+  const trimmed = email.trim();
+  const [local, domain] = trimmed.split('@');
+  if (!local || !domain) return '';
+  const visible = local.length <= 2 ? local.slice(0, 1) : local.slice(0, 2);
+  return `${visible}${'*'.repeat(Math.max(3, local.length - visible.length))}@${domain}`;
+};
+
+const maskCustomerPhone = (phone: string): string => {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  return `${digits.length > 4 ? '***-' : ''}${digits.slice(-4)}`;
+};
+
+const orderStatusEndpoint = (template: string, orderId: string): string => (
+  template.includes('{orderId}')
+    ? template.replace('{orderId}', encodeURIComponent(orderId))
+    : template
+);
+
+const summarizeOrderStatus = (checks: OrderStatusHandoffCheck[]): OrderStatusHandoffStatus => {
+  if (checks.some((check) => check.status === 'blocked')) return 'blocked';
+  if (checks.some((check) => check.status === 'attention')) return 'attention';
+  return 'ready';
+};
+
+const buildOrderStatusHandoff = ({
+  activeSiteId,
+  adminOrderDetailApiUrl,
+  publicOrderIntakeUrl,
+  order,
+  customerProfile,
+  orderOperationPlan,
+  ordersApiReady,
+}: {
+  activeSiteId: string;
+  adminOrderDetailApiUrl: string;
+  publicOrderIntakeUrl: string;
+  order: CollectionRecord | null;
+  customerProfile: CollectionRecord | null;
+  orderOperationPlan: OrderOperationActionPlan | null;
+  ordersApiReady: boolean;
+}): OrderStatusHandoff => {
+  const generatedAt = new Date().toISOString();
+  const adminDetailUrl = order ? orderStatusEndpoint(adminOrderDetailApiUrl, order.id) : adminOrderDetailApiUrl;
+  const endpoints = {
+    checkoutIntake: publicOrderIntakeUrl,
+    adminOrderDetail: adminDetailUrl,
+    adminTracking: `${adminDetailUrl}/tracking`,
+    adminProviderRefund: `${adminDetailUrl}/provider-refund`,
+  };
+
+  if (!order) {
+    const checks: OrderStatusHandoffCheck[] = [
+      {
+        key: 'selected-order',
+        label: 'Selected order',
+        status: 'blocked',
+        detail: 'Select or save an order before exporting customer status handoff data.',
+      },
+      {
+        key: 'private-order-queue',
+        label: 'Private order queue',
+        status: ordersApiReady ? 'ready' : 'blocked',
+        detail: ordersApiReady
+          ? 'Raw order records are private and can be projected into a customer-safe status payload.'
+          : 'Sync the private orders collection before exposing customer order status.',
+      },
+    ];
+
+    return {
+      schemaVersion: 'backy.order-status-handoff.v1',
+      generatedAt,
+      status: summarizeOrderStatus(checks),
+      score: 0,
+      selectedSiteId: activeSiteId,
+      order: null,
+      customer: null,
+      tracking: null,
+      refund: null,
+      endpoints,
+      privacy: {
+        publicCollectionReadBlocked: ordersApiReady,
+        customerSafeFieldsOnly: true,
+        excludedFields: ['email', 'phone', 'shippingaddress', 'billingaddress', 'notes', 'paymentreference', 'providerrefundpayload', 'fulfillmentpayload'],
+      },
+      actionPlan: null,
+      checks,
+      nextSteps: ['Select an order from the queue or save the current draft before copying customer status JSON.'],
+    };
+  }
+
+  const values = order.values;
+  const currency = normalizeCurrency(String(values.currency || 'USD'));
+  const orderNumber = String(readOrderValue(values, 'ordernumber', order.slug));
+  const customerName = String(readOrderValue(values, 'customername', '') || '').trim();
+  const email = String(values.email || '').trim();
+  const phone = String(readOrderValue(values, 'phone', '') || '').trim();
+  const orderStatus = asOrderStatus(readOrderValue(values, 'orderstatus', undefined));
+  const paymentStatus = asPaymentStatus(readOrderValue(values, 'paymentstatus', undefined));
+  const fulfillmentStatus = asFulfillmentStatus(readOrderValue(values, 'fulfillmentstatus', undefined));
+  const trackingNumber = String(readOrderValue(values, 'trackingnumber', '') || '').trim();
+  const trackingUrl = String(readOrderValue(values, 'trackingurl', '') || '').trim();
+  const trackingStatus = String(readOrderValue(values, 'trackingstatus', '') || '').trim();
+  const fulfillmentCarrier = String(readOrderValue(values, 'fulfillmentcarrier', '') || '').trim();
+  const fulfilledAt = String(readOrderValue(values, 'fulfilledat', '') || '');
+  const shippingLabelStatus = asShippingLabelStatus(readOrderValue(values, 'shippinglabelstatus', undefined));
+  const shippingLabelProvider = String(readOrderValue(values, 'shippinglabelprovider', '') || '').trim();
+  const shippingLabelId = String(readOrderValue(values, 'shippinglabelid', '') || '').trim();
+  const providerRefundStatus = asProviderRefundStatus(readOrderValue(values, 'providerrefundstatus', undefined));
+  const providerRefundId = String(readOrderValue(values, 'providerrefundid', '') || '').trim();
+  const refundAmountValue = readOrderValue(values, 'refundamount', null);
+  const refundAmount = refundAmountValue === null || refundAmountValue === undefined ? null : toNumber(refundAmountValue);
+  const hasTracking = Boolean(trackingNumber || trackingUrl);
+  const isClosed = orderStatus === 'cancelled' || paymentStatus === 'refunded' || orderStatus === 'refunded';
+  const lineItems = parseOrderLineItems(values.items, currency);
+
+  const checks: OrderStatusHandoffCheck[] = [
+    {
+      key: 'selected-order',
+      label: 'Selected order',
+      status: 'ready',
+      detail: `${orderNumber} is selected with ${lineItems.length} line item${lineItems.length === 1 ? '' : 's'} and ${formatMoney(toNumber(values.total), currency)} total.`,
+    },
+    {
+      key: 'customer-contact',
+      label: 'Customer contact',
+      status: email && customerName ? 'ready' : 'blocked',
+      detail: email && customerName
+        ? `${maskCustomerEmail(email)} can receive customer-safe status updates${customerProfile ? ' with a linked profile.' : '.'}`
+        : 'Customer name and email are required before customer status can be projected.',
+    },
+    {
+      key: 'payment-status',
+      label: 'Payment status',
+      status: paymentStatus === 'failed' ? 'blocked' : paymentStatus === 'pending' ? 'attention' : 'ready',
+      detail: paymentStatus === 'paid'
+        ? 'Payment is paid and the customer status view can proceed to fulfillment state.'
+        : paymentStatus === 'refunded'
+          ? 'Payment is refunded and the customer status view can show the order as closed.'
+          : paymentStatus === 'failed'
+            ? 'Payment failed; customer status should direct the buyer to support or retry flow.'
+            : 'Payment is still pending; keep the customer status view in a checkout-confirmation state.',
+    },
+    {
+      key: 'fulfillment-tracking',
+      label: 'Fulfillment and tracking',
+      status: isClosed || fulfillmentStatus === 'fulfilled' || hasTracking
+        ? 'ready'
+        : paymentStatus === 'paid' || fulfillmentStatus === 'processing'
+          ? 'attention'
+          : 'ready',
+      detail: isClosed
+        ? 'Order is closed; customer status can show cancellation or refund state.'
+        : fulfillmentStatus === 'fulfilled'
+          ? hasTracking
+            ? 'Fulfillment is complete and tracking details are available.'
+            : 'Fulfillment is complete; tracking is optional for digital or pickup orders.'
+          : hasTracking
+            ? 'Tracking details are present while fulfillment continues.'
+            : paymentStatus === 'paid'
+              ? 'Paid order still needs fulfillment or tracking metadata.'
+              : 'Tracking will become available after payment and fulfillment progress.',
+    },
+    {
+      key: 'refund-status',
+      label: 'Refund and return',
+      status: providerRefundStatus === 'failed' || providerRefundStatus === 'requires_action'
+        ? 'blocked'
+        : providerRefundStatus === 'requested'
+          ? 'attention'
+          : 'ready',
+      detail: providerRefundStatus === 'succeeded' || paymentStatus === 'refunded' || (refundAmount || 0) > 0
+        ? 'Refund or return metadata is present for customer support.'
+        : providerRefundStatus === 'requested'
+          ? 'Provider refund is requested and should be refreshed before promising a final customer state.'
+          : providerRefundStatus === 'failed' || providerRefundStatus === 'requires_action'
+            ? 'Provider refund needs operator action before customer-facing status is final.'
+            : 'No refund or return is active for this order.',
+    },
+    {
+      key: 'private-order-queue',
+      label: 'Customer portal safety',
+      status: ordersApiReady ? 'ready' : 'blocked',
+      detail: ordersApiReady
+        ? 'Raw order collection access is blocked; this handoff only exposes a bounded customer-safe projection.'
+        : 'Orders collection privacy or schema readiness needs repair before customer status projection.',
+    },
+    {
+      key: 'operation-plan',
+      label: 'Operation action plan',
+      status: !orderOperationPlan ? 'attention' : orderOperationPlan.attention ? 'attention' : 'ready',
+      detail: orderOperationPlan?.recommendation || 'Operation action plan is unavailable until the order is loaded into the queue.',
+    },
+  ];
+  const status = summarizeOrderStatus(checks);
+  const readyCount = checks.filter((check) => check.status === 'ready').length;
+  const nextSteps = checks
+    .filter((check) => check.status !== 'ready')
+    .map((check) => check.detail)
+    .slice(0, 4);
+
+  return {
+    schemaVersion: 'backy.order-status-handoff.v1',
+    generatedAt,
+    status,
+    score: Math.round((readyCount / checks.length) * 100),
+    selectedSiteId: activeSiteId,
+    order: {
+      id: order.id,
+      slug: order.slug,
+      orderNumber,
+      recordStatus: order.status,
+      total: toNumber(values.total),
+      currency,
+      itemCount: lineItems.length,
+      orderStatus,
+      paymentStatus,
+      fulfillmentStatus,
+      createdAt: order.createdAt || '',
+      updatedAt: order.updatedAt || '',
+    },
+    customer: {
+      displayName: customerName,
+      maskedEmail: maskCustomerEmail(email),
+      maskedPhone: maskCustomerPhone(phone),
+      customerProfileId: customerProfile?.id || String(readOrderValue(values, 'customerid', '') || ''),
+      customerProfileSlug: customerProfile?.slug || '',
+      customerProfileStatus: String(customerProfile?.values?.status || ''),
+    },
+    tracking: {
+      carrier: fulfillmentCarrier,
+      trackingNumber,
+      trackingUrl,
+      trackingStatus,
+      trackingLastCheckedAt: String(readOrderValue(values, 'trackinglastcheckedat', '') || ''),
+      fulfilledAt,
+      shippingLabelStatus,
+      shippingLabelProvider,
+      shippingLabelId,
+    },
+    refund: {
+      refundAmount,
+      refundReasonPresent: Boolean(readOrderValue(values, 'refundreason', '')),
+      providerRefundStatus,
+      providerRefundProvider: String(readOrderValue(values, 'providerrefundprovider', '') || ''),
+      providerRefundId,
+      providerRefundRequestedAt: String(readOrderValue(values, 'providerrefundrequestedat', '') || ''),
+      providerRefundCompletedAt: String(readOrderValue(values, 'providerrefundcompletedat', '') || ''),
+    },
+    endpoints,
+    privacy: {
+      publicCollectionReadBlocked: ordersApiReady,
+      customerSafeFieldsOnly: true,
+      excludedFields: ['email', 'phone', 'shippingaddress', 'billingaddress', 'notes', 'paymentreference', 'providerrefundpayload', 'fulfillmentpayload'],
+    },
+    actionPlan: orderOperationPlan,
+    checks,
+    nextSteps: nextSteps.length
+      ? nextSteps
+      : ['Customer status handoff is ready for order confirmation, tracking, refund, and support views.'],
+  };
+};
 
 const buildOrderOperationActionPlan = (
   order: CollectionRecord,

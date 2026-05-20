@@ -162,6 +162,19 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes("schemaVersion: 'backy.order-operation-action-plan.v1'"), 'Orders handoff manifest must expose per-order operation action plans');
   assert(source.includes('buildOrderOperationActionPlan') && source.includes('actionPlan={orderOperationPlans.get(order.id)}'), 'Orders list must build and pass per-order operation action plans');
   assert(source.includes('actionPlan.recommendation') && source.includes('disabledByPlan'), 'Orders action buttons must surface action-plan recommendations and disabled reasons');
+  assert(source.includes('data-testid="orders-status-handoff"'), 'Orders page must render the selected-order customer status handoff');
+  assert(
+    source.includes("schemaVersion: 'backy.order-status-handoff.v1'") &&
+      source.includes('selectedOrderStatusHandoffText') &&
+      source.includes('selectedOrderStatusHandoff') &&
+      source.includes('buildOrderStatusHandoff') &&
+      source.includes('data-testid="orders-status-handoff-copy-button"') &&
+      source.includes('data-testid="orders-status-handoff-action-plan"') &&
+      source.includes('Order status handoff copied.') &&
+      source.includes('customerSafeFieldsOnly') &&
+      source.includes('excludedFields'),
+    'Orders page must expose a copyable customer-safe order status handoff manifest',
+  );
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
       source.includes('data-testid="orders-provider-certification-download-button"') &&
@@ -2064,6 +2077,15 @@ const assertOrdersLayout = async (client) => {
       cronReadiness: Boolean(document.querySelector('[data-testid="orders-cron-readiness"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
+      statusHandoff: Boolean(document.querySelector('[data-testid="orders-status-handoff"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-status-handoff-copy-button"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-status-handoff-action-plan"]')) &&
+        document.body?.innerText?.includes('Order status handoff') &&
+        document.body?.innerText?.includes('backy.order-status-handoff.v1') &&
+        document.body?.innerText?.includes('Copy status JSON') &&
+        document.body?.innerText?.includes('Selected order') &&
+        document.body?.innerText?.includes('Payment status') &&
+        document.body?.innerText?.includes('Fulfillment and tracking'),
       checkout: document.body?.innerText?.includes('/commerce/orders') || false,
       privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
       analyticsEndpoint: document.body?.innerText?.includes('/commerce/orders/analytics') || false,
@@ -2079,7 +2101,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.operationActionPlan && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.operationActionPlan && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.statusHandoff && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
