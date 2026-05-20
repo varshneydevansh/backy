@@ -9,8 +9,9 @@ import type {
 import { matchCollectionItemRoute, matchCollectionListRoute } from './collectionRoutes';
 import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
 import { getRepositoryPageByPublicPath } from './repositoryPages';
-import { normalizeRoutePath, type ResolvedSiteRoute } from './routeResolver';
+import { type ResolvedSiteRoute, withLocalizedResolvedRoute } from './routeResolver';
 import { resolveRedirectRoute } from './redirectRules';
+import { resolveLocalizedRoutePath } from './siteLocalization';
 
 type RepositoryRouteResolverRepositories = Pick<
   BackyRepositories,
@@ -90,12 +91,13 @@ export async function resolveRepositorySiteRoute(
   repositories: RepositoryRouteResolverRepositories,
   site: Site,
   rawPath: string,
-  options: { previewToken?: string | null } = {},
+  options: { previewToken?: string | null; host?: string | null } = {},
 ): Promise<ResolvedSiteRoute | null> {
-  const path = normalizeRoutePath(rawPath);
+  const localized = resolveLocalizedRoutePath(site.settings, rawPath, { host: options.host });
+  const path = localized.path;
   const redirectRoute = resolveRedirectRoute(site.settings, path);
   if (redirectRoute) {
-    return redirectRoute;
+    return withLocalizedResolvedRoute(redirectRoute, localized);
   }
 
   const blogMatch = path.match(/^\/blog\/([^/]+)$/);
@@ -111,7 +113,7 @@ export async function resolveRepositorySiteRoute(
     }
 
     const canonical = canonicalPathForRepositoryPost(post);
-    return {
+    return withLocalizedResolvedRoute({
       type: 'post',
       path,
       status: post.status,
@@ -125,7 +127,7 @@ export async function resolveRepositorySiteRoute(
         apiUrl: `/api/sites/${site.id}/blog?slug=${encodeURIComponent(post.slug)}`,
         hostedPath: canonical,
       },
-    };
+    }, localized);
   }
 
   const pagePath = path === '/' ? 'index' : path.slice(1);
@@ -136,7 +138,7 @@ export async function resolveRepositorySiteRoute(
 
   if (page && (isRepositoryContentPubliclyReadable(page) || canPreviewPage)) {
     const canonical = canonicalPathForRepositoryPage(page);
-    return {
+    return withLocalizedResolvedRoute({
       type: 'page',
       path,
       status: page.status,
@@ -150,7 +152,7 @@ export async function resolveRepositorySiteRoute(
         apiUrl: `/api/sites/${site.id}/pages?path=${encodeURIComponent(path)}`,
         renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(path)}`,
       },
-    };
+    }, localized);
   }
 
   const collections = await repositories.collections.list({
@@ -177,14 +179,14 @@ export async function resolveRepositorySiteRoute(
     });
     const recordCount = records.items.filter(isRepositoryContentPubliclyReadable).length;
 
-    return {
+    return withLocalizedResolvedRoute({
       type: 'dynamicList',
       path,
       status: 'published',
       canonical,
       params,
       resource: dynamicListResource(site.id, collection, canonical, recordCount),
-    };
+    }, localized);
   }
 
   const dynamicItemMatch = matchCollectionItemRoute(path, publicCollections);
@@ -203,7 +205,7 @@ export async function resolveRepositorySiteRoute(
     return null;
   }
 
-  return {
+  return withLocalizedResolvedRoute({
     type: 'dynamicItem',
     path,
     status: record.status,
@@ -226,5 +228,5 @@ export async function resolveRepositorySiteRoute(
       frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
       collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
     },
-  };
+  }, localized);
 }

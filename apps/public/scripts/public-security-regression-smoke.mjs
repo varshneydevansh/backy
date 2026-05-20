@@ -1684,6 +1684,16 @@ assertIncludes(
   "if (!site || !site.isPublished)",
   "public render endpoint must not expose unpublished sites",
 );
+assertIncludes(
+  publicRenderRoute,
+  "resolveLocalizedRoutePath(site.settings, requestedPath, { host: routeHost })",
+  "public render endpoint must resolve configured locale path/domain routing before page, blog, and dynamic route matching",
+);
+assertIncludes(
+  publicRenderRoute,
+  "locale: localized.locale.code",
+  "public render endpoint must pass resolved locale metadata into render payloads",
+);
 const hostedSiteRoute = read(
   "apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx",
 );
@@ -1722,8 +1732,18 @@ const publicResolveRoute = read(
 );
 assertIncludes(
   publicResolveRoute,
-  "resolveRepositorySiteRoute(repositories, site, path, { previewToken })",
+  "resolveRepositorySiteRoute(repositories, site, path, { previewToken, host: routeHost })",
   "database public route resolve API must reuse the repository route resolver",
+);
+assertIncludes(
+  publicResolveRoute,
+  "const routeHost = resolveRequestHost(request, searchParams);",
+  "public route resolve API must accept host/domain context for localized domain routing",
+);
+assertIncludes(
+  publicResolveRoute,
+  "const site = await findRepositorySite(repositories, siteId);",
+  "public route resolve API must resolve database sites by id, slug, or custom domain",
 );
 assertExcludes(
   publicResolveRoute,
@@ -1734,6 +1754,39 @@ assertExcludes(
   publicResolveRoute,
   "matchCollectionItemRoute(",
   "database public route resolve API must not duplicate collection item route matching",
+);
+const routeResolverSource = read("apps/public/src/lib/routeResolver.ts");
+const repositoryRouteResolverSource = read("apps/public/src/lib/repositoryRouteResolver.ts");
+const siteLocalizationSource = read("apps/public/src/lib/siteLocalization.ts");
+assertIncludes(
+  siteLocalizationSource,
+  "export const resolveLocalizedRoutePath =",
+  "public localization helper must normalize locale-aware route paths",
+);
+assertIncludes(
+  siteLocalizationSource,
+  "matchedBy: 'path-prefix'",
+  "public localization helper must strip configured path-prefix locale routes",
+);
+assertIncludes(
+  siteLocalizationSource,
+  "matchedBy: 'domain'",
+  "public localization helper must resolve configured locale domains",
+);
+assertIncludes(
+  routeResolverSource,
+  "resolveLocalizedRoutePath(site.settings, rawPath, { host: options.host })",
+  "demo route resolver must match localized path/domain variants before route lookup",
+);
+assertIncludes(
+  routeResolverSource,
+  "withLocalizedPathQuery(resource.renderUrl, canonical)",
+  "route resolver must publish localized render URLs for custom frontends",
+);
+assertIncludes(
+  repositoryRouteResolverSource,
+  "resolveLocalizedRoutePath(site.settings, rawPath, { host: options.host })",
+  "repository route resolver must match localized path/domain variants before route lookup",
 );
 const pageRendererSource = read("apps/public/src/components/PageRenderer.tsx");
 assertIncludes(

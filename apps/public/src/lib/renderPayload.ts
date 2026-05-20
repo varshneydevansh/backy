@@ -31,6 +31,8 @@ const LEGACY_CURRENT_RECORD_ID_QUERY_VALUE = '$record.id';
 interface RenderPayloadOptions {
   requestId: string;
   path: string;
+  locale?: string;
+  canonicalPath?: string;
   dataSource?: RenderDataSource;
 }
 
@@ -2288,7 +2290,8 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
     limit: 100,
   });
   const forms = listFormsBySite(site.id, { pageId: page.id });
-  const canonical = page.isHomepage ? '/' : page.meta.canonical || getCanonicalPathForPage(page);
+  const locale = options.locale || 'en';
+  const canonical = options.canonicalPath || (page.isHomepage ? '/' : page.meta.canonical || getCanonicalPathForPage(page));
   const actions = collectElementActions(elements);
   const dataBindings = collectDataBindingManifest(site.id, elements, context);
   const navigation = sourceData.getSiteNavigation(site.id);
@@ -2302,7 +2305,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         id: site.id,
         slug: site.slug,
         name: site.name,
-        locale: 'en',
+        locale,
         status: site.status,
         assetsBaseUrl: '',
         themeTokens: buildBackyThemeTokens(site.theme),
@@ -2314,7 +2317,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         path: options.path,
         status: page.status,
         canonical,
-        params: {},
+        params: { locale },
         dataset: collectionDataset,
       },
       content: buildCanonicalContentPayload({
@@ -2322,7 +2325,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         kind: 'page',
         title: page.title,
         status: page.status,
-        locale: 'en',
+        locale,
         version: page.updatedAt,
         elements: payloadElements,
       }),
@@ -2393,7 +2396,8 @@ export function buildPublicCollectionListRenderPayload(
     visibility: 'public',
     limit: 100,
   });
-  const canonical = buildCollectionListPath(collection);
+  const locale = options.locale || 'en';
+  const canonical = options.canonicalPath || buildCollectionListPath(collection);
   const actions = collectElementActions(elements);
   const dataBindings = collectDataBindingManifest(site.id, elements, context);
   const navigation = sourceData.getSiteNavigation(site.id);
@@ -2408,7 +2412,7 @@ export function buildPublicCollectionListRenderPayload(
         id: site.id,
         slug: site.slug,
         name: site.name,
-        locale: 'en',
+        locale,
         status: site.status,
         assetsBaseUrl: '',
         themeTokens: buildBackyThemeTokens(site.theme),
@@ -2422,6 +2426,7 @@ export function buildPublicCollectionListRenderPayload(
         canonical,
         params: {
           collectionSlug: collection.slug,
+          locale,
         },
       },
       content: buildCanonicalContentPayload({
@@ -2429,7 +2434,7 @@ export function buildPublicCollectionListRenderPayload(
         kind: 'dynamicList',
         title: collection.name,
         status: collection.status === 'archived' ? 'archived' : collection.status,
-        locale: 'en',
+        locale,
         version: collection.updatedAt,
         elements: payloadElements,
       }),
@@ -2497,7 +2502,8 @@ export function buildPublicCollectionItemRenderPayload(
     visibility: 'public',
     limit: 100,
   });
-  const canonical = buildCollectionItemPath(collection, record.slug);
+  const locale = options.locale || 'en';
+  const canonical = options.canonicalPath || buildCollectionItemPath(collection, record.slug);
   const actions = collectElementActions(elements);
   const dataBindings = collectDataBindingManifest(site.id, elements, context);
   const navigation = sourceData.getSiteNavigation(site.id);
@@ -2517,7 +2523,7 @@ export function buildPublicCollectionItemRenderPayload(
         id: site.id,
         slug: site.slug,
         name: site.name,
-        locale: 'en',
+        locale,
         status: site.status,
         assetsBaseUrl: '',
         themeTokens: buildBackyThemeTokens(site.theme),
@@ -2532,6 +2538,7 @@ export function buildPublicCollectionItemRenderPayload(
         params: {
           collectionSlug: collection.slug,
           recordSlug: record.slug,
+          locale,
         },
       },
       content: buildCanonicalContentPayload({
@@ -2539,7 +2546,7 @@ export function buildPublicCollectionItemRenderPayload(
         kind: 'dynamicItem',
         title,
         status: record.status,
-        locale: 'en',
+        locale,
         version: record.updatedAt,
         elements: payloadElements,
       }),
@@ -2607,7 +2614,8 @@ export function buildPublicBlogPostRenderPayload(
     limit: 100,
   });
   const forms = listFormsBySite(site.id, { postId: post.id });
-  const canonical = post.meta?.canonical || `/blog/${post.slug}`;
+  const locale = options.locale || 'en';
+  const canonical = options.canonicalPath || post.meta?.canonical || `/blog/${post.slug}`;
   const actions = collectElementActions(resolvedElements);
   const dataBindings = collectDataBindingManifest(site.id, resolvedElements, context);
   const navigation = sourceData.getSiteNavigation(site.id);
@@ -2620,7 +2628,7 @@ export function buildPublicBlogPostRenderPayload(
         id: site.id,
         slug: site.slug,
         name: site.name,
-        locale: 'en',
+        locale,
         status: site.status,
         assetsBaseUrl: '',
         themeTokens: buildBackyThemeTokens(site.theme),
@@ -2634,6 +2642,7 @@ export function buildPublicBlogPostRenderPayload(
         canonical,
         params: {
           slug: post.slug,
+          locale,
         },
       },
       content: buildCanonicalContentPayload({
@@ -2641,7 +2650,7 @@ export function buildPublicBlogPostRenderPayload(
         kind: 'post',
         title: post.title,
         status: post.status,
-        locale: 'en',
+        locale,
         version: post.updatedAt,
         elements: payloadElements,
       }),

@@ -193,7 +193,8 @@ Legend:
 
 #### `/sites/[subdomain]/[[...path]]` (`apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx`)
 - ✅ Site/page resolution covers seeded and DB-backed site settings, slug/path lookup, redirects, gone routes, dynamic list/detail routes, preview, and unpublished guards.
-- ⚠️ Domain and locale routing variants plus broader cache-invalidation hardening remain open follow-up work.
+- ✅ Public render/resolve APIs now normalize locale path prefixes, match locale domains from request/query host context, publish localized canonical route/resource URLs, and carry locale/canonical metadata into render payloads.
+- ⚠️ Broader cache-invalidation hardening and hosted custom-domain/edge certification remain open follow-up work.
 
 #### `/api/sites` (`apps/public/src/app/api/sites/route.ts`)
 - ✅ Public/admin site discovery is API-backed for the current audit scope, with demo mode retained for local seeded data.
@@ -521,7 +522,7 @@ Use this file as the persistent baseline before any implementation pass.
 
 ### 11.2 High
 - Provider-managed tax/shipping/discount/subscription/webhook certification depth.
-- Domain, locale, and cache invalidation hardening for public routing.
+- Cache invalidation and hosted custom-domain/edge certification for public routing. Domain and locale API resolution are now source-guarded and covered by `test:localized-routes`.
 - Continued editor regression coverage for nested blocks and rich text selection flows.
 
 ### 11.3 Medium

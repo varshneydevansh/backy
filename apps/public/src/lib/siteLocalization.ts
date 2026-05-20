@@ -15,6 +15,14 @@ export type PublicLocalizationDiscovery = {
   locales: PublicLocaleDiscovery[];
 };
 
+export type ResolvedLocalizedRoutePath = {
+  originalPath: string;
+  path: string;
+  locale: PublicLocaleDiscovery;
+  localeStrategy: PublicLocalizationDiscovery['localeStrategy'];
+  matchedBy: 'path-prefix' | 'domain' | 'default';
+};
+
 export type PublicRoutePattern = {
   type: string;
   pattern: string;
@@ -52,6 +60,26 @@ const normalizePathPrefix = (value: unknown, code: string, strategy: PublicLocal
 const normalizeDomain = (value: unknown): string | null => {
   if (typeof value !== 'string' || !value.trim()) return null;
   const host = value.trim().replace(/^https?:\/\//i, '').split('/')[0]?.replace(/\/+$/g, '').toLowerCase();
+  return host || null;
+};
+
+const normalizeRoutePath = (rawPath: string | null | undefined): string => {
+  const pathOnly = (rawPath || '/').split('?')[0].split('#')[0].trim();
+  const normalized = pathOnly.replace(/^\/+|\/+$/g, '');
+  return normalized ? `/${normalized}` : '/';
+};
+
+const normalizeRouteHost = (value: string | null | undefined): string | null => {
+  if (!value?.trim()) return null;
+  const host = value
+    .trim()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .split(/[/?#]/)[0]
+    .split('@')
+    .pop()
+    ?.split(':')[0]
+    .toLowerCase()
+    .replace(/^www\./, '');
   return host || null;
 };
 
@@ -108,6 +136,81 @@ export const normalizeSiteLocalization = (settings?: Pick<SiteSettings, 'localiz
       pathPrefix: locale.code === defaultLocale && strategy !== 'domain' ? '' : locale.pathPrefix,
     })),
   };
+};
+
+export const resolveLocalizedRoutePath = (
+  settings: Pick<SiteSettings, 'localization'> | undefined | null,
+  rawPath: string,
+  options: { host?: string | null } = {},
+): ResolvedLocalizedRoutePath => {
+  const localization = normalizeSiteLocalization(settings);
+  const originalPath = normalizeRoutePath(rawPath);
+  const defaultLocale = localization.locales.find((locale) => locale.default) || localization.locales[0] || {
+    code: localization.defaultLocale,
+    default: true,
+    direction: 'ltr' as const,
+    pathPrefix: '',
+  };
+  const normalizedHost = normalizeRouteHost(options.host);
+
+  if (localization.localeStrategy === 'domain' && normalizedHost) {
+    const domainLocale = localization.locales.find((locale) => (
+      normalizeRouteHost(locale.domain || null) === normalizedHost
+    ));
+    if (domainLocale) {
+      return {
+        originalPath,
+        path: originalPath,
+        locale: domainLocale,
+        localeStrategy: localization.localeStrategy,
+        matchedBy: 'domain',
+      };
+    }
+  }
+
+  if (localization.localeStrategy === 'path-prefix') {
+    const prefixedLocale = localization.locales
+      .filter((locale) => locale.pathPrefix)
+      .sort((left, right) => right.pathPrefix.length - left.pathPrefix.length)
+      .find((locale) => (
+        originalPath === locale.pathPrefix || originalPath.startsWith(`${locale.pathPrefix}/`)
+      ));
+
+    if (prefixedLocale) {
+      const strippedPath = originalPath.slice(prefixedLocale.pathPrefix.length);
+      return {
+        originalPath,
+        path: strippedPath ? normalizeRoutePath(strippedPath) : '/',
+        locale: prefixedLocale,
+        localeStrategy: localization.localeStrategy,
+        matchedBy: 'path-prefix',
+      };
+    }
+  }
+
+  return {
+    originalPath,
+    path: originalPath,
+    locale: defaultLocale,
+    localeStrategy: localization.localeStrategy,
+    matchedBy: 'default',
+  };
+};
+
+export const applyLocalePrefixToPath = (
+  path: string,
+  localized: ResolvedLocalizedRoutePath,
+): string => {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(path) || path.startsWith('//')) {
+    return path;
+  }
+
+  const normalizedPath = normalizeRoutePath(path);
+  if (localized.matchedBy !== 'path-prefix' || !localized.locale.pathPrefix) {
+    return normalizedPath;
+  }
+
+  return `${localized.locale.pathPrefix}${normalizedPath === '/' ? '' : normalizedPath}` || '/';
 };
 
 const joinRoutePath = (prefix: string, pattern: string) => {

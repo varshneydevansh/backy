@@ -39,6 +39,7 @@
         "test:hosted-responsive": "node scripts/hosted-responsive-smoke.mjs",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs",
         "test:admin-contract-source": "BACKY_ADMIN_CONTRACT_SOURCE_GUARD=1 node scripts/admin-contract-smoke.mjs",
+        "test:localized-routes": "tsx --tsconfig tsconfig.json scripts/localized-route-smoke.ts",
         "test:public-security": "node scripts/public-security-regression-smoke.mjs"
     },
     "dependencies": {

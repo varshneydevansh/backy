@@ -34,6 +34,7 @@ import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collec
 import { buildSiteNavigation } from '@/lib/navigation';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
+import { resolveLocalizedRoutePath } from '@/lib/siteLocalization';
 
 interface RouteParams {
   params: Promise<{
@@ -47,6 +48,29 @@ const SUPPORTED_RENDER_SCHEMA_VERSIONS = [RENDER_SCHEMA_VERSION] as const;
 const RENDER_VERSION_HEADERS = {
   'x-backy-supported-schema-versions': SUPPORTED_RENDER_SCHEMA_VERSIONS.join(', '),
 };
+
+const normalizePublicRouteHost = (value: string | null | undefined): string | null => {
+  if (!value?.trim()) return null;
+  const host = value
+    .trim()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .split(/[/?#]/)[0]
+    .split('@')
+    .pop()
+    ?.split(':')[0]
+    .toLowerCase()
+    .replace(/^www\./, '');
+  return host || null;
+};
+
+const resolveRequestHost = (request: NextRequest, searchParams: URLSearchParams): string | null => (
+  normalizePublicRouteHost(
+    searchParams.get('host')
+    || searchParams.get('domain')
+    || request.headers.get('x-forwarded-host')
+    || request.headers.get('host'),
+  )
+);
 
 const errorResponse = (
   status: number,
@@ -368,8 +392,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
-    const path = normalizeRoutePath(searchParams.get('path') || searchParams.get('slug') || '/');
+    const requestedPath = normalizeRoutePath(searchParams.get('path') || searchParams.get('slug') || '/');
+    let path = requestedPath;
     const previewToken = searchParams.get('previewToken');
+    const routeHost = resolveRequestHost(request, searchParams);
     const negotiatedSchema = negotiateRenderSchemaVersion(request, searchParams);
     if (!negotiatedSchema.supported) {
       return errorResponse(
@@ -393,6 +419,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const storeSite = repositorySiteToStoreSite(site);
+      const localized = resolveLocalizedRoutePath(site.settings, requestedPath, { host: routeHost });
+      path = localized.path;
+      const publicPath = localized.originalPath;
       const dataSource = await buildRepositoryRenderDataSource(repositories, site);
       const renderCacheRevision = previewToken
         ? undefined
@@ -417,14 +446,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             targetId: post.id,
             requestId,
             surface: 'render-api',
-            path,
+            path: publicPath,
             slug: post.slug,
           });
         }
 
         return publicContractJson(
           await withRepositoryNavigation(
-            buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), { requestId, path, dataSource }),
+            buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), {
+              requestId,
+              path: publicPath,
+              locale: localized.locale.code,
+              canonicalPath: publicPath,
+              dataSource,
+            }),
             repositories,
             site,
           ),
@@ -454,14 +489,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             targetId: page.id,
             requestId,
             surface: 'render-api',
-            path,
+            path: publicPath,
             slug: page.slug,
           });
         }
 
         return publicContractJson(
           await withRepositoryNavigation(
-            buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), { requestId, path, dataSource }),
+            buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), {
+              requestId,
+              path: publicPath,
+              locale: localized.locale.code,
+              canonicalPath: publicPath,
+              dataSource,
+            }),
             repositories,
             site,
           ),
@@ -502,7 +543,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               storeSite,
               repositoryCollectionToStoreCollection(collection),
               records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
-              { requestId, path, dataSource },
+              { requestId, path: publicPath, locale: localized.locale.code, canonicalPath: publicPath, dataSource },
             ),
             repositories,
             site,
@@ -537,7 +578,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 storeSite,
                 repositoryCollectionToStoreCollection(collection),
                 repositoryRecordToStoreRecord(record),
-                { requestId, path, dataSource },
+                { requestId, path: publicPath, locale: localized.locale.code, canonicalPath: publicPath, dataSource },
               ),
               repositories,
               site,
@@ -563,6 +604,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
+    const localized = resolveLocalizedRoutePath(site.settings, requestedPath, { host: routeHost });
+    path = localized.path;
+    const publicPath = localized.originalPath;
     const blogMatch = path.match(/^\/blog\/([^/]+)$/);
     if (blogMatch) {
       const slug = decodeURIComponent(blogMatch[1]);
@@ -587,13 +631,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           targetId: post.id,
           requestId,
           surface: 'render-api',
-          path,
+          path: publicPath,
           slug: post.slug,
         });
       }
 
       return publicContractJson(
-        buildPublicBlogPostRenderPayload(site, post, { requestId, path }),
+        buildPublicBlogPostRenderPayload(site, post, {
+          requestId,
+          path: publicPath,
+          locale: localized.locale.code,
+          canonicalPath: publicPath,
+        }),
         {
           requestId,
           request,
@@ -622,13 +671,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           targetId: page.id,
           requestId,
           surface: 'render-api',
-          path,
+          path: publicPath,
           slug: page.slug,
         });
       }
 
       return publicContractJson(
-        buildPublicRenderPayload(site, page, { requestId, path }),
+        buildPublicRenderPayload(site, page, {
+          requestId,
+          path: publicPath,
+          locale: localized.locale.code,
+          canonicalPath: publicPath,
+        }),
         {
           requestId,
           request,
@@ -647,7 +701,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const records = listCollectionRecords(site.id, collection.id, { limit: 100 }).records;
 
       return publicContractJson(
-        buildPublicCollectionListRenderPayload(site, collection, records, { requestId, path }),
+        buildPublicCollectionListRenderPayload(site, collection, records, {
+          requestId,
+          path: publicPath,
+          locale: localized.locale.code,
+          canonicalPath: publicPath,
+        }),
         {
           requestId,
           request,
@@ -666,7 +725,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       if (collection && record) {
         return publicContractJson(
-          buildPublicCollectionItemRenderPayload(site, collection, record, { requestId, path }),
+          buildPublicCollectionItemRenderPayload(site, collection, record, {
+            requestId,
+            path: publicPath,
+            locale: localized.locale.code,
+            canonicalPath: publicPath,
+          }),
           {
             requestId,
             request,

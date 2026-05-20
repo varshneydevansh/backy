@@ -167,6 +167,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Returns the external page/post/dynamic item render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
   - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
   - Current data bindings include normalized collection dataset manifests, resolved public collection fields/records, and element binding metadata when canvas elements declare collection `dataBindings`.
+  - Locale-aware requests may provide `host` or `domain` query context, or rely on forwarded/host headers. Path-prefix locales are stripped before route matching, domain locales are selected from host context, and returned payloads carry localized `site.locale`, `content.locale`, `route.params.locale`, and canonical path values.
   - Published render responses include `Cache-Control: public, max-age=30, stale-while-revalidate=120`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: render`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-supported-schema-versions`, `x-backy-request-id`, and `x-backy-site-id`.
   - Clients can request the current render schema with `schemaVersion=backy.content-payload.v1` or `x-backy-accept-schema-version`; unsupported render schema requests return `406 UNSUPPORTED_RENDER_SCHEMA_VERSION` with supported versions in `error.details`.
   - Database-mode published render responses emit `x-backy-cache-revision` from the latest site invalidation event, not only the response body hash, so custom frontends can revalidate after content, route, media, navigation, SEO, settings, and frontend-design mutations.
@@ -190,6 +191,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Page routes include `resource.kind: "page"` plus page API and render URLs.
   - Blog post routes under `/blog/:slug` include `resource.kind: "post"` plus post API and hosted path.
   - Collection dynamic list routes under `/:collectionSlug` include `resource.kind: "dynamicList"`, collection metadata, public records API URL, render URL, hosted path, and record count. Collection dynamic item routes under `/:collectionSlug/:recordSlug` include `resource.kind: "dynamicItem"`, collection metadata, record id/slug, public records API URL, render URL, and hosted path.
+  - Locale-aware resolutions may provide `host` or `domain` query context, or rely on forwarded/host headers. Resolved routes include `params.locale`, `locale` metadata with matched strategy/base path/original path, and localized canonical/resource render URLs for path-prefix routes.
   - Draft and future scheduled content stays hidden unless the exact preview token is supplied.
   - Successful page/post preview-token route resolutions record tokenless `previewToken.use` audit metadata without storing the raw token.
   - Unresolved paths return `404` with `ROUTE_NOT_FOUND`.
@@ -788,8 +790,8 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   2. Fetch `GET /api/sites/:siteId/manifest` once to discover schema refs, capabilities, endpoints, route patterns, collections, forms, media/font support, navigation, and the site-scoped OpenAPI URL.
   3. Use `manifest.data.delivery` and `manifest.data.modules.routing.localizedRoutePatterns` to choose the locale strategy, path prefixes, locale domains, and generated page/blog/dynamic route variants before building the frontend router.
   4. Fetch `GET /api/sites/:siteId/interactive-components` when `capabilities.interactiveComponents` is true and cache it with ETag revalidation.
-  5. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
-  6. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
+  5. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`; pass `host` or `domain` when the frontend domain should select a Backy locale domain.
+  6. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`; pass the same `host` or `domain` locale context used for route resolution.
   7. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
   8. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound, slug-bound, searched, filtered, and sorted datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
   9. Render from `content` + `theme` + `meta` only; ignore admin-only flags.

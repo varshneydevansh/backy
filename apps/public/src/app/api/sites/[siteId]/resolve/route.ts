@@ -28,6 +28,54 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const normalizePublicRouteHost = (value: string | null | undefined): string | null => {
+  if (!value?.trim()) return null;
+  const host = value
+    .trim()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .split(/[/?#]/)[0]
+    .split('@')
+    .pop()
+    ?.split(':')[0]
+    .toLowerCase()
+    .replace(/^www\./, '');
+  return host || null;
+};
+
+const resolveRequestHost = (request: NextRequest, searchParams: URLSearchParams): string | null => (
+  normalizePublicRouteHost(
+    searchParams.get('host')
+    || searchParams.get('domain')
+    || request.headers.get('x-forwarded-host')
+    || request.headers.get('host'),
+  )
+);
+
+const findRepositorySite = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  identifier: string,
+): Promise<Site | null> => {
+  const byId = await repositories.sites.getById(identifier);
+  if (byId) return byId;
+
+  const bySlug = await repositories.sites.getBySlug(identifier);
+  if (bySlug) return bySlug;
+
+  const normalizedDomain = normalizePublicRouteHost(identifier);
+  if (!normalizedDomain) return null;
+
+  const result = await repositories.sites.list({
+    status: 'published',
+    limit: 100,
+    offset: 0,
+  });
+
+  return result.items.find((site) => (
+    normalizePublicRouteHost(site.customDomain || null) === normalizedDomain
+    || normalizePublicRouteHost(site.settings?.domainVerification?.domain || null) === normalizedDomain
+  )) || null;
+};
+
 const errorResponse = (status: number, code: string, message: string, requestId: string, path?: string) => (
   publicContractJson(
     {
@@ -122,10 +170,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url);
     const path = normalizeRoutePath(searchParams.get('path') || searchParams.get('slug') || '/');
     const previewToken = searchParams.get('previewToken');
+    const routeHost = resolveRequestHost(request, searchParams);
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      const site = await findRepositorySite(repositories, siteId);
 
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId, path);
@@ -134,7 +183,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         ? undefined
         : await repositories.cacheInvalidations.latestRevision({ siteId: site.id }) || undefined;
 
-      const route = await resolveRepositorySiteRoute(repositories, site, path, { previewToken });
+      const route = await resolveRepositorySiteRoute(repositories, site, path, { previewToken, host: routeHost });
       if (!route) {
         return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
       }
@@ -197,7 +246,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId, path);
     }
 
-    const route = resolveSiteRoute(site, path, { previewToken });
+    const route = resolveSiteRoute(site, path, { previewToken, host: routeHost });
     if (!route) {
       return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
     }
