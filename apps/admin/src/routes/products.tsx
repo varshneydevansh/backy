@@ -214,7 +214,7 @@ const PRODUCT_PROVIDER_CERTIFICATION_GROUPS = [
     gate: 'ci:commerce-provider-certification',
     requiredInputs: [
       'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
-      'configured Settings commerce discount provider endpoint',
+      'BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL',
     ],
     evidence: 'Live promotion-code lookup credentials or selected HTTP discount endpoint.',
   },
@@ -234,6 +234,22 @@ const PRODUCT_PROVIDER_CERTIFICATION_GROUPS = [
       'BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL',
     ],
     evidence: 'Live catalog credentials or a selected HTTP product sync endpoint.',
+  },
+  {
+    family: 'Subscription lifecycle providers',
+    providers: ['Stripe', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay', 'HTTP', 'Manual handoff'],
+    gate: 'ci:commerce-provider-certification',
+    requiredInputs: [
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN',
+      'BACKY_PADDLE_API_KEY or PADDLE_API_KEY',
+      'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN',
+      'BACKY_ADYEN_API_KEY or ADYEN_API_KEY',
+      'BACKY_MOLLIE_API_KEY or MOLLIE_API_KEY',
+      'BACKY_RAZORPAY_KEY_ID/BACKY_RAZORPAY_KEY_SECRET or RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET',
+      'BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL',
+    ],
+    evidence: 'Live product subscription pause, resume, cancel, webhook, renewal, dunning, and cancellation evidence.',
   },
   {
     family: 'Mock provider regression',
