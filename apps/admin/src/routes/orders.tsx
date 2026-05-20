@@ -975,6 +975,9 @@ const DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
 } satisfies OrderProviderCertificationCommandOptions;
 
 const quoteOrderShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteOrderEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteOrderShellValue(value)
+);
 const orderBoolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 const uniqueOrderCertificationInputs = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
 const hasOrderProviderCertificationSelector = (options: OrderProviderCertificationCommandOptions): boolean => (
@@ -1051,7 +1054,9 @@ const ORDER_PROVIDER_CERTIFICATION_WEBHOOK_INPUTS: Record<OrderProviderCertifica
   generic: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'],
 };
 
-const buildOrderProviderCertificationCommand = (options: OrderProviderCertificationCommandOptions): string => {
+const buildOrderProviderCertificationEnvEntries = (
+  options: OrderProviderCertificationCommandOptions,
+): Array<[string, string]> => {
   const selectedSelector = hasOrderProviderCertificationSelector(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/+$/, '');
   const envEntries: Array<[string, string]> = [
@@ -1094,6 +1099,13 @@ const buildOrderProviderCertificationCommand = (options: OrderProviderCertificat
     envEntries.push(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', '<https-subscription-action-url>']);
   }
 
+  return envEntries;
+};
+
+const buildOrderProviderCertificationCommand = (options: OrderProviderCertificationCommandOptions): string => {
+  const selectedSelector = hasOrderProviderCertificationSelector(options);
+  const envEntries = buildOrderProviderCertificationEnvEntries(options);
+
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteOrderShellValue(value)}`),
     ...(options.includeFulfillmentEvidence ? [
@@ -1102,6 +1114,16 @@ const buildOrderProviderCertificationCommand = (options: OrderProviderCertificat
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
     selectedSelector ? 'npm run ci:commerce-provider-certification' : '# Select at least one commerce provider selector before running certification.',
+  ].join('\n');
+};
+
+const buildOrderProviderCertificationEnvTemplate = (options: OrderProviderCertificationCommandOptions): string => {
+  const envEntries = buildOrderProviderCertificationEnvEntries(options);
+
+  return [
+    '# Backy order provider certification environment',
+    '# Keep real provider credential values in CI secrets or local shell variables.',
+    ...envEntries.map(([key, value]) => `${key}=${quoteOrderEnvTemplateValue(value)}`),
   ].join('\n');
 };
 
@@ -1136,6 +1158,8 @@ const buildOrderProviderCertificationRequiredInputs = (options: OrderProviderCer
 
 const ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildOrderProviderCertificationCommand(DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildOrderProviderCertificationEnvTemplate(DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.order-provider-certification-env-template.v1',
   providerChoices: {
     payment: ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.map((option) => option.value),
     tax: ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.map((option) => option.value),
@@ -1287,6 +1311,10 @@ function OrdersRoute() {
   const providerCertificationHasSelectedSelector = hasOrderProviderCertificationSelector(providerCertificationCommandOptions);
   const providerCertificationCommand = useMemo(
     () => buildOrderProviderCertificationCommand(providerCertificationCommandOptions),
+    [providerCertificationCommandOptions],
+  );
+  const providerCertificationEnvTemplate = useMemo(
+    () => buildOrderProviderCertificationEnvTemplate(providerCertificationCommandOptions),
     [providerCertificationCommandOptions],
   );
   const providerCertificationRequiredInputs = useMemo(
@@ -1825,7 +1853,15 @@ function OrdersRoute() {
     operatorCommandTemplate: {
       ...ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
       command: providerCertificationCommand,
+      envTemplate: providerCertificationEnvTemplate,
       requiredInputs: providerCertificationRequiredInputs,
+    },
+    operatorEnvTemplate: {
+      schemaVersion: 'backy.order-provider-certification-env-template.v1',
+      format: 'shell-env',
+      fileName: '.env.backy-order-provider-certification',
+      body: providerCertificationEnvTemplate,
+      secretHandling: 'Generated template values are non-secret selectors and placeholders; replace placeholders with CI secrets or local shell values before execution.',
     },
     preflightGates: [...ORDER_PROVIDER_CERTIFICATION_PREFLIGHT_GATES],
     providerSelectors: [...ORDER_PROVIDER_CERTIFICATION_SELECTORS],
@@ -1886,6 +1922,7 @@ function OrdersRoute() {
     orderOperationPlanSummary,
     ordersApiReady,
     providerCertificationCommand,
+    providerCertificationEnvTemplate,
     providerCertificationRequiredInputs,
     providerReadinessChecks,
     providerReadinessReadyCount,
@@ -3427,6 +3464,21 @@ function OrdersRoute() {
     }
   };
 
+  const copyProviderCertificationEnvTemplate = async () => {
+    if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(providerCertificationEnvTemplate);
+      setNotice('Orders provider certification env template copied.');
+    } catch {
+      setNotice(providerCertificationEnvTemplate);
+    }
+  };
+
   const downloadOrderHandoff = () => {
     if (isOrdersBusy) return;
     if (!canExportOrders) {
@@ -4128,17 +4180,30 @@ function OrdersRoute() {
 	                          Select the live order-operation families for this run. The command keeps provider credentials in CI or shell environment variables and only writes non-secret selector aliases.
 	                        </p>
 	                      </div>
-	                      <Button
-	                        size="sm"
-	                        variant="outline"
-	                        onClick={() => void copyProviderCertificationOperatorGate()}
-	                        disabled={isOrdersAccessBusy || !canExportOrders || !providerCertificationHasSelectedSelector}
-	                        title={!canExportOrders ? exportPermissionTitle : !providerCertificationHasSelectedSelector ? 'Select at least one commerce provider selector' : undefined}
-	                        iconStart={<Copy className="size-4" />}
-	                        data-testid="orders-provider-certification-command-builder-copy-button"
-	                      >
-	                        Copy guarded command
-	                      </Button>
+	                      <div className="flex flex-wrap items-center gap-2">
+	                        <Button
+	                          size="sm"
+	                          variant="outline"
+	                          onClick={() => void copyProviderCertificationEnvTemplate()}
+	                          disabled={isOrdersAccessBusy || !canExportOrders || !providerCertificationHasSelectedSelector}
+	                          title={!canExportOrders ? exportPermissionTitle : !providerCertificationHasSelectedSelector ? 'Select at least one commerce provider selector' : undefined}
+	                          iconStart={<Copy className="size-4" />}
+	                          data-testid="orders-provider-certification-env-copy-button"
+	                        >
+	                          Copy env template
+	                        </Button>
+	                        <Button
+	                          size="sm"
+	                          variant="outline"
+	                          onClick={() => void copyProviderCertificationOperatorGate()}
+	                          disabled={isOrdersAccessBusy || !canExportOrders || !providerCertificationHasSelectedSelector}
+	                          title={!canExportOrders ? exportPermissionTitle : !providerCertificationHasSelectedSelector ? 'Select at least one commerce provider selector' : undefined}
+	                          iconStart={<Copy className="size-4" />}
+	                          data-testid="orders-provider-certification-command-builder-copy-button"
+	                        >
+	                          Copy guarded command
+	                        </Button>
+	                      </div>
 	                    </div>
 	                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
 	                      {([
@@ -4356,6 +4421,25 @@ function OrdersRoute() {
 	                          </span>
 	                        </span>
 	                      </label>
+	                    </div>
+	                    <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="orders-provider-certification-env-template">
+	                      <div className="flex flex-wrap items-start justify-between gap-2">
+	                        <div>
+	                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Env template</div>
+	                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+	                            Copy this into CI secrets or a local shell env file, then replace placeholders with live provider credentials before running the guarded command.
+	                          </p>
+	                        </div>
+	                        <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+	                          backy.order-provider-certification-env-template.v1
+	                        </span>
+	                      </div>
+	                      <pre
+	                        className="mt-2 max-h-64 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px] leading-5 text-foreground"
+	                        data-testid="orders-provider-certification-env-template-body"
+	                      >
+	                        {providerCertificationEnvTemplate}
+	                      </pre>
 	                    </div>
 	                    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
 	                      <div>

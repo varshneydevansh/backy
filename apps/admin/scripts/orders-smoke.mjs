@@ -181,8 +181,12 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-testid="orders-provider-certification-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-command-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-command-builder"') &&
+      source.includes('data-testid="orders-provider-certification-env-copy-button"') &&
+      source.includes('data-testid="orders-provider-certification-env-template"') &&
+      source.includes('data-testid="orders-provider-certification-env-template-body"') &&
       source.includes('data-testid="orders-provider-certification-command-builder-copy-button"') &&
       source.includes('providerCertificationHandoffText') &&
+      source.includes('providerCertificationEnvTemplate') &&
       source.includes('orderEvidence') &&
       source.includes('endpointEvidence') &&
       source.includes('providerReadinessEvidence') &&
@@ -199,7 +203,11 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('ci:commerce-provider-certification') &&
       source.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification') &&
       source.includes('buildOrderProviderCertificationCommand') &&
+      source.includes('buildOrderProviderCertificationEnvTemplate') &&
       source.includes('operatorCommandTemplate') &&
+      source.includes('operatorEnvTemplate') &&
+      source.includes('backy.order-provider-certification-env-template.v1') &&
+      source.includes('Copy env template') &&
       source.includes('orders-provider-certification-payment-toggle') &&
       source.includes('data-testid="orders-provider-certification-tax-provider-select"') &&
       source.includes('data-testid="orders-provider-certification-external-target-input"') &&
@@ -2070,6 +2078,9 @@ const assertOrdersLayout = async (client) => {
         Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-command-copy-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-env-copy-button"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template-body"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder-copy-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-payment-toggle"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-tax-provider-select"]')) &&
@@ -2077,6 +2088,9 @@ const assertOrdersLayout = async (client) => {
         Boolean(document.querySelector('[data-testid="orders-provider-certification-runbook"]')) &&
         document.body?.innerText?.includes('Live provider certification') &&
         document.body?.innerText?.includes('Order certification command builder') &&
+        document.body?.innerText?.includes('Env template') &&
+        document.body?.innerText?.includes('backy.order-provider-certification-env-template.v1') &&
+        document.body?.innerText?.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1') &&
         document.body?.innerText?.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
         document.body?.innerText?.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
         document.body?.innerText?.includes('Order certification evidence') &&
@@ -2085,6 +2099,7 @@ const assertOrdersLayout = async (client) => {
         document.body?.innerText?.includes('Quote recalculation') &&
         document.body?.innerText?.includes('Carrier labels and tracking') &&
         document.body?.innerText?.includes('Webhook and reconciliation') &&
+        document.body?.innerText?.includes('Copy env template') &&
         document.body?.innerText?.includes('Copy CI command') &&
         document.body?.innerText?.includes('Live provider runbook') &&
         document.body?.innerText?.includes('Download provider JSON'),
