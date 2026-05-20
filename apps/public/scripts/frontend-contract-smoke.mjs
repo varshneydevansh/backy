@@ -111,6 +111,17 @@ assert(
     manifestRoute.includes("responsiveImages: true") &&
     manifestRoute.includes("publicFolderDiscovery: true") &&
     manifestRoute.includes("editableMetadata: true") &&
+    manifestRoute.includes("fileCategories") &&
+    manifestRoute.includes("schemaVersion: 'backy.media-discovery.v1'") &&
+    manifestRoute.includes("fileCategories: 'backy.media-file-categories.v1'") &&
+    manifestRoute.includes("type: 'document'") &&
+    manifestRoute.includes("aliases: ['file']") &&
+    manifestRoute.includes("pickerUse: 'downloadable-document'") &&
+    manifestRoute.includes("deliveryPolicy") &&
+    manifestRoute.includes("privateFiles: 'signed-url-required'") &&
+    manifestRoute.includes("signedUrlEndpoint: `/api/admin/sites/${siteId}/media/{mediaId}/signed-url`") &&
+    manifestRoute.includes("acceptedDispositions: ['inline', 'attachment']") &&
+    manifestRoute.includes("downloadableTypes: ['document', 'other', 'audio', 'video']") &&
     manifestRoute.includes("folders: `/api/sites/${siteId}/media/folders`") &&
     manifestRoute.includes("'folderId'") &&
     manifestRoute.includes("'scope'") &&
@@ -120,18 +131,29 @@ assert(
     manifestRoute.includes('media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total)') &&
     frontendManifestSchema.includes('"backy.media-discovery.v1"') &&
     frontendManifestSchema.includes('"signedPrivateFiles"') &&
+    frontendManifestSchema.includes('"fileCategories"') &&
+    frontendManifestSchema.includes('"backy.media-file-categories.v1"') &&
+    frontendManifestSchema.includes('"downloadable-document"') &&
+    frontendManifestSchema.includes('"signed-url-required"') &&
+    frontendManifestSchema.includes('"signedUrlEndpoint"') &&
     frontendManifestSchema.includes('"publicFolderDiscovery"') &&
     frontendManifestSchema.includes('"queryParams"') &&
     frontendManifestSchema.includes('"folderId"') &&
     frontendManifestSchema.includes('"backy.media-folders.v1"') &&
     frontendManifestSchema.includes('"maxLimit"') &&
     sdkSource.includes('schemaVersion: "backy.media-discovery.v1";') &&
+    sdkSource.includes('fileCategories: Array<') &&
+    sdkSource.includes('deliveryPolicy:') &&
+    sdkSource.includes('privateFiles: "signed-url-required";') &&
+    sdkSource.includes('fileCategories: "backy.media-file-categories.v1";') &&
     sdkSource.includes('BackyMediaFolder') &&
     sdkSource.includes('mediaFolders(') &&
     sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') &&
     sdkSource.includes('siteId?: string') &&
     sdkSmoke.includes('manifest() missing media discovery module') &&
     sdkSmoke.includes('manifest() media discovery missing folderId filter') &&
+    sdkSmoke.includes('manifest() media discovery missing document category') &&
+    sdkSmoke.includes('manifest() media discovery missing signed URL policy') &&
     sdkSmoke.includes('mediaFolders() missing folder array') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery'),
   'Frontend manifest and SDK must expose structured media discovery for custom frontend asset browsers.',

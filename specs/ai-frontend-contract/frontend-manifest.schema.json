@@ -1814,6 +1814,25 @@
                 "publicCount": { "type": "number", "minimum": 0 },
                 "fontCount": { "type": "number", "minimum": 0 },
                 "types": { "type": "array", "items": { "type": "string" } },
+                "fileCategories": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "type": { "enum": ["image", "video", "audio", "document", "font", "other"] },
+                      "label": { "type": "string", "minLength": 1 },
+                      "accepts": { "type": "array", "items": { "type": "string" } },
+                      "aliases": { "type": "array", "items": { "type": "string" } },
+                      "pickerUse": { "enum": ["visual-media", "embedded-media", "downloadable-document", "downloadable-file", "typography"] },
+                      "delivery": { "enum": ["public-or-signed-file", "font-manifest-or-file"] },
+                      "transformEligible": { "type": "boolean" },
+                      "responsiveEligible": { "type": "boolean" },
+                      "fontManifestEligible": { "type": "boolean" }
+                    },
+                    "required": ["type", "label", "accepts", "pickerUse", "delivery", "transformEligible", "responsiveEligible", "fontManifestEligible"]
+                  }
+                },
                 "listUrl": { "type": "string", "minLength": 1 },
                 "endpoints": {
                   "type": "object",
@@ -1902,21 +1921,42 @@
                   },
                   "required": ["list", "folders", "fonts", "detail", "file", "transform"]
                 },
+                "deliveryPolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicFiles": { "const": "direct-file-url" },
+                    "privateFiles": { "const": "signed-url-required" },
+                    "signedUrlEndpoint": { "type": "string", "minLength": 1 },
+                    "signedUrlMethod": { "const": "POST" },
+                    "signedUrlPermission": { "const": "media.view" },
+                    "acceptedDispositions": { "type": "array", "items": { "enum": ["inline", "attachment"] } },
+                    "defaultDisposition": { "const": "inline" },
+                    "maxSignedUrlSeconds": { "const": 3600 },
+                    "transformableTypes": { "type": "array", "items": { "const": "image" } },
+                    "responsiveTypes": { "type": "array", "items": { "const": "image" } },
+                    "fontManifestTypes": { "type": "array", "items": { "const": "font" } },
+                    "downloadableTypes": { "type": "array", "items": { "enum": ["document", "other", "audio", "video"] } },
+                    "secretHandling": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["publicFiles", "privateFiles", "signedUrlEndpoint", "signedUrlMethod", "signedUrlPermission", "acceptedDispositions", "defaultDisposition", "maxSignedUrlSeconds", "transformableTypes", "responsiveTypes", "fontManifestTypes", "downloadableTypes", "secretHandling"]
+                },
                 "schemas": {
                   "type": "object",
                   "additionalProperties": true,
                   "properties": {
                     "list": { "const": "backy.media-discovery.v1" },
+                    "fileCategories": { "const": "backy.media-file-categories.v1" },
                     "folders": { "const": "backy.media-folders.v1" },
                     "fonts": { "const": "backy.font-manifest.v1" },
                     "references": { "const": "backy.media.references.v1" },
                     "editableMetadata": { "const": "backy.media.editable-metadata.v1" },
                     "notFound": { "const": "MEDIA_NOT_FOUND" }
                   },
-                  "required": ["list", "folders", "fonts", "references", "editableMetadata", "notFound"]
+                  "required": ["list", "fileCategories", "folders", "fonts", "references", "editableMetadata", "notFound"]
                 }
               },
-              "required": ["schemaVersion", "count", "publicCount", "fontCount", "types", "listUrl", "endpoints", "capabilities", "filters", "methods", "cache", "schemas"]
+              "required": ["schemaVersion", "count", "publicCount", "fontCount", "types", "fileCategories", "listUrl", "endpoints", "capabilities", "filters", "methods", "cache", "deliveryPolicy", "schemas"]
             },
             "commerce": {
               "type": "object",

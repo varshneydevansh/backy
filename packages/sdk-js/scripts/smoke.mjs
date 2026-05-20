@@ -683,6 +683,18 @@ assert(manifestMedia.capabilities?.signedPrivateFiles === true, 'manifest() medi
 assert(manifestMedia.capabilities?.responsiveImages === true, 'manifest() media discovery missing responsive image capability');
 assert(manifestMedia.capabilities?.publicFolderDiscovery === true, 'manifest() media discovery missing public folder capability');
 assert(manifestMedia.capabilities?.editableMetadata === true, 'manifest() media discovery missing editable metadata capability');
+assert(manifestMedia.fileCategories?.some?.((category) => (
+  category.type === 'document' &&
+  category.aliases?.includes?.('file') &&
+  category.pickerUse === 'downloadable-document' &&
+  category.delivery === 'public-or-signed-file' &&
+  category.transformEligible === false
+)), 'manifest() media discovery missing document category');
+assert(manifestMedia.fileCategories?.some?.((category) => (
+  category.type === 'font' &&
+  category.pickerUse === 'typography' &&
+  category.fontManifestEligible === true
+)), 'manifest() media discovery missing font category');
 assert(manifestMedia.filters?.queryParams?.includes?.('folder'), 'manifest() media discovery missing folder filter');
 assert(manifestMedia.filters?.queryParams?.includes?.('folderId'), 'manifest() media discovery missing folderId filter');
 assert(manifestMedia.filters?.queryParams?.includes?.('search'), 'manifest() media discovery missing search filter');
@@ -695,7 +707,12 @@ assert(manifestMedia.filters?.maxLimit === 100, 'manifest() media discovery miss
 assert(manifestMedia.filters?.scopes?.includes?.('page') && manifestMedia.filters?.scopes?.includes?.('post'), 'manifest() media discovery missing page/post scope filters');
 assert(manifestMedia.methods?.folders === 'GET', 'manifest() media discovery missing folder method');
 assert(manifestMedia.cache?.folders === 'public-discovery', 'manifest() media discovery missing folder cache policy');
+assert(manifestMedia.deliveryPolicy?.privateFiles === 'signed-url-required', 'manifest() media discovery missing signed URL policy');
+assert(manifestMedia.deliveryPolicy?.signedUrlEndpoint === `/api/admin/sites/${client.getSiteId()}/media/{mediaId}/signed-url`, 'manifest() media discovery signed URL endpoint drifted');
+assert(manifestMedia.deliveryPolicy?.acceptedDispositions?.includes?.('attachment'), 'manifest() media discovery missing attachment disposition');
+assert(manifestMedia.deliveryPolicy?.downloadableTypes?.includes?.('document'), 'manifest() media discovery missing document downloadable type');
 assert(manifestMedia.schemas?.folders === 'backy.media-folders.v1', 'manifest() media discovery missing folder schema');
+assert(manifestMedia.schemas?.fileCategories === 'backy.media-file-categories.v1', 'manifest() media discovery missing file category schema');
 const manifestTheme = manifest.data.modules?.theme;
 assert(manifestTheme?.schemaVersion === 'backy.theme-discovery.v1', 'manifest() missing theme discovery module');
 assert(manifestTheme.tokenSchemaVersion === 'backy.theme.v1', 'manifest() theme discovery missing token schema marker');

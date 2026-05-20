@@ -3625,6 +3625,18 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         publicCount: number;
         fontCount: number;
         types: Array<string>;
+        fileCategories: Array<{
+          type: "image" | "video" | "audio" | "document" | "font" | "other";
+          label: string;
+          accepts: Array<string>;
+          aliases?: Array<string>;
+          pickerUse: "visual-media" | "embedded-media" | "downloadable-document" | "downloadable-file" | "typography";
+          delivery: "public-or-signed-file" | "font-manifest-or-file";
+          transformEligible: boolean;
+          responsiveEligible: boolean;
+          fontManifestEligible: boolean;
+          [key: string]: unknown;
+        }>;
         listUrl: string;
         endpoints: {
           list: string;
@@ -3683,8 +3695,25 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           transform: "public-redirect";
           [key: string]: unknown;
         };
+        deliveryPolicy: {
+          publicFiles: "direct-file-url";
+          privateFiles: "signed-url-required";
+          signedUrlEndpoint: string;
+          signedUrlMethod: "POST";
+          signedUrlPermission: "media.view";
+          acceptedDispositions: Array<"inline" | "attachment">;
+          defaultDisposition: "inline";
+          maxSignedUrlSeconds: 3600;
+          transformableTypes: Array<"image">;
+          responsiveTypes: Array<"image">;
+          fontManifestTypes: Array<"font">;
+          downloadableTypes: Array<"document" | "other" | "audio" | "video">;
+          secretHandling: string;
+          [key: string]: unknown;
+        };
         schemas: {
           list: "backy.media-discovery.v1";
+          fileCategories: "backy.media-file-categories.v1";
           folders: "backy.media-folders.v1";
           fonts: "backy.font-manifest.v1";
           references: "backy.media.references.v1";
