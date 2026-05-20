@@ -53,6 +53,22 @@ const assertPagesListSourceContract = () => {
   assert(source.includes("'template_source'") && source.includes("'frontend_design_template_id'") && source.includes("'collection_dataset_slug'"), 'Pages CSV export must include template provenance columns');
   assert(source.includes('const templateInfo = pageTemplateInfo(page)') && source.includes('template: templateInfo') && source.includes("pageMetaString(page, 'frontendDesignTemplateId')") && source.includes("pageMetaRecord(page, 'collectionDataset')"), 'Pages handoff must expose starter, frontend-design, and dataset page provenance');
   assert(
+    source.includes("schema: 'backy.page-launch-readiness.v1'") &&
+      source.includes('const selectedPageLaunchHandoff = useMemo(() => {') &&
+      source.includes('selectedPageLaunchHandoffText') &&
+      source.includes('data-testid="pages-selected-launch-handoff"') &&
+      source.includes("copyPageApiText(selectedPageLaunchHandoffText, 'Selected page launch readiness handoff')") &&
+      source.includes('pageTemplateInfo(apiPage)') &&
+      source.includes('deliveryHealthMap[apiPage.id]') &&
+      source.includes('deliveryHealthHistoryMap[apiPage.id]') &&
+      source.includes('revisionSummaryMap[apiPage.id]') &&
+      source.includes('adminReadinessUrl') &&
+      source.includes('renderApi: renderUrl') &&
+      source.includes('resolveApi: resolveUrl') &&
+      source.includes('selectedPageLaunchReadiness: selectedPageLaunchHandoff'),
+    'Pages list must expose a selected page launch/readiness handoff with template provenance, revision, delivery health, and frontend API endpoints.',
+  );
+  assert(
       source.includes("key: 'member-login'") &&
       source.includes("key: 'member-account'") &&
       source.includes('data-testid={`pages-create-${shortcut.key}`}') &&

@@ -1981,9 +1981,182 @@ function PagesListView() {
       ? canEditPages && canPublishPages
     : bulkAction === 'archive'
       ? canEditPages
-      : bulkAction === 'delete'
-        ? canDeletePages
-        : true;
+    : bulkAction === 'delete'
+      ? canDeletePages
+      : true;
+  const selectedPageLaunchHandoff = useMemo(() => {
+    const generatedAt = new Date().toISOString();
+    const site = {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: siteSlug,
+    };
+
+    if (!apiPage) {
+      return {
+        schema: 'backy.page-launch-readiness.v1',
+        generatedAt,
+        site,
+        selectedPage: null,
+        route: null,
+        readiness: null,
+        delivery: null,
+        revisions: null,
+        frontendContract: {
+          state: 'empty-page-library',
+          pageApi: publicPagesUrl,
+          createRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+        },
+        nextSteps: [
+          'Create a page for this site.',
+          'Run readiness before handing the page to a hosted or custom frontend.',
+        ],
+      };
+    }
+
+    const pageSiteId = apiPage.siteId || activeSiteId;
+    const pagePath = pagePublicPath(apiPage);
+    const encodedSiteId = encodeURIComponent(pageSiteId);
+    const encodedPageId = encodeURIComponent(apiPage.id);
+    const encodedPath = encodeURIComponent(pagePath);
+    const encodedSlug = encodeURIComponent(apiPage.slug || pagePath.replace(/^\/+/, '') || 'home');
+    const templateInfo = pageTemplateInfo(apiPage);
+    const routeDiagnostic = pageRouteDiagnostics[apiPage.id] || {
+      path: pagePath,
+      status: 'available' as const,
+      message: 'Route is available.',
+      conflictIds: [],
+    };
+    const readiness = readinessMap[apiPage.id];
+    const deliveryStatus = getPageDeliveryStatus(apiPage, readiness, routeDiagnostic);
+    const revisionSummary = revisionSummaryMap[apiPage.id];
+    const latestRevision = revisionSummary?.latest || null;
+    const deliveryHealth = deliveryHealthMap[apiPage.id] || null;
+    const deliveryHealthHistory = deliveryHealthHistoryMap[apiPage.id] || [];
+    const pageBySlugUrl = `${publicBaseUrl}/api/sites/${encodedSiteId}/pages?slug=${encodedSlug}`;
+    const renderUrl = `${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`;
+    const resolveUrl = `${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`;
+    const adminDetailUrl = `${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}`;
+    const adminReadinessUrl = `${adminDetailUrl}/readiness`;
+    const previewEndpoint = `${adminDetailUrl}/preview`;
+    const adminEditRoute = `/pages/${encodedPageId}/edit?siteId=${encodedSiteId}`;
+    const readinessBlocker = readiness ? getPublishBlocker(readiness) : null;
+    const routeBlocker = routeDiagnostic.status === 'conflict' ? routeDiagnostic.message : null;
+    const publishBlockers = [routeBlocker, readinessBlocker].filter((blocker): blocker is string => Boolean(blocker));
+
+    return {
+      schema: 'backy.page-launch-readiness.v1',
+      generatedAt,
+      site,
+      selectedPage: {
+        id: apiPage.id,
+        title: apiPage.title,
+        slug: apiPage.slug,
+        path: pagePath,
+        status: apiPage.status,
+        isHomepage: Boolean(apiPage.isHomepage),
+        parentId: apiPage.parentId || null,
+        parentTitle: getParentPageTitle(apiPage, activeSitePageMap) || null,
+        template: templateInfo,
+        navigation: {
+          placement: pageMetaString(apiPage, 'navigationPlacement') || null,
+          label: pageMetaString(apiPage, 'navigationLabel') || null,
+        },
+        editorRoute: adminEditRoute,
+      },
+      route: {
+        path: routeDiagnostic.path,
+        status: routeDiagnostic.status,
+        message: routeDiagnostic.message,
+        conflictIds: routeDiagnostic.conflictIds,
+      },
+      readiness: readiness
+        ? {
+            score: readiness.score,
+            statusLabel: readiness.statusLabel,
+            elementCount: readiness.elementCount,
+            checks: readiness.checks.map((check) => ({
+              label: check.label,
+              status: check.status,
+              severity: check.severity,
+              message: check.message,
+            })),
+            publishBlocker: readinessBlocker,
+          }
+        : {
+            score: null,
+            statusLabel: 'not-checked',
+            elementCount: null,
+            checks: [],
+            publishBlocker: 'Run readiness before publishing or handing this page to a custom frontend.',
+          },
+      delivery: {
+        status: deliveryStatus,
+        publicUrl: apiPage.status === 'published' && deliveryStatus !== 'blocked' ? publicPageUrl(apiPage) : null,
+        pageBySlugUrl,
+        renderUrl,
+        resolveUrl,
+        previewEndpoint,
+        adminDetailUrl,
+        adminReadinessUrl,
+        health: deliveryHealth,
+        healthHistory: deliveryHealthHistory,
+      },
+      revisions: {
+        count: revisionSummary?.count ?? 0,
+        historyRoute: `${adminEditRoute}#page-editor-revisions`,
+        latest: latestRevision
+          ? {
+              id: latestRevision.id,
+              note: latestRevision.note,
+              createdAt: latestRevision.createdAt,
+              status: latestRevision.snapshotStatus,
+            }
+          : null,
+      },
+      frontendContract: {
+        state: publishBlockers.length === 0 ? 'launchable' : 'blocked',
+        selectedPageSource: selectedPages.length > 0 ? 'bulk-selection' : apiPage.status === 'published' ? 'first-published-page' : 'first-site-page',
+        pageApi: pageBySlugUrl,
+        renderApi: renderUrl,
+        resolveApi: resolveUrl,
+        previewApi: previewEndpoint,
+        readinessApi: adminReadinessUrl,
+        publicDeliveryRequires: 'published status, available route, passing readiness, and healthy public/render/resolve probes',
+      },
+      publishBlockers,
+      nextSteps: publishBlockers.length === 0
+        ? [
+            'Open the visual editor for final content or layout edits.',
+            'Use render or resolve APIs from custom frontends.',
+            'Refresh delivery health after publish or domain changes.',
+          ]
+        : [
+            'Resolve the listed route or readiness blockers.',
+            'Run readiness again before publish.',
+            'Copy this handoff after the selected page is launchable.',
+          ],
+    };
+  }, [
+    activeSite?.name,
+    activeSiteId,
+    activeSitePageMap,
+    adminBaseUrl,
+    apiPage,
+    deliveryHealthHistoryMap,
+    deliveryHealthMap,
+    pageRouteDiagnostics,
+    publicBaseUrl,
+    publicPagesUrl,
+    readinessMap,
+    revisionSummaryMap,
+    selectedPages.length,
+    siteSlug,
+  ]);
+  const selectedPageLaunchHandoffText = useMemo(
+    () => JSON.stringify(selectedPageLaunchHandoff, null, 2),
+    [selectedPageLaunchHandoff],
+  );
   const pageHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     site: {
@@ -2181,6 +2354,7 @@ function PagesListView() {
           status: apiPage.status,
         }
       : null,
+    selectedPageLaunchReadiness: selectedPageLaunchHandoff,
     workflows: pageDesignReadiness.workflow,
     guardrails: [
       'Use the visual editor for canvas, section, grouping, media, and publish changes.',
@@ -2217,6 +2391,7 @@ function PagesListView() {
     revisionSummaryMap,
     searchQuery,
     selectedPages.length,
+    selectedPageLaunchHandoff,
     siteSlug,
     statusFilter,
     activeSitePageMap,
@@ -2767,6 +2942,135 @@ function PagesListView() {
             <PageApiSnippet label="Admin page detail" value={adminPageDetailUrl} />
             <PageApiSnippet label="Readiness check" value={adminPageReadinessUrl} />
             <PageApiSnippet label="Preview link" value={adminPagePreviewUrl} />
+          </div>
+
+          <div
+            data-testid="pages-selected-launch-handoff"
+            data-schema={selectedPageLaunchHandoff.schema}
+            data-selected-page-id={selectedPageLaunchHandoff.selectedPage?.id || ''}
+            data-delivery-status={selectedPageLaunchHandoff.delivery?.status || 'empty'}
+            className="mt-4 rounded-lg border border-border bg-background p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Selected page launch handoff</h3>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Copy the page-level route, readiness, preview, revision, and delivery contract for the current selection or API page.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void copyPageApiText(selectedPageLaunchHandoffText, 'Selected page launch readiness handoff')}
+                disabled={isPageLibraryBusy || !canViewPages}
+                title={!canViewPages ? viewPermissionTitle : undefined}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Copy selected page launch readiness handoff"
+              >
+                <Copy className="h-4 w-4" />
+                Copy launch JSON
+              </button>
+            </div>
+
+            {selectedPageLaunchHandoff.selectedPage && selectedPageLaunchHandoff.route && selectedPageLaunchHandoff.readiness && selectedPageLaunchHandoff.delivery ? (
+              <>
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <PageApiStat label="Selected page" value={selectedPageLaunchHandoff.selectedPage.title} />
+                  <PageApiStat label="Route" value={selectedPageLaunchHandoff.route.path} />
+                  <PageApiStat label="Template" value={selectedPageLaunchHandoff.selectedPage.template.label} />
+                  <PageApiStat label="Revision count" value={`${selectedPageLaunchHandoff.revisions?.count ?? 0}`} />
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="text-xs font-medium text-muted-foreground">Readiness</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <StatusBadge
+                        status={selectedPageLaunchHandoff.readiness.statusLabel}
+                        type={selectedPageLaunchHandoff.readiness.statusLabel === 'ready'
+                          ? 'success'
+                          : selectedPageLaunchHandoff.readiness.statusLabel === 'blocked'
+                            ? 'error'
+                            : 'warning'}
+                      />
+                      <span className="font-mono text-sm font-semibold text-foreground">
+                        {selectedPageLaunchHandoff.readiness.score === null ? 'pending' : `${selectedPageLaunchHandoff.readiness.score}%`}
+                      </span>
+                      {selectedPageLaunchHandoff.readiness.elementCount !== null && (
+                        <span className="text-xs text-muted-foreground">
+                          {selectedPageLaunchHandoff.readiness.elementCount} elements
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                      {selectedPageLaunchHandoff.readiness.publishBlocker || 'No readiness blocker recorded.'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="text-xs font-medium text-muted-foreground">Route and publish state</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <StatusBadge
+                        status={selectedPageLaunchHandoff.route.status}
+                        type={selectedPageLaunchHandoff.route.status === 'conflict'
+                          ? 'error'
+                          : selectedPageLaunchHandoff.route.status === 'warning'
+                            ? 'warning'
+                            : 'success'}
+                      />
+                      <StatusBadge
+                        status={selectedPageLaunchHandoff.delivery.status}
+                        type={selectedPageLaunchHandoff.delivery.status === 'published'
+                          ? 'success'
+                          : selectedPageLaunchHandoff.delivery.status === 'blocked'
+                            ? 'error'
+                            : 'warning'}
+                      />
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                      {selectedPageLaunchHandoff.route.message}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="text-xs font-medium text-muted-foreground">Delivery health</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <StatusBadge
+                        status={selectedPageLaunchHandoff.delivery.health?.status || 'not probed'}
+                        type={selectedPageLaunchHandoff.delivery.health?.status === 'healthy'
+                          ? 'success'
+                          : selectedPageLaunchHandoff.delivery.health?.status === 'error'
+                            ? 'error'
+                            : selectedPageLaunchHandoff.delivery.health?.status === 'warning'
+                              ? 'warning'
+                              : 'info'}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {selectedPageLaunchHandoff.delivery.healthHistory.length} recent probe{selectedPageLaunchHandoff.delivery.healthHistory.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                      {selectedPageLaunchHandoff.delivery.health?.message || 'Publish and refresh delivery to probe public, render, and resolve endpoints.'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  <PageApiSnippet label="Selected page API" value={selectedPageLaunchHandoff.delivery.pageBySlugUrl} />
+                  <PageApiSnippet label="Render selected page" value={selectedPageLaunchHandoff.delivery.renderUrl} />
+                  <PageApiSnippet label="Resolve selected page" value={selectedPageLaunchHandoff.delivery.resolveUrl} />
+                  <PageApiSnippet label="Selected readiness API" value={selectedPageLaunchHandoff.delivery.adminReadinessUrl} />
+                  <PageApiSnippet label="Preview selected page" value={selectedPageLaunchHandoff.delivery.previewEndpoint} />
+                  <PageApiSnippet label="Editor route" value={selectedPageLaunchHandoff.selectedPage.editorRoute} />
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                Create a page for this site to generate a launch handoff.
+              </div>
+            )}
           </div>
 
           <div className="mt-4 rounded-lg border border-border bg-background p-4">
