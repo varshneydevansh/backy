@@ -55,6 +55,11 @@ import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
 import { compareCanvasRevisionElements, type CanvasRevisionElementDiff } from '@/lib/revisionCanvasDiff';
 import {
+    getContentRevisionActionLabel,
+    getContentRevisionActorLabel,
+    getContentRevisionSnapshotUpdatedLabel,
+} from '@/lib/revisionMetadata';
+import {
   createCanvasElement,
   normalizeSavedCanvasContent,
   serializeCanvasContent,
@@ -1696,6 +1701,9 @@ function EditBlogPostPage() {
             id: revision.id,
             note: revision.note,
             createdAt: revision.createdAt,
+            createdBy: revision.createdBy,
+            actor: getContentRevisionActorLabel(revision),
+            action: getContentRevisionActionLabel(revision),
             status: revision.snapshotStatus,
             graph: blogRevisionTimelineById.get(revision.id),
             snapshot: {
@@ -1794,6 +1802,8 @@ function EditBlogPostPage() {
             note: revision.note,
             createdAt: revision.createdAt,
             createdBy: revision.createdBy,
+            actor: getContentRevisionActorLabel(revision),
+            action: getContentRevisionActionLabel(revision),
             graph: blogRevisionTimelineById.get(revision.id) || null,
             snapshot: {
                 title: revision.snapshotTitle,
@@ -3028,6 +3038,11 @@ function EditBlogPostPage() {
                                                             <div className="text-xs text-muted-foreground">
                                                                 {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
                                                                 {revisionGraphNode ? ` · ${revisionGraphNode.label}${revisionGraphNode.isLatest ? ' · latest' : revisionGraphNode.isOldest ? ' · oldest' : ''}` : ''}
+                                                            </div>
+                                                            <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-muted-foreground" data-testid={`blog-editor-revision-metadata-${revision.id}`}>
+                                                                <span className="rounded bg-muted px-1.5 py-0.5">Action: {getContentRevisionActionLabel(revision)}</span>
+                                                                <span className="rounded bg-muted px-1.5 py-0.5">Actor: {getContentRevisionActorLabel(revision)}</span>
+                                                                <span className="rounded bg-muted px-1.5 py-0.5">Snapshot updated: {getContentRevisionSnapshotUpdatedLabel(revision)}</span>
                                                             </div>
                                                         </div>
                                                         <div className="flex shrink-0 items-center gap-1">

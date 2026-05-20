@@ -197,6 +197,7 @@ const assert = (condition, message) => {
 const assertPageEditorFallbackIsReadOnly = () => {
   const source = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
   const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
+  const revisionMetadataSource = fs.readFileSync(new URL('../src/lib/revisionMetadata.ts', import.meta.url), 'utf8');
   assert(source.includes('isUsingLocalPageCopy'), 'Page editor must track backend-load fallback state');
   assert(source.includes('localPageCopyDisabledMessage'), 'Page editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditPage && !isUsingLocalPageCopy}'), 'Page editor canvas editing must be disabled for local fallback copies');
@@ -213,6 +214,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(visualDiffSource.includes('Visual diff focus') && visualDiffSource.includes('changeIndexById') && visualDiffSource.includes('data-testid={`${testId}-focus`}'), 'Shared revision visual diff must show numbered changed-element focus markers');
   assert(source.includes("schema: 'backy.page-revision-graph.v1'") && source.includes('pageRevisionTimeline') && source.includes('data-testid="page-editor-revision-graph"') && source.includes('data-testid="page-editor-toggle-revision-graph"'), 'Page editor revisions must expose graph timeline navigation and handoff metadata');
   assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
+  assert(source.includes('data-testid={`page-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Page editor revisions must expose actor/action metadata in cards and handoff summaries');
 };
 
 const assertCanvasEditorShortcutSource = () => {

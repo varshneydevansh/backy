@@ -220,7 +220,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
    - page/blog revision records with actor/timestamp.
 2. Diff tooling:
    - field-level and content payload diffs for admin.
-   - Page and blog editor revision cards now expose first-pass current-vs-snapshot field rows for title, route, status, SEO, taxonomy/media where applicable, canvas layer count deltas, canvas element/property change rows with expandable property drill-downs for added/removed/updated elements, side-by-side snapshot/current visual canvas maps, numbered changed-element focus markers, and restore-confirmation impact previews, plus copyable `backy.page-revision-compare.v1` and `backy.blog-revision-compare.v1` briefs for AI/custom frontend handoff. Page and blog editors also expose first-pass `backy.page-revision-graph.v1` / `backy.blog-revision-graph.v1` timeline metadata with newest/oldest node navigation; remaining work is richer branching revision graph views and pixel-level rendered visual comparisons.
+   - Page and blog editor revision cards now expose first-pass current-vs-snapshot field rows for title, route, status, SEO, taxonomy/media where applicable, canvas layer count deltas, canvas element/property change rows with expandable property drill-downs for added/removed/updated elements, side-by-side snapshot/current visual canvas maps, numbered changed-element focus markers, restore-confirmation impact previews, and actor/action metadata, plus copyable `backy.page-revision-compare.v1` and `backy.blog-revision-compare.v1` briefs for AI/custom frontend handoff. Page and blog editors also expose first-pass `backy.page-revision-graph.v1` / `backy.blog-revision-graph.v1` timeline metadata with newest/oldest node navigation; remaining work is richer branching revision graph views and pixel-level rendered visual comparisons.
 3. Rollback:
    - restore to prior revision and re-publish guard.
 4. Safety:
@@ -228,7 +228,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 
 ### Exit criteria
 - One-click rollback exists for pages and blog posts.
-- Revision history includes author/action metadata.
+- Revision history includes visible author/action metadata.
 
 ## Phase H: Media, SEO, localization, and visual system
 - Objective: production-site quality baseline for real sites.

@@ -26,6 +26,7 @@ const assert = (condition, message) => {
 const assertBlogEditorFallbackIsReadOnly = () => {
   const source = fs.readFileSync(new URL('../src/routes/blog.$postId.tsx', import.meta.url), 'utf8');
   const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
+  const revisionMetadataSource = fs.readFileSync(new URL('../src/lib/revisionMetadata.ts', import.meta.url), 'utf8');
   assert(source.includes('isUsingLocalPostCopy'), 'Blog editor must track backend-load fallback state');
   assert(source.includes('localPostCopyDisabledMessage'), 'Blog editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
@@ -43,6 +44,7 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(visualDiffSource.includes('Visual diff focus') && visualDiffSource.includes('changeIndexById') && visualDiffSource.includes('data-testid={`${testId}-focus`}'), 'Shared revision visual diff must show numbered changed-element focus markers');
   assert(source.includes("schema: 'backy.blog-revision-graph.v1'") && source.includes('blogRevisionTimeline') && source.includes('data-testid="blog-editor-revision-graph"') && source.includes('data-testid="blog-editor-toggle-revision-graph"'), 'Blog editor revisions must expose graph timeline navigation and handoff metadata');
   assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="blog-editor-restore-impact"') && source.includes('data-testid="blog-editor-confirm-restore"') && source.includes('Current </span>'), 'Blog editor restore confirmation must preview restore impact before rollback');
+  assert(source.includes('data-testid={`blog-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Blog editor revisions must expose actor/action metadata in cards and handoff summaries');
   assert(
     source.includes('getScheduledBlogEditorDateError') &&
       source.includes('Date.parse(scheduledAt)') &&
