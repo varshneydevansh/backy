@@ -196,6 +196,7 @@ const assert = (condition, message) => {
 
 const assertPageEditorFallbackIsReadOnly = () => {
   const source = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
+  const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
   assert(source.includes('isUsingLocalPageCopy'), 'Page editor must track backend-load fallback state');
   assert(source.includes('localPageCopyDisabledMessage'), 'Page editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditPage && !isUsingLocalPageCopy}'), 'Page editor canvas editing must be disabled for local fallback copies');
@@ -209,6 +210,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('compareCanvasRevisionElements') && source.includes('elementDiff: CanvasRevisionElementDiff') && source.includes('data-testid={`page-editor-revision-element-diff-${revision.id}`}'), 'Page editor revision cards must show canvas element/property diffs');
   assert(source.includes('<details className="pl-2"') && source.includes('change.properties.map((property)') && source.includes('changed propert{change.propertyChangeCount === 1'), 'Page editor revision cards must drill into changed element properties');
   assert(source.includes('RevisionCanvasVisualDiff') && source.includes('testId={`page-editor-revision-visual-diff-${revision.id}`}') && source.includes('currentElements={editorElements}'), 'Page editor revision cards must show side-by-side visual canvas diffs');
+  assert(visualDiffSource.includes('Visual diff focus') && visualDiffSource.includes('changeIndexById') && visualDiffSource.includes('data-testid={`${testId}-focus`}'), 'Shared revision visual diff must show numbered changed-element focus markers');
   assert(source.includes("schema: 'backy.page-revision-graph.v1'") && source.includes('pageRevisionTimeline') && source.includes('data-testid="page-editor-revision-graph"') && source.includes('data-testid="page-editor-toggle-revision-graph"'), 'Page editor revisions must expose graph timeline navigation and handoff metadata');
 };
 

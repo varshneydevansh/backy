@@ -21,6 +21,7 @@ type RevisionCanvasVisualPreviewProps = {
   canvasWidth?: number | null;
   canvasHeight?: number | null;
   elementDiff: CanvasRevisionElementDiff;
+  changeIndexById: Map<string, number>;
   side: 'snapshot' | 'current';
 };
 
@@ -101,6 +102,7 @@ const RevisionCanvasVisualPreview = ({
   canvasWidth,
   canvasHeight,
   elementDiff,
+  changeIndexById,
   side,
 }: RevisionCanvasVisualPreviewProps) => {
   const visualElements = flattenVisualElements(elements)
@@ -130,18 +132,31 @@ const RevisionCanvasVisualPreview = ({
       >
         {visualElements.map((element) => {
           const status = statusForElement(element.id);
+          const changeIndex = status === 'unchanged' ? undefined : changeIndexById.get(element.id);
           const width = Math.max(2, Math.min(REVISION_VISUAL_WIDTH, element.width * scale));
           const height = Math.max(2, Math.min(REVISION_VISUAL_HEIGHT, element.height * scale));
           const left = Math.max(0, Math.min(REVISION_VISUAL_WIDTH - width, element.x * scale));
           const top = Math.max(0, Math.min(REVISION_VISUAL_HEIGHT - height, element.y * scale));
+          const markerLeft = Math.max(0, Math.min(REVISION_VISUAL_WIDTH - 14, left + width / 2 - 7));
+          const markerTop = Math.max(0, Math.min(REVISION_VISUAL_HEIGHT - 14, top + height / 2 - 7));
 
           return (
-            <span
-              key={element.id}
-              className={`absolute rounded-sm border ${visualStatusClass(status)}`}
-              style={{ left, top, width, height }}
-              title={`${element.label} (${element.type}, ${status})`}
-            />
+            <span key={element.id}>
+              <span
+                className={`absolute rounded-sm border ${visualStatusClass(status)}`}
+                style={{ left, top, width, height }}
+                title={`${element.label} (${element.type}, ${status})`}
+              />
+              {changeIndex ? (
+                <span
+                  className="absolute flex h-3.5 w-3.5 items-center justify-center rounded-full bg-foreground text-[9px] font-bold leading-none text-background"
+                  style={{ left: markerLeft, top: markerTop }}
+                  title={`${changeIndex}. ${element.label} (${element.type}, ${status})`}
+                >
+                  {changeIndex}
+                </span>
+              ) : null}
+            </span>
           );
         })}
       </div>
@@ -158,31 +173,61 @@ export const RevisionCanvasVisualDiff = ({
   currentCanvasWidth,
   currentCanvasHeight,
   elementDiff,
-}: RevisionCanvasVisualDiffProps) => (
-  <div className="mt-2 border-t border-border/60 pt-2" data-testid={testId}>
-    <div className="font-medium text-foreground">Visual canvas diff</div>
-    <div className="mt-1 grid gap-2 sm:grid-cols-2">
-      <RevisionCanvasVisualPreview
-        label="Snapshot"
-        elements={snapshotElements}
-        canvasWidth={snapshotCanvasWidth}
-        canvasHeight={snapshotCanvasHeight}
-        elementDiff={elementDiff}
-        side="snapshot"
-      />
-      <RevisionCanvasVisualPreview
-        label="Current"
-        elements={currentElements}
-        canvasWidth={currentCanvasWidth}
-        canvasHeight={currentCanvasHeight}
-        elementDiff={elementDiff}
-        side="current"
-      />
+}: RevisionCanvasVisualDiffProps) => {
+  const changeIndexById = new Map(elementDiff.changes.map((change, index) => [change.id, index + 1]));
+
+  return (
+    <div className="mt-2 border-t border-border/60 pt-2" data-testid={testId}>
+      <div className="font-medium text-foreground">Visual canvas diff</div>
+      <div className="mt-1 grid gap-2 sm:grid-cols-2">
+        <RevisionCanvasVisualPreview
+          label="Snapshot"
+          elements={snapshotElements}
+          canvasWidth={snapshotCanvasWidth}
+          canvasHeight={snapshotCanvasHeight}
+          elementDiff={elementDiff}
+          changeIndexById={changeIndexById}
+          side="snapshot"
+        />
+        <RevisionCanvasVisualPreview
+          label="Current"
+          elements={currentElements}
+          canvasWidth={currentCanvasWidth}
+          canvasHeight={currentCanvasHeight}
+          elementDiff={elementDiff}
+          changeIndexById={changeIndexById}
+          side="current"
+        />
+      </div>
+      <div className="mt-1 flex flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-emerald-500 bg-emerald-500/25" />Added</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-red-500 bg-red-500/25" />Removed</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-amber-500 bg-amber-500/30" />Updated</span>
+      </div>
+      {elementDiff.changes.length ? (
+        <div className="mt-2 grid gap-1" data-testid={`${testId}-focus`}>
+          <div className="font-medium text-foreground">Visual diff focus</div>
+          {elementDiff.changes.map((change, index) => (
+            <div key={change.id} className="grid gap-1 border-t border-border/60 pt-1 first:border-t-0">
+              <div className="flex flex-wrap items-center gap-1 text-foreground">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[10px] font-bold leading-none text-background">{index + 1}</span>
+                <span className="font-semibold capitalize">{change.kind}</span>
+                <span className="font-mono">{change.type}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{change.label}</span>
+              </div>
+              <div className="min-w-0 [overflow-wrap:anywhere]">
+                <span className="text-muted-foreground">Path </span>
+                <span>{change.path}</span>
+                <span className="text-muted-foreground"> · </span>
+                <span>{change.propertyChangeCount} propert{change.propertyChangeCount === 1 ? 'y' : 'ies'}</span>
+              </div>
+            </div>
+          ))}
+          {elementDiff.totalChanged > elementDiff.changes.length ? (
+            <div>{elementDiff.totalChanged - elementDiff.changes.length} more changed element{elementDiff.totalChanged - elementDiff.changes.length === 1 ? '' : 's'} summarized by the color overlays.</div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
-    <div className="mt-1 flex flex-wrap gap-2">
-      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-emerald-500 bg-emerald-500/25" />Added</span>
-      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-red-500 bg-red-500/25" />Removed</span>
-      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-amber-500 bg-amber-500/30" />Updated</span>
-    </div>
-  </div>
-);
+  );
+};

@@ -25,6 +25,7 @@ const assert = (condition, message) => {
 
 const assertBlogEditorFallbackIsReadOnly = () => {
   const source = fs.readFileSync(new URL('../src/routes/blog.$postId.tsx', import.meta.url), 'utf8');
+  const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
   assert(source.includes('isUsingLocalPostCopy'), 'Blog editor must track backend-load fallback state');
   assert(source.includes('localPostCopyDisabledMessage'), 'Blog editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
@@ -39,6 +40,7 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes('compareCanvasRevisionElements') && source.includes('elementDiff: CanvasRevisionElementDiff') && source.includes('data-testid={`blog-editor-revision-element-diff-${revision.id}`}'), 'Blog editor revision cards must show canvas element/property diffs');
   assert(source.includes('<details className="pl-2"') && source.includes('change.properties.map((property)') && source.includes('changed propert{change.propertyChangeCount === 1'), 'Blog editor revision cards must drill into changed element properties');
   assert(source.includes('RevisionCanvasVisualDiff') && source.includes('testId={`blog-editor-revision-visual-diff-${revision.id}`}') && source.includes('currentElements={canvasElements}'), 'Blog editor revision cards must show side-by-side visual canvas diffs');
+  assert(visualDiffSource.includes('Visual diff focus') && visualDiffSource.includes('changeIndexById') && visualDiffSource.includes('data-testid={`${testId}-focus`}'), 'Shared revision visual diff must show numbered changed-element focus markers');
   assert(source.includes("schema: 'backy.blog-revision-graph.v1'") && source.includes('blogRevisionTimeline') && source.includes('data-testid="blog-editor-revision-graph"') && source.includes('data-testid="blog-editor-toggle-revision-graph"'), 'Blog editor revisions must expose graph timeline navigation and handoff metadata');
   assert(
     source.includes('getScheduledBlogEditorDateError') &&
