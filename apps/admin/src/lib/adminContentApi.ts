@@ -3360,7 +3360,22 @@ export interface ContentRevision {
   createdBy: string | null;
   createdAt: string;
   snapshotTitle: string;
+  snapshotSlug: string;
   snapshotStatus: Page['status'] | BlogPost['status'];
+  snapshotUpdatedAt: string | null;
+  snapshotMetaTitle: string | null;
+  snapshotMetaDescription: string | null;
+  snapshotCanvas: ContentRevisionCanvasSummary;
+}
+
+export interface ContentRevisionCanvasSummary {
+  rootLayerCount: number;
+  totalLayerCount: number;
+  containerLayerCount: number;
+  maxDepth: number;
+  canvasWidth: number | null;
+  canvasHeight: number | null;
+  serializedBytes: number;
 }
 
 export interface ContentRevisionSummary {
@@ -4019,8 +4034,128 @@ const toStoreUser = (user: ApiUser): User => ({
   lastActive: toLastActiveLabel(user),
 });
 
+const isApiRecord = (value: unknown): value is Record<string, unknown> => (
+  !!value && typeof value === 'object' && !Array.isArray(value)
+);
+
+const parseRevisionContentPayload = (content: unknown): unknown => {
+  if (typeof content !== 'string') {
+    return content;
+  }
+
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+};
+
+const getRevisionContentDocument = (payload: unknown): Record<string, unknown> | null => {
+  if (!isApiRecord(payload)) {
+    return null;
+  }
+
+  if (Array.isArray(payload.elements)) {
+    return payload;
+  }
+
+  return isApiRecord(payload.contentDocument) ? payload.contentDocument : null;
+};
+
+const getRevisionContentElements = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (isApiRecord(payload) && Array.isArray(payload.elements)) {
+    return payload.elements;
+  }
+
+  const contentDocument = getRevisionContentDocument(payload);
+  return Array.isArray(contentDocument?.elements) ? contentDocument.elements : [];
+};
+
+const numericRecordValue = (record: Record<string, unknown> | null | undefined, key: string): number | null => {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+};
+
+const getRevisionCanvasSize = (payload: unknown): { width: number | null; height: number | null } => {
+  const contentDocument = getRevisionContentDocument(payload);
+  const topLevelCanvasSize = isApiRecord(payload) && isApiRecord(payload.canvasSize) ? payload.canvasSize : null;
+  const documentMetadata = isApiRecord(contentDocument?.metadata) ? contentDocument.metadata : null;
+  const documentCanvasSize = isApiRecord(documentMetadata?.canvasSize) ? documentMetadata.canvasSize : null;
+  const canvasSize = topLevelCanvasSize || documentCanvasSize;
+
+  return {
+    width: numericRecordValue(canvasSize, 'width'),
+    height: numericRecordValue(canvasSize, 'height'),
+  };
+};
+
+const countRevisionCanvasLayers = (
+  nodes: unknown[],
+  depth: number,
+): Pick<ContentRevisionCanvasSummary, 'totalLayerCount' | 'containerLayerCount' | 'maxDepth'> => {
+  let totalLayerCount = 0;
+  let containerLayerCount = 0;
+  let maxDepth = 0;
+
+  const visit = (items: unknown[], currentDepth: number) => {
+    items.forEach((item) => {
+      if (!isApiRecord(item)) {
+        return;
+      }
+
+      totalLayerCount += 1;
+      maxDepth = Math.max(maxDepth, currentDepth);
+
+      if (Array.isArray(item.children) && item.children.length > 0) {
+        containerLayerCount += 1;
+        visit(item.children, currentDepth + 1);
+      }
+    });
+  };
+
+  visit(nodes, depth);
+
+  return {
+    totalLayerCount,
+    containerLayerCount,
+    maxDepth,
+  };
+};
+
+const getRevisionCanvasSummary = (content: unknown): ContentRevisionCanvasSummary => {
+  const payload = parseRevisionContentPayload(content);
+  const elements = getRevisionContentElements(payload);
+  const canvasSize = getRevisionCanvasSize(payload);
+  const counts = countRevisionCanvasLayers(elements, elements.length > 0 ? 1 : 0);
+  const serialized = typeof content === 'string'
+    ? content
+    : content === undefined || content === null
+      ? ''
+      : JSON.stringify(content) || '';
+
+  return {
+    rootLayerCount: elements.filter(isApiRecord).length,
+    totalLayerCount: counts.totalLayerCount,
+    containerLayerCount: counts.containerLayerCount,
+    maxDepth: counts.maxDepth,
+    canvasWidth: canvasSize.width,
+    canvasHeight: canvasSize.height,
+    serializedBytes: serialized.length,
+  };
+};
+
+const stringRecordValue = (record: Record<string, unknown>, key: string): string | null => {
+  const value = record[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+};
+
 const toContentRevision = (revision: ApiRevision): ContentRevision => {
   const snapshot = revision.snapshot;
+  const snapshotMeta = isApiRecord(snapshot.meta) ? snapshot.meta : {};
   return {
     id: revision.id,
     targetType: revision.targetType,
@@ -4028,7 +4163,12 @@ const toContentRevision = (revision: ApiRevision): ContentRevision => {
     createdBy: revision.createdBy,
     createdAt: revision.createdAt,
     snapshotTitle: snapshot.title,
+    snapshotSlug: typeof snapshot.slug === 'string' ? snapshot.slug : '',
     snapshotStatus: toContentStatus(snapshot.status, snapshot.status === 'published'),
+    snapshotUpdatedAt: snapshot.updatedAt || snapshot.createdAt || null,
+    snapshotMetaTitle: stringRecordValue(snapshotMeta, 'title'),
+    snapshotMetaDescription: stringRecordValue(snapshotMeta, 'description'),
+    snapshotCanvas: getRevisionCanvasSummary(snapshot.content),
   };
 };
 

@@ -220,6 +220,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
    - page/blog revision records with actor/timestamp.
 2. Diff tooling:
    - field-level and content payload diffs for admin.
+   - Page editor revision cards now expose a first-pass current-vs-snapshot summary for title, route, status, SEO, and canvas layer count deltas; remaining work is full element/property diff views and revision graph navigation.
 3. Rollback:
    - restore to prior revision and re-publish guard.
 4. Safety:

@@ -118,6 +118,18 @@ type PageSaveConflict = {
   currentUpdatedAt?: string;
 };
 
+type PageRevisionDiff = {
+  id: string;
+  changedFields: string[];
+  summary: string;
+  currentLayerCount: number;
+  snapshotLayerCount: number;
+  layerDelta: number;
+  currentRootLayerCount: number;
+  snapshotRootLayerCount: number;
+  rootLayerDelta: number;
+};
+
 type PageEditorPermissionKey =
   | 'pages.view'
   | 'pages.edit'
@@ -198,6 +210,67 @@ const getCanvasTreeStats = (elements: CanvasElement[]): CanvasTreeStats => {
     totalLayerCount,
     containerLayerCount,
     maxDepth,
+  };
+};
+
+const metaStringValue = (meta: Record<string, any> | undefined, key: string): string => {
+  const value = meta?.[key];
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const pageRevisionDiff = (
+  page: Page,
+  revision: ContentRevision,
+  stats: CanvasTreeStats,
+  canvasSize: CanvasSize,
+): PageRevisionDiff => {
+  const changedFields: string[] = [];
+  const currentMetaTitle = metaStringValue(page.meta, 'title') || page.title;
+  const currentMetaDescription = metaStringValue(page.meta, 'description');
+
+  if (revision.snapshotTitle !== page.title) {
+    changedFields.push('title');
+  }
+
+  if (revision.snapshotSlug !== page.slug) {
+    changedFields.push('route');
+  }
+
+  if (revision.snapshotStatus !== page.status) {
+    changedFields.push('status');
+  }
+
+  if (
+    (revision.snapshotMetaTitle || '') !== currentMetaTitle ||
+    (revision.snapshotMetaDescription || '') !== currentMetaDescription
+  ) {
+    changedFields.push('SEO');
+  }
+
+  const layerDelta = stats.totalLayerCount - revision.snapshotCanvas.totalLayerCount;
+  const rootLayerDelta = stats.rootLayerCount - revision.snapshotCanvas.rootLayerCount;
+  const canvasSizeChanged = (
+    revision.snapshotCanvas.canvasWidth !== null &&
+    revision.snapshotCanvas.canvasHeight !== null &&
+    (revision.snapshotCanvas.canvasWidth !== canvasSize.width || revision.snapshotCanvas.canvasHeight !== canvasSize.height)
+  );
+
+  if (layerDelta !== 0 || rootLayerDelta !== 0 || canvasSizeChanged) {
+    changedFields.push('canvas');
+  }
+
+  return {
+    id: revision.id,
+    changedFields,
+    summary: changedFields.length
+      ? `${changedFields.length} changed area${changedFields.length === 1 ? '' : 's'}: ${changedFields.join(', ')}.`
+      : 'Matches the current saved page summary.',
+    currentLayerCount: stats.totalLayerCount,
+    snapshotLayerCount: revision.snapshotCanvas.totalLayerCount,
+    layerDelta,
+    currentRootLayerCount: stats.rootLayerCount,
+    snapshotRootLayerCount: revision.snapshotCanvas.rootLayerCount,
+    rootLayerDelta,
   };
 };
 
@@ -519,6 +592,12 @@ function PageEditorRoute() {
 
   const editorElements = initialElements.length ? initialElements : fallbackElements;
   const canvasTreeStats = useMemo(() => getCanvasTreeStats(editorElements), [editorElements]);
+  const revisionDiffById = useMemo(() => page
+    ? new Map(revisions.map((revision) => [
+        revision.id,
+        pageRevisionDiff(page, revision, canvasTreeStats, initialCanvasSize),
+      ]))
+    : new Map<string, PageRevisionDiff>(), [canvasTreeStats, initialCanvasSize, page, revisions]);
   const interactiveReadinessIssues = useMemo(
     () => collectInteractiveReadinessIssues(editorElements),
     [editorElements],
@@ -832,6 +911,13 @@ function PageEditorRoute() {
       note: revision.note,
       createdAt: revision.createdAt,
       status: revision.snapshotStatus,
+      snapshot: {
+        title: revision.snapshotTitle,
+        slug: revision.snapshotSlug,
+        updatedAt: revision.snapshotUpdatedAt,
+        canvas: revision.snapshotCanvas,
+      },
+      compareToCurrent: revisionDiffById.get(revision.id),
     })),
     preview: previewUrl
       ? {
@@ -1682,27 +1768,44 @@ function PageEditorRoute() {
                 </div>
               ) : (
                 <div className="grid gap-2">
-                  {revisions.slice(0, 6).map((revision) => (
-                    <div key={revision.id} className="rounded-lg border border-border px-3 py-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">{revision.note || 'Revision snapshot'}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                  {revisions.slice(0, 6).map((revision) => {
+                    const revisionDiff = revisionDiffById.get(revision.id);
+                    const layerDelta = revisionDiff?.layerDelta || 0;
+
+                    return (
+                      <div key={revision.id} className="rounded-lg border border-border px-3 py-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium">{revision.note || 'Revision snapshot'}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
+                            onClick={() => setPendingRestoreRevision(revision)}
+                            className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                            title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div
+                          className="mt-2 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] leading-5 text-muted-foreground"
+                          data-testid={`page-editor-revision-diff-${revision.id}`}
+                        >
+                          <div className="font-medium text-foreground">{revisionDiff?.summary}</div>
+                          <div>
+                            Snapshot: {revision.snapshotCanvas.totalLayerCount} layer{revision.snapshotCanvas.totalLayerCount === 1 ? '' : 's'}
+                            {' '}({revision.snapshotCanvas.rootLayerCount} root, depth {revision.snapshotCanvas.maxDepth || 0}).
+                            {' '}Current delta: {layerDelta === 0 ? 'no layer change' : `${layerDelta > 0 ? '+' : ''}${layerDelta} layer${Math.abs(layerDelta) === 1 ? '' : 's'}`}.
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
-                          onClick={() => setPendingRestoreRevision(revision)}
-                          className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                          title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </PanelContent>
