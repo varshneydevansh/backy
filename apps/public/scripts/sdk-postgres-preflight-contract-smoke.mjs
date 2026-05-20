@@ -52,7 +52,14 @@ assert(
     manifestRoute.includes('getFrontendDatabaseCertificationRuntime') &&
     manifestRoute.includes('databaseUrlConfigured') &&
     manifestRoute.includes('readyForCertification') &&
-    manifestRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
+    manifestRoute.includes('scenarioEvidence: buildFrontendDatabaseCertificationEvidence(frontendDatabaseCertificationRuntime)') &&
+    manifestRoute.includes('backy.frontend-database-certification-evidence.v1') &&
+    manifestRoute.includes("'commerce'") &&
+    manifestRoute.includes("'generated-sdk'") &&
+    manifestRoute.includes('Manifest and OpenAPI discovery') &&
+    manifestRoute.includes('Generated SDK and cache') &&
+    manifestRoute.includes('database URLs, service credentials, private orders, submissions, and contact payloads stay private') &&
+    manifestRoute.includes('runtime: frontendDatabaseCertificationRuntime') &&
     manifestRoute.includes('Database URLs and service credentials are never returned') &&
     manifestRoute.includes("'media'") &&
     manifestRoute.includes("'forms'") &&
@@ -87,6 +94,7 @@ assert(
     settingsRoute.includes('data-testid="settings-frontend-database-certification"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-copy-button"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-download-button"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-evidence"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-command-builder"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-command-builder-copy-button"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-database-alias-select"') &&
@@ -95,6 +103,13 @@ assert(
     settingsRoute.includes('data-testid="settings-frontend-database-certification-required-inputs"') &&
     settingsRoute.includes('Frontend SDK database certification') &&
     settingsRoute.includes('frontendDatabaseCertificationHandoff') &&
+    settingsRoute.includes('frontendDatabaseCertificationScenarioEvidence') &&
+    settingsRoute.includes('scenarioEvidence: frontendDatabaseCertificationScenarioEvidence') &&
+    settingsRoute.includes('backy.frontend-database-certification-evidence.v1') &&
+    settingsRoute.includes('Frontend database scenario evidence') &&
+    settingsRoute.includes('Manifest and OpenAPI discovery') &&
+    settingsRoute.includes('Commerce contracts') &&
+    settingsRoute.includes('Generated SDK and cache') &&
     settingsRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
     settingsRoute.includes('buildFrontendDatabaseCertificationCommand') &&
     settingsRoute.includes('backy-frontend-database-certification-handoff.json') &&
@@ -134,7 +149,13 @@ assert(
     openApiRoute.includes('getFrontendDatabaseCertificationRuntime') &&
     openApiRoute.includes('databaseUrlConfigured') &&
     openApiRoute.includes('readyForCertification') &&
-    openApiRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
+    openApiRoute.includes('scenarioEvidence: buildFrontendDatabaseCertificationEvidence(frontendDatabaseCertificationRuntime)') &&
+    openApiRoute.includes('backy.frontend-database-certification-evidence.v1') &&
+    openApiRoute.includes('"commerce"') &&
+    openApiRoute.includes('"generated-sdk"') &&
+    openApiRoute.includes('Manifest and OpenAPI discovery') &&
+    openApiRoute.includes('Generated SDK and cache') &&
+    openApiRoute.includes('runtime: frontendDatabaseCertificationRuntime') &&
     openApiRoute.includes('Database URLs and service credentials are never returned') &&
     openApiRoute.includes('"media"') &&
     openApiRoute.includes('"forms"') &&
@@ -176,6 +197,11 @@ assert(
     frontendManifestSchema.includes('"runtime"') &&
     frontendManifestSchema.includes('"databaseUrlConfigured"') &&
     frontendManifestSchema.includes('"readyForCertification"') &&
+    frontendManifestSchema.includes('"scenarioEvidence"') &&
+    frontendManifestSchema.includes('"backy.frontend-database-certification-evidence.v1"') &&
+    frontendManifestSchema.includes('"BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke"') &&
+    frontendManifestSchema.includes('"covered"') &&
+    frontendManifestSchema.includes('"expectedEvidence"') &&
     frontendManifestSchema.includes('"version", "schemas", "databaseCertification"'),
   'Frontend manifest schema must require and type the database certification handoff.',
 );
@@ -206,6 +232,9 @@ assert(
     generatedSdkTypes.includes('databaseUrlAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL">') &&
     generatedSdkTypes.includes('databaseUrlConfigured: boolean') &&
     generatedSdkTypes.includes('readyForCertification: boolean') &&
+    generatedSdkTypes.includes('schemaVersion: "backy.frontend-database-certification-evidence.v1"') &&
+    generatedSdkTypes.includes('requiredGate: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke"') &&
+    generatedSdkTypes.includes('expectedEvidence: Array<string>') &&
     generatedSdkTypes.includes('"npm run test:frontend-contract-types"'),
   'Generated SDK types must export the manifest/OpenAPI database certification contract.',
 );
@@ -225,12 +254,16 @@ assert(
   sdkIndex.includes('export interface BackyFrontendDatabaseCertification') &&
     sdkIndex.includes('schemaVersion: "backy.frontend-database-certification.v1"') &&
     sdkIndex.includes('readyForCertification: boolean') &&
+    sdkIndex.includes('schemaVersion: "backy.frontend-database-certification-evidence.v1"') &&
+    sdkIndex.includes('expectedEvidence: string[]') &&
     sdkIndex.includes('operatorCommandTemplate: {') &&
     sdkIndex.includes('export interface BackyFrontendManifestContract') &&
     sdkIndex.includes('databaseCertification: BackyFrontendDatabaseCertification') &&
     sdkIndex.includes('contract: BackyFrontendManifestContract') &&
     generatedSdkTypeSmoke.includes('convenienceFrontendDatabaseCertification') &&
     generatedSdkTypeSmoke.includes('operatorCommandTemplate') &&
+    generatedSdkTypeSmoke.includes('scenarioEvidence') &&
+    generatedSdkTypeSmoke.includes('generated-sdk-cache') &&
     generatedSdkTypeSmoke.includes('export BACKY_SDK_REQUIRE_DATABASE') &&
     generatedSdkTypeSmoke.includes('satisfies BackyFrontendDatabaseCertification'),
   'SDK convenience manifest types must expose the same database certification runtime handoff as generated types.',
@@ -482,7 +515,9 @@ assert(
     sdkReadme.includes('npm run doctor:release-certification') &&
     sdkReadme.includes('forwards `disposable_database_confirmed=true` to `BACKY_DATABASE_DISPOSABLE_CONFIRMED`') &&
     sdkReadme.includes('with the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias') &&
-    sdkReadme.includes('coverage families for media, forms, and interactive components'),
+    sdkReadme.includes('coverage families for media, forms, commerce, generated SDK/cache behavior, and interactive components') &&
+    sdkReadme.includes('backy.frontend-database-certification-evidence.v1') &&
+    sdkReadme.includes('scenario coverage for manifest/OpenAPI discovery, render and route resolution'),
   'SDK README must document both database secret aliases and the disposable confirmation env for the Supabase/Postgres smoke.',
 );
 
@@ -499,9 +534,11 @@ assert(
 );
 
 assert(
-  apiContracts.includes('forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database') &&
+    apiContracts.includes('forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database') &&
     apiContracts.includes('against `BACKY_DATABASE_URL`/`DATABASE_URL` only after `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true`') &&
     apiContracts.includes('`operatorCommandTemplate` for a copyable guarded command with `BACKY_SDK_REQUIRE_DATABASE=1` and `npm run doctor:release-certification`') &&
+    apiContracts.includes('backy.frontend-database-certification-evidence.v1') &&
+    apiContracts.includes('scenario coverage for manifest/OpenAPI discovery, render/route resolution, media/font delivery') &&
     apiContracts.includes('sdk-postgres-smoke.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database'),
   'API contracts must document both database secret aliases and the SDK disposable confirmation env for Postgres manual gates.',
 );
@@ -527,6 +564,9 @@ assert(
     audit.includes('media/forms/interactive-component coverage families') &&
     audit.includes('non-secret database credential boundary') &&
     audit.includes('SDK certification gate wording update') &&
+    audit.includes('SDK database scenario evidence update') &&
+    audit.includes('backy.frontend-database-certification-evidence.v1') &&
+    audit.includes('generated SDK/cache behavior') &&
     audit.includes('Settings Delivery SDK Postgres command builder') &&
     audit.includes('databaseCertification.operatorCommandTemplate') &&
     audit.includes('BACKY_SDK_REQUIRE_DATABASE=1 npm run ci:sdk-postgres-smoke') &&

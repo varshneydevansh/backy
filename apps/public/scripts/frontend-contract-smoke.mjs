@@ -376,20 +376,29 @@ assert(
     manifestRoute.includes('npm run test:frontend-contract-types') &&
     manifestRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
     manifestRoute.includes('buildFrontendDatabaseCertificationCommand') &&
-    manifestRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
+    manifestRoute.includes('scenarioEvidence: buildFrontendDatabaseCertificationEvidence(frontendDatabaseCertificationRuntime)') &&
+    manifestRoute.includes('backy.frontend-database-certification-evidence.v1') &&
+    manifestRoute.includes("'generated-sdk'") &&
+    manifestRoute.includes('runtime: frontendDatabaseCertificationRuntime') &&
     manifestRoute.includes('readyForCertification') &&
     openApiRoute.includes('"x-backy-database-certification": frontendDatabaseCertification') &&
     openApiRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
-    openApiRoute.includes('runtime: getFrontendDatabaseCertificationRuntime()') &&
+    openApiRoute.includes('scenarioEvidence: buildFrontendDatabaseCertificationEvidence(frontendDatabaseCertificationRuntime)') &&
+    openApiRoute.includes('backy.frontend-database-certification-evidence.v1') &&
+    openApiRoute.includes('"generated-sdk"') &&
+    openApiRoute.includes('runtime: frontendDatabaseCertificationRuntime') &&
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('operatorCommandTemplate: {') &&
     generatedSdkTypes.includes('readyForCertification: boolean') &&
+    generatedSdkTypes.includes('schemaVersion: "backy.frontend-database-certification-evidence.v1"') &&
     generatedSdkTypes.includes('"x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification') &&
     sdkSource.includes('export interface BackyFrontendDatabaseCertification') &&
     sdkSource.includes('operatorCommandTemplate: {') &&
+    sdkSource.includes('schemaVersion: "backy.frontend-database-certification-evidence.v1"') &&
     sdkSource.includes('databaseCertification: BackyFrontendDatabaseCertification') &&
     sdkSource.includes('contract: BackyFrontendManifestContract') &&
     generatedSdkSmoke.includes('frontendDatabaseCertification') &&
+    generatedSdkSmoke.includes('scenarioEvidence') &&
     generatedSdkSmoke.includes('convenienceFrontendDatabaseCertification') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestDatabaseCertification'),
   'Frontend manifest, OpenAPI, generated SDK types, and convenience SDK manifest types must expose the non-secret SDK Postgres certification handoff.',

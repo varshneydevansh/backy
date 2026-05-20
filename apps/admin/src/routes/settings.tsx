@@ -846,6 +846,131 @@ const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   ],
 };
+const FRONTEND_DATABASE_CERTIFICATION_COVERAGE_FAMILIES = [
+  'manifest',
+  'openapi',
+  'render',
+  'media',
+  'collections',
+  'reusable-sections',
+  'forms',
+  'comments',
+  'events',
+  'commerce',
+  'interactive-components',
+  'generated-sdk',
+] as const;
+const FRONTEND_DATABASE_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'manifest-openapi-discovery',
+    label: 'Manifest and OpenAPI discovery',
+    expectedEvidence: ['public manifest response', 'site-scoped OpenAPI response', 'Backy contract headers'],
+    nextAction: 'Run the SDK Postgres smoke and attach manifest/OpenAPI response evidence from the disposable database target.',
+  },
+  {
+    key: 'render-route-resolution',
+    label: 'Render and route resolution',
+    expectedEvidence: ['route resolve response', 'render payload', 'redirect/gone route case'],
+    nextAction: 'Verify resolve, redirect/gone, and render payload reads against database-backed pages and posts.',
+  },
+  {
+    key: 'media-font-delivery',
+    label: 'Media and font delivery',
+    expectedEvidence: ['media list response', 'font manifest response', 'cache/ETag evidence'],
+    nextAction: 'Run media/font SDK reads against migrated database media records and public cache headers.',
+  },
+  {
+    key: 'cms-reusable-content',
+    label: 'CMS and reusable content',
+    expectedEvidence: ['collection schema', 'collection records', 'reusable sections'],
+    nextAction: 'Verify collection schemas/records and reusable sections from the disposable database service data.',
+  },
+  {
+    key: 'forms-comments-events',
+    label: 'Forms, comments, and events',
+    expectedEvidence: ['form definition', 'comment moderation contract', 'interaction event feed'],
+    nextAction: 'Exercise public forms, comments, moderation/reporting, and event reads in the SDK Postgres smoke.',
+  },
+  {
+    key: 'commerce-contracts',
+    label: 'Commerce contracts',
+    expectedEvidence: ['commerce catalog', 'order contract', 'provider certification handoff'],
+    nextAction: 'Verify catalog/order contract discovery against database-backed products and private order queues.',
+  },
+  {
+    key: 'interactive-runtime',
+    label: 'Interactive runtime',
+    expectedEvidence: ['component registry', 'sandbox metadata', 'runtime telemetry endpoint'],
+    nextAction: 'Verify interactive registry, sandbox response headers, and telemetry contract reads in database mode.',
+  },
+  {
+    key: 'generated-sdk-cache',
+    label: 'Generated SDK and cache',
+    expectedEvidence: ['generated TypeScript contract', 'SDK smoke', '304 cache revalidation'],
+    nextAction: 'Run generated type checks and SDK cached manifest/OpenAPI/render helpers against the disposable target.',
+  },
+  {
+    key: 'database-runtime-guard',
+    label: 'Database runtime guard',
+    expectedEvidence: ['database URL alias configured', 'disposable confirmation', 'target host/database guard'],
+    nextAction: 'Set the database URL alias, disposable confirmation, and optional expected host/name guards before the DB smoke.',
+  },
+] as const;
+
+const buildFrontendDatabaseCertificationScenarioEvidence = ({
+  databaseReady,
+  publicApiReady,
+}: {
+  databaseReady: boolean;
+  publicApiReady: boolean;
+}) => {
+  const countEvidence = (...values: boolean[]) => values.filter(Boolean).length;
+  const coverageSet = new Set<string>(FRONTEND_DATABASE_CERTIFICATION_COVERAGE_FAMILIES);
+  const evidenceCounts: Record<string, number> = {
+    'manifest-openapi-discovery': countEvidence(
+      coverageSet.has('manifest'),
+      coverageSet.has('openapi'),
+      publicApiReady,
+    ),
+    'render-route-resolution': countEvidence(coverageSet.has('render')),
+    'media-font-delivery': countEvidence(coverageSet.has('media')),
+    'cms-reusable-content': countEvidence(
+      coverageSet.has('collections'),
+      coverageSet.has('reusable-sections'),
+    ),
+    'forms-comments-events': countEvidence(
+      coverageSet.has('forms'),
+      coverageSet.has('comments'),
+      coverageSet.has('events'),
+    ),
+    'commerce-contracts': countEvidence(coverageSet.has('commerce')),
+    'interactive-runtime': countEvidence(coverageSet.has('interactive-components')),
+    'generated-sdk-cache': countEvidence(coverageSet.has('generated-sdk')),
+    'database-runtime-guard': countEvidence(databaseReady),
+  };
+  const scenarios = FRONTEND_DATABASE_CERTIFICATION_SCENARIOS.map((scenario) => {
+    const evidenceCount = evidenceCounts[scenario.key] || 0;
+    return {
+      ...scenario,
+      evidenceCount,
+      status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+    };
+  });
+  const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+  return {
+    schemaVersion: 'backy.frontend-database-certification-evidence.v1',
+    status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+    requiredGate: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke',
+    coverage: {
+      covered,
+      total: scenarios.length,
+      missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+    },
+    scenarios,
+    secretHandling: 'Frontend database certification evidence reports scenario names, counts, gates, and non-secret contract families only; database URLs, service credentials, private orders, submissions, and contact payloads stay private.',
+  };
+};
 
 const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOptions) => (
   options.certifyStorage ||
@@ -2195,6 +2320,15 @@ function SettingsPage() {
     providerCertificationRuntimeEvidence,
     providerCertificationScenarioEvidence,
   ]);
+  const frontendDatabaseCertificationScenarioEvidence = useMemo(() => buildFrontendDatabaseCertificationScenarioEvidence({
+    databaseReady: Boolean(runtimeDatabase?.mode === 'database' && runtimeDatabase.configured),
+    publicApiReady: Boolean(runtimePublicApi?.corsAllowedOriginsConfigured && runtimePublicApi.exposedContractHeaders.length),
+  }), [
+    runtimeDatabase?.configured,
+    runtimeDatabase?.mode,
+    runtimePublicApi?.corsAllowedOriginsConfigured,
+    runtimePublicApi?.exposedContractHeaders.length,
+  ]);
   const frontendDatabaseCertificationHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.frontend-database-certification.v1',
@@ -2216,13 +2350,15 @@ function SettingsPage() {
       openApi: '/api/sites/{siteId}/openapi#x-backy-database-certification',
       sdkType: 'BackyFrontendDatabaseCertification',
     },
-    coverageFamilies: ['manifest', 'openapi', 'render', 'media', 'forms', 'interactive-components', 'collections', 'comments', 'events', 'commerce'],
+    coverageFamilies: [...FRONTEND_DATABASE_CERTIFICATION_COVERAGE_FAMILIES],
+    scenarioEvidence: frontendDatabaseCertificationScenarioEvidence,
     runtimeEvidence: {
       database: runtimeDatabase || null,
       publicApi: runtimePublicApi || null,
     },
     secretHandling: 'Database URLs and service credentials stay in server/CI environment variables; this handoff only exports aliases, gate names, coverage, and non-secret runtime readiness.',
   }), [
+    frontendDatabaseCertificationScenarioEvidence,
     runtimeDatabase,
     runtimePublicApi,
   ]);
@@ -3080,6 +3216,7 @@ function SettingsPage() {
             runtimeDatabase={runtimeDatabase}
             runtimePublicApi={runtimePublicApi}
             runtimeStorage={runtimeStorage}
+            frontendDatabaseCertificationScenarioEvidence={frontendDatabaseCertificationScenarioEvidence}
             frontendDatabaseCertificationControlsDisabled={isSaving || !canConfigureSettings}
             frontendDatabaseCertificationControlsTitle={configurePermissionTitle}
             onCopyFrontendDatabaseCertificationHandoff={() => void copySettingsHandoffText(frontendDatabaseCertificationHandoffText, 'Frontend database certification handoff')}
@@ -4254,6 +4391,7 @@ function DeliveryModeSettings({
   runtimeDatabase,
   runtimePublicApi,
   runtimeStorage,
+  frontendDatabaseCertificationScenarioEvidence,
   frontendDatabaseCertificationControlsDisabled = false,
   frontendDatabaseCertificationControlsTitle,
   onCopyFrontendDatabaseCertificationHandoff,
@@ -4264,6 +4402,7 @@ function DeliveryModeSettings({
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
   runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
+  frontendDatabaseCertificationScenarioEvidence: ReturnType<typeof buildFrontendDatabaseCertificationScenarioEvidence>;
   frontendDatabaseCertificationControlsDisabled?: boolean;
   frontendDatabaseCertificationControlsTitle?: string;
   onCopyFrontendDatabaseCertificationHandoff: () => void;
@@ -4531,6 +4670,57 @@ function DeliveryModeSettings({
                 <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
               </div>
             ))}
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="settings-frontend-database-certification-evidence">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium text-foreground">Frontend database scenario evidence</div>
+                <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                  Tracks the non-secret custom frontend service-data scenarios operators must prove before moving manifest, OpenAPI, and SDK contracts to database-certified.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                  {frontendDatabaseCertificationScenarioEvidence.schemaVersion}
+                </span>
+                <span className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                  frontendDatabaseCertificationScenarioEvidence.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}>
+                  {frontendDatabaseCertificationScenarioEvidence.coverage.covered}/{frontendDatabaseCertificationScenarioEvidence.coverage.total} scenarios
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+              {frontendDatabaseCertificationScenarioEvidence.requiredGate}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {frontendDatabaseCertificationScenarioEvidence.scenarios.map((scenario) => (
+                <div key={scenario.key} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-medium text-foreground">{scenario.label}</div>
+                    <span className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                      scenario.status === 'covered' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                    )}>
+                      {scenario.status}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
+                  </div>
+                  {scenario.status === 'missing' ? (
+                    <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                  ) : null}
+                  <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                    Expected: {scenario.expectedEvidence.join(' | ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+              {frontendDatabaseCertificationScenarioEvidence.secretHandling}
+            </div>
           </div>
           <div className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="settings-frontend-database-certification-command-builder">
             <div className="flex flex-wrap items-start justify-between gap-3">

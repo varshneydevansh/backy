@@ -2630,6 +2630,28 @@ export interface BackyFrontendDatabaseCertification {
   };
   requires: string[];
   coverage: string[];
+  scenarioEvidence: {
+    schemaVersion: "backy.frontend-database-certification-evidence.v1";
+    status: "ready" | "attention";
+    requiredGate: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke";
+    coverage: {
+      covered: number;
+      total: number;
+      missing: string[];
+      [key: string]: unknown;
+    };
+    scenarios: Array<{
+      key: string;
+      label: string;
+      status: "covered" | "missing";
+      evidenceCount: number;
+      expectedEvidence: string[];
+      nextAction: string;
+      [key: string]: unknown;
+    }>;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
   operatorCommandTemplate: {
     command: string;
     databaseUrlAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL" | string>;

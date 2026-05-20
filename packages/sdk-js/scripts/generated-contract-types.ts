@@ -341,7 +341,45 @@ const frontendDatabaseCertification = {
     "disposable_database_confirmed=true",
     "public schema, RLS policies, indexes, and constraints migrated",
   ],
-  coverage: ["manifest", "openapi", "render", "collections", "forms"],
+  coverage: ["manifest", "openapi", "render", "collections", "forms", "commerce", "generated-sdk"],
+  scenarioEvidence: {
+    schemaVersion: "backy.frontend-database-certification-evidence.v1",
+    status: "attention",
+    requiredGate: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke",
+    coverage: {
+      covered: 8,
+      total: 9,
+      missing: ["database-runtime-guard"],
+    },
+    scenarios: [
+      {
+        key: "manifest-openapi-discovery",
+        label: "Manifest and OpenAPI discovery",
+        status: "covered",
+        evidenceCount: 3,
+        expectedEvidence: ["public manifest response", "site-scoped OpenAPI response"],
+        nextAction: "Attach manifest and OpenAPI response evidence.",
+      },
+      {
+        key: "generated-sdk-cache",
+        label: "Generated SDK and cache",
+        status: "covered",
+        evidenceCount: 1,
+        expectedEvidence: ["generated TypeScript contract", "SDK smoke", "304 cache revalidation"],
+        nextAction: "Run generated type checks and SDK cached helpers.",
+      },
+      {
+        key: "database-runtime-guard",
+        label: "Database runtime guard",
+        status: "missing",
+        evidenceCount: 0,
+        expectedEvidence: ["database URL alias configured", "disposable confirmation"],
+        nextAction: "Set the disposable database target and run the DB smoke.",
+      },
+    ],
+    secretHandling:
+      "Frontend database certification evidence reports scenario names, counts, gates, and non-secret contract families only; database URLs, service credentials, private orders, submissions, and contact payloads stay private.",
+  },
   operatorCommandTemplate: {
     command: [
       "# Store the disposable database URL in BACKY_DATABASE_URL as a CI secret or local shell env.",

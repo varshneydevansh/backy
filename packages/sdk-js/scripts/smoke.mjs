@@ -730,7 +730,19 @@ assert(manifest.data.contract?.databaseCertification?.environment?.targetGuards?
 assert(manifest.data.contract?.databaseCertification?.requires?.includes('disposable_database_confirmed=true'), 'manifest() missing disposable database confirmation requirement');
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('media'), 'manifest() missing media database certification coverage');
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('forms'), 'manifest() missing forms database certification coverage');
+assert(manifest.data.contract?.databaseCertification?.coverage?.includes('commerce'), 'manifest() missing commerce database certification coverage');
+assert(manifest.data.contract?.databaseCertification?.coverage?.includes('generated-sdk'), 'manifest() missing generated SDK database certification coverage');
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('interactive-components'), 'manifest() missing interactive component database certification coverage');
+assert(manifest.data.contract?.databaseCertification?.scenarioEvidence?.schemaVersion === 'backy.frontend-database-certification-evidence.v1', 'manifest() missing database certification scenario evidence schema');
+assert(manifest.data.contract?.databaseCertification?.scenarioEvidence?.requiredGate === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke', 'manifest() database certification scenario evidence gate drifted');
+assert(manifest.data.contract?.databaseCertification?.scenarioEvidence?.scenarios?.some((scenario) => scenario.key === 'manifest-openapi-discovery'), 'manifest() missing manifest/openapi database certification scenario');
+assert(manifest.data.contract?.databaseCertification?.scenarioEvidence?.scenarios?.some((scenario) => scenario.key === 'commerce-contracts'), 'manifest() missing commerce database certification scenario');
+assert(manifest.data.contract?.databaseCertification?.scenarioEvidence?.scenarios?.some((scenario) => scenario.key === 'generated-sdk-cache'), 'manifest() missing generated SDK database certification scenario');
+assert(
+  typeof manifest.data.contract?.databaseCertification?.scenarioEvidence?.secretHandling === 'string' &&
+    manifest.data.contract.databaseCertification.scenarioEvidence.secretHandling.includes('database URLs, service credentials, private orders, submissions, and contact payloads stay private'),
+  'manifest() missing non-secret database certification scenario boundary',
+);
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('npm run ci:sdk-postgres-smoke'), 'manifest() missing SDK Postgres operator command template');
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('BACKY_SDK_REQUIRE_DATABASE'), 'manifest() missing SDK database-mode operator env');
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('npm run doctor:release-certification'), 'manifest() missing SDK release doctor command');
@@ -807,9 +819,14 @@ assert(openapi['x-backy-database-certification']?.environment?.targetGuards?.inc
 assert(openapi['x-backy-database-certification']?.requires?.includes('disposable_database_confirmed=true'), 'openapi() missing disposable database confirmation requirement');
 assert(openapi['x-backy-database-certification']?.coverage?.includes('media'), 'openapi() missing media database certification coverage');
 assert(openapi['x-backy-database-certification']?.coverage?.includes('forms'), 'openapi() missing forms database certification coverage');
+assert(openapi['x-backy-database-certification']?.coverage?.includes('commerce'), 'openapi() missing commerce database certification coverage');
+assert(openapi['x-backy-database-certification']?.coverage?.includes('generated-sdk'), 'openapi() missing generated SDK database certification coverage');
 assert(typeof openapi['x-backy-database-certification']?.runtime?.databaseUrlConfigured === 'boolean', 'openapi() missing non-secret database URL runtime state');
 assert(typeof openapi['x-backy-database-certification']?.runtime?.readyForCertification === 'boolean', 'openapi() missing SDK Postgres readiness runtime state');
 assert(openapi['x-backy-database-certification']?.coverage?.includes('interactive-components'), 'openapi() missing interactive component database certification coverage');
+assert(openapi['x-backy-database-certification']?.scenarioEvidence?.schemaVersion === manifest.data.contract.databaseCertification.scenarioEvidence.schemaVersion, 'openapi() missing database certification scenario evidence schema');
+assert(openapi['x-backy-database-certification']?.scenarioEvidence?.requiredGate === manifest.data.contract.databaseCertification.scenarioEvidence.requiredGate, 'openapi() database certification scenario evidence gate drifted from manifest');
+assert(openapi['x-backy-database-certification']?.scenarioEvidence?.scenarios?.some((scenario) => scenario.key === 'generated-sdk-cache'), 'openapi() missing generated SDK database certification scenario');
 assert(
   typeof openapi['x-backy-database-certification']?.secretHandling === 'string' &&
     openapi['x-backy-database-certification'].secretHandling.includes('OpenAPI exposes only non-secret gate names and requirements'),

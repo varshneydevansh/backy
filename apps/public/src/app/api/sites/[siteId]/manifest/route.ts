@@ -224,6 +224,76 @@ const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   ],
 } as const;
+const FRONTEND_DATABASE_CERTIFICATION_COVERAGE = [
+  'manifest',
+  'openapi',
+  'render',
+  'media',
+  'collections',
+  'reusable-sections',
+  'forms',
+  'comments',
+  'events',
+  'commerce',
+  'interactive-components',
+  'generated-sdk',
+] as const;
+const FRONTEND_DATABASE_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'manifest-openapi-discovery',
+    label: 'Manifest and OpenAPI discovery',
+    expectedEvidence: ['public manifest response', 'site-scoped OpenAPI response', 'Backy contract headers'],
+    nextAction: 'Run the SDK Postgres smoke and attach manifest/OpenAPI response evidence from the disposable database target.',
+  },
+  {
+    key: 'render-route-resolution',
+    label: 'Render and route resolution',
+    expectedEvidence: ['route resolve response', 'render payload', 'redirect/gone route case'],
+    nextAction: 'Verify resolve, redirect/gone, and render payload reads against database-backed pages and posts.',
+  },
+  {
+    key: 'media-font-delivery',
+    label: 'Media and font delivery',
+    expectedEvidence: ['media list response', 'font manifest response', 'cache/ETag evidence'],
+    nextAction: 'Run media/font SDK reads against migrated database media records and public cache headers.',
+  },
+  {
+    key: 'cms-reusable-content',
+    label: 'CMS and reusable content',
+    expectedEvidence: ['collection schema', 'collection records', 'reusable sections'],
+    nextAction: 'Verify collection schemas/records and reusable sections from the disposable database service data.',
+  },
+  {
+    key: 'forms-comments-events',
+    label: 'Forms, comments, and events',
+    expectedEvidence: ['form definition', 'comment moderation contract', 'interaction event feed'],
+    nextAction: 'Exercise public forms, comments, moderation/reporting, and event reads in the SDK Postgres smoke.',
+  },
+  {
+    key: 'commerce-contracts',
+    label: 'Commerce contracts',
+    expectedEvidence: ['commerce catalog', 'order contract', 'provider certification handoff'],
+    nextAction: 'Verify catalog/order contract discovery against database-backed products and private order queues.',
+  },
+  {
+    key: 'interactive-runtime',
+    label: 'Interactive runtime',
+    expectedEvidence: ['component registry', 'sandbox metadata', 'runtime telemetry endpoint'],
+    nextAction: 'Verify interactive registry, sandbox response headers, and telemetry contract reads in database mode.',
+  },
+  {
+    key: 'generated-sdk-cache',
+    label: 'Generated SDK and cache',
+    expectedEvidence: ['generated TypeScript contract', 'SDK smoke', '304 cache revalidation'],
+    nextAction: 'Run generated type checks and SDK cached manifest/OpenAPI/render helpers against the disposable target.',
+  },
+  {
+    key: 'database-runtime-guard',
+    label: 'Database runtime guard',
+    expectedEvidence: ['database URL alias configured', 'disposable confirmation', 'target host/database guard'],
+    nextAction: 'Set the database URL alias, disposable confirmation, and optional expected host/name guards before the DB smoke.',
+  },
+] as const;
 
 const getFrontendDatabaseCertificationRuntime = () => {
   const databaseUrl = envValue(['BACKY_DATABASE_URL', 'DATABASE_URL']);
@@ -253,6 +323,64 @@ const getFrontendDatabaseCertificationRuntime = () => {
   };
 };
 
+const buildFrontendDatabaseCertificationEvidence = (
+  runtime: ReturnType<typeof getFrontendDatabaseCertificationRuntime>,
+) => {
+  const countEvidence = (...values: boolean[]) => values.filter(Boolean).length;
+  const coverageSet = new Set<string>(FRONTEND_DATABASE_CERTIFICATION_COVERAGE);
+  const evidenceCounts: Record<string, number> = {
+    'manifest-openapi-discovery': countEvidence(
+      coverageSet.has('manifest'),
+      coverageSet.has('openapi'),
+      Boolean(FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.command),
+    ),
+    'render-route-resolution': countEvidence(coverageSet.has('render')),
+    'media-font-delivery': countEvidence(coverageSet.has('media')),
+    'cms-reusable-content': countEvidence(
+      coverageSet.has('collections'),
+      coverageSet.has('reusable-sections'),
+    ),
+    'forms-comments-events': countEvidence(
+      coverageSet.has('forms'),
+      coverageSet.has('comments'),
+      coverageSet.has('events'),
+    ),
+    'commerce-contracts': countEvidence(coverageSet.has('commerce')),
+    'interactive-runtime': countEvidence(coverageSet.has('interactive-components')),
+    'generated-sdk-cache': countEvidence(coverageSet.has('generated-sdk')),
+    'database-runtime-guard': countEvidence(
+      runtime.databaseUrlConfigured,
+      runtime.disposableConfirmed,
+      runtime.expectedHostConfigured || runtime.expectedDatabaseConfigured,
+      runtime.readyForCertification,
+    ),
+  };
+  const scenarios = FRONTEND_DATABASE_CERTIFICATION_SCENARIOS.map((scenario) => {
+    const evidenceCount = evidenceCounts[scenario.key] || 0;
+    return {
+      ...scenario,
+      evidenceCount,
+      status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+    };
+  });
+  const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+  return {
+    schemaVersion: 'backy.frontend-database-certification-evidence.v1',
+    status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+    requiredGate: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke',
+    coverage: {
+      covered,
+      total: scenarios.length,
+      missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+    },
+    scenarios,
+    secretHandling: 'Frontend database certification evidence reports scenario names, counts, gates, and non-secret contract families only; database URLs, service credentials, private orders, submissions, and contact payloads stay private.',
+  };
+};
+
+const frontendDatabaseCertificationRuntime = getFrontendDatabaseCertificationRuntime();
+
 const frontendDatabaseCertification = {
   schemaVersion: 'backy.frontend-database-certification.v1',
   status: 'external-database-gate',
@@ -278,19 +406,9 @@ const frontendDatabaseCertification = {
     'disposable_database_confirmed=true',
     'public schema, RLS policies, indexes, and constraints migrated',
   ],
-  coverage: [
-    'manifest',
-    'openapi',
-    'render',
-    'media',
-    'collections',
-    'reusable-sections',
-    'forms',
-    'comments',
-    'events',
-    'interactive-components',
-  ],
-  runtime: getFrontendDatabaseCertificationRuntime(),
+  coverage: [...FRONTEND_DATABASE_CERTIFICATION_COVERAGE],
+  scenarioEvidence: buildFrontendDatabaseCertificationEvidence(frontendDatabaseCertificationRuntime),
+  runtime: frontendDatabaseCertificationRuntime,
   operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
   secretHandling: 'Database URLs and service credentials stay in CI/runtime environment; the manifest exposes only non-secret gate names and requirements.',
 } as const;

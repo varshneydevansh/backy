@@ -54,6 +54,49 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "scenarioEvidence": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.frontend-database-certification-evidence.v1" },
+            "status": { "enum": ["ready", "attention"] },
+            "requiredGate": { "const": "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke" },
+            "coverage": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "covered": { "type": "integer", "minimum": 0 },
+                "total": { "type": "integer", "minimum": 0 },
+                "missing": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 }
+                }
+              },
+              "required": ["covered", "total", "missing"]
+            },
+            "scenarios": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "key": { "type": "string", "minLength": 1 },
+                  "label": { "type": "string", "minLength": 1 },
+                  "status": { "enum": ["covered", "missing"] },
+                  "evidenceCount": { "type": "integer", "minimum": 0 },
+                  "expectedEvidence": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "nextAction": { "type": "string", "minLength": 1 }
+                },
+                "required": ["key", "label", "status", "evidenceCount", "expectedEvidence", "nextAction"]
+              }
+            },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["schemaVersion", "status", "requiredGate", "coverage", "scenarios", "secretHandling"]
+        },
         "operatorCommandTemplate": {
           "type": "object",
           "additionalProperties": true,
@@ -108,7 +151,7 @@
         },
         "secretHandling": { "type": "string", "minLength": 1 }
       },
-      "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "operatorCommandTemplate", "runtime", "secretHandling"]
+      "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "scenarioEvidence", "operatorCommandTemplate", "runtime", "secretHandling"]
     },
     "launchReadiness": {
       "type": "object",
