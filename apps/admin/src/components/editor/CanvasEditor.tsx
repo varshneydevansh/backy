@@ -6350,6 +6350,8 @@ export function CanvasEditor({
                           onClick={() => distributeSelectedElements('horizontal')}
                           disabled={isCanvasMutationDisabled || !canDistributeSelected}
                           className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Distribute selected layers horizontally"
+                          aria-label="Distribute selected layers horizontally"
                           data-testid="editor-inspector-distribute-horizontal"
                         >
                           <AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />
@@ -6360,6 +6362,8 @@ export function CanvasEditor({
                           onClick={() => distributeSelectedElements('vertical')}
                           disabled={isCanvasMutationDisabled || !canDistributeSelected}
                           className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Distribute selected layers vertically"
+                          aria-label="Distribute selected layers vertically"
                           data-testid="editor-inspector-distribute-vertical"
                         >
                           <AlignVerticalDistributeCenter className="h-3.5 w-3.5" />
