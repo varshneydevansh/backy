@@ -115,6 +115,7 @@ Legend:
 
 #### `/pages.new` (`pages.new.tsx`)
 - ✅ create page form shell with template, navigation, SEO, dataset, autosave, and future-date scheduled publish validation.
+- ✅ Page creation permission failures now expose alert semantics, retryable permission loading, and a user-access handoff before the user starts a new editor document.
 - ⚠️ continue hardening publish workflow and per-page settings defaults beyond current starter/template clone coverage.
 
 #### `/pages/$pageId/edit` (`pages.$pageId.edit.tsx`)
@@ -452,7 +453,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Consistent status vocabulary and badges across pages.
 - Empty-state / error-state placeholders for every admin list.
   - `/sites` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and permission retry actions.
-  - `/pages` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and a user-access handoff link.
+  - `/pages` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, and a user-access handoff link.
   - `/collections` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, permission-contract retry actions, and filtered full-result record bulk selection summaries.
   - `/forms` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.

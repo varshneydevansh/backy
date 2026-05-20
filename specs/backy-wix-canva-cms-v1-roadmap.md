@@ -134,7 +134,7 @@ It explicitly excludes:
 4. `/sites.new`: schema validation + backend success/fail states
 5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, theme-token editing, navigation/redirect/SEO editors, form/comment operations, loaded-comment bulk moderation summaries, frontend handoff, site-level comment policy controls, and backend permission/ownership scoping; remaining work is live domain/deploy execution and deeper workflow polish
 6. `/pages`: persisted filtering, paging, search, status chips
-7. `/pages.new`: slug uniqueness + template starter + validation
+7. `/pages.new`: slug uniqueness, template starter, validation, scheduled publish checks, and retryable permission recovery
 8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring for `interactiveFigure`/`codeComponent` blocks; uploaded/signed custom component bundles, hostile-bundle browser security fixtures, component usage governance, and production repository smoke are now covered for the current platform scope
 9. `/blog`: status controls, tag/category UI, list filters, and filtered full-result bulk selection
 10. `/blog.new`: post metadata + publish path

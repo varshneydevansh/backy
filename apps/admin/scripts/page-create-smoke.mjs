@@ -1287,6 +1287,14 @@ const assertPageCreateSourceContracts = () => {
     'Page create submit readiness must require a resolved target site, not just a stale siteId',
   );
   assert(
+    source.includes('const loadPageCreatePermissions = useCallback(() => {') &&
+      source.includes('data-testid="page-create-permission-state"') &&
+      source.includes('aria-label="Retry loading page creation permissions"') &&
+      source.includes('Retry permissions') &&
+      source.includes("navigate({ to: '/users' })"),
+    'Page create permission state must expose retryable permission loading and a user-access handoff',
+  );
+  assert(
     source.includes('getScheduledPageDateError') &&
       source.includes('Date.parse(scheduledAt)') &&
       source.includes('scheduledAtMs <= Date.now()') &&

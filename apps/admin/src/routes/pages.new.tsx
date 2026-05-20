@@ -2,7 +2,7 @@
  * BACKY CMS - NEW PAGE
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
 import {
@@ -1326,7 +1326,7 @@ function NewPageRoute() {
         navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
     };
 
-    useEffect(() => {
+    const loadPageCreatePermissions = useCallback(() => {
         let cancelled = false;
         setPermissionError(null);
 
@@ -1362,6 +1362,8 @@ function NewPageRoute() {
             cancelled = true;
         };
     }, [currentAdmin?.id]);
+
+    useEffect(() => loadPageCreatePermissions(), [loadPageCreatePermissions]);
 
     useEffect(() => {
         try {
@@ -2737,8 +2739,40 @@ function NewPageRoute() {
                 title="Page creation unavailable"
                 description={editPermissionTitle || 'Your account cannot create pages.'}
             >
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    {permissionError || editPermissionTitle || 'Ask an owner or admin to grant pages.edit access.'}
+                <div
+                    role="alert"
+                    data-testid="page-create-permission-state"
+                    className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="flex gap-3">
+                            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                            <div>
+                                <p className="font-semibold">Page creation permissions could not be verified</p>
+                                <p className="mt-1 leading-6">
+                                    {permissionError || editPermissionTitle || 'Ask an owner or admin to grant pages.edit access.'}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={loadPageCreatePermissions}
+                                disabled={isPermissionsLoading}
+                                aria-label="Retry loading page creation permissions"
+                                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Retry permissions
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => navigate({ to: '/users' })}
+                                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+                            >
+                                Review users
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </PageShell>
         );
