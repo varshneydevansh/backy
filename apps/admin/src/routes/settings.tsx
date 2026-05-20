@@ -185,6 +185,27 @@ type SettingsValidationIssue = {
   severity: 'error' | 'warning';
 };
 
+type SettingsLaunchReadinessStatus = 'ready' | 'attention' | 'blocked';
+
+type SettingsLaunchReadinessCheck = {
+  key: string;
+  label: string;
+  status: SettingsLaunchReadinessStatus;
+  detail: string;
+  nextAction: string;
+  ownerSurface: SettingsTab | 'release';
+  gate?: string;
+};
+
+type SettingsLaunchActionPlan = {
+  schemaVersion: 'backy.settings-launch-action-plan.v1';
+  nextAction: string;
+  blockingChecks: string[];
+  attentionChecks: string[];
+  recommendedCommands: string[];
+  ownerSurfaces: Array<SettingsTab | 'release'>;
+};
+
 const DELIVERY_OPTIONS: Array<{
   id: DeliveryMode;
   title: string;
@@ -912,6 +933,40 @@ const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   storageProviderChoices: SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS.map((option) => option.value),
   notificationProviderChoices: SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS.map((option) => option.value),
   requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+};
+
+const SETTINGS_LAUNCH_STATUS_STYLES: Record<SettingsLaunchReadinessStatus, string> = {
+  ready: 'bg-emerald-50 text-emerald-700',
+  attention: 'bg-amber-50 text-amber-700',
+  blocked: 'bg-red-50 text-red-700',
+};
+
+const SETTINGS_LAUNCH_STATUS_LABELS: Record<SettingsLaunchReadinessStatus, string> = {
+  ready: 'Ready',
+  attention: 'Attention',
+  blocked: 'Blocked',
+};
+
+const summarizeSettingsLaunchStatus = (checks: SettingsLaunchReadinessCheck[]): SettingsLaunchReadinessStatus => {
+  if (checks.some((check) => check.status === 'blocked')) return 'blocked';
+  if (checks.some((check) => check.status === 'attention')) return 'attention';
+  return 'ready';
+};
+
+const buildSettingsLaunchActionPlan = (checks: SettingsLaunchReadinessCheck[]): SettingsLaunchActionPlan => {
+  const blockingChecks = checks.filter((check) => check.status === 'blocked');
+  const attentionChecks = checks.filter((check) => check.status === 'attention');
+  const actionableChecks = [...blockingChecks, ...attentionChecks];
+  const recommendedCommands = uniqueTextValues(actionableChecks.map((check) => check.gate || ''));
+
+  return {
+    schemaVersion: 'backy.settings-launch-action-plan.v1',
+    nextAction: actionableChecks[0]?.nextAction || 'Settings launch controls are ready; run the release certification workflow before marking live providers complete.',
+    blockingChecks: blockingChecks.map((check) => check.key),
+    attentionChecks: attentionChecks.map((check) => check.key),
+    recommendedCommands,
+    ownerSurfaces: uniqueTextValues(actionableChecks.map((check) => check.ownerSurface)) as Array<SettingsTab | 'release'>,
+  };
 };
 
 const FRONTEND_API_CAPABILITIES: FrontendApiCapability[] = [
@@ -2040,8 +2095,172 @@ function SettingsPage() {
     runtimeDatabase,
     runtimePublicApi,
   ]);
+  const settingsLaunchReadiness = useMemo(() => {
+    const storageConfigured = runtimeStorage?.configured === true
+      || Boolean(integrations.storage?.provider || integrations.storage?.bucket || integrations.storage?.publicBaseUrl);
+    const databaseConfigured = runtimeDatabase?.configured === true;
+    const databaseMode = runtimeDatabase?.mode || 'unknown';
+    const supabaseConfigured = runtimeSupabase?.configured === true
+      || Boolean(integrations.supabase?.databaseEnabled || integrations.supabase?.storageEnabled || integrations.supabase?.authEnabled);
+    const vercelConfigured = runtimeVercel?.configured === true
+      || Boolean(integrations.vercel?.projectId || integrations.vercel?.productionDomain);
+    const publicApiConfigured = Boolean(runtimePublicApi?.corsAllowedOriginsConfigured && runtimePublicApi.exposedContractHeaders.length);
+    const notificationConfigured = Boolean(integrations.notifications) && runtimeNotifications?.configured !== false;
+    const commerceProviderNeedsCertification = integrations.commerce?.mode === 'checkout-provider'
+      || integrations.commerce?.paymentProvider !== 'none'
+      || integrations.commerce?.webhookEventsEnabled === true;
+    const commerceRuntimeReady = !commerceProviderNeedsCertification || Boolean(runtimeCommerce?.webhookSecretConfigured);
+    const interactiveReady = runtimeInteractiveComponents?.configured !== false;
+    const securityReady = Boolean(publicApiKey && adminApiKey && (authSettings?.minPasswordLength || 0) >= 10);
+    const providerRuntimeInputsReady = providerCertificationRuntimeEvidence.localRuntimeInputsConfigured;
+
+    const checks: SettingsLaunchReadinessCheck[] = [
+      {
+        key: 'delivery-api-contracts',
+        label: 'Delivery and API contracts',
+        status: deliveryMode && publicApiKey ? 'ready' : 'blocked',
+        detail: deliveryMode === 'custom-frontend'
+          ? `Headless API mode is selected. Public base: ${publicApiBase}. Admin base: ${adminApiBase}.`
+          : `Managed hosting is selected. Public base: ${publicApiBase}. Admin base: ${adminApiBase}.`,
+        nextAction: 'Choose custom frontend mode or managed hosting, then copy the Settings handoff for frontend/runtime integration.',
+        ownerSurface: 'delivery',
+      },
+      {
+        key: 'security-keys-audit',
+        label: 'Security, keys, and audit',
+        status: securityReady ? 'ready' : 'attention',
+        detail: securityReady
+          ? 'Public/admin API keys and password policy are present; audit controls are exposed in Settings.'
+          : 'Review API keys, password policy, session controls, and Settings audit visibility before launch.',
+        nextAction: 'Open Security, regenerate keys if needed, enforce the password/session baseline, and confirm audit visibility.',
+        ownerSurface: 'security',
+      },
+      {
+        key: 'media-storage-runtime',
+        label: 'Media storage runtime',
+        status: storageConfigured ? 'ready' : 'blocked',
+        detail: storageConfigured
+          ? `${runtimeStorage?.provider || integrations.storage?.provider || 'configured'} storage is available for uploads, fonts, files, and frontend delivery.`
+          : `Storage is missing ${runtimeStorage?.missing?.join(', ') || 'provider and bucket metadata'}.`,
+        nextAction: 'Open Infrastructure and configure storage provider, bucket/public URL, allowed file types, and private file behavior.',
+        ownerSurface: 'infrastructure',
+        gate: 'npm run ci:settings-provider-certification',
+      },
+      {
+        key: 'database-supabase-runtime',
+        label: 'Database and Supabase runtime',
+        status: databaseConfigured && supabaseConfigured && databaseMode !== 'demo' ? 'ready' : databaseConfigured ? 'attention' : 'blocked',
+        detail: databaseConfigured && databaseMode !== 'demo'
+          ? `${runtimeDatabase?.provider || 'database'} persistence is configured${runtimeDatabase?.host ? ` on ${runtimeDatabase.host}` : ''}.`
+          : databaseConfigured
+            ? 'Local/demo persistence is available, but production Supabase/Postgres certification is still required.'
+            : `Database runtime is missing ${runtimeDatabase?.missing?.join(', ') || 'BACKY_DATABASE_URL or DATABASE_URL'}.`,
+        nextAction: 'Run the disposable Supabase/Postgres release gate before treating Settings, Forms, and SDK persistence as production-ready.',
+        ownerSurface: 'release',
+        gate: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke',
+      },
+      {
+        key: 'public-api-cors',
+        label: 'Custom frontend CORS and headers',
+        status: publicApiConfigured ? 'ready' : 'attention',
+        detail: publicApiConfigured
+          ? `${runtimePublicApi?.corsAllowedOriginCount || 0} exact frontend origin${runtimePublicApi?.corsAllowedOriginCount === 1 ? '' : 's'} configured with Backy contract headers exposed.`
+          : 'Set exact custom frontend browser origins so public APIs expose Backy contract headers safely.',
+        nextAction: 'Add BACKY_CORS_ALLOWED_ORIGINS for each deployed custom frontend origin before browser clients depend on public APIs.',
+        ownerSurface: 'infrastructure',
+        gate: 'npm run test:release-certification-preflight-contract',
+      },
+      {
+        key: 'provider-certification-gate',
+        label: 'Live provider certification',
+        status: providerRuntimeInputsReady ? 'attention' : 'blocked',
+        detail: providerRuntimeInputsReady
+          ? 'Runtime inputs are present locally; Settings and Commerce still require credentialed provider certification before the Partial rows move to Ready.'
+          : `Provider certification needs ${providerCertificationRuntimeEvidence.missingInputAliases.length ? providerCertificationRuntimeEvidence.missingInputAliases.join(', ') : 'live provider runtime inputs'}.`,
+        nextAction: 'Use the provider command builder or release workflow with explicitly selected Settings and Commerce provider families.',
+        ownerSurface: 'infrastructure',
+        gate: 'npm run ci:settings-provider-certification',
+      },
+      {
+        key: 'notifications-commerce-interactive',
+        label: 'Notifications, commerce, and interactive runtime',
+        status: notificationConfigured && commerceRuntimeReady && interactiveReady ? 'ready' : 'attention',
+        detail: [
+          notificationConfigured ? 'notifications ready' : 'notifications need provider/runtime review',
+          commerceRuntimeReady ? 'commerce runtime safe for selected mode' : 'commerce webhook/provider secret evidence is missing',
+          interactiveReady ? 'interactive component contract available' : 'interactive component sandbox needs configuration',
+        ].join('; '),
+        nextAction: 'Review Notifications, Commerce, and interactive component runtime evidence before enabling customer-facing workflows.',
+        ownerSurface: 'infrastructure',
+        gate: 'npm run ci:settings-provider-certification',
+      },
+    ];
+    const score = Math.round((checks.filter((check) => check.status === 'ready').length / checks.length) * 100);
+    const actionPlan = buildSettingsLaunchActionPlan(checks);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      schemaVersion: 'backy.settings-launch-readiness.v1',
+      status: summarizeSettingsLaunchStatus(checks),
+      score,
+      delivery: {
+        mode: deliveryMode,
+        publicApiBase,
+        adminApiBase,
+        publicContracts: PUBLIC_API_ENDPOINTS.length,
+        adminContracts: ADMIN_API_ENDPOINTS.length,
+      },
+      runtime: {
+        databaseMode,
+        databaseConfigured,
+        supabaseConfigured,
+        storageConfigured,
+        vercelConfigured,
+        publicApiConfigured,
+        notificationConfigured,
+        commerceRuntimeReady,
+        interactiveReady,
+      },
+      certificationGates: {
+        releaseWorkflow: '.github/workflows/backy-release-certification.yml',
+        database: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke',
+        formsDatabase: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres',
+        settingsProviders: 'npm run ci:settings-provider-certification',
+        commerceProviders: 'npm run ci:commerce-provider-certification',
+        localPreflight: 'npm run test:partial-gate-preflights',
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        exportedEvidence: 'booleans, provider family labels, required aliases, gate names, endpoint templates, and runtime readiness only',
+      },
+      checks,
+      actionPlan,
+    };
+  }, [
+    adminApiBase,
+    adminApiKey,
+    authSettings?.minPasswordLength,
+    deliveryMode,
+    integrations.commerce,
+    integrations.notifications,
+    integrations.storage,
+    integrations.supabase,
+    integrations.vercel,
+    publicApiBase,
+    publicApiKey,
+    providerCertificationRuntimeEvidence,
+    runtimeCommerce,
+    runtimeDatabase,
+    runtimeInteractiveComponents,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+  ]);
   const settingsHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
+    launchReadiness: settingsLaunchReadiness,
     delivery: {
       mode: deliveryMode,
       publicApiBase,
@@ -2214,6 +2433,7 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
     seoSettings,
+    settingsLaunchReadiness,
     siteScopedSettingsDraft,
     hasSiteScopedSettingsUnsavedChanges,
     siteSettingsScope,
@@ -2221,6 +2441,7 @@ function SettingsPage() {
   const settingsHandoffText = useMemo(() => JSON.stringify(settingsHandoff, null, 2), [settingsHandoff]);
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationHandoff, null, 2), [providerCertificationHandoff]);
   const frontendDatabaseCertificationHandoffText = useMemo(() => JSON.stringify(frontendDatabaseCertificationHandoff, null, 2), [frontendDatabaseCertificationHandoff]);
+  const settingsLaunchReadinessText = useMemo(() => JSON.stringify(settingsLaunchReadiness, null, 2), [settingsLaunchReadiness]);
 
   const copySettingsHandoffText = async (value: string, label: string) => {
     if (isSaving) return;
@@ -2531,6 +2752,82 @@ function SettingsPage() {
                     <SettingsWorkflowStep key={step.label} index={index + 1} {...step} />
                   ))}
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="settings-launch-readiness">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold">Settings launch readiness</h3>
+                    <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SETTINGS_LAUNCH_STATUS_STYLES[settingsLaunchReadiness.status])}>
+                      {SETTINGS_LAUNCH_STATUS_LABELS[settingsLaunchReadiness.status]}
+                    </span>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                    Copy this launch handoff before treating Backy as the backend for managed sites or custom frontends. It keeps provider secrets out of the payload while naming the database, provider, CORS, API, media, and release gates still needed for production.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isSaving || !canConfigureSettings}
+                  title={configurePermissionTitle}
+                  onClick={() => void copySettingsHandoffText(settingsLaunchReadinessText, 'Settings launch readiness handoff')}
+                  iconStart={<Copy className="size-4" />}
+                  data-testid="settings-launch-readiness-copy-button"
+                >
+                  Copy launch JSON
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: 'Schema', value: settingsLaunchReadiness.schemaVersion },
+                  { label: 'Launch score', value: `${settingsLaunchReadiness.score}%` },
+                  { label: 'Provider gate', value: settingsLaunchReadiness.certificationGates.settingsProviders },
+                  { label: 'Database gate', value: settingsLaunchReadiness.certificationGates.database },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                    <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-launch-readiness-action-plan">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Action plan</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{settingsLaunchReadiness.actionPlan.nextAction}</p>
+                  </div>
+                  <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    {settingsLaunchReadiness.actionPlan.schemaVersion}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {settingsLaunchReadiness.actionPlan.recommendedCommands.length ? settingsLaunchReadiness.actionPlan.recommendedCommands.map((command) => (
+                    <span key={command} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {command}
+                    </span>
+                  )) : (
+                    <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      .github/workflows/backy-release-certification.yml
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {settingsLaunchReadiness.checks.map((check) => (
+                  <div key={check.key} className="rounded-md border border-border bg-card px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-semibold text-foreground">{check.label}</div>
+                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', SETTINGS_LAUNCH_STATUS_STYLES[check.status])}>
+                        {SETTINGS_LAUNCH_STATUS_LABELS[check.status]}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+                  </div>
+                ))}
               </div>
             </div>
 

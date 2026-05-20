@@ -166,6 +166,15 @@ const assertSettingsSourceContracts = () => {
     'BACKY_RESEND_API_KEY or RESEND_API_KEY',
     'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
     'releaseCertification',
+    'data-testid="settings-launch-readiness"',
+    'data-testid="settings-launch-readiness-copy-button"',
+    'data-testid="settings-launch-readiness-action-plan"',
+    'settingsLaunchReadiness',
+    'settingsLaunchReadinessText',
+    "schemaVersion: 'backy.settings-launch-readiness.v1'",
+    "schemaVersion: 'backy.settings-launch-action-plan.v1'",
+    'includesSecretValues: false',
+    "copySettingsHandoffText(settingsLaunchReadinessText, 'Settings launch readiness handoff')",
   ];
 
   const missingRouteSnippets = requiredSettingsRouteSnippets.filter((snippet) => !settingsRoute.includes(snippet));
@@ -734,6 +743,10 @@ const navigateToSettings = async (client) => {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="settings-command-center"]')),
       ownershipMap: Boolean(document.querySelector('[data-testid="settings-platform-ownership-map"]')),
+      launchReadiness: Boolean(document.querySelector('[data-testid="settings-launch-readiness"]')),
+      launchReadinessCopy: Boolean(document.querySelector('[data-testid="settings-launch-readiness-copy-button"]')),
+      launchReadinessActionPlan: Boolean(document.querySelector('[data-testid="settings-launch-readiness-action-plan"]')),
+      launchReadinessText: document.querySelector('[data-testid="settings-launch-readiness"]')?.textContent || '',
       hasBackyOwner: document.body?.innerText?.includes('Backy in-house') || false,
       hasSupabaseOwner: document.body?.innerText?.includes('Supabase connection') || false,
       hasVercelOwner: document.body?.innerText?.includes('Vercel connection') || false,
@@ -750,6 +763,14 @@ const navigateToSettings = async (client) => {
     if (
       state.ready &&
       state.ownershipMap &&
+      state.launchReadiness &&
+      state.launchReadinessCopy &&
+      state.launchReadinessActionPlan &&
+      state.launchReadinessText.includes('backy.settings-launch-readiness.v1') &&
+      state.launchReadinessText.includes('backy.settings-launch-action-plan.v1') &&
+      state.launchReadinessText.includes('Copy launch JSON') &&
+      state.launchReadinessText.includes('Database gate') &&
+      state.launchReadinessText.includes('Provider gate') &&
       state.hasBackyOwner &&
       state.hasSupabaseOwner &&
       state.hasVercelOwner &&
@@ -2096,9 +2117,11 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     scrollWidth: document.documentElement.scrollWidth,
     hasAuditTrail: document.body?.innerText?.includes('Audit') || document.body?.innerText?.includes('audit'),
     hasCommandCenter: Boolean(document.querySelector('[data-testid="settings-command-center"]')),
+    hasLaunchReadiness: Boolean(document.querySelector('[data-testid="settings-launch-readiness"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Settings page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(layout.hasAuditTrail, `Security tab did not expose audit trail text: ${JSON.stringify(layout)}`);
+  assert(layout.hasLaunchReadiness, `Settings command center did not retain launch readiness panel: ${JSON.stringify(layout)}`);
 
   return {
     initial,
