@@ -122,6 +122,7 @@ type SettingsCertificationCommandOptions = {
   notificationProvider: SettingsCertificationNotificationProvider;
   certifyCommerce: boolean;
   externalBaseUrl: string;
+  includeReleaseDoctor: boolean;
 };
 
 const SETTINGS_CERTIFICATION_STORAGE_PROVIDER_CHOICES: SettingsCertificationStorageProvider[] = ['auto', 'local', 's3', 'supabase'];
@@ -138,6 +139,7 @@ const DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS = {
   notificationProvider: 'auto',
   certifyCommerce: true,
   externalBaseUrl: '',
+  includeReleaseDoctor: true,
 } satisfies SettingsCertificationCommandOptions;
 
 const quoteShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
@@ -153,7 +155,6 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
   const settingsSelected = hasSettingsCertificationGroup(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/$/, '');
   const envEntries: Array<[string, string]> = [
-    ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
     ['BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(settingsSelected)],
     ['BACKY_SETTINGS_CERTIFY_STORAGE', boolEnv(options.certifyStorage)],
     ['BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER', options.storageProvider],
@@ -163,6 +164,10 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
     ['BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER', options.notificationProvider],
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(options.certifyCommerce)],
   ];
+
+  if (options.includeReleaseDoctor) {
+    envEntries.unshift(['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1']);
+  }
 
   if (externalBaseUrl) {
     envEntries.push(
@@ -188,12 +193,13 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteShellValue(value)}`),
     '',
+    ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
     ...(commands.length ? commands : ['# Select at least one provider family before running certification.']),
   ].join('\n');
 };
 
 const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCertificationCommandOptions): string[] => Array.from(new Set([
-  'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+  options.includeReleaseDoctor ? 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1' : '',
   hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
   options.certifyCommerce ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
   options.certifyStorage || options.certifyRotation ? 'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER' : '',

@@ -1201,6 +1201,8 @@ includesAll(
     "BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER",
     "BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER",
     "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED",
+    "includeReleaseDoctor",
+    "npm run doctor:release-certification",
     "npm run ci:settings-provider-certification",
     "npm run ci:commerce-provider-certification",
   ],
