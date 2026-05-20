@@ -73,6 +73,7 @@ export interface AdminSiteSettingsScope {
     workspace?: Record<string, unknown>;
     site: SiteSettings;
   };
+  frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff;
   endpoints: {
     workspaceSettings: string;
     siteSettings: string;

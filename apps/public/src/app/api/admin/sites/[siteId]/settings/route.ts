@@ -19,6 +19,7 @@ import { publicContractJson } from "@/lib/publicContractResponse";
 import { normalizeRedirectRules } from "@/lib/redirectRules";
 import {
   getRequiredDatabaseRepositories,
+  resolvePublicRepositoryRuntimeConfig,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
 import { normalizeSiteLocalization } from "@/lib/siteLocalization";
@@ -34,6 +35,101 @@ interface RouteParams {
 
 const SITE_SETTINGS_SCOPE_SCHEMA = "backy.site-settings-scope.v1";
 
+type FrontendDatabaseCertificationEnvAlias = "BACKY_DATABASE_URL" | "DATABASE_URL";
+
+type FrontendDatabaseCertificationCommandOptions = {
+  databaseEnvAlias: FrontendDatabaseCertificationEnvAlias;
+  disposableConfirmed: boolean;
+  expectedHost: string;
+  expectedDatabase: string;
+  includeReleaseDoctor: boolean;
+};
+
+const FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES: FrontendDatabaseCertificationEnvAlias[] = [
+  "BACKY_DATABASE_URL",
+  "DATABASE_URL",
+];
+
+const DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS = {
+  databaseEnvAlias: "BACKY_DATABASE_URL",
+  disposableConfirmed: true,
+  expectedHost: "",
+  expectedDatabase: "",
+  includeReleaseDoctor: true,
+} satisfies FrontendDatabaseCertificationCommandOptions;
+
+const FRONTEND_DATABASE_CERTIFICATION_COVERAGE = [
+  "manifest",
+  "openapi",
+  "render",
+  "media",
+  "collections",
+  "reusable-sections",
+  "forms",
+  "comments",
+  "events",
+  "commerce",
+  "interactive-components",
+  "generated-sdk",
+] as const;
+
+const FRONTEND_DATABASE_CERTIFICATION_SCENARIOS = [
+  {
+    key: "manifest-openapi-discovery",
+    label: "Manifest and OpenAPI discovery",
+    expectedEvidence: ["public manifest response", "site-scoped OpenAPI response", "Backy contract headers"],
+    nextAction: "Run the SDK Postgres smoke and attach manifest/OpenAPI response evidence from the disposable database target.",
+  },
+  {
+    key: "render-route-resolution",
+    label: "Render and route resolution",
+    expectedEvidence: ["route resolve response", "render payload", "redirect/gone route case"],
+    nextAction: "Verify resolve, redirect/gone, and render payload reads against database-backed pages and posts.",
+  },
+  {
+    key: "media-font-delivery",
+    label: "Media and font delivery",
+    expectedEvidence: ["media list response", "font manifest response", "cache/ETag evidence"],
+    nextAction: "Run media/font SDK reads against migrated database media records and public cache headers.",
+  },
+  {
+    key: "cms-reusable-content",
+    label: "CMS and reusable content",
+    expectedEvidence: ["collection schema", "collection records", "reusable sections"],
+    nextAction: "Verify collection schemas/records and reusable sections from the disposable database service data.",
+  },
+  {
+    key: "forms-comments-events",
+    label: "Forms, comments, and events",
+    expectedEvidence: ["form definition", "comment moderation contract", "interaction event feed"],
+    nextAction: "Exercise public forms, comments, moderation/reporting, and event reads in the SDK Postgres smoke.",
+  },
+  {
+    key: "commerce-contracts",
+    label: "Commerce contracts",
+    expectedEvidence: ["commerce catalog", "order contract", "provider certification handoff"],
+    nextAction: "Verify catalog/order contract discovery against database-backed products and private order queues.",
+  },
+  {
+    key: "interactive-runtime",
+    label: "Interactive runtime",
+    expectedEvidence: ["component registry", "sandbox metadata", "runtime telemetry endpoint"],
+    nextAction: "Verify interactive registry, sandbox response headers, and telemetry contract reads in database mode.",
+  },
+  {
+    key: "generated-sdk-cache",
+    label: "Generated SDK and cache",
+    expectedEvidence: ["generated TypeScript contract", "SDK smoke", "304 cache revalidation"],
+    nextAction: "Run generated type checks and SDK cached manifest/OpenAPI/render helpers against the disposable target.",
+  },
+  {
+    key: "database-runtime-guard",
+    label: "Database runtime guard",
+    expectedEvidence: ["database URL alias configured", "disposable confirmation", "target host/database guard"],
+    nextAction: "Set the database URL alias, disposable confirmation, and optional expected host/name guards before the DB smoke.",
+  },
+] as const;
+
 type SiteSettingsScopedSite = {
   id: string;
   slug: string;
@@ -43,6 +139,366 @@ type SiteSettingsScopedSite = {
 
 const makeRequestId = () =>
   `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const quoteShellValue = (value: string): string =>
+  `'${value.replace(/'/g, "'\\''")}'`;
+
+const quoteEnvTemplateValue = (value: string): string =>
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteShellValue(value);
+
+const envValue = (keys: string[]): string => {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+};
+
+const stringField = (source: unknown, key: string): string => {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return "";
+  }
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "string" ? value.trim() : "";
+};
+
+const booleanEnvEnabled = (key: string): boolean => {
+  const value = process.env[key]?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+};
+
+const normalizeCorsOrigin = (origin: string) => {
+  const trimmed = origin.trim();
+  if (!trimmed || trimmed === "*") {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+};
+
+const buildFrontendDatabaseCertificationEnvEntries = (
+  options: FrontendDatabaseCertificationCommandOptions,
+): Array<[string, string]> => {
+  const envEntries: Array<[string, string]> = [
+    ["BACKY_DATA_MODE", "database"],
+    ["BACKY_SDK_REQUIRE_DATABASE", "1"],
+    [
+      "BACKY_DATABASE_DISPOSABLE_CONFIRMED",
+      options.disposableConfirmed ? "true" : "<confirm-disposable-db-first>",
+    ],
+  ];
+
+  if (options.includeReleaseDoctor) {
+    envEntries.unshift(
+      ["BACKY_RELEASE_CERTIFY_DATABASE", "1"],
+      ["BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED", "1"],
+    );
+  }
+
+  const expectedHost = options.expectedHost.trim();
+  const expectedDatabase = options.expectedDatabase.trim();
+  if (expectedHost) {
+    envEntries.push(["BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST", expectedHost]);
+  }
+  if (expectedDatabase) {
+    envEntries.push(["BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE", expectedDatabase]);
+  }
+
+  return envEntries;
+};
+
+const buildFrontendDatabaseCertificationCommand = (
+  options: FrontendDatabaseCertificationCommandOptions,
+): string => {
+  const envEntries = buildFrontendDatabaseCertificationEnvEntries(options);
+
+  return [
+    `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
+    `# export ${options.databaseEnvAlias}='<postgres-url>'`,
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteShellValue(value)}`),
+    "",
+    ...(options.includeReleaseDoctor ? ["npm run doctor:release-certification"] : []),
+    "npm run ci:sdk-postgres-smoke",
+  ].join("\n");
+};
+
+const buildFrontendDatabaseCertificationEnvTemplate = (
+  options: FrontendDatabaseCertificationCommandOptions,
+): string => {
+  const envEntries = buildFrontendDatabaseCertificationEnvEntries(options);
+
+  return [
+    "# Backy frontend SDK database certification environment",
+    "# Keep the disposable database URL in CI secrets or local shell variables.",
+    `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+    ...envEntries.map(([key, value]) => `${key}=${quoteEnvTemplateValue(value)}`),
+  ].join("\n");
+};
+
+const buildFrontendDatabaseCertificationRequiredInputs = (
+  options: FrontendDatabaseCertificationCommandOptions,
+): string[] => [
+  `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+  "BACKY_DATA_MODE=database",
+  "BACKY_SDK_REQUIRE_DATABASE=1",
+  "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true",
+  "disposable migrated Supabase/Postgres database",
+  "public manifest/OpenAPI/render/media/forms/interactive-component migrations with RLS policies",
+  ...(options.expectedHost.trim() ? ["BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST"] : []),
+  ...(options.expectedDatabase.trim() ? ["BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE"] : []),
+  ...(options.includeReleaseDoctor
+    ? ["BACKY_RELEASE_CERTIFY_DATABASE=1", "BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1"]
+    : []),
+];
+
+const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
+  command: buildFrontendDatabaseCertificationCommand(
+    DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS,
+  ),
+  envTemplate: buildFrontendDatabaseCertificationEnvTemplate(
+    DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS,
+  ),
+  envTemplateSchemaVersion: "backy.frontend-database-certification-env-template.v1",
+  databaseUrlAliases: FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES,
+  requiredInputs: buildFrontendDatabaseCertificationRequiredInputs(
+    DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS,
+  ),
+  targetGuards: [
+    "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
+    "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",
+  ],
+  secretHandling:
+    "Disposable database URLs stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.",
+};
+
+const getPublicApiRuntimeSummary = () => {
+  const rawAllowedOrigins = envValue(["BACKY_CORS_ALLOWED_ORIGINS"]);
+  const allowedOrigins = rawAllowedOrigins
+    .split(",")
+    .map(normalizeCorsOrigin)
+    .filter((origin): origin is string => Boolean(origin));
+
+  return {
+    corsAllowedOriginsConfigured: allowedOrigins.length > 0,
+    corsAllowedOriginCount: allowedOrigins.length,
+    allowedOrigins,
+    exactOriginPolicy: true,
+    wildcardAllowed: false,
+    exposedContractHeaders: [
+      "ETag",
+      "x-backy-request-id",
+      "x-backy-contract-version",
+      "x-backy-schema-version",
+      "x-backy-supported-schema-versions",
+      "x-backy-cache-scope",
+      "x-backy-cache-revision",
+      "x-backy-site-id",
+    ],
+    missing: allowedOrigins.length > 0 ? [] : ["BACKY_CORS_ALLOWED_ORIGINS"],
+  };
+};
+
+const getDatabaseRuntimeSummary = () => {
+  if (shouldUseDemoStoreFallback()) {
+    return {
+      mode: "demo",
+      provider: "local-json",
+      configured: true,
+      missing: [] as string[],
+      note: "Backy is using local JSON persistence in this environment.",
+    };
+  }
+
+  try {
+    const config = resolvePublicRepositoryRuntimeConfig();
+    const database = config.database;
+    const url = database?.url;
+    const host = url ? new URL(url).host : undefined;
+
+    return {
+      mode: config.mode,
+      provider: database?.type || "unknown",
+      configured: config.mode === "database" && Boolean(database?.path || database?.url),
+      host,
+      database: database?.name,
+      path: database?.type === "sqlite" ? database.path : undefined,
+      logging: Boolean(database?.logging),
+      missing:
+        config.mode === "database" && !database?.path && !database?.url
+          ? ["BACKY_DATABASE_URL or DATABASE_URL"]
+          : ([] as string[]),
+    };
+  } catch (error) {
+    return {
+      mode: "database",
+      provider: "unknown",
+      configured: false,
+      missing: ["BACKY_DATABASE_TYPE", "BACKY_DATABASE_URL or DATABASE_URL"],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to resolve database runtime.",
+    };
+  }
+};
+
+const getFrontendDatabaseCertificationRuntime = (
+  database: ReturnType<typeof getDatabaseRuntimeSummary>,
+  publicApi: ReturnType<typeof getPublicApiRuntimeSummary>,
+) => {
+  const databaseUrlAlias =
+    FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES.find((key) =>
+      Boolean(process.env[key]?.trim()),
+    ) || null;
+  const expectedHostConfigured = Boolean(
+    process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST?.trim(),
+  );
+  const expectedDatabaseConfigured = Boolean(
+    process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE?.trim(),
+  );
+  const disposableConfirmed = booleanEnvEnabled("BACKY_DATABASE_DISPOSABLE_CONFIRMED");
+  const dataMode = stringField(process.env, "BACKY_DATA_MODE") || database.mode;
+  const databaseUrlConfigured = Boolean(databaseUrlAlias);
+  const missing = [
+    ...(dataMode === "demo" ? ["BACKY_DATA_MODE=database"] : []),
+    ...(!databaseUrlConfigured ? ["BACKY_DATABASE_URL or DATABASE_URL"] : []),
+    ...(!disposableConfirmed ? ["BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"] : []),
+  ];
+
+  return {
+    dataMode,
+    databaseProvider: database.provider,
+    databaseHostConfigured: Boolean(database.host),
+    databaseNameConfigured: Boolean(database.database),
+    databaseUrlConfigured,
+    databaseUrlAlias,
+    disposableConfirmed,
+    expectedHostConfigured,
+    expectedDatabaseConfigured,
+    publicApiReady: publicApi.missing.length === 0,
+    readyForCertification:
+      dataMode !== "demo" && databaseUrlConfigured && disposableConfirmed,
+    missing,
+    secretHandling:
+      "Database URLs and service credentials stay in CI/runtime environment variables; site Settings admin API returns only alias names, booleans, and target guard presence.",
+  };
+};
+
+const buildFrontendDatabaseCertificationScenarioEvidence = (
+  runtime: ReturnType<typeof getFrontendDatabaseCertificationRuntime>,
+) => {
+  const countEvidence = (...values: boolean[]) =>
+    values.filter(Boolean).length;
+  const coverageSet = new Set<string>(FRONTEND_DATABASE_CERTIFICATION_COVERAGE);
+  const evidenceCounts: Record<string, number> = {
+    "manifest-openapi-discovery": countEvidence(
+      coverageSet.has("manifest"),
+      coverageSet.has("openapi"),
+      runtime.publicApiReady,
+    ),
+    "render-route-resolution": countEvidence(coverageSet.has("render")),
+    "media-font-delivery": countEvidence(coverageSet.has("media")),
+    "cms-reusable-content": countEvidence(
+      coverageSet.has("collections"),
+      coverageSet.has("reusable-sections"),
+    ),
+    "forms-comments-events": countEvidence(
+      coverageSet.has("forms"),
+      coverageSet.has("comments"),
+      coverageSet.has("events"),
+    ),
+    "commerce-contracts": countEvidence(coverageSet.has("commerce")),
+    "interactive-runtime": countEvidence(coverageSet.has("interactive-components")),
+    "generated-sdk-cache": countEvidence(coverageSet.has("generated-sdk")),
+    "database-runtime-guard": countEvidence(
+      runtime.databaseUrlConfigured,
+      runtime.disposableConfirmed,
+      runtime.expectedHostConfigured || runtime.expectedDatabaseConfigured,
+      runtime.readyForCertification,
+    ),
+  };
+  const scenarios = FRONTEND_DATABASE_CERTIFICATION_SCENARIOS.map((scenario) => {
+    const evidenceCount = evidenceCounts[scenario.key] || 0;
+    return {
+      ...scenario,
+      evidenceCount,
+      status: evidenceCount > 0 ? ("covered" as const) : ("missing" as const),
+    };
+  });
+  const covered = scenarios.filter((scenario) => scenario.status === "covered")
+    .length;
+
+  return {
+    schemaVersion: "backy.frontend-database-certification-evidence.v1",
+    status: covered === scenarios.length ? ("ready" as const) : ("attention" as const),
+    requiredGate: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke",
+    coverage: {
+      covered,
+      total: scenarios.length,
+      missing: scenarios
+        .filter((scenario) => scenario.status === "missing")
+        .map((scenario) => scenario.key),
+    },
+    scenarios,
+    secretHandling:
+      "Frontend database certification evidence reports scenario names, counts, gates, and non-secret contract families only; database URLs, service credentials, private orders, submissions, and contact payloads stay private.",
+  };
+};
+
+const frontendDatabaseCertificationContract = (
+  runtime: ReturnType<typeof getFrontendDatabaseCertificationRuntime>,
+  scenarioEvidence: ReturnType<
+    typeof buildFrontendDatabaseCertificationScenarioEvidence
+  >,
+) => ({
+  generatedAt: new Date().toISOString(),
+  schemaVersion: "backy.frontend-database-certification.v1",
+  status: "external-database-gate",
+  requiredFor: "production-custom-frontends",
+  source: "admin-site-settings-api",
+  gate: {
+    command: "npm run ci:sdk-postgres-smoke",
+    workflow: ".github/workflows/sdk-postgres-smoke.yml",
+    localPreflight: "npm run test:sdk-postgres-preflight-contract",
+    disposableGuard: "npm run test:sdk-postgres-disposable-guard",
+    typeContract: "npm run test:frontend-contract-types",
+  },
+  environment: {
+    dataMode: "database",
+    secretAliases: [...FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES],
+    requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true",
+    targetGuards: [
+      "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
+      "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",
+    ],
+  },
+  requires: [
+    "disposable migrated Supabase/Postgres database",
+    "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true",
+    "disposable_database_confirmed=true",
+    "public schema, RLS policies, indexes, and constraints migrated",
+  ],
+  coverage: [...FRONTEND_DATABASE_CERTIFICATION_COVERAGE],
+  runtime,
+  scenarioEvidence,
+  operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+  operatorEnvTemplate: {
+    schemaVersion: "backy.frontend-database-certification-env-template.v1",
+    format: "shell-env",
+    fileName: ".env.backy-frontend-database-certification",
+    body: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    secretHandling:
+      "Generated template values are non-secret aliases and placeholders; replace the database URL placeholder with a disposable migrated Supabase/Postgres secret before execution.",
+  },
+  secretHandling:
+    "Database URLs and service credentials stay in CI/runtime environment; site Settings admin responses expose only non-secret gate names, aliases, runtime booleans, and scenario evidence.",
+});
 
 const errorResponse = (
   status: number,
@@ -320,34 +776,51 @@ const workspaceSettingsSummary = (settings: {
 const siteSettingsEnvelope = (
   site: SiteSettingsScopedSite,
   workspaceSettings: Parameters<typeof workspaceSettingsSummary>[0],
-) => ({
-  schemaVersion: SITE_SETTINGS_SCOPE_SCHEMA,
-  scope: {
-    level: "site",
-    siteId: site.id,
-    siteSlug: site.slug,
-    teamId: site.teamId || null,
-    workspaceSettingsScope: "global",
-    siteSettingsScope: "site",
-  },
-  siteSettings: {
+) => {
+  const runtimeDatabase = getDatabaseRuntimeSummary();
+  const runtimePublicApi = getPublicApiRuntimeSummary();
+  const frontendDatabaseCertificationRuntime =
+    getFrontendDatabaseCertificationRuntime(runtimeDatabase, runtimePublicApi);
+  const frontendDatabaseCertificationScenarioEvidence =
+    buildFrontendDatabaseCertificationScenarioEvidence(
+      frontendDatabaseCertificationRuntime,
+    );
+  const siteSettings = {
     ...DEFAULT_SITE_SETTINGS,
     ...(site.settings || {}),
-  },
-  workspaceSettings: workspaceSettingsSummary(workspaceSettings),
-  effectiveSettings: {
-    workspace: workspaceSettingsSummary(workspaceSettings),
-    site: {
-      ...DEFAULT_SITE_SETTINGS,
-      ...(site.settings || {}),
+  };
+  const summarizedWorkspaceSettings = workspaceSettingsSummary(workspaceSettings);
+
+  return {
+    schemaVersion: SITE_SETTINGS_SCOPE_SCHEMA,
+    scope: {
+      level: "site",
+      siteId: site.id,
+      siteSlug: site.slug,
+      teamId: site.teamId || null,
+      workspaceSettingsScope: "global",
+      siteSettingsScope: "site",
     },
-  },
-  endpoints: {
-    workspaceSettings: "/api/admin/settings",
-    siteSettings: `/api/admin/sites/${encodeURIComponent(site.id)}/settings`,
-    siteDetail: `/api/admin/sites/${encodeURIComponent(site.id)}`,
-  },
-});
+    siteSettings,
+    workspaceSettings: summarizedWorkspaceSettings,
+    effectiveSettings: {
+      workspace: summarizedWorkspaceSettings,
+      site: {
+        ...DEFAULT_SITE_SETTINGS,
+        ...(site.settings || {}),
+      },
+    },
+    frontendDatabaseCertification: frontendDatabaseCertificationContract(
+      frontendDatabaseCertificationRuntime,
+      frontendDatabaseCertificationScenarioEvidence,
+    ),
+    endpoints: {
+      workspaceSettings: "/api/admin/settings",
+      siteSettings: `/api/admin/sites/${encodeURIComponent(site.id)}/settings`,
+      siteDetail: `/api/admin/sites/${encodeURIComponent(site.id)}`,
+    },
+  };
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get("x-request-id") || makeRequestId();

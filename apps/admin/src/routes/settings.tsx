@@ -2699,6 +2699,7 @@ function SettingsPage() {
           schemaVersion: siteSettingsScope.schemaVersion,
           scope: siteSettingsScope.scope,
           endpoints: siteSettingsScope.endpoints,
+          frontendDatabaseCertification: siteSettingsScope.frontendDatabaseCertification || null,
           editableSections: ['seo', 'analytics', 'social', 'localization', 'commentPolicy'],
           savedSiteSettings: {
             seo: siteSettingsScope.siteSettings.seo,
@@ -3724,6 +3725,14 @@ function SiteScopedSettingsPanel({
             <div>
               <dt className="font-semibold text-foreground">Endpoint</dt>
               <dd className="break-all text-muted-foreground">{scope?.endpoints.siteSettings || '/api/admin/sites/:siteId/settings'}</dd>
+            </div>
+            <div data-testid="settings-site-scope-frontend-database-certification">
+              <dt className="font-semibold text-foreground">Database gate</dt>
+              <dd className="text-muted-foreground">
+                {scope?.frontendDatabaseCertification?.schemaVersion || 'backy.frontend-database-certification.v1'}
+                {' / '}
+                {scope?.frontendDatabaseCertification?.status || 'external-database-gate'}
+              </dd>
             </div>
           </dl>
         </div>

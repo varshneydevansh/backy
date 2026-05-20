@@ -21,6 +21,7 @@ const nextConfig = read('../next.config.js');
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const adminSettingsRoute = read('../src/app/api/admin/settings/route.ts');
+const adminSiteSettingsRoute = read('../src/app/api/admin/sites/[siteId]/settings/route.ts');
 const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const sdkIndex = read('../../../packages/sdk-js/src/index.ts');
@@ -102,6 +103,35 @@ assert(
 );
 
 assert(
+  adminSiteSettingsRoute.includes('frontendDatabaseCertification: frontendDatabaseCertificationContract(') &&
+    adminSiteSettingsRoute.includes('schemaVersion: "backy.frontend-database-certification.v1"') &&
+    adminSiteSettingsRoute.includes('source: "admin-site-settings-api"') &&
+    adminSiteSettingsRoute.includes('command: "npm run ci:sdk-postgres-smoke"') &&
+    adminSiteSettingsRoute.includes('workflow: ".github/workflows/sdk-postgres-smoke.yml"') &&
+    adminSiteSettingsRoute.includes('localPreflight: "npm run test:sdk-postgres-preflight-contract"') &&
+    adminSiteSettingsRoute.includes('disposableGuard: "npm run test:sdk-postgres-disposable-guard"') &&
+    adminSiteSettingsRoute.includes('"BACKY_DATABASE_URL"') &&
+    adminSiteSettingsRoute.includes('"DATABASE_URL"') &&
+    adminSiteSettingsRoute.includes('requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"') &&
+    adminSiteSettingsRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
+    adminSiteSettingsRoute.includes('operatorEnvTemplate') &&
+    adminSiteSettingsRoute.includes('buildFrontendDatabaseCertificationCommand') &&
+    adminSiteSettingsRoute.includes('buildFrontendDatabaseCertificationEnvTemplate') &&
+    adminSiteSettingsRoute.includes('"BACKY_SDK_REQUIRE_DATABASE", "1"') &&
+    adminSiteSettingsRoute.includes('"BACKY_RELEASE_CERTIFY_DATABASE", "1"') &&
+    adminSiteSettingsRoute.includes('backy.frontend-database-certification-env-template.v1') &&
+    adminSiteSettingsRoute.includes('.env.backy-frontend-database-certification') &&
+    adminSiteSettingsRoute.includes('getFrontendDatabaseCertificationRuntime') &&
+    adminSiteSettingsRoute.includes('databaseUrlConfigured') &&
+    adminSiteSettingsRoute.includes('readyForCertification') &&
+    adminSiteSettingsRoute.includes('scenarioEvidence') &&
+    adminSiteSettingsRoute.includes('backy.frontend-database-certification-evidence.v1') &&
+    adminSiteSettingsRoute.includes('"generated-sdk"') &&
+    adminSiteSettingsRoute.includes('Database URLs and service credentials stay in CI/runtime environment'),
+  'Site-scoped Settings API must mirror the non-secret SDK Postgres certification handoff for custom admin clients.',
+);
+
+assert(
   adminContentApi.includes('export interface FrontendDatabaseCertificationHandoff') &&
     adminContentApi.includes("schemaVersion: 'backy.frontend-database-certification.v1'") &&
     adminContentApi.includes("schemaVersion: 'backy.frontend-database-certification-evidence.v1'") &&
@@ -146,8 +176,10 @@ assert(
     settingsRoute.includes('data-testid="settings-frontend-database-certification-expected-host-input"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-expected-database-input"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-required-inputs"') &&
+    settingsRoute.includes('data-testid="settings-site-scope-frontend-database-certification"') &&
     settingsRoute.includes('Frontend SDK database certification') &&
     settingsRoute.includes('frontendDatabaseCertificationHandoff') &&
+    settingsRoute.includes('frontendDatabaseCertification: siteSettingsScope.frontendDatabaseCertification') &&
     settingsRoute.includes('frontendDatabaseCertificationScenarioEvidence') &&
     settingsRoute.includes('scenarioEvidence: frontendDatabaseCertificationScenarioEvidence') &&
     settingsRoute.includes('backy.frontend-database-certification-evidence.v1') &&
@@ -597,6 +629,8 @@ assert(
 assert(
     apiContracts.includes('forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database') &&
     apiContracts.includes('against `BACKY_DATABASE_URL`/`DATABASE_URL` only after `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true`') &&
+    apiContracts.includes('GET /api/admin/sites/:siteId/settings` mirrors it at `data.settings.frontendDatabaseCertification`') &&
+    apiContracts.includes('source: admin-site-settings-api') &&
     apiContracts.includes('`operatorCommandTemplate` for a copyable guarded command with `BACKY_SDK_REQUIRE_DATABASE=1` and `npm run doctor:release-certification`') &&
     apiContracts.includes('`operatorEnvTemplate` for `.env.backy-frontend-database-certification`') &&
     apiContracts.includes('backy.frontend-database-certification-evidence.v1') &&
@@ -627,6 +661,8 @@ assert(
     audit.includes('non-secret database credential boundary') &&
     audit.includes('SDK certification gate wording update') &&
     audit.includes('SDK database scenario evidence update') &&
+    audit.includes('Site Settings frontend database handoff update') &&
+    audit.includes('admin-site-settings-api') &&
     audit.includes('backy.frontend-database-certification-evidence.v1') &&
     audit.includes('generated SDK/cache behavior') &&
     audit.includes('Settings Delivery SDK Postgres command builder') &&

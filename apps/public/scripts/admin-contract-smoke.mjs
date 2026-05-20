@@ -171,6 +171,12 @@ function assertSiteSettingsLocalizationSource() {
   assert(source.includes('NO_SITE_SETTINGS_CHANGES'), 'Site settings route must reject unsupported-only patches with a stable error code');
   assert(source.includes('UNSUPPORTED_SITE_SETTINGS_KEYS'), 'Site settings route must reject mixed unsupported site settings payloads with a stable error code');
   assert(source.includes('site.settings.updated'), 'Site settings updates must emit a stable audit action');
+  assert(source.includes('frontendDatabaseCertification: frontendDatabaseCertificationContract('), 'Site settings envelope must include frontend database certification metadata');
+  assert(source.includes('source: "admin-site-settings-api"'), 'Site settings frontend database certification must identify the site Settings API source');
+  assert(source.includes('backy.frontend-database-certification.v1'), 'Site settings frontend database certification must expose a stable handoff schema');
+  assert(source.includes('backy.frontend-database-certification-evidence.v1'), 'Site settings frontend database certification must expose scenario evidence');
+  assert(source.includes('npm run ci:sdk-postgres-smoke'), 'Site settings frontend database certification must expose the SDK Postgres gate');
+  assert(source.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED'), 'Site settings frontend database certification must expose disposable database guard envs');
   assert(
     source.includes("workspaceSettingsScope: 'global'") || source.includes('workspaceSettingsScope: "global"'),
     'Site settings envelope must separate workspace settings scope',
@@ -181,6 +187,7 @@ function assertSiteSettingsLocalizationSource() {
   );
   assert(apiContracts.includes('UNSUPPORTED_SITE_SETTINGS_KEYS'), 'API contracts must document mixed site/workspace settings rejection');
   assert(apiContracts.includes('`localization`'), 'API contracts must document localization as a site-scoped settings section');
+  assert(apiContracts.includes('admin-site-settings-api'), 'API contracts must document the site Settings frontend database certification source');
 }
 
 function assertNavigationContractSource() {
@@ -1332,6 +1339,15 @@ try {
     assert(scopedSettings?.effectiveSettings?.site, `${detail.url} missing effective site settings`);
     assert(scopedSettings?.endpoints?.workspaceSettings === '/api/admin/settings', `${detail.url} missing workspace settings endpoint`);
     assert(scopedSettings?.endpoints?.siteSettings === `/api/admin/sites/${createdSiteId}/settings`, `${detail.url} missing site settings endpoint`);
+    const siteFrontendDatabaseCertification = scopedSettings?.frontendDatabaseCertification;
+    assert(siteFrontendDatabaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', `${detail.url} missing site frontend database certification schema`);
+    assert(siteFrontendDatabaseCertification?.status === 'external-database-gate', `${detail.url} missing site frontend database certification status`);
+    assert(siteFrontendDatabaseCertification?.source === 'admin-site-settings-api', `${detail.url} missing site frontend database certification source`);
+    assert(siteFrontendDatabaseCertification?.gate?.command === 'npm run ci:sdk-postgres-smoke', `${detail.url} missing site frontend database certification gate`);
+    assert(siteFrontendDatabaseCertification?.operatorEnvTemplate?.schemaVersion === 'backy.frontend-database-certification-env-template.v1', `${detail.url} missing site frontend database env-template schema`);
+    assert(siteFrontendDatabaseCertification?.scenarioEvidence?.schemaVersion === 'backy.frontend-database-certification-evidence.v1', `${detail.url} missing site frontend database scenario evidence`);
+    assert(!JSON.stringify(siteFrontendDatabaseCertification).includes('postgres://'), `${detail.url} exposed a database URL in site frontend database certification`);
+    assert(!JSON.stringify(siteFrontendDatabaseCertification).includes('SERVICE_ROLE'), `${detail.url} exposed service-role material in site frontend database certification`);
 
     const update = await request(`/api/admin/sites/${createdSiteId}/settings`, {
       method: 'PATCH',

@@ -49,6 +49,7 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-site-scope-default-locale"',
     'data-testid="settings-site-scope-locale-strategy"',
     'data-testid="settings-site-scope-locales"',
+    'data-testid="settings-site-scope-frontend-database-certification"',
     'data-testid="settings-permission-state"',
     'data-testid="settings-rbac-permission-state"',
     'Settings permissions could not be verified',
@@ -56,6 +57,7 @@ const assertSettingsSourceContracts = () => {
     'to="/users"',
     'Review users',
     "editableSections: ['seo', 'analytics', 'social', 'localization', 'commentPolicy']",
+    'frontendDatabaseCertification: siteSettingsScope.frontendDatabaseCertification',
     'localization: siteSettingsScope.siteSettings.localization',
     'localization: {',
     'locales: parseSiteScopedLocaleRows',
@@ -224,7 +226,9 @@ const assertSettingsSourceContracts = () => {
     "await setLabeledControl(client, 'Locale routing', 'path-prefix')",
     "await setLabeledControl(client, 'Locale entries'",
     "siteScopeSaved.localeStrategy === 'path-prefix'",
+    "state.databaseGate",
     "handoffState.editableSections.includes('localization')",
+    "handoffState.frontendDatabaseCertification === 'backy.frontend-database-certification.v1'",
     "handoffState.localization?.localeStrategy === 'path-prefix'",
     "scope.siteSettings?.localization?.localeStrategy === 'path-prefix'",
     "entry.metadata?.changedKeys?.includes('localization')",
@@ -1101,6 +1105,7 @@ const waitForSiteScopeEditable = async (client, siteId) => {
     const state = await evaluate(client, `(() => ({
       hasPanel: Boolean(document.querySelector('[data-testid="settings-site-scope-panel"]')),
       schema: document.querySelector('[data-testid="settings-site-scope-panel"]')?.textContent?.includes('backy.site-settings-scope.v1') || false,
+      databaseGate: document.querySelector('[data-testid="settings-site-scope-frontend-database-certification"]')?.textContent?.includes('backy.frontend-database-certification.v1') || false,
       endpoint: document.querySelector('[data-testid="settings-site-scope-panel"]')?.textContent?.includes('/api/admin/sites/') || false,
       selected: document.querySelector('[data-testid="settings-site-scope-site"]')?.value || '',
       titleTemplateDisabled: document.querySelector('[data-testid="settings-site-scope-title-template"]')?.matches(':disabled') ?? true,
@@ -1113,6 +1118,7 @@ const waitForSiteScopeEditable = async (client, siteId) => {
     if (
       state.hasPanel &&
       state.schema &&
+      state.databaseGate &&
       state.endpoint &&
       state.selected === siteId &&
       !state.titleTemplateDisabled &&
@@ -1743,6 +1749,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       hasScopedSettings: payload.siteScopedSettings?.schemaVersion === 'backy.site-settings-scope.v1',
       siteId: payload.siteScopedSettings?.scope?.siteId || '',
       endpoint: payload.siteScopedSettings?.endpoints?.siteSettings || '',
+      frontendDatabaseCertification: payload.siteScopedSettings?.frontendDatabaseCertification?.schemaVersion || '',
       editableSections: payload.siteScopedSettings?.editableSections || [],
       dirty: payload.siteScopedSettings?.dirty,
       description: payload.siteScopedSettings?.savedSiteSettings?.seo?.defaultDescription || '',
@@ -1755,6 +1762,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       handoffState.hasScopedSettings &&
       handoffState.siteId === siteScopeSite.id &&
       handoffState.endpoint.includes(`/api/admin/sites/${siteScopeSite.id}/settings`) &&
+      handoffState.frontendDatabaseCertification === 'backy.frontend-database-certification.v1' &&
       handoffState.editableSections.includes('analytics') &&
       handoffState.editableSections.includes('localization') &&
       handoffState.dirty === false &&
