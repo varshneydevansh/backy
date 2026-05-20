@@ -424,6 +424,14 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     return 'input';
   }
 
+  if (normalized === 'interactivefigure') {
+    return 'interactiveFigure';
+  }
+
+  if (normalized === 'codecomponent') {
+    return 'codeComponent';
+  }
+
   const knownTypes: CanvasElement['type'][] = [
     'text',
     'heading',
@@ -456,6 +464,8 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     'quote',
     'repeater',
     'comment',
+    'interactiveFigure',
+    'codeComponent',
   ];
 
   return knownTypes.includes(normalized as CanvasElement['type'])
@@ -5083,36 +5093,46 @@ const getCollectionBinding = (element: CanvasElement): Record<string, unknown> |
 };
 
 const getTargetPathOptions = (elementType: CanvasElement['type']) => {
-  if (elementType === 'image') {
+  const normalizedElementType = normalizeCanvasElementType(elementType);
+
+  if (normalizedElementType === 'image') {
     return [
       { value: 'props.assetId', label: 'Image asset' },
       { value: 'props.src', label: 'Image URL' },
       { value: 'props.alt', label: 'Alt text' },
     ];
   }
-  if (elementType === 'button') {
+  if (normalizedElementType === 'button') {
     return [
       { value: 'props.label', label: 'Button label' },
       { value: 'props.href', label: 'Button URL' },
     ];
   }
-  if (elementType === 'link') {
+  if (normalizedElementType === 'link') {
     return [
       { value: 'props.content', label: 'Link text' },
       { value: 'props.href', label: 'Link URL' },
     ];
   }
-  if (elementType === 'video') {
+  if (normalizedElementType === 'video') {
     return [
       { value: 'props.src', label: 'Video URL' },
     ];
   }
-  if (elementType === 'html' || elementType === 'table') {
+  if (normalizedElementType === 'html' || normalizedElementType === 'table') {
     return [
       { value: 'props.html', label: 'HTML content' },
     ];
   }
-  if (elementType === 'interactiveFigure') {
+  if (normalizedElementType === 'repeater') {
+    return [
+      { value: 'props.collectionId', label: 'Repeater collection' },
+      { value: 'props.titleField', label: 'Title field' },
+      { value: 'props.descriptionField', label: 'Description field' },
+      { value: 'props.imageField', label: 'Image field' },
+    ];
+  }
+  if (normalizedElementType === 'interactiveFigure') {
     return [
       { value: 'props.data', label: 'Figure data' },
       { value: 'props.series', label: 'Chart/series data' },
@@ -5122,7 +5142,7 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
       { value: 'props.controls', label: 'Control values' },
     ];
   }
-  if (elementType === 'codeComponent') {
+  if (normalizedElementType === 'codeComponent') {
     return [
       { value: 'props.data', label: 'Component data' },
       { value: 'props.input', label: 'Component input' },
@@ -5139,6 +5159,17 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
 
 const NON_FIELD_BINDING_SLOT_KEYS = new Set(['record', 'records', 'categories', 'relatedPosts']);
 const VIRTUAL_COLLECTION_FIELD_PATHS = new Set(['id', 'slug', 'status', 'createdAt', 'updatedAt']);
+const REPEATER_BINDING_SLOT_TARGETS = new Set([
+  'props.collectionId',
+  'props.titleField',
+  'props.descriptionField',
+  'props.imageField',
+]);
+const REPEATER_FIELD_BINDING_SLOT_TARGET_PROPS: Record<string, 'titleField' | 'descriptionField' | 'imageField'> = {
+  'props.titleField': 'titleField',
+  'props.descriptionField': 'descriptionField',
+  'props.imageField': 'imageField',
+};
 
 const BINDING_SLOT_FIELD_ALIASES: Record<string, string[]> = {
   title: ['title', 'name', 'label'],
@@ -5173,6 +5204,19 @@ const bindingSlotFieldPath = (
   bindingSlotFieldCandidates(slot).find((candidate) => (
     VIRTUAL_COLLECTION_FIELD_PATHS.has(candidate) || fieldPathExists(collection, collections, candidate)
   )) || ''
+);
+
+const isRepeaterBindingSlotTarget = (element: CanvasElement, targetPath: string): boolean => (
+  normalizeCanvasElementType(element.type) === 'repeater' && REPEATER_BINDING_SLOT_TARGETS.has(targetPath)
+);
+
+const bindingSlotCanApplyWithoutFieldPath = (element: CanvasElement, slot: ComponentBindingSlot): boolean => (
+  isRepeaterBindingSlotTarget(element, slot.targetPath) && slot.targetPath === 'props.collectionId'
+);
+
+const bindingSlotTargetAllowed = (element: CanvasElement, slot: ComponentBindingSlot): boolean => (
+  isRepeaterBindingSlotTarget(element, slot.targetPath)
+  || getTargetPathOptions(element.type).some((option) => option.value === slot.targetPath)
 );
 
 const bindingUpdateForFieldPath = (fieldPath: string): { fieldKey: string; sourcePath: string } => {
@@ -5287,6 +5331,88 @@ const defaultFieldKey = (
 
   const typedField = collection.fields.find((field) => preferredTypes.includes(field.type));
   return typedField?.key || (fallbackToFirst ? collection.fields[0]?.key : '') || '';
+};
+
+const repeaterDatasetIdForCollection = (
+  element: CanvasElement,
+  collection: Collection,
+): string => {
+  const existingDatasetId = typeof element.props?.datasetId === 'string' ? element.props.datasetId.trim() : '';
+  return existingDatasetId || `dataset_${collection.id}_${element.id}`;
+};
+
+const repeaterBindingPropsForSlot = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  collection: Collection,
+  collections: Collection[],
+  fieldPath: string,
+): ElementProps | null => {
+  if (!isRepeaterBindingSlotTarget(element, slot.targetPath)) {
+    return null;
+  }
+
+  const nextProps: ElementProps = {
+    ...(element.props || {}),
+    collectionId: collection.id,
+    datasetId: repeaterDatasetIdForCollection(element, collection),
+  };
+
+  if (slot.targetPath === 'props.collectionId') {
+    const currentTitleField = typeof nextProps.titleField === 'string' ? nextProps.titleField : '';
+    const currentDescriptionField = typeof nextProps.descriptionField === 'string' ? nextProps.descriptionField : '';
+    const currentImageField = typeof nextProps.imageField === 'string' ? nextProps.imageField : '';
+    const titleField = fieldPathExists(collection, collections, currentTitleField)
+      ? currentTitleField
+      : defaultFieldKey(collection, ['title', 'name', 'label'], ['text']);
+    const descriptionField = fieldPathExists(collection, collections, currentDescriptionField)
+      ? currentDescriptionField
+      : defaultFieldKey(collection, ['summary', 'description', 'excerpt', 'body'], ['richText', 'text']);
+    const imageField = fieldPathExists(collection, collections, currentImageField)
+      ? currentImageField
+      : defaultFieldKey(collection, ['featuredImage', 'image', 'coverImage', 'thumbnail', 'media'], ['image'], { fallbackToFirst: false });
+
+    nextProps.titleField = titleField;
+    nextProps.descriptionField = descriptionField;
+    if (imageField) {
+      nextProps.imageField = imageField;
+    } else {
+      delete nextProps.imageField;
+    }
+
+    return nextProps;
+  }
+
+  const targetProp = REPEATER_FIELD_BINDING_SLOT_TARGET_PROPS[slot.targetPath];
+  if (!targetProp || !fieldPath) {
+    return null;
+  }
+
+  nextProps[targetProp] = fieldPath;
+  return nextProps;
+};
+
+const isRepeaterBindingSlotApplied = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  collection: Collection | null,
+  fieldPath: string,
+): boolean => {
+  if (!collection || !isRepeaterBindingSlotTarget(element, slot.targetPath)) {
+    return false;
+  }
+
+  const props = element.props || {};
+  if (props.collectionId !== collection.id) {
+    return false;
+  }
+
+  if (slot.targetPath === 'props.collectionId') {
+    return true;
+  }
+
+  const targetProp = REPEATER_FIELD_BINDING_SLOT_TARGET_PROPS[slot.targetPath];
+  return Boolean(targetProp && fieldPath && props[targetProp] === fieldPath);
 };
 
 const normalizedNumberInput = (value: unknown): string => (
@@ -5604,6 +5730,37 @@ const applyCollectionBindingToElement = (
   };
 };
 
+const applyBindingSlotToElement = (
+  element: CanvasElement,
+  slot: ComponentBindingSlot,
+  collection: Collection,
+  collections: Collection[],
+  fieldPath: string,
+): { element: CanvasElement; applied: boolean } => {
+  const repeaterProps = repeaterBindingPropsForSlot(element, slot, collection, collections, fieldPath);
+  if (repeaterProps) {
+    return {
+      element: {
+        ...element,
+        props: repeaterProps,
+      },
+      applied: true,
+    };
+  }
+
+  if (!fieldPath || !bindingSlotTargetAllowed(element, slot)) {
+    return { element, applied: false };
+  }
+
+  return {
+    element: applyCollectionBindingToElement(
+      element,
+      collectionBindingForSlot(element, slot, collection, collections, fieldPath),
+    ),
+    applied: true,
+  };
+};
+
 const bindableSlotsForElement = (
   element: CanvasElement,
   collection: Collection | null,
@@ -5616,8 +5773,10 @@ const bindableSlotsForElement = (
   return element.bindingSlots
     .map((slot) => {
       const fieldPath = bindingSlotFieldPath(slot, collection, collections);
-      const targetAllowed = getTargetPathOptions(element.type).some((option) => option.value === slot.targetPath);
-      return fieldPath && targetAllowed ? { slot, fieldPath } : null;
+      const canApplyWithoutFieldPath = bindingSlotCanApplyWithoutFieldPath(element, slot);
+      return (fieldPath || canApplyWithoutFieldPath) && bindingSlotTargetAllowed(element, slot)
+        ? { slot, fieldPath }
+        : null;
     })
     .filter((entry): entry is { slot: ComponentBindingSlot; fieldPath: string } => entry !== null);
 };
@@ -5661,11 +5820,11 @@ const applyChildBindingSlots = (
         : child;
 
       slotBindings.forEach(({ slot, fieldPath }) => {
-        nextChild = applyCollectionBindingToElement(
-          nextChild,
-          collectionBindingForSlot(nextChild, slot, collection, collections, fieldPath),
-        );
-        applied += 1;
+        const result = applyBindingSlotToElement(nextChild, slot, collection, collections, fieldPath);
+        nextChild = result.element;
+        if (result.applied) {
+          applied += 1;
+        }
       });
 
       return nextChild;
@@ -5814,24 +5973,33 @@ function PresetBindingSlotsPanel({
         {slots.map((slot) => {
           const fieldCandidates = bindingSlotFieldCandidates(slot);
           const fieldPath = bindingSlotFieldPath(slot, selectedCollection, collections);
-          const targetAllowed = targetPathOptions.some((option) => option.value === slot.targetPath);
+          const targetAllowed = bindingSlotTargetAllowed(element, slot);
           const targetLabel = targetPathOptions.find((option) => option.value === slot.targetPath)?.label || slot.targetPath;
           const bindingUpdate = fieldPath ? bindingUpdateForFieldPath(fieldPath) : null;
-          const isApplied = Boolean(
-            bindingUpdate
-            && selectedFieldKey === bindingUpdate.fieldKey
-            && selectedSourcePath === bindingUpdate.sourcePath
-            && selectedTargetPath === slot.targetPath,
-          );
+          const canApplyWithoutFieldPath = bindingSlotCanApplyWithoutFieldPath(element, slot);
+          const canApplySlot = Boolean(selectedCollection && targetAllowed && (fieldPath || canApplyWithoutFieldPath));
+          const isApplied = isRepeaterBindingSlotTarget(element, slot.targetPath)
+            ? isRepeaterBindingSlotApplied(element, slot, selectedCollection, fieldPath)
+            : Boolean(
+                bindingUpdate
+                && selectedFieldKey === bindingUpdate.fieldKey
+                && selectedSourcePath === bindingUpdate.sourcePath
+                && selectedTargetPath === slot.targetPath,
+              );
           const disabledReason = !selectedCollection
             ? 'Choose a collection first.'
             : !targetAllowed
-              ? 'This slot is handled by specialized element controls.'
-              : fieldCandidates.length === 0
+              ? 'This slot is not available for this element type.'
+              : fieldCandidates.length === 0 && !canApplyWithoutFieldPath
                 ? 'This slot documents a record-level connection.'
-                : !fieldPath
+                : !fieldPath && !canApplyWithoutFieldPath
                   ? 'No matching field exists in the selected collection.'
                   : '';
+          const slotTargetSummary = fieldPath
+            ? `${fieldPath} -> ${targetLabel}`
+            : canApplyWithoutFieldPath && selectedCollection
+              ? `${selectedCollection.name} -> ${targetLabel}`
+              : slot.description || disabledReason;
 
           return (
             <div
@@ -5854,8 +6022,8 @@ function PresetBindingSlotsPanel({
                 </div>
                 <button
                   type="button"
-                  onClick={() => fieldPath && targetAllowed && onApplySlot(slot, fieldPath)}
-                  disabled={Boolean(disabledReason)}
+                  onClick={() => canApplySlot && onApplySlot(slot, fieldPath)}
+                  disabled={!canApplySlot}
                   title={disabledReason || `Apply ${slot.label}`}
                   data-testid={`editor-data-binding-slot-apply-${slot.id}`}
                   className="shrink-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
@@ -5864,7 +6032,7 @@ function PresetBindingSlotsPanel({
                 </button>
               </div>
               <div className="mt-1 text-[11px] text-muted-foreground">
-                {fieldPath ? `${fieldPath} -> ${targetLabel}` : slot.description || disabledReason}
+                {slotTargetSummary}
               </div>
               {disabledReason && (
                 <div className="mt-1 text-[11px] text-muted-foreground" data-testid={`editor-data-binding-slot-reason-${slot.id}`}>
@@ -6956,8 +7124,21 @@ function DataBindingProperties({
 
   const applyBindingSlot = (slot: ComponentBindingSlot, fieldPath: string) => {
     if (!slot.targetPath) return;
+    if (!activeSlotCollection) return;
+
+    if (isRepeaterBindingSlotTarget(element, slot.targetPath)) {
+      const result = applyBindingSlotToElement(element, slot, activeSlotCollection, collections, fieldPath);
+      if (result.applied) {
+        onChange({
+          props: result.element.props,
+        });
+      }
+      return;
+    }
+
     const bindingUpdate = bindingUpdateForFieldPath(fieldPath);
     updateBinding({
+      collectionId: activeSlotCollection.id,
       fieldKey: bindingUpdate.fieldKey,
       sourcePath: bindingUpdate.sourcePath,
       targetPath: slot.targetPath,
