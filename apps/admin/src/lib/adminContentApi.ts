@@ -855,6 +855,25 @@ export interface FormsPersistenceCertification {
     missing?: string[];
     secretHandling?: string;
   };
+  scenarioEvidence?: {
+    schemaVersion: 'backy.forms-persistence-scenario-evidence.v1';
+    status: 'ready' | 'attention';
+    requiredGate: string;
+    coverage: {
+      covered: number;
+      total: number;
+      missing: string[];
+    };
+    scenarios: Array<{
+      key: string;
+      label: string;
+      expectedEvidence: readonly string[];
+      nextAction: string;
+      evidenceCount: number;
+      status: 'covered' | 'missing';
+    }>;
+    secretHandling: string;
+  };
   secretHandling: string;
   checks?: Array<Record<string, unknown>>;
 }

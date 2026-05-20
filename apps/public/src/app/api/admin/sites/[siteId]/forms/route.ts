@@ -132,6 +132,111 @@ const buildFormsPostgresCertificationEnvTemplate = (options: FormsPostgresCertif
   ].join('\n');
 };
 
+const FORM_PERSISTENCE_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'form-definition-crud',
+    label: 'Form definition CRUD',
+    expectedEvidence: ['form definition rows', 'field schemas', 'active/inactive state'],
+    nextAction: 'Create or update at least one persisted form definition with fields before running the DB smoke.',
+  },
+  {
+    key: 'public-submission-intake',
+    label: 'Public submission intake',
+    expectedEvidence: ['public submission row', 'request id', 'validated field values'],
+    nextAction: 'Submit a public form payload against the disposable database target.',
+  },
+  {
+    key: 'moderation-review',
+    label: 'Moderation review',
+    expectedEvidence: ['approved submission', 'rejected or spam submission', 'review metadata'],
+    nextAction: 'Approve, reject, or mark a stored submission as spam through the Forms inbox.',
+  },
+  {
+    key: 'contact-share',
+    label: 'Contact share',
+    expectedEvidence: ['contact-share mapping', 'contact record', 'dedupe metadata'],
+    nextAction: 'Enable contact sharing and approve a submission that creates or updates a contact.',
+  },
+  {
+    key: 'collection-routing',
+    label: 'Collection routing',
+    expectedEvidence: ['collection target mapping', 'created collection record', 'routing status'],
+    nextAction: 'Route an approved submission into a writable collection record.',
+  },
+  {
+    key: 'delivery-audit',
+    label: 'Delivery and audit events',
+    expectedEvidence: ['email/webhook event', 'retry state', 'audit activity'],
+    nextAction: 'Configure email or webhook delivery and capture at least one delivery or retry event.',
+  },
+  {
+    key: 'consent-spam-settings',
+    label: 'Consent and spam settings',
+    expectedEvidence: ['consent field', 'honeypot/captcha setting', 'consent retention record'],
+    nextAction: 'Add consent/spam controls and collect a submission that records consent state.',
+  },
+  {
+    key: 'custom-frontend-contract',
+    label: 'Custom frontend contract',
+    expectedEvidence: ['definition URL', 'submit URL', 'sample payload'],
+    nextAction: 'Select a form so the definition, submit, sample payload, and cURL handoff are available.',
+  },
+] as const;
+
+const formFieldTextIncludes = (
+  form: FormDefinition,
+  text: string,
+): boolean => form.fields.some((field) => (
+  field.type.toLowerCase().includes(text) ||
+  field.key.toLowerCase().includes(text) ||
+  field.label.toLowerCase().includes(text)
+));
+
+const buildFormsPersistenceScenarioEvidence = (forms: FormDefinition[]) => {
+  const formsWithFields = forms.filter((form) => form.fields.length > 0).length;
+  const activePublicForms = forms.filter((form) => form.isActive && form.audience === 'public').length;
+  const manuallyModeratedForms = forms.filter((form) => (form.moderationMode || 'manual') === 'manual').length;
+  const contactShareConfigured = forms.filter((form) => Boolean(form.contactShare?.enabled)).length;
+  const collectionRoutingConfigured = forms.filter((form) => Boolean(form.collectionTarget?.enabled)).length;
+  const deliveryConfigured = forms.filter((form) => Boolean(form.notificationEmail || form.notificationWebhook)).length;
+  const consentOrSpamConfigured = forms.filter((form) => (
+    Boolean(form.enableHoneypot || form.enableCaptcha || form.spamSettings || form.consentSettings) ||
+    formFieldTextIncludes(form, 'consent')
+  )).length;
+  const evidenceCounts: Record<string, number> = {
+    'form-definition-crud': formsWithFields,
+    'public-submission-intake': activePublicForms,
+    'moderation-review': manuallyModeratedForms,
+    'contact-share': contactShareConfigured,
+    'collection-routing': collectionRoutingConfigured,
+    'delivery-audit': deliveryConfigured,
+    'consent-spam-settings': consentOrSpamConfigured,
+    'custom-frontend-contract': formsWithFields,
+  };
+  const scenarios = FORM_PERSISTENCE_CERTIFICATION_SCENARIOS.map((scenario) => {
+    const evidenceCount = evidenceCounts[scenario.key] || 0;
+    return {
+      ...scenario,
+      evidenceCount,
+      status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+    };
+  });
+  const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+  return {
+    schemaVersion: 'backy.forms-persistence-scenario-evidence.v1',
+    status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+    requiredGate: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres',
+    coverage: {
+      covered,
+      total: scenarios.length,
+      missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+    },
+    scenarios,
+    secretHandling: 'Forms persistence scenario evidence reports only names, counts, gates, and readiness states; database URLs, credentials, submission values, IP hashes, and contact payloads stay private.',
+  };
+};
+
 const FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE = {
   command: buildFormsPostgresCertificationCommand(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
   envTemplate: buildFormsPostgresCertificationEnvTemplate(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
@@ -151,7 +256,7 @@ const FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE = {
   secretHandling: 'Disposable database URLs stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
 };
 
-const formPersistenceCertification = (siteId: string) => ({
+const formPersistenceCertification = (siteId: string, forms: FormDefinition[] = []) => ({
   schemaVersion: 'backy.forms-persistence-certification.v1',
   status: 'external-database-gate',
   selectedSiteId: siteId,
@@ -202,6 +307,7 @@ const formPersistenceCertification = (siteId: string) => ({
     secretHandling: 'Generated template values are non-secret aliases and placeholders; replace the database URL placeholder with a disposable migrated Supabase/Postgres secret before execution.',
   },
   runtime: getFormsPersistenceRuntimeSummary(),
+  scenarioEvidence: buildFormsPersistenceScenarioEvidence(forms),
   secretHandling: 'Database URLs stay in server/CI environment variables; Forms API responses expose only non-secret gate names and readiness evidence.',
 });
 
@@ -421,11 +527,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           forms: payload.items,
           total: payload.pagination.total,
           pagination: payload.pagination,
-          persistenceCertification: formPersistenceCertification(site.id),
+          persistenceCertification: formPersistenceCertification(site.id, payload.items),
         },
         forms: payload.items,
         total: payload.pagination.total,
-        persistenceCertification: formPersistenceCertification(site.id),
+        persistenceCertification: formPersistenceCertification(site.id, payload.items),
       });
     }
 
@@ -447,11 +553,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           offset: 0,
           hasMore: false,
         },
-        persistenceCertification: formPersistenceCertification(site.id),
+        persistenceCertification: formPersistenceCertification(site.id, forms),
       },
       forms,
       total: forms.length,
-      persistenceCertification: formPersistenceCertification(site.id),
+      persistenceCertification: formPersistenceCertification(site.id, forms),
     });
   } catch (error) {
     console.error('Admin forms API error:', error);

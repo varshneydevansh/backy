@@ -389,6 +389,12 @@ const assertFormsPersistenceCertificationSource = () => {
     'readyForCertification',
     'databaseUrlConfigured',
     'Database URLs and credentials are never returned',
+    'scenarioEvidence',
+    'backy.forms-persistence-scenario-evidence.v1',
+    'form-definition-crud',
+    'public-submission-intake',
+    'custom-frontend-contract',
+    'Forms persistence scenario evidence reports only names, counts, gates, and readiness states',
   ]) {
     assert(source.includes(label), `Forms persistence certification must name ${label}`);
   }
@@ -427,6 +433,15 @@ const assertFormsPersistenceCertificationResponse = (payload) => {
   assert(typeof certification.runtime.disposableConfirmed === 'boolean' && typeof certification.runtime.readyForCertification === 'boolean', `Forms persistence certification must expose disposable confirmation readiness: ${JSON.stringify(certification)}`);
   assert(Array.isArray(certification.runtime.missing), `Forms persistence certification must expose missing runtime inputs: ${JSON.stringify(certification)}`);
   assert(typeof certification.runtime.secretHandling === 'string' && certification.runtime.secretHandling.includes('Database URLs and credentials are never returned'), `Forms runtime summary must describe non-secret handling: ${JSON.stringify(certification)}`);
+  assert(certification.scenarioEvidence, `Forms persistence certification missing scenario evidence: ${JSON.stringify(certification)}`);
+  assert(certification.scenarioEvidence.schemaVersion === 'backy.forms-persistence-scenario-evidence.v1', `Unexpected Forms scenario evidence schema: ${JSON.stringify(certification.scenarioEvidence)}`);
+  assert(certification.scenarioEvidence.requiredGate === certification.operatorGate, `Forms scenario evidence gate must mirror operator gate: ${JSON.stringify(certification.scenarioEvidence)}`);
+  assert(certification.scenarioEvidence.coverage && certification.scenarioEvidence.coverage.total === 8 && Array.isArray(certification.scenarioEvidence.coverage.missing), `Forms scenario evidence must expose coverage totals: ${JSON.stringify(certification.scenarioEvidence)}`);
+  assert(Array.isArray(certification.scenarioEvidence.scenarios) && certification.scenarioEvidence.scenarios.length === 8, `Forms scenario evidence must enumerate all scenarios: ${JSON.stringify(certification.scenarioEvidence)}`);
+  for (const scenarioKey of ['form-definition-crud', 'public-submission-intake', 'moderation-review', 'contact-share', 'collection-routing', 'delivery-audit', 'consent-spam-settings', 'custom-frontend-contract']) {
+    assert(certification.scenarioEvidence.scenarios.some((scenario) => scenario.key === scenarioKey), `Forms scenario evidence missing ${scenarioKey}: ${JSON.stringify(certification.scenarioEvidence)}`);
+  }
+  assert(typeof certification.scenarioEvidence.secretHandling === 'string' && certification.scenarioEvidence.secretHandling.includes('database URLs, credentials, submission values, IP hashes, and contact payloads stay private'), `Forms scenario evidence must describe non-secret handling: ${JSON.stringify(certification.scenarioEvidence)}`);
   assert(typeof certification.secretHandling === 'string' && certification.secretHandling.includes('Database URLs stay in server/CI environment variables'), `Forms persistence certification must describe non-secret handling: ${JSON.stringify(certification)}`);
   assert(JSON.stringify(legacyCertification) === JSON.stringify(certification), `Legacy Forms persistence certification must mirror data.persistenceCertification: ${JSON.stringify({ certification, legacyCertification })}`);
 };
