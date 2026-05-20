@@ -440,6 +440,7 @@ Use this file as the persistent baseline before any implementation pass.
 ### 9.1 Canvas editor experience
 - Current local editor parity is guarded by focused smoke paths for drag/drop, copy/cut/paste/duplicate/delete/grouping, responsive breakpoint state, rich-text table/list depth, imported list-indent edits, and long-session stress.
 - Remaining editor work should be treated as regression hardening and new-control coverage, not as a currently counted Partial gate.
+- Undo and redo controls now expose stable ids and shortcut metadata for Cmd/Ctrl+Z, Cmd/Ctrl+Y, and Shift+Cmd/Ctrl+Z, keeping the history command surface source-guarded alongside mutation controls.
 - Group/ungroup toolbar and inspector controls now expose stable action ids plus `aria-keyshortcuts` for Cmd/Ctrl+G and Shift+Cmd/Ctrl+G, with source-only editor smoke coverage for shortcut discoverability.
 - Nested component authoring now includes direct child-layer scope selection through the toolbar, inspector, and Shift+Cmd/Ctrl+A shortcut so container/group children can be selected for grouping, alignment, duplication, and delete flows without repeated single-child drilling.
 - Sibling-scope selection is available from the toolbar plus single and multi-layer inspector cards with Cmd/Ctrl+A shortcut metadata, keeping same-parent grouping and alignment setup local to the current properties workflow.

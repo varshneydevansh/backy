@@ -5195,6 +5195,8 @@ export function CanvasEditor({
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Undo (Cmd/Ctrl+Z)"
               aria-label="Undo"
+              aria-keyshortcuts="Control+Z Meta+Z"
+              data-testid="editor-undo"
             >
               <Undo className="h-4 w-4" />
             </button>
@@ -5205,6 +5207,8 @@ export function CanvasEditor({
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)"
               aria-label="Redo"
+              aria-keyshortcuts="Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z"
+              data-testid="editor-redo"
             >
               <Redo className="h-4 w-4" />
             </button>

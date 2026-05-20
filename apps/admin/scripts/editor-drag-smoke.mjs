@@ -225,6 +225,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
   assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
+  assert(source.includes('data-testid="editor-undo"') && source.includes('aria-keyshortcuts="Control+Z Meta+Z"'), 'Editor undo toolbar control must expose Cmd/Ctrl+Z metadata and a stable id');
+  assert(source.includes('data-testid="editor-redo"') && source.includes('aria-keyshortcuts="Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z"'), 'Editor redo toolbar control must expose Cmd/Ctrl+Y and Shift+Cmd/Ctrl+Z metadata with a stable id');
   assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleSelectedVisibilityToggle') && source.includes('selectedLayersAreHidden'), 'Editor toolbar must expose selected-layer visibility toggle');
   assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleSelectedLockToggle') && source.includes('selectedLayersAreLocked'), 'Editor toolbar must expose selected-layer lock toggle');
   assert(source.includes('data-testid="editor-inspector-selection-state-actions"') && source.includes('data-testid="editor-inspector-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-toggle-selection-lock"'), 'Editor multi-selection inspector must expose local selected-layer visibility and lock toggles');
