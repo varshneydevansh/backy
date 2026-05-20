@@ -1912,6 +1912,7 @@ function VideoElement({ element }: ElementRendererProps) {
       src={src}
       width={typeof width === 'number' ? width : undefined}
       height={typeof height === 'number' ? height : undefined}
+      title={getNameClass(props.title) || undefined}
       poster={poster}
       autoPlay={autoPlay}
       loop={getBooleanWithFallback(props.loop, false)}

@@ -3328,6 +3328,7 @@ function CanvasElementComponent({
       return (
         <video
           src={videoSrc}
+          title={sanitizeText(p.title) || undefined}
           poster={posterSrc || undefined}
           controls={isPreview ? getBooleanWithFallback(p.controls, true) : false}
           autoPlay={isPreview ? getBooleanWithFallback(p.autoplay ?? p.autoPlay, false) : false}

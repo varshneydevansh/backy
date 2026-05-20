@@ -37,16 +37,35 @@ const STATUS_OPTIONS: ManagedPageStatus[] = ['draft', 'published', 'scheduled', 
 const INLINE_TEXT_ELEMENT_TYPES = new Set(['text', 'heading', 'paragraph', 'quote', 'button', 'link']);
 const INLINE_LINK_ELEMENT_TYPES = new Set(['button', 'link']);
 const INLINE_IMAGE_ELEMENT_TYPES = new Set(['image']);
+const INLINE_MEDIA_ELEMENT_TYPES = new Set(['video', 'embed', 'map']);
 const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-down'] as const;
+const IFRAME_LOADING_OPTIONS = ['', 'lazy', 'eager'] as const;
 const BORDER_STYLE_OPTIONS = ['', 'solid', 'dashed', 'dotted', 'double', 'none'] as const;
 const TEXT_ALIGN_OPTIONS = ['', 'left', 'center', 'right', 'justify'] as const;
 const TEXT_TRANSFORM_OPTIONS = ['', 'none', 'uppercase', 'lowercase', 'capitalize'] as const;
 const TEXT_DECORATION_OPTIONS = ['', 'none', 'underline', 'line-through', 'overline'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
+type IframeLoadingOption = typeof IFRAME_LOADING_OPTIONS[number];
 type BorderStyleOption = typeof BORDER_STYLE_OPTIONS[number];
 type TextAlignOption = typeof TEXT_ALIGN_OPTIONS[number];
 type TextTransformOption = typeof TEXT_TRANSFORM_OPTIONS[number];
 type TextDecorationOption = typeof TEXT_DECORATION_OPTIONS[number];
+type InlineMediaFields = {
+  src: string;
+  poster: string;
+  title: string;
+  address: string;
+  markerLabel: string;
+  zoom: string;
+  allowedHosts: string;
+  loading: IframeLoadingOption;
+  controls: boolean;
+  autoplay: boolean;
+  loop: boolean;
+  muted: boolean;
+  playsInline: boolean;
+  allowFullScreen: boolean;
+};
 type InlineAppearanceFields = {
   color: string;
   backgroundColor: string;
@@ -289,6 +308,42 @@ const imageFieldsFromElement = (element: Record<string, unknown> | null) => {
   };
 };
 
+const stringOrListProp = (props: Record<string, unknown>, key: string): string => {
+  const value = props[key];
+  if (Array.isArray(value)) {
+    return value.filter((item) => typeof item === 'string' && item.trim().length > 0).join(', ');
+  }
+  return typeof value === 'string' ? value : '';
+};
+
+const booleanProp = (props: Record<string, unknown>, key: string, fallback = false): boolean => {
+  const value = props[key];
+  return typeof value === 'boolean' ? value : fallback;
+};
+
+const mediaFieldsFromElement = (element: Record<string, unknown> | null): InlineMediaFields => {
+  const props = elementProps(element);
+  const loading = stringProp(props, 'loading');
+  return {
+    src: stringProp(props, 'src') || stringProp(props, 'url'),
+    poster: stringProp(props, 'poster'),
+    title: stringProp(props, 'title'),
+    address: stringProp(props, 'address'),
+    markerLabel: stringProp(props, 'markerLabel'),
+    zoom: lengthProp(props, 'zoom'),
+    allowedHosts: stringOrListProp(props, 'allowedHosts') || stringOrListProp(props, 'embedAllowedHosts'),
+    loading: IFRAME_LOADING_OPTIONS.includes(loading as IframeLoadingOption)
+      ? loading as IframeLoadingOption
+      : '',
+    controls: booleanProp(props, 'controls', true),
+    autoplay: booleanProp(props, 'autoplay', booleanProp(props, 'autoPlay')),
+    loop: booleanProp(props, 'loop'),
+    muted: booleanProp(props, 'muted'),
+    playsInline: booleanProp(props, 'playsInline'),
+    allowFullScreen: booleanProp(props, 'allowFullScreen', true),
+  };
+};
+
 const appearanceFieldsFromElement = (element: Record<string, unknown> | null): InlineAppearanceFields => {
   const props = elementProps(element);
   const borderStyle = stringProp(props, 'borderStyle');
@@ -461,6 +516,55 @@ const updateElementImage = (
   objectFit: input.objectFit,
 });
 
+const updateElementMedia = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  elementType: string,
+  input: InlineMediaFields,
+): Record<string, unknown> | null => {
+  const src = input.src.trim();
+  const title = input.title.trim();
+  const loading = input.loading || undefined;
+
+  if (elementType === 'video') {
+    return updateElementProps(content, elementId, {
+      src,
+      poster: input.poster.trim(),
+      title,
+      controls: input.controls,
+      autoplay: input.autoplay,
+      muted: input.muted,
+      loop: input.loop,
+      playsInline: input.playsInline,
+    });
+  }
+
+  if (elementType === 'embed') {
+    return updateElementProps(content, elementId, {
+      src,
+      url: src,
+      title,
+      allowedHosts: input.allowedHosts.trim(),
+      loading,
+      allowFullScreen: input.allowFullScreen,
+    });
+  }
+
+  if (elementType === 'map') {
+    return updateElementProps(content, elementId, {
+      address: input.address.trim(),
+      src,
+      title,
+      markerLabel: input.markerLabel.trim(),
+      zoom: input.zoom.trim(),
+      loading,
+      allowFullScreen: input.allowFullScreen,
+    });
+  }
+
+  return null;
+};
+
 const updateElementAppearance = (
   content: Record<string, unknown> | undefined,
   elementId: string,
@@ -551,6 +655,21 @@ export function LivePageManagementOverlay({
   const [inlineImageTitle, setInlineImageTitle] = useState('');
   const [inlineImageObjectFit, setInlineImageObjectFit] = useState<ImageObjectFit>('cover');
   const [inlineImageSaving, setInlineImageSaving] = useState(false);
+  const [inlineMediaSrc, setInlineMediaSrc] = useState('');
+  const [inlineMediaPoster, setInlineMediaPoster] = useState('');
+  const [inlineMediaTitle, setInlineMediaTitle] = useState('');
+  const [inlineMediaAddress, setInlineMediaAddress] = useState('');
+  const [inlineMediaMarkerLabel, setInlineMediaMarkerLabel] = useState('');
+  const [inlineMediaZoom, setInlineMediaZoom] = useState('');
+  const [inlineMediaAllowedHosts, setInlineMediaAllowedHosts] = useState('');
+  const [inlineMediaLoading, setInlineMediaLoading] = useState<IframeLoadingOption>('');
+  const [inlineMediaControls, setInlineMediaControls] = useState(true);
+  const [inlineMediaAutoplay, setInlineMediaAutoplay] = useState(false);
+  const [inlineMediaLoop, setInlineMediaLoop] = useState(false);
+  const [inlineMediaMuted, setInlineMediaMuted] = useState(false);
+  const [inlineMediaPlaysInline, setInlineMediaPlaysInline] = useState(false);
+  const [inlineMediaAllowFullScreen, setInlineMediaAllowFullScreen] = useState(true);
+  const [inlineMediaSaving, setInlineMediaSaving] = useState(false);
   const [inlineAppearanceColor, setInlineAppearanceColor] = useState('');
   const [inlineAppearanceBackgroundColor, setInlineAppearanceBackgroundColor] = useState('');
   const [inlineAppearanceBorderColor, setInlineAppearanceBorderColor] = useState('');
@@ -692,6 +811,20 @@ export function LivePageManagementOverlay({
       setInlineImageAlt('');
       setInlineImageTitle('');
       setInlineImageObjectFit('cover');
+      setInlineMediaSrc('');
+      setInlineMediaPoster('');
+      setInlineMediaTitle('');
+      setInlineMediaAddress('');
+      setInlineMediaMarkerLabel('');
+      setInlineMediaZoom('');
+      setInlineMediaAllowedHosts('');
+      setInlineMediaLoading('');
+      setInlineMediaControls(true);
+      setInlineMediaAutoplay(false);
+      setInlineMediaLoop(false);
+      setInlineMediaMuted(false);
+      setInlineMediaPlaysInline(false);
+      setInlineMediaAllowFullScreen(true);
       setInlineAppearanceColor('');
       setInlineAppearanceBackgroundColor('');
       setInlineAppearanceBorderColor('');
@@ -745,6 +878,12 @@ export function LivePageManagementOverlay({
   const selectedElementSupportsInlineText = INLINE_TEXT_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineLink = INLINE_LINK_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineImage = INLINE_IMAGE_ELEMENT_TYPES.has(selectedElementType);
+  const selectedElementSupportsInlineMedia = INLINE_MEDIA_ELEMENT_TYPES.has(selectedElementType);
+  const selectedElementMediaSaveDisabled = selectedElementLocked
+    || inlineMediaSaving
+    || (selectedElementType === 'map'
+      ? inlineMediaSrc.trim().length === 0 && inlineMediaAddress.trim().length === 0
+      : inlineMediaSrc.trim().length === 0);
 
   useEffect(() => {
     setInlineText(inlineTextFromElement(selectedContentElement));
@@ -755,6 +894,21 @@ export function LivePageManagementOverlay({
     setInlineImageAlt(imageFields.alt);
     setInlineImageTitle(imageFields.title);
     setInlineImageObjectFit(imageFields.objectFit);
+    const mediaFields = mediaFieldsFromElement(selectedContentElement);
+    setInlineMediaSrc(mediaFields.src);
+    setInlineMediaPoster(mediaFields.poster);
+    setInlineMediaTitle(mediaFields.title);
+    setInlineMediaAddress(mediaFields.address);
+    setInlineMediaMarkerLabel(mediaFields.markerLabel);
+    setInlineMediaZoom(mediaFields.zoom);
+    setInlineMediaAllowedHosts(mediaFields.allowedHosts);
+    setInlineMediaLoading(mediaFields.loading);
+    setInlineMediaControls(mediaFields.controls);
+    setInlineMediaAutoplay(mediaFields.autoplay);
+    setInlineMediaLoop(mediaFields.loop);
+    setInlineMediaMuted(mediaFields.muted);
+    setInlineMediaPlaysInline(mediaFields.playsInline);
+    setInlineMediaAllowFullScreen(mediaFields.allowFullScreen);
     const appearanceFields = appearanceFieldsFromElement(selectedContentElement);
     setInlineAppearanceColor(appearanceFields.color);
     setInlineAppearanceBackgroundColor(appearanceFields.backgroundColor);
@@ -988,6 +1142,69 @@ export function LivePageManagementOverlay({
       setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected image.');
     } finally {
       setInlineImageSaving(false);
+    }
+  };
+
+  const saveInlineMedia = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its media fields.');
+      return;
+    }
+
+    const nextContent = updateElementMedia(page.content, selectedElementId, selectedElementType, {
+      src: inlineMediaSrc,
+      poster: inlineMediaPoster,
+      title: inlineMediaTitle,
+      address: inlineMediaAddress,
+      markerLabel: inlineMediaMarkerLabel,
+      zoom: inlineMediaZoom,
+      allowedHosts: inlineMediaAllowedHosts,
+      loading: inlineMediaLoading,
+      controls: inlineMediaControls,
+      autoplay: inlineMediaAutoplay,
+      loop: inlineMediaLoop,
+      muted: inlineMediaMuted,
+      playsInline: inlineMediaPlaysInline,
+      allowFullScreen: inlineMediaAllowFullScreen,
+    });
+    if (!nextContent) {
+      setError('Unable to update this media element from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineMediaSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected media element.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Media element saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected media element.');
+    } finally {
+      setInlineMediaSaving(false);
     }
   };
 
@@ -1442,6 +1659,206 @@ export function LivePageManagementOverlay({
                     }}
                   >
                     {inlineImageSaving ? 'Saving image...' : 'Save image'}
+                  </button>
+                </div>
+              ) : null}
+              {selectedElementSupportsInlineMedia ? (
+                <div data-backy-live-media-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Media / embed
+                  </span>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    {selectedElementType === 'map' ? 'Map URL' : 'Source URL'}
+                    <input
+                      value={inlineMediaSrc}
+                      onChange={(event) => setInlineMediaSrc(event.target.value)}
+                      placeholder={selectedElementType === 'video' ? 'Video URL or Backy media URL' : 'https://...'}
+                      style={{
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        font: 'inherit',
+                        fontSize: 13,
+                        padding: '8px 9px',
+                      }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Title
+                    <input
+                      value={inlineMediaTitle}
+                      onChange={(event) => setInlineMediaTitle(event.target.value)}
+                      placeholder="Accessible title"
+                      style={{
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        font: 'inherit',
+                        fontSize: 13,
+                        padding: '8px 9px',
+                      }}
+                    />
+                  </label>
+                  {selectedElementType === 'video' ? (
+                    <>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Poster image
+                        <input
+                          value={inlineMediaPoster}
+                          onChange={(event) => setInlineMediaPoster(event.target.value)}
+                          placeholder="Poster image URL"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineMediaControls}
+                            onChange={(event) => setInlineMediaControls(event.target.checked)}
+                          />
+                          Controls
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineMediaAutoplay}
+                            onChange={(event) => setInlineMediaAutoplay(event.target.checked)}
+                          />
+                          Autoplay
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineMediaMuted}
+                            onChange={(event) => setInlineMediaMuted(event.target.checked)}
+                          />
+                          Muted
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineMediaLoop}
+                            onChange={(event) => setInlineMediaLoop(event.target.checked)}
+                          />
+                          Loop
+                        </label>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                        <input
+                          type="checkbox"
+                          checked={inlineMediaPlaysInline}
+                          onChange={(event) => setInlineMediaPlaysInline(event.target.checked)}
+                        />
+                        Play inline on mobile
+                      </label>
+                    </>
+                  ) : null}
+                  {selectedElementType === 'embed' ? (
+                    <>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Allowed hosts
+                        <input
+                          value={inlineMediaAllowedHosts}
+                          onChange={(event) => setInlineMediaAllowedHosts(event.target.value)}
+                          placeholder="youtube.com, vimeo.com"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Loading
+                          <select
+                            value={inlineMediaLoading}
+                            onChange={(event) => setInlineMediaLoading(event.target.value as IframeLoadingOption)}
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                          >
+                            {IFRAME_LOADING_OPTIONS.map((option) => (
+                              <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155', paddingTop: 20 }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineMediaAllowFullScreen}
+                            onChange={(event) => setInlineMediaAllowFullScreen(event.target.checked)}
+                          />
+                          Fullscreen
+                        </label>
+                      </div>
+                    </>
+                  ) : null}
+                  {selectedElementType === 'map' ? (
+                    <>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Address
+                        <input
+                          value={inlineMediaAddress}
+                          onChange={(event) => setInlineMediaAddress(event.target.value)}
+                          placeholder="1600 Amphitheatre Pkwy, Mountain View"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Marker label
+                          <input
+                            value={inlineMediaMarkerLabel}
+                            onChange={(event) => setInlineMediaMarkerLabel(event.target.value)}
+                            placeholder="HQ"
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                          />
+                        </label>
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Zoom
+                          <input
+                            value={inlineMediaZoom}
+                            onChange={(event) => setInlineMediaZoom(event.target.value)}
+                            placeholder="12"
+                            inputMode="decimal"
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                          />
+                        </label>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Loading
+                          <select
+                            value={inlineMediaLoading}
+                            onChange={(event) => setInlineMediaLoading(event.target.value as IframeLoadingOption)}
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                          >
+                            {IFRAME_LOADING_OPTIONS.map((option) => (
+                              <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155', paddingTop: 20 }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineMediaAllowFullScreen}
+                            onChange={(event) => setInlineMediaAllowFullScreen(event.target.checked)}
+                          />
+                          Fullscreen
+                        </label>
+                      </div>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={saveInlineMedia}
+                    disabled={selectedElementMediaSaveDisabled}
+                    style={{
+                      justifySelf: 'start',
+                      border: 0,
+                      borderRadius: 6,
+                      background: selectedElementMediaSaveDisabled ? '#94a3b8' : '#2563eb',
+                      color: '#fff',
+                      cursor: selectedElementMediaSaveDisabled ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      padding: '7px 10px',
+                    }}
+                  >
+                    {inlineMediaSaving ? 'Saving media...' : 'Save media'}
                   </button>
                 </div>
               ) : null}

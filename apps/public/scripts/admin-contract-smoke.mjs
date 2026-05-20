@@ -573,7 +573,12 @@ function assertAdminPageContentValidationSource() {
   assert(liveManageOverlay.includes('data-backy-live-inline-editor="page"'), 'live management overlay must expose inline element text editing');
   assert(liveManageOverlay.includes('data-backy-live-link-editor="page"'), 'live management overlay must expose inline link/button destination editing');
   assert(liveManageOverlay.includes('data-backy-live-image-editor="page"'), 'live management overlay must expose inline image metadata editing');
+  assert(liveManageOverlay.includes('data-backy-live-media-editor="page"'), 'live management overlay must expose inline video/embed/map media editing');
   assert(liveManageOverlay.includes('data-backy-live-layout-editor="page"'), 'live management overlay must expose inline layout editing');
+  assert(liveManageOverlay.includes('INLINE_MEDIA_ELEMENT_TYPES') && liveManageOverlay.includes("'video', 'embed', 'map'"), 'live management overlay must support video, embed, and map inline media targets');
+  assert(liveManageOverlay.includes('inlineMediaSrc') && liveManageOverlay.includes('inlineMediaAddress'), 'live management overlay must expose selected media source and map address editing');
+  assert(liveManageOverlay.includes('inlineMediaAllowedHosts') && liveManageOverlay.includes('inlineMediaAllowFullScreen'), 'live management overlay must expose embed host and fullscreen controls');
+  assert(liveManageOverlay.includes('inlineMediaControls') && liveManageOverlay.includes('inlineMediaAutoplay'), 'live management overlay must expose video playback controls');
   assert(liveManageOverlay.includes('inlineLayoutName'), 'live management overlay must expose selected element layer name editing');
   assert(liveManageOverlay.includes('inlineLayoutVisible'), 'live management overlay must expose selected element visibility editing');
   assert(liveManageOverlay.includes('inlineLayoutLocked') && liveManageOverlay.includes('selectedElementLocked'), 'live management overlay must expose and honor selected element locking');
@@ -584,6 +589,7 @@ function assertAdminPageContentValidationSource() {
   assert(liveManageOverlay.includes('updateElementText'), 'live management overlay must patch selected element content');
   assert(liveManageOverlay.includes('updateElementLink'), 'live management overlay must patch selected link/button destinations');
   assert(liveManageOverlay.includes('updateElementImage'), 'live management overlay must patch selected image metadata');
+  assert(liveManageOverlay.includes('updateElementMedia'), 'live management overlay must patch selected video/embed/map fields');
   assert(liveManageOverlay.includes('updateElementLayout'), 'live management overlay must patch selected element layout fields');
   assert(liveManageOverlay.includes('updateElementAppearance'), 'live management overlay must patch selected element appearance props');
   assert(publicPageRenderer.includes('data-backy-element-id'), 'public renderer must expose stable element ids for live inspection');
