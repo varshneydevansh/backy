@@ -154,7 +154,7 @@ Legend:
 - ⚠️ Provider-account automation, secret rotation execution, and cross-channel attribution beyond provider feeds remain external/provider hardening work.
 
 #### `/users` (`users.tsx`)
-- ✅ User list and user API flows cover role/status editing, invite/reset/session lifecycle, team-scoped access, permission previews, and audit activity.
+- ✅ User list and user API flows cover role/status editing, invite/reset/session lifecycle, team-scoped access, permission previews, actionable bulk status/delete selection summaries, and audit activity.
 - ⚠️ Broader external auth-provider rollout remains globally tracked outside this page.
 
 #### `/users.new` (`users.new.tsx`)

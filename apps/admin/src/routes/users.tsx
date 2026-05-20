@@ -566,12 +566,16 @@ function UsersListView() {
       return roleMatches && statusMatches && reviewMatches;
     })
   ), [reviewFilter, roleFilter, statusFilter, users]);
+  const selectedUserIdSet = useMemo(() => new Set(selectedUserIds), [selectedUserIds]);
   const selectedUsers = useMemo(() => (
-    users.filter((user) => selectedUserIds.includes(user.id))
-  ), [selectedUserIds, users]);
+    users.filter((user) => selectedUserIdSet.has(user.id))
+  ), [selectedUserIdSet, users]);
   const selectedActionableUsers = useMemo(() => (
     selectedUsers.filter((user) => !isCurrentUser(user))
   ), [isCurrentUser, selectedUsers]);
+  const selectedActionableUserIds = useMemo(() => (
+    selectedActionableUsers.map((user) => user.id)
+  ), [selectedActionableUsers]);
 
   const toggleUserSelection = (user: UserType, checked: boolean) => {
     if (isUsersBusy || isCurrentUser(user) || (!canManageUsers && !canDeleteUsers)) return;
@@ -648,7 +652,7 @@ function UsersListView() {
       return;
     }
 
-    const userIds = selectedActionableUsers.map((user) => user.id);
+    const userIds = selectedActionableUserIds;
     if (userIds.length === 0) {
       setNotice('Select at least one non-current user before running a bulk action.');
       return;
@@ -679,7 +683,7 @@ function UsersListView() {
       return;
     }
 
-    const userIds = selectedActionableUsers.map((user) => user.id);
+    const userIds = selectedActionableUserIds;
     if (userIds.length === 0) {
       setNotice('Select at least one non-current user before running a bulk action.');
       setPendingBulkDelete(false);
@@ -889,7 +893,7 @@ function UsersListView() {
         return (
           <input
             type="checkbox"
-            checked={selectedUserIds.includes(user.id)}
+            checked={selectedUserIdSet.has(user.id)}
             disabled={isUsersBusy || locked}
             onChange={(event) => toggleUserSelection(user, event.target.checked)}
             aria-label={locked ? `Self selection locked for ${user.fullName}` : `Select ${user.fullName}`}
@@ -1054,8 +1058,12 @@ function UsersListView() {
   const visibleSelectableUsers = useMemo(() => (
     data.filter((user) => !isCurrentUser(user))
   ), [data, isCurrentUser]);
+  const selectedVisibleActionableUsers = useMemo(() => (
+    visibleSelectableUsers.filter((user) => selectedUserIdSet.has(user.id))
+  ), [selectedUserIdSet, visibleSelectableUsers]);
+  const hiddenSelectedUserCount = Math.max(0, selectedActionableUsers.length - selectedVisibleActionableUsers.length);
   const allVisibleSelected = visibleSelectableUsers.length > 0
-    && visibleSelectableUsers.every((user) => selectedUserIds.includes(user.id));
+    && visibleSelectableUsers.every((user) => selectedUserIdSet.has(user.id));
   const toggleVisibleSelection = (checked: boolean) => {
     if (isUsersBusy || (!canManageUsers && !canDeleteUsers)) return;
 
@@ -1780,8 +1788,13 @@ function UsersListView() {
                     />
                     Select visible
                   </label>
-                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                  <span
+                    className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground"
+                    data-testid="users-bulk-selection-summary"
+                  >
                     {selectedActionableUsers.length} selected
+                    {selectedVisibleActionableUsers.length !== selectedActionableUsers.length ? ` · ${selectedVisibleActionableUsers.length} visible` : ''}
+                    {hiddenSelectedUserCount > 0 ? ` · ${hiddenSelectedUserCount} outside this view` : ''}
                   </span>
                   {selectedUserIds.length > 0 && (
                     <Button
@@ -1790,6 +1803,7 @@ function UsersListView() {
                       size="sm"
                       disabled={isUsersBusy}
                       onClick={() => setSelectedUserIds([])}
+                      data-testid="users-bulk-clear-selection"
                     >
                       Clear
                     </Button>
@@ -2170,7 +2184,7 @@ function UsersListView() {
               <div>
                 <h2 id="users-bulk-delete-confirm-title" className="text-lg font-semibold text-foreground">Remove selected users?</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  This revokes admin access for {selectedActionableUsers.length} selected account{selectedActionableUsers.length === 1 ? '' : 's'}. Current-session users stay locked.
+                  {`This revokes admin access for ${selectedActionableUsers.length} selected account${selectedActionableUsers.length === 1 ? '' : 's'}${hiddenSelectedUserCount > 0 ? `, including ${hiddenSelectedUserCount} outside this filtered view` : ''}. Current-session users stay locked.`}
                 </p>
               </div>
             </div>

@@ -499,6 +499,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - This keeps site-wide publish, archive, and delete operations usable when an editorial library spans multiple post-library pages.
 - Source coverage is guarded by `apps/admin/scripts/blog-list-smoke.mjs`.
 
+### ✅ Users bulk selection summary
+- The users access table now derives selected accounts through a Set-backed selection model and shows actionable selected accounts plus visible/outside-view counts.
+- Bulk status and delete actions stay scoped to non-current selected users, and delete confirmation calls out selected accounts hidden by the active table view.
+- Source coverage is guarded by `apps/admin/scripts/users-smoke.mjs`.
+
 ### ✅ Product catalog bulk selection
 - The product catalog bulk selector now adds every loaded product matching the current catalog filters instead of reusing only the already-selected subset.
 - This keeps publish/draft/archive/delete/export actions reachable from an empty selection after filtering the catalog.

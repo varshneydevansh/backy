@@ -39,6 +39,15 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
   assert(detailSource.includes('title="No invite link generated"'), 'User detail invite empty state must keep the shared title visible');
   assert(detailSource.includes('title="No reset token generated"'), 'User detail reset empty state must keep the shared title visible');
   assert(detailSource.includes('title="No matching user activity"'), 'User detail activity empty state must keep the shared title visible');
+  assert(
+    source.includes('const selectedUserIdSet = useMemo') &&
+      source.includes('const selectedVisibleActionableUsers = useMemo') &&
+      source.includes('const hiddenSelectedUserCount = Math.max') &&
+      source.includes('data-testid="users-bulk-selection-summary"') &&
+      source.includes('data-testid="users-bulk-clear-selection"') &&
+      source.includes('outside this view'),
+    'Users bulk toolbar must summarize selected actionable users outside the current table view',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -1996,6 +2005,11 @@ const cleanup = async ({ client, childProcess, userDataDir, userId }) => {
 
 const main = async () => {
   assertUsersEmptyStatesUseSharedComponent();
+  if (process.env.BACKY_USERS_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'users-source' }));
+    return;
+  }
+
   let client;
   let childProcess;
   let userDataDir;
