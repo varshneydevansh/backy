@@ -7780,6 +7780,32 @@ try {
     assert(providerCertification?.commerceGate === 'npm run ci:commerce-provider-certification', `${url} missing Commerce provider certification gate`);
     assert(providerCertification?.localPreflight === 'npm run test:settings-provider-certification-preflight-contract', `${url} missing Settings provider local preflight`);
     assert(providerCertification?.releasePreflight === 'npm run test:release-certification-preflight-contract', `${url} missing Settings provider release preflight`);
+    assert(providerCertification?.operatorCommandTemplate, `${url} missing provider certification operatorCommandTemplate`);
+    assert(
+      providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') &&
+        providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER') &&
+        providerCertification.operatorCommandTemplate.command.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') &&
+        providerCertification.operatorCommandTemplate.command.includes('npm run ci:settings-provider-certification') &&
+        providerCertification.operatorCommandTemplate.command.includes('npm run ci:commerce-provider-certification'),
+      `${url} missing provider certification operator command aliases`,
+    );
+    assert(
+      Array.isArray(providerCertification.operatorCommandTemplate.storageProviderChoices) &&
+        providerCertification.operatorCommandTemplate.storageProviderChoices.includes('supabase') &&
+        providerCertification.operatorCommandTemplate.storageProviderChoices.includes('s3'),
+      `${url} missing provider certification storage provider choices`,
+    );
+    assert(
+      Array.isArray(providerCertification.operatorCommandTemplate.notificationProviderChoices) &&
+        providerCertification.operatorCommandTemplate.notificationProviderChoices.includes('resend') &&
+        providerCertification.operatorCommandTemplate.notificationProviderChoices.includes('smtp'),
+      `${url} missing provider certification notification provider choices`,
+    );
+    assert(
+      Array.isArray(providerCertification.operatorCommandTemplate.requiredInputAliases) &&
+        providerCertification.operatorCommandTemplate.requiredInputAliases.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
+      `${url} missing provider certification operator required aliases`,
+    );
     assert(
       typeof providerCertification?.secretHandling === 'string' &&
         providerCertification.secretHandling.includes('Provider credentials stay in deployment or CI environment variables'),

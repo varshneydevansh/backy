@@ -579,6 +579,199 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
   },
 ] as const;
 
+type SettingsCertificationStorageProvider = 'auto' | 'local' | 's3' | 'supabase';
+type SettingsCertificationNotificationProvider = 'auto' | 'webhook' | 'http-endpoint' | 'resend' | 'smtp' | 'local-outbox';
+
+type SettingsCertificationCommandOptions = {
+  certifyStorage: boolean;
+  storageProvider: SettingsCertificationStorageProvider;
+  certifyRotation: boolean;
+  certifyVercelSecrets: boolean;
+  vercelProjectId: string;
+  vercelTeamId: string;
+  certifyNotification: boolean;
+  notificationProvider: SettingsCertificationNotificationProvider;
+  certifyCommerce: boolean;
+  externalBaseUrl: string;
+};
+
+const SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS: Array<{
+  value: SettingsCertificationStorageProvider;
+  label: string;
+  description: string;
+}> = [
+  { value: 'auto', label: 'Auto detect', description: 'Use BACKY_STORAGE_PROVIDER/BACKY_MEDIA_STORAGE_PROVIDER.' },
+  { value: 'local', label: 'Local storage', description: 'Accept the local adapter for local certification.' },
+  { value: 's3', label: 'S3/R2 compatible', description: 'Require S3-compatible runtime credentials.' },
+  { value: 'supabase', label: 'Supabase storage', description: 'Require Supabase storage runtime credentials.' },
+];
+
+const SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS: Array<{
+  value: SettingsCertificationNotificationProvider;
+  label: string;
+  description: string;
+}> = [
+  { value: 'auto', label: 'Auto detect', description: 'Infer from the configured notification runtime.' },
+  { value: 'webhook', label: 'Webhook capture', description: 'Use the built-in capture server for delivery proof.' },
+  { value: 'http-endpoint', label: 'HTTP endpoint', description: 'Require an HTTP delivery endpoint alias.' },
+  { value: 'resend', label: 'Resend', description: 'Require Resend provider credentials.' },
+  { value: 'smtp', label: 'SMTP', description: 'Require SMTP host and auth aliases.' },
+  { value: 'local-outbox', label: 'Local outbox', description: 'Accept local outbox delivery readiness.' },
+];
+
+const DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS = {
+  certifyStorage: true,
+  storageProvider: 'auto',
+  certifyRotation: false,
+  certifyVercelSecrets: false,
+  vercelProjectId: '',
+  vercelTeamId: '',
+  certifyNotification: true,
+  notificationProvider: 'auto',
+  certifyCommerce: true,
+  externalBaseUrl: '',
+} satisfies SettingsCertificationCommandOptions;
+
+const uniqueTextValues = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
+
+const quoteShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
+const boolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
+
+const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOptions) => (
+  options.certifyStorage ||
+  options.certifyRotation ||
+  options.certifyVercelSecrets ||
+  options.certifyNotification
+);
+
+const buildSettingsProviderCertificationCommand = (options: SettingsCertificationCommandOptions): string => {
+  const settingsSelected = hasSettingsCertificationGroup(options);
+  const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/$/, '');
+  const envEntries: Array<[string, string]> = [
+    ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
+    ['BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(settingsSelected)],
+    ['BACKY_SETTINGS_CERTIFY_STORAGE', boolEnv(options.certifyStorage)],
+    ['BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER', options.storageProvider],
+    ['BACKY_SETTINGS_CERTIFY_ROTATION', boolEnv(options.certifyRotation)],
+    ['BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS', boolEnv(options.certifyVercelSecrets)],
+    ['BACKY_SETTINGS_CERTIFY_NOTIFICATION', boolEnv(options.certifyNotification)],
+    ['BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER', options.notificationProvider],
+    ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(options.certifyCommerce)],
+  ];
+
+  if (externalBaseUrl) {
+    envEntries.push(
+      ['BACKY_SETTINGS_CERTIFICATION_BASE_URL', externalBaseUrl],
+      ['BACKY_COMMERCE_CERTIFICATION_BASE_URL', externalBaseUrl],
+      ['BACKY_ADMIN_API_KEY', '<admin-api-key>'],
+    );
+  }
+
+  if (options.certifyVercelSecrets && options.vercelProjectId.trim()) {
+    envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID', options.vercelProjectId.trim()]);
+  }
+
+  if (options.certifyVercelSecrets && options.vercelTeamId.trim()) {
+    envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID', options.vercelTeamId.trim()]);
+  }
+
+  const commands = [
+    settingsSelected ? 'npm run ci:settings-provider-certification' : '',
+    options.certifyCommerce ? 'npm run ci:commerce-provider-certification' : '',
+  ].filter(Boolean);
+
+  return [
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteShellValue(value)}`),
+    '',
+    ...(commands.length ? commands : ['# Select at least one provider family before running certification.']),
+  ].join('\n');
+};
+
+const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCertificationCommandOptions): string[] => {
+  const aliases = [
+    'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+    hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+    options.certifyCommerce ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+  ];
+  const externalBaseUrl = options.externalBaseUrl.trim();
+
+  if (externalBaseUrl) {
+    aliases.push(
+      'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+      'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+      'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
+    );
+  }
+
+  if (options.certifyStorage || options.certifyRotation) {
+    aliases.push('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER');
+    if (options.storageProvider === 'auto' || options.storageProvider === 'supabase') {
+      aliases.push(
+        'BACKY_SUPABASE_URL or SUPABASE_URL',
+        'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+        'BACKY_SUPABASE_STORAGE_BUCKET or BACKY_STORAGE_BUCKET',
+      );
+    }
+    if (options.storageProvider === 'auto' || options.storageProvider === 's3') {
+      aliases.push(
+        'BACKY_S3_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID',
+        'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY',
+        'BACKY_S3_REGION or AWS_REGION',
+      );
+    }
+  }
+
+  if (options.certifyRotation) {
+    aliases.push('BACKY_*_NEXT_* replacement storage env');
+  }
+
+  if (options.certifyVercelSecrets) {
+    aliases.push(
+      'VERCEL_TOKEN or BACKY_VERCEL_TOKEN',
+      'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID',
+      'VERCEL_TEAM_ID or BACKY_VERCEL_TEAM_ID',
+    );
+  }
+
+  if (options.certifyNotification) {
+    aliases.push('BACKY_EMAIL_PROVIDER or BACKY_TRANSACTIONAL_EMAIL_PROVIDER');
+    if (options.notificationProvider === 'auto' || options.notificationProvider === 'http-endpoint') {
+      aliases.push('BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL');
+    }
+    if (options.notificationProvider === 'auto' || options.notificationProvider === 'resend') {
+      aliases.push('BACKY_RESEND_API_KEY or RESEND_API_KEY');
+    }
+    if (options.notificationProvider === 'auto' || options.notificationProvider === 'smtp') {
+      aliases.push(
+        'BACKY_SMTP_HOST or SMTP_HOST',
+        'BACKY_SMTP_USER or SMTP_USER',
+        'BACKY_SMTP_PASSWORD or SMTP_PASSWORD',
+      );
+    }
+  }
+
+  if (options.certifyCommerce) {
+    aliases.push(
+      'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+      'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
+      'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
+      'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+      'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+      'provider-specific catalog/payment/subscription credentials',
+    );
+  }
+
+  return uniqueTextValues(aliases);
+};
+
+const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
+  command: buildSettingsProviderCertificationCommand(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  storageProviderChoices: SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS.map((option) => option.value),
+  notificationProviderChoices: SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS.map((option) => option.value),
+  requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+};
+
 const FRONTEND_API_CAPABILITIES: FrontendApiCapability[] = [
   {
     area: 'Site routing and render payloads',
@@ -1647,6 +1840,7 @@ function SettingsPage() {
       notifications: integrations.notifications || null,
       commerce: integrations.commerce || null,
     },
+    operatorCommandTemplate: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
     groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
       family: group.family,
       providers: [...group.providers],
@@ -5676,6 +5870,27 @@ function InfrastructureSettings({
   const [isRunningStorageSecretManager, setIsRunningStorageSecretManager] = useState(false);
   const [storageSecretManagerError, setStorageSecretManagerError] = useState('');
   const [storageSecretManagerResult, setStorageSecretManagerResult] = useState<SettingsStorageSecretManagerResult | null>(null);
+  const [settingsCertificationCommandOptions, setSettingsCertificationCommandOptions] = useState<SettingsCertificationCommandOptions>(
+    DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS,
+  );
+  const [copiedCertificationCommand, setCopiedCertificationCommand] = useState(false);
+  const settingsCertificationCommand = useMemo(
+    () => buildSettingsProviderCertificationCommand(settingsCertificationCommandOptions),
+    [settingsCertificationCommandOptions],
+  );
+  const settingsCertificationRequiredAliases = useMemo(
+    () => buildSettingsProviderCertificationRequiredAliases(settingsCertificationCommandOptions),
+    [settingsCertificationCommandOptions],
+  );
+  const settingsCertificationHasSelectedFamily = hasSettingsCertificationGroup(settingsCertificationCommandOptions) ||
+    settingsCertificationCommandOptions.certifyCommerce;
+
+  const updateSettingsCertificationCommandOptions = (next: Partial<SettingsCertificationCommandOptions>) => {
+    setSettingsCertificationCommandOptions((current) => ({
+      ...current,
+      ...next,
+    }));
+  };
 
   const updateStorage = (next: Partial<StorageSettings>) => {
     if (storageDisabled) return;
@@ -5777,6 +5992,21 @@ function InfrastructureSettings({
       setCopiedEnvProfile('');
     }
   };
+
+  const copySettingsProviderCertificationCommand = async () => {
+    if (providerCertificationControlsDisabled || !settingsCertificationHasSelectedFamily) return;
+
+    try {
+      await navigator.clipboard.writeText(settingsCertificationCommand);
+      setCopiedCertificationCommand(true);
+      setTimeout(() => {
+        setCopiedCertificationCommand(false);
+      }, 1400);
+    } catch {
+      setCopiedCertificationCommand(false);
+    }
+  };
+
   const providerRuntimeEvidenceRows = useMemo(() => {
     const commerceReady = Boolean(
       runtimeCommerce?.webhookSecretConfigured ||
@@ -6288,6 +6518,175 @@ function InfrastructureSettings({
               </div>
               <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
                 Runtime evidence is non-secret and mirrors the Settings admin API providerCertification.runtimeEvidence block; credential values stay in server or CI environment variables.
+              </div>
+            </div>
+            <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-provider-certification-command-builder">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Certification command builder</div>
+                  <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                    Select the provider families for this run; the command keeps credentials in CI or shell environment variables and only writes non-secret aliases here.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={providerCertificationControlsDisabled || !settingsCertificationHasSelectedFamily}
+                  title={providerCertificationControlsTitle || (!settingsCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined)}
+                  onClick={() => void copySettingsProviderCertificationCommand()}
+                  iconStart={copiedCertificationCommand ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  data-testid="settings-provider-certification-command-copy-button"
+                >
+                  {copiedCertificationCommand ? 'Copied command' : 'Copy command'}
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                {([
+                  {
+                    key: 'certifyStorage',
+                    label: 'Storage provisioning',
+                    env: 'BACKY_SETTINGS_CERTIFY_STORAGE',
+                    testId: 'settings-provider-certification-storage-toggle',
+                  },
+                  {
+                    key: 'certifyRotation',
+                    label: 'Credential rotation',
+                    env: 'BACKY_SETTINGS_CERTIFY_ROTATION',
+                    testId: 'settings-provider-certification-rotation-toggle',
+                  },
+                  {
+                    key: 'certifyVercelSecrets',
+                    label: 'Vercel secrets',
+                    env: 'BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS',
+                    testId: 'settings-provider-certification-vercel-toggle',
+                  },
+                  {
+                    key: 'certifyNotification',
+                    label: 'Notifications',
+                    env: 'BACKY_SETTINGS_CERTIFY_NOTIFICATION',
+                    testId: 'settings-provider-certification-notification-toggle',
+                  },
+                  {
+                    key: 'certifyCommerce',
+                    label: 'Nested commerce',
+                    env: 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED',
+                    testId: 'settings-provider-certification-commerce-toggle',
+                  },
+                ] satisfies Array<{
+                  key: 'certifyStorage' | 'certifyRotation' | 'certifyVercelSecrets' | 'certifyNotification' | 'certifyCommerce';
+                  label: string;
+                  env: string;
+                  testId: string;
+                }>).map((item) => (
+                  <label key={item.key} className="flex min-h-[92px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={settingsCertificationCommandOptions[item.key]}
+                      disabled={providerCertificationControlsDisabled}
+                      onChange={(event) => updateSettingsCertificationCommandOptions({
+                        [item.key]: event.target.checked,
+                      } as Partial<SettingsCertificationCommandOptions>)}
+                      className="mt-1 size-4 rounded border-border"
+                      data-testid={item.testId}
+                    />
+                    <span>
+                      <span className="block font-semibold text-foreground">{item.label}</span>
+                      <span className="mt-1 block break-words font-mono text-[10px] leading-4 text-muted-foreground">{item.env}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+                <label className="text-xs">
+                  <span className="font-semibold text-foreground">Storage provider</span>
+                  <select
+                    value={settingsCertificationCommandOptions.storageProvider}
+                    disabled={providerCertificationControlsDisabled || (!settingsCertificationCommandOptions.certifyStorage && !settingsCertificationCommandOptions.certifyRotation)}
+                    onChange={(event) => updateSettingsCertificationCommandOptions({
+                      storageProvider: event.target.value as SettingsCertificationStorageProvider,
+                    })}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="settings-provider-certification-storage-provider-select"
+                  >
+                    {SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                    {SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS.find((option) => option.value === settingsCertificationCommandOptions.storageProvider)?.description}
+                  </span>
+                </label>
+                <label className="text-xs">
+                  <span className="font-semibold text-foreground">Notification provider</span>
+                  <select
+                    value={settingsCertificationCommandOptions.notificationProvider}
+                    disabled={providerCertificationControlsDisabled || !settingsCertificationCommandOptions.certifyNotification}
+                    onChange={(event) => updateSettingsCertificationCommandOptions({
+                      notificationProvider: event.target.value as SettingsCertificationNotificationProvider,
+                    })}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="settings-provider-certification-notification-provider-select"
+                  >
+                    {SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                    {SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS.find((option) => option.value === settingsCertificationCommandOptions.notificationProvider)?.description}
+                  </span>
+                </label>
+                <label className="text-xs">
+                  <span className="font-semibold text-foreground">External target URL</span>
+                  <input
+                    type="url"
+                    value={settingsCertificationCommandOptions.externalBaseUrl}
+                    disabled={providerCertificationControlsDisabled}
+                    onChange={(event) => updateSettingsCertificationCommandOptions({ externalBaseUrl: event.target.value })}
+                    placeholder="https://backy.example.com"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="settings-provider-certification-external-target-input"
+                  />
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">Blank starts a local disposable target.</span>
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  <label className="text-xs">
+                    <span className="font-semibold text-foreground">Vercel project id</span>
+                    <input
+                      type="text"
+                      value={settingsCertificationCommandOptions.vercelProjectId}
+                      disabled={providerCertificationControlsDisabled || !settingsCertificationCommandOptions.certifyVercelSecrets}
+                      onChange={(event) => updateSettingsCertificationCommandOptions({ vercelProjectId: event.target.value })}
+                      placeholder="prj_..."
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      data-testid="settings-provider-certification-vercel-project-input"
+                    />
+                  </label>
+                  <label className="text-xs">
+                    <span className="font-semibold text-foreground">Vercel team id</span>
+                    <input
+                      type="text"
+                      value={settingsCertificationCommandOptions.vercelTeamId}
+                      disabled={providerCertificationControlsDisabled || !settingsCertificationCommandOptions.certifyVercelSecrets}
+                      onChange={(event) => updateSettingsCertificationCommandOptions({ vercelTeamId: event.target.value })}
+                      placeholder="team_..."
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      data-testid="settings-provider-certification-vercel-team-input"
+                    />
+                  </label>
+                </div>
+              </div>
+              <pre className="mt-3 max-h-72 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="settings-provider-certification-command">
+                <code>{settingsCertificationCommand}</code>
+              </pre>
+              <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="settings-provider-certification-required-aliases">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required aliases for selected run</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {settingsCertificationRequiredAliases.map((alias) => (
+                    <span key={alias} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {alias}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">

@@ -112,8 +112,12 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-provider-runtime-evidence"',
     'data-testid="settings-provider-certification-download-button"',
     'data-testid="settings-provider-certification-copy-button"',
+    'data-testid="settings-provider-certification-command-builder"',
+    'data-testid="settings-provider-certification-command-copy-button"',
+    'data-testid="settings-provider-certification-required-aliases"',
     'providerCertification',
     'providerCertificationHandoff',
+    'operatorCommandTemplate',
     'providerRuntimeEvidenceRows',
     'providerRuntimeEvidenceReadyCount',
     'runtimeEvidence',
@@ -122,6 +126,11 @@ const assertSettingsSourceContracts = () => {
     'backy-settings-provider-certification-handoff.json',
     'Provider certification handoff downloaded.',
     'npm run test:settings-provider-certification-preflight-contract',
+    'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
+    'BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER',
+    'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED',
+    'npm run ci:settings-provider-certification',
+    'npm run ci:commerce-provider-certification',
     'external-live-provider-gate',
     'Runtime provider evidence',
     'Public API/CORS',
@@ -1723,6 +1732,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
 
   const infrastructureState = await evaluate(client, `(() => {
     const runbookText = document.querySelector('[data-testid="settings-release-certification-runbook"]')?.textContent || '';
+    const providerCommandBuilderText = document.querySelector('[data-testid="settings-provider-certification-command-builder"]')?.textContent || '';
+    const providerCommandText = document.querySelector('[data-testid="settings-provider-certification-command"]')?.textContent || '';
     return {
     search: window.location.search,
     text: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 500) || '',
@@ -1766,6 +1777,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasProviderRuntimeEvidenceCopy: document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Runtime provider evidence') && document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Public API/CORS') || false,
     hasProviderCertificationDownloadButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-download-button"]')),
     hasProviderCertificationCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-copy-button"]')),
+    hasProviderCertificationCommandBuilder: Boolean(document.querySelector('[data-testid="settings-provider-certification-command-builder"]')),
+    hasProviderCertificationCommandCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-command-copy-button"]')),
+    hasProviderCertificationCommandDefaults: providerCommandText.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_STORAGE') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION') && providerCommandText.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('npm run ci:settings-provider-certification') && providerCommandText.includes('npm run ci:commerce-provider-certification'),
+    hasProviderCertificationCommandAliases: providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER') && providerCommandBuilderText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
     hasProviderCertificationSettings: runbookText.includes('Provider certification matrix') && runbookText.includes('npm run ci:settings-provider-certification'),
     hasProviderCertificationCommerce: runbookText.includes('npm run ci:commerce-provider-certification') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
     hasProviderCertificationFamilies: runbookText.includes('Supabase/Postgres') && runbookText.includes('Vercel env secret manager') && runbookText.includes('Resend') && runbookText.includes('Magento'),
@@ -1832,6 +1847,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasProviderCertificationMatrix &&
       infrastructureState.hasProviderCertificationDownloadButton &&
       infrastructureState.hasProviderCertificationCopyButton &&
+      infrastructureState.hasProviderCertificationCommandBuilder &&
+      infrastructureState.hasProviderCertificationCommandCopyButton &&
+      infrastructureState.hasProviderCertificationCommandDefaults &&
+      infrastructureState.hasProviderCertificationCommandAliases &&
       infrastructureState.hasProviderCertificationSettings &&
       infrastructureState.hasProviderCertificationCommerce &&
       infrastructureState.hasProviderCertificationFamilies &&

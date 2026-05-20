@@ -108,6 +108,119 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
   },
 ] as const;
 
+type SettingsCertificationStorageProvider = 'auto' | 'local' | 's3' | 'supabase';
+type SettingsCertificationNotificationProvider = 'auto' | 'webhook' | 'http-endpoint' | 'resend' | 'smtp' | 'local-outbox';
+
+type SettingsCertificationCommandOptions = {
+  certifyStorage: boolean;
+  storageProvider: SettingsCertificationStorageProvider;
+  certifyRotation: boolean;
+  certifyVercelSecrets: boolean;
+  vercelProjectId: string;
+  vercelTeamId: string;
+  certifyNotification: boolean;
+  notificationProvider: SettingsCertificationNotificationProvider;
+  certifyCommerce: boolean;
+  externalBaseUrl: string;
+};
+
+const SETTINGS_CERTIFICATION_STORAGE_PROVIDER_CHOICES: SettingsCertificationStorageProvider[] = ['auto', 'local', 's3', 'supabase'];
+const SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_CHOICES: SettingsCertificationNotificationProvider[] = ['auto', 'webhook', 'http-endpoint', 'resend', 'smtp', 'local-outbox'];
+
+const DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS = {
+  certifyStorage: true,
+  storageProvider: 'auto',
+  certifyRotation: false,
+  certifyVercelSecrets: false,
+  vercelProjectId: '',
+  vercelTeamId: '',
+  certifyNotification: true,
+  notificationProvider: 'auto',
+  certifyCommerce: true,
+  externalBaseUrl: '',
+} satisfies SettingsCertificationCommandOptions;
+
+const quoteShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const boolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
+const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOptions) => (
+  options.certifyStorage ||
+  options.certifyRotation ||
+  options.certifyVercelSecrets ||
+  options.certifyNotification
+);
+
+const buildSettingsProviderCertificationCommand = (options: SettingsCertificationCommandOptions): string => {
+  const settingsSelected = hasSettingsCertificationGroup(options);
+  const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/$/, '');
+  const envEntries: Array<[string, string]> = [
+    ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
+    ['BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(settingsSelected)],
+    ['BACKY_SETTINGS_CERTIFY_STORAGE', boolEnv(options.certifyStorage)],
+    ['BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER', options.storageProvider],
+    ['BACKY_SETTINGS_CERTIFY_ROTATION', boolEnv(options.certifyRotation)],
+    ['BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS', boolEnv(options.certifyVercelSecrets)],
+    ['BACKY_SETTINGS_CERTIFY_NOTIFICATION', boolEnv(options.certifyNotification)],
+    ['BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER', options.notificationProvider],
+    ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(options.certifyCommerce)],
+  ];
+
+  if (externalBaseUrl) {
+    envEntries.push(
+      ['BACKY_SETTINGS_CERTIFICATION_BASE_URL', externalBaseUrl],
+      ['BACKY_COMMERCE_CERTIFICATION_BASE_URL', externalBaseUrl],
+      ['BACKY_ADMIN_API_KEY', '<admin-api-key>'],
+    );
+  }
+
+  if (options.certifyVercelSecrets && options.vercelProjectId.trim()) {
+    envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID', options.vercelProjectId.trim()]);
+  }
+
+  if (options.certifyVercelSecrets && options.vercelTeamId.trim()) {
+    envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID', options.vercelTeamId.trim()]);
+  }
+
+  const commands = [
+    settingsSelected ? 'npm run ci:settings-provider-certification' : '',
+    options.certifyCommerce ? 'npm run ci:commerce-provider-certification' : '',
+  ].filter(Boolean);
+
+  return [
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteShellValue(value)}`),
+    '',
+    ...(commands.length ? commands : ['# Select at least one provider family before running certification.']),
+  ].join('\n');
+};
+
+const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCertificationCommandOptions): string[] => Array.from(new Set([
+  'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+  hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+  options.certifyCommerce ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+  options.certifyStorage || options.certifyRotation ? 'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER' : '',
+  options.certifyStorage || options.certifyRotation ? 'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY' : '',
+  options.certifyStorage || options.certifyRotation ? 'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY' : '',
+  options.certifyRotation ? 'BACKY_*_NEXT_* replacement storage env' : '',
+  options.certifyVercelSecrets ? 'VERCEL_TOKEN or BACKY_VERCEL_TOKEN' : '',
+  options.certifyVercelSecrets ? 'VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID' : '',
+  options.certifyNotification ? 'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL' : '',
+  options.certifyNotification ? 'BACKY_RESEND_API_KEY or RESEND_API_KEY' : '',
+  options.certifyNotification ? 'BACKY_SMTP_HOST or SMTP_HOST' : '',
+  options.certifyNotification ? 'BACKY_SMTP_USER or SMTP_USER' : '',
+  options.certifyNotification ? 'BACKY_SMTP_PASSWORD or SMTP_PASSWORD' : '',
+  options.certifyCommerce ? 'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY' : '',
+  options.certifyCommerce ? 'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY' : '',
+  options.certifyCommerce ? 'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY' : '',
+  options.certifyCommerce ? 'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY' : '',
+  options.certifyCommerce ? 'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET' : '',
+].filter(Boolean)));
+
+const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
+  command: buildSettingsProviderCertificationCommand(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  storageProviderChoices: SETTINGS_CERTIFICATION_STORAGE_PROVIDER_CHOICES,
+  notificationProviderChoices: SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_CHOICES,
+  requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+};
+
 const uniqueStrings = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
 
 const missingInputsFromRuntime = (summary: unknown): string[] => {
@@ -181,6 +294,7 @@ const providerCertificationContract = (runtimeEvidence: ReturnType<typeof buildP
   releasePreflight: 'npm run test:release-certification-preflight-contract',
   secretHandling: 'Provider credentials stay in deployment or CI environment variables; admin settings responses only expose non-secret provider families, gate names, and readiness evidence.',
   runtimeEvidence,
+  operatorCommandTemplate: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
   groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
     family: group.family,
     providers: [...group.providers],

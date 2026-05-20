@@ -484,6 +484,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/products` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
   - `/orders` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
   - `/settings` now has source-guarded permission error states with alert semantics and user-access handoff actions.
+- `/settings` now has a source-guarded provider-certification command builder that turns selected storage, rotation, Vercel secret, notification, and nested-commerce families into copyable non-secret CI commands plus required alias reminders. `GET /api/admin/settings` exposes the same `providerCertification.operatorCommandTemplate`; the status remains Partial until the generated Settings/Commerce commands pass against live providers.
 - Better validation copy + inline field errors.
 - Confirm-delete patterns and action recovery paths.
 - Role-based UI filtering (hide unavailable actions instead of disabled-only).

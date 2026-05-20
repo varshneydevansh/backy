@@ -1161,6 +1161,12 @@ includesAll(
   adminContractSmokeSource,
   [
     "backy.settings-provider-certification-handoff.v1",
+    "operatorCommandTemplate",
+    "BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER",
+    "BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER",
+    "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED",
+    "npm run ci:settings-provider-certification",
+    "npm run ci:commerce-provider-certification",
     "providerCertificationRequiredInputs",
     "providerCertification.runtimeEvidence",
     "missingInputAliases",
@@ -1185,6 +1191,20 @@ includesAll(
     "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
   ],
   "Admin settings runtime provider certification handoff contract",
+);
+
+includesAll(
+  routeSource,
+  [
+    "operatorCommandTemplate",
+    "buildSettingsProviderCertificationCommand",
+    "BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER",
+    "BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER",
+    "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED",
+    "npm run ci:settings-provider-certification",
+    "npm run ci:commerce-provider-certification",
+  ],
+  "Admin settings provider certification command template contract",
 );
 
 includesAll(
