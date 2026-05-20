@@ -580,7 +580,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Member-account starter pages now seed explicit tablet/mobile responsive overrides for authenticated profile cards, preferences forms, update selectors, save CTAs, and protected resource cards so member dashboards remain readable and tappable across breakpoints.
   - Blank starter pages now seed explicit tablet/mobile responsive overrides for the default heading and intro copy so ad hoc pages begin with readable starter text across breakpoints.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
-  - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
+  - Section management operations now enforce content permissions, ownership transfer now uses the owner-only `settings.billing` permission, and `test:admin-rbac-coverage` now guards every non-auth admin API route for `requireAdminAccess` plus explicit permission-scoped access checks, with only documented self-permission/dynamic-handler exceptions.
 - ✅ Conflict-safe page saves
   - Page editor saves send `expectedUpdatedAt` through `PATCH /api/admin/sites/:siteId/pages/:pageId`.
   - Stale editor saves now return `PAGE_VERSION_CONFLICT` instead of overwriting a newer backend copy.

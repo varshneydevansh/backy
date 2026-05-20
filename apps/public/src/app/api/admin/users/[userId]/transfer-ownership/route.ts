@@ -33,7 +33,7 @@ export async function POST(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { roles: ['owner'] });
+  const access = await requireAdminAccess(request, requestId, { permission: 'settings.billing' });
   if (access instanceof NextResponse) {
     return access;
   }
