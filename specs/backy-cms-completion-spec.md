@@ -35,8 +35,8 @@ Current audit baseline: **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. The 
 - **Phase B:** in-progress completion.
   - Done: selection and interaction improvements, render stability, property panel upgrades.
   - Done: undo/redo completion, copy/duplicate/delete determinism, save/publish/reload persistence flow hardening, and read-only editor action gating.
-  - Latest close-out: duplicate placement is now deterministic sibling insertion; page save fallback uses editor canvas size instead of stale initial.
-  - Open: nested multi-select command stack cases and full revision graph integration.
+  - Latest close-out: duplicate placement is now deterministic sibling insertion; page save fallback uses editor canvas size instead of stale initial; nested paste now normalizes cross-parent placement inside selected containers/groups.
+  - Open: full revision graph integration and continued nested command-stack regression hardening.
   - In this pass: move/resize history commits now occur on interaction end for deterministic undo/redo while keeping live drags responsive.
   - Latest pass: read-only editor gating now blocks mutation actions in non-editor roles.
 - **Phase C:** complete for parity-grade comment moderation.
@@ -459,6 +459,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Multi-selection clipboard actions now derive availability from the active sibling scope, label single versus multi-layer actions correctly, and expose copy/duplicate/cut/paste/delete controls directly in the inspector.
 - Single selected layers now expose copy, duplicate, cut, paste, and delete directly in the inspector with the same shortcut and paste-target metadata as the toolbar, so nested component editing does not require leaving the properties panel for common layer operations.
 - Duplicate and copy/paste cloning now remaps root and nested element ids deterministically from the source ids with collision-safe `-copy` suffixes, and focused clipboard smoke verifies deterministic paste/redo/duplicate selection ids.
+- Cross-parent paste keeps clipboard source-scope metadata: pasting a root/sibling layer into a selected container or group starts the clone at a visible local inset, while pasting nested content back to the canvas root preserves its absolute visual position. `BACKY_EDITOR_NESTED_GROUP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers the selected-container paste target, normalized child coordinates, deterministic clone id, and persisted parent metadata.
 - Single and multi-layer inspectors now expose local hide/show and lock/unlock controls backed by the same selected-layer handlers as the toolbar, keeping common layer state changes available while editing properties.
 - Layer-order controls now expose bracket shortcut metadata in the toolbar and are available from both single and multi-layer inspector cards for send-to-back, send-backward, bring-forward, and bring-to-front workflows.
 - Keep right-pane rich-text selection, media/link sub-actions, and nested block confidence covered whenever related controls are changed.

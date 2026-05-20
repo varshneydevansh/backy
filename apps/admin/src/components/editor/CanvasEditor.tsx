@@ -151,9 +151,16 @@ type EditorHistoryEntry = {
   selectedId: string | null;
   selectedIds: string[];
 };
+type EditorClipboardItem = {
+  element: CanvasElement;
+  sourceParentId: string | null;
+  sourceAbsoluteOffset: { x: number; y: number } | null;
+};
 type CloneElementTreeOptions = {
   renameRoot?: boolean;
   siblingNames?: string[];
+  rootX?: number;
+  rootY?: number;
   usedElementIds: Set<string>;
   rootZIndex: number;
 };
@@ -1493,7 +1500,7 @@ export function CanvasEditor({
   const effectivePublishDisabledReason = publishDisabledReason || interactivePublishDisabledReason;
 
   // Clipboard State
-  const [clipboardElements, setClipboardElements] = useState<CanvasElement[]>([]);
+  const [clipboardElements, setClipboardElements] = useState<EditorClipboardItem[]>([]);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
@@ -2562,9 +2569,13 @@ export function CanvasEditor({
   const handleCopy = useCallback(() => {
     const entries = getSelectedSiblingEntries(elementsRef.current);
     if (entries.length > 0) {
-      setClipboardElements(entries.map((entry) => JSON.parse(JSON.stringify(entry.element)) as CanvasElement));
+      setClipboardElements(entries.map((entry) => ({
+        element: JSON.parse(JSON.stringify(entry.element)) as CanvasElement,
+        sourceParentId: entry.parentId,
+        sourceAbsoluteOffset: getElementAbsoluteOffset(elementsRef.current, entry.element.id),
+      })));
     }
-  }, [getSelectedSiblingEntries]);
+  }, [getElementAbsoluteOffset, getSelectedSiblingEntries]);
 
   const cloneElementTreeWithDeterministicIds = useCallback(
     (
@@ -2594,8 +2605,8 @@ export function CanvasEditor({
         }
 
         if (isRoot) {
-          nextNode.x = sourceElement.x + x;
-          nextNode.y = sourceElement.y + y;
+          nextNode.x = options.rootX ?? sourceElement.x + x;
+          nextNode.y = options.rootY ?? sourceElement.y + y;
           nextNode.zIndex = options.rootZIndex;
         }
 
@@ -2622,12 +2633,23 @@ export function CanvasEditor({
       const parentId = canNest ? selectedElement.id : null;
       const usedElementIds = collectCanvasElementIds(previousElements);
       const rootZIndex = Math.max(walkTreeMaxZ(previousElements), 0) + 1;
-      const pastedElements = clipboardElements.map((clipboardElement, index) => (
-        cloneElementTreeWithDeterministicIds(clipboardElement, 20, 20, parentId, {
+      const pastedElements = clipboardElements.map((clipboardItem, index) => {
+        const isCrossParentPaste = clipboardItem.sourceParentId !== parentId;
+        const rootPosition = parentId && isCrossParentPaste
+          ? { rootX: 20 + index * 20, rootY: 20 + index * 20 }
+          : !parentId && clipboardItem.sourceAbsoluteOffset
+            ? {
+              rootX: clipboardItem.sourceAbsoluteOffset.x + 20,
+              rootY: clipboardItem.sourceAbsoluteOffset.y + 20,
+            }
+            : {};
+
+        return cloneElementTreeWithDeterministicIds(clipboardItem.element, 20, 20, parentId, {
+          ...rootPosition,
           usedElementIds,
           rootZIndex: rootZIndex + index,
-        })
-      ));
+        });
+      });
       let nextElements = previousElements;
       let inserted = false;
 
@@ -4646,7 +4668,11 @@ export function CanvasEditor({
     const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
     if (entries.length === 0) return;
 
-    setClipboardElements(entries.map((entry) => JSON.parse(JSON.stringify(entry.element)) as CanvasElement));
+    setClipboardElements(entries.map((entry) => ({
+      element: JSON.parse(JSON.stringify(entry.element)) as CanvasElement,
+      sourceParentId: entry.parentId,
+      sourceAbsoluteOffset: getElementAbsoluteOffset(elements, entry.element.id),
+    })));
 
     let nextElements = elements;
     let parentSelection: string | null = entries[0]?.parentId ?? null;
@@ -4665,7 +4691,7 @@ export function CanvasEditor({
     setSelectedIds(parentSelection ? [parentSelection] : []);
     setSelectedId(parentSelection);
     updateElementsWithHistory(nextElements, parentSelection, parentSelection ? [parentSelection] : []);
-  }, [elements, getSelectedSiblingEntries, isCanvasMutationDisabled, updateElementsWithHistory]);
+  }, [elements, getElementAbsoluteOffset, getSelectedSiblingEntries, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   /**
    * Handle save

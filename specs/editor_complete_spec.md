@@ -343,6 +343,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Ctrl/Cmd+C copies selected unlocked sibling element trees into editor clipboard state.
 - Ctrl/Cmd+X cuts selected unlocked sibling element trees and keeps them available for paste.
 - Ctrl/Cmd+V pastes with deterministic collision-safe ids for root and nested children, 20px offset, nesting support for compatible selected parents, and history integration.
+- Cross-parent paste stores source scope metadata, normalizes root/sibling layers pasted into selected containers/groups to a visible local inset, and preserves nested child absolute position when pasted back to the canvas root.
 - Focused clipboard smoke verifies copy, paste, undo, redo, duplicate, cut, paste, and manual save.
 
 ### 21. Keyboard Shortcuts
@@ -373,6 +374,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Shell panel shortcut coverage verifies Components, Inspector, Layers, and Focus commands update live panel visibility and exit focus mode when a requested side panel needs to become visible.
 - Grouping shortcut coverage now verifies Ctrl/Cmd+G preserves child geometry, Ctrl/Cmd+Z restores the sibling multi-selection, Ctrl/Cmd+Shift+Z restores the grouped selection, and Ctrl/Cmd+Shift+G expands children back into the original sibling geometry.
 - Ungrouping now converts tablet/mobile child layout overrides from group-relative coordinates back into absolute canvas coordinates, so breakpoint-authored grouped layouts do not jump when expanded.
+- Nested group smoke now verifies root-to-container paste target metadata, deterministic clone id selection, normalized local child placement, save persistence, and parent metadata for pasted layers.
 - Focused smoke coverage: `BACKY_EDITOR_SHORTCUTS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 
 ### 22. Markdown-like Text Shortcuts

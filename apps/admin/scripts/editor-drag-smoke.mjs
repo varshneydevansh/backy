@@ -276,6 +276,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('const canCopySelected = selectedEntries.length > 0 && selectedEntriesShareParent') && source.includes('const canCutSelected = selectedEntriesShareParent') && source.includes('const canDuplicateSelected = canCutSelected'), 'Editor clipboard toolbar actions must derive availability from the selected sibling layer scope');
   assert(source.includes('data-testid="editor-copy-selection"') && source.includes('data-testid="editor-cut-selection"') && source.includes('data-testid="editor-duplicate-selection"') && source.includes('`Copy ${selectedLayerActionLabel}'), 'Editor toolbar clipboard actions must expose stable ids and multi-selection labels');
   assert(source.includes('aria-keyshortcuts="Control+C Meta+C"') && source.includes('aria-keyshortcuts="Control+X Meta+X"') && source.includes('aria-keyshortcuts="Control+V Meta+V"') && source.includes('aria-keyshortcuts="Control+D Meta+D"') && source.includes('aria-keyshortcuts="Delete Backspace"'), 'Editor clipboard and delete controls must expose keyboard shortcut metadata');
+  assert(source.includes('type EditorClipboardItem = {') && source.includes('sourceParentId: string | null') && source.includes('sourceAbsoluteOffset: { x: number; y: number } | null'), 'Editor clipboard must retain source scope metadata for cross-parent nested paste placement');
   assert(source.includes("const clipboardLayerLabel = clipboardElements.length === 1 ? 'layer' : 'layers'") && source.includes("const pasteTargetMode = canPasteIntoSelectedContainer ? 'selected-container' : 'canvas-root'") && source.includes('`Paste ${clipboardLayerLabel} into ${selectedElementLabel}`') && source.includes('data-paste-target={pasteTargetMode}') && source.includes('data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement?.id : undefined}'), 'Editor paste control must expose whether paste targets the selected container or canvas root');
   assert(source.includes('data-testid="editor-inspector-selection-actions"') && source.includes('data-testid="editor-inspector-copy-selection"') && source.includes('data-testid="editor-inspector-paste-selection"') && source.includes('data-testid="editor-inspector-delete-selection"'), 'Editor multi-selection inspector must expose copy, duplicate, cut, paste, and delete actions');
   assert(source.includes('data-testid="editor-inspector-single-selection-actions"') && source.includes('data-testid="editor-inspector-single-copy-selection"') && source.includes('data-testid="editor-inspector-single-paste-selection"') && source.includes('data-testid="editor-inspector-single-delete-selection"') && source.includes('data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement.id : undefined}'), 'Editor single-selection inspector must expose local clipboard, paste-target, and delete actions');
@@ -299,11 +300,15 @@ const assertCanvasEditorShortcutSource = () => {
     source.includes('const collectCanvasElementIds = (') &&
       source.includes('const getNextDeterministicCloneId = (sourceId: string, usedElementIds: Set<string>): string') &&
       source.includes('usedElementIds: Set<string>') &&
+      source.includes('rootX?: number') &&
+      source.includes('const isCrossParentPaste = clipboardItem.sourceParentId !== parentId') &&
+      source.includes('rootX: 20 + index * 20') &&
+      source.includes('rootX: clipboardItem.sourceAbsoluteOffset.x + 20') &&
       source.includes('collectCanvasElementIds(previousElements)') &&
       source.includes('collectCanvasElementIds(currentElements)') &&
       deterministicCloneSource.includes('getNextDeterministicCloneId(clone.id, options.usedElementIds)') &&
       !deterministicCloneSource.includes('generateId()'),
-    'Editor duplicate and paste cloning must remap root and nested element ids deterministically from source ids without timestamp/random generation',
+    'Editor duplicate and paste cloning must remap ids deterministically and normalize cross-parent paste placement without timestamp/random generation',
   );
   assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
   assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
@@ -4278,8 +4283,11 @@ const readClipboardEditingState = async (client, label) => {
             exists: true,
             disabled: button.disabled,
             title: button.getAttribute('title') || '',
+            pasteTarget: button.getAttribute('data-paste-target') || '',
+            pasteTargetId: button.getAttribute('data-paste-target-id') || '',
+            clipboardCount: Number(button.getAttribute('data-clipboard-count') || 0),
           }
-        : { exists: false, disabled: null, title: '' };
+        : { exists: false, disabled: null, title: '', pasteTarget: '', pasteTargetId: '', clipboardCount: 0 };
     };
     const selectedLayerIds = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
       .map((node) => node.getAttribute('data-layer-id'))
@@ -10258,6 +10266,68 @@ const waitForPersistedNestedGroup = async (pageId, parentId, childIds) => {
   throw new Error(`Persisted nested group did not preserve parent metadata: ${JSON.stringify(lastState)}`);
 };
 
+const testNestedPasteTargetNormalization = async (client, pageId, parentId, sourceId) => {
+  await selectLayerIds(client, [sourceId]);
+  await pressKey(client, 'c', { ctrlKey: true });
+  const before = await readClipboardEditingState(client, 'before nested paste target');
+  const expectedPastedId = nextDeterministicCloneId(sourceId, before.elementIds);
+
+  await selectLayerIds(client, [parentId]);
+  const targetState = await readClipboardEditingState(client, 'nested paste target selected');
+  assert(
+    targetState.paste.disabled === false &&
+      targetState.paste.pasteTarget === 'selected-container' &&
+      targetState.paste.pasteTargetId === parentId,
+    `Paste should target selected parent ${parentId}: ${JSON.stringify(targetState)}`,
+  );
+
+  await pressKey(client, 'v', { ctrlKey: true });
+  await sleep(250);
+  const afterPaste = await readClipboardEditingState(client, 'after nested paste target');
+  assert(
+    afterPaste.elementIds.includes(expectedPastedId) &&
+      clipboardStateSelectsId(afterPaste, expectedPastedId),
+    `Nested paste did not create/select deterministic child clone ${expectedPastedId}: ${JSON.stringify(afterPaste)}`,
+  );
+
+  const pastedState = await readEditorElementState(client, [expectedPastedId]);
+  assert(
+    pastedState[expectedPastedId].x >= 15 &&
+      pastedState[expectedPastedId].x <= 45 &&
+      pastedState[expectedPastedId].y >= 15 &&
+      pastedState[expectedPastedId].y <= 45,
+    `Cross-parent paste should normalize local child coordinates near the selected container origin: ${JSON.stringify(pastedState)}`,
+  );
+
+  await clickSave(client);
+  await waitForEditorMutationReady(client, 'after nested paste target save');
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const parent = findCanvasElement(payload.data?.page?.content?.elements || [], parentId);
+  const pasted = findCanvasElement(parent?.children || [], expectedPastedId);
+  assert(
+    pasted?.parentId === parentId &&
+      pasted.x >= 15 &&
+      pasted.x <= 45 &&
+      pasted.y >= 15 &&
+      pasted.y <= 45,
+    `Persisted nested paste did not keep ${expectedPastedId} as a normalized child of ${parentId}: ${JSON.stringify({ pasted, parentId })}`,
+  );
+
+  return {
+    parentId,
+    sourceId,
+    expectedPastedId,
+    targetState,
+    pastedState,
+    persisted: {
+      id: pasted.id,
+      parentId: pasted.parentId,
+      x: pasted.x,
+      y: pasted.y,
+    },
+  };
+};
+
 const testNestedLayerGroupingPersistence = async (client, pageId) => {
   const parentId = 'smoke-box';
   const childIds = ['smoke-child-button', 'smoke-child-link'];
@@ -10309,6 +10379,9 @@ const testNestedLayerGroupingPersistence = async (client, pageId) => {
   await sleep(250);
   const after = await readEditorElementState(client, childIds);
   assertElementState(after, before, 'nested group/ungroup roundtrip');
+  const nestedPaste = NESTED_GROUP_SMOKE
+    ? await testNestedPasteTargetNormalization(client, pageId, parentId, 'smoke-heading')
+    : null;
 
   return {
     parentId,
@@ -10323,6 +10396,7 @@ const testNestedLayerGroupingPersistence = async (client, pageId) => {
     },
     before,
     after,
+    nestedPaste,
   };
 };
 
