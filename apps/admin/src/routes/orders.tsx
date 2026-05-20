@@ -715,6 +715,28 @@ const ORDER_PROVIDER_CERTIFICATION_GROUPS = [
   },
 ] as const;
 
+const ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE = 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification';
+const ORDER_PROVIDER_CERTIFICATION_PREFLIGHT_GATES = [
+  'npm run test:commerce-provider-certification-preflight-contract',
+  'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification',
+] as const;
+const ORDER_PROVIDER_CERTIFICATION_SELECTORS = [
+  'BACKY_COMMERCE_CERTIFY_PAYMENT=1 with BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
+  'BACKY_COMMERCE_CERTIFY_TAX=1 with BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
+  'BACKY_COMMERCE_CERTIFY_SHIPPING=1 with BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+  'BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS=1 with BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER',
+  'BACKY_COMMERCE_CERTIFY_WEBHOOKS=1 with BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
+] as const;
+const ORDER_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS = [
+  'commerce provider preflight output',
+  'release certification doctor output',
+  'safe local/external target summary',
+  'selected provider-family flags',
+  'runtime commerce diagnostic output',
+  'credentialed order execution check output',
+  'non-secret workflow summary without provider secrets',
+] as const;
+
 const EMPTY_ORDER_FORM: OrderFormState = {
   orderNumber: '',
   customerName: '',
@@ -1272,6 +1294,10 @@ function OrdersRoute() {
     },
     localMockGate: 'ci:commerce-provider-smoke',
     liveCertificationGate: 'ci:commerce-provider-certification',
+    operatorGate: ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+    preflightGates: [...ORDER_PROVIDER_CERTIFICATION_PREFLIGHT_GATES],
+    providerSelectors: [...ORDER_PROVIDER_CERTIFICATION_SELECTORS],
+    evidenceExpectations: [...ORDER_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS],
     secretHandling: 'Provider credentials stay in server environment/configuration; order records and handoff manifests only expose non-secret readiness evidence.',
     orderEvidence: {
       apiReady: ordersApiReady,
@@ -2809,6 +2835,21 @@ function OrdersRoute() {
     }
   };
 
+  const copyProviderCertificationOperatorGate = async () => {
+    if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(providerCertificationSummary.operatorGate);
+      setNotice('Orders provider certification CI command copied.');
+    } catch {
+      setNotice(providerCertificationSummary.operatorGate);
+    }
+  };
+
   const downloadOrderHandoff = () => {
     if (isOrdersBusy) return;
     if (!canExportOrders) {
@@ -3401,6 +3442,17 @@ function OrdersRoute() {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => void copyProviderCertificationOperatorGate()}
+                        disabled={isOrdersAccessBusy || !canExportOrders}
+                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="orders-provider-certification-command-copy-button"
+                      >
+                        Copy CI command
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={downloadProviderCertificationHandoff}
                         disabled={isOrdersAccessBusy || !canExportOrders}
                         title={!canExportOrders ? exportPermissionTitle : undefined}
@@ -3430,6 +3482,38 @@ function OrdersRoute() {
                     <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
                       <div className="font-medium text-foreground">Secrets</div>
                       <div className="mt-1 text-muted-foreground">Server env only</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-certification-runbook">
+                    <div className="font-medium text-foreground">Live provider runbook</div>
+                    <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+                      {providerCertificationSummary.operatorGate}
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preflight gates</div>
+                        <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                          {providerCertificationSummary.preflightGates.map((gate) => (
+                            <li key={gate} className="font-mono">{gate}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Provider selectors</div>
+                        <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                          {providerCertificationSummary.providerSelectors.map((selector) => (
+                            <li key={selector} className="font-mono">{selector}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence to attach</div>
+                        <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                          {providerCertificationSummary.evidenceExpectations.map((expectation) => (
+                            <li key={expectation}>{expectation}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
                   <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-runtime-evidence">

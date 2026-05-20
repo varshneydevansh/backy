@@ -178,7 +178,8 @@ Legend:
 
 #### `/orders` (`orders.tsx`)
 - ✅ Orders workspace bulk workflow applies paid/processing/fulfilled/cancelled actions to every selected loaded order, including selections outside the active filtered view.
-- ⚠️ Live payment, refund, shipping, fulfillment, tracking, and reconciliation provider certification remains required before production certification.
+- ✅ Orders live-provider handoff now exposes the required-mode Commerce certification operator gate, preflight/doctor commands, provider-family selectors, and evidence expectations in the UI and export manifest.
+- ⚠️ Live payment, refund, shipping, fulfillment, tracking, and reconciliation provider certification still remains required before production certification.
 
 #### `/contacts` (`contacts.tsx`)
 - ✅ Contacts workspace covers lead filtering, lifecycle, import/export, duplicate merge, promotion, sync, consent/retention, segmentation, analytics, retryable permission recovery, and visible/outside-view bulk selection summaries.

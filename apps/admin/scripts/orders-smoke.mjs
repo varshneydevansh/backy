@@ -161,6 +161,7 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(
     source.includes('data-testid="orders-provider-certification-download-button"') &&
       source.includes('data-testid="orders-provider-certification-copy-button"') &&
+      source.includes('data-testid="orders-provider-certification-command-copy-button"') &&
       source.includes('providerCertificationHandoffText') &&
       source.includes('orderEvidence') &&
       source.includes('endpointEvidence') &&
@@ -175,6 +176,11 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes("requiredFor: 'live-commerce-provider-launch'") &&
       source.includes('ci:commerce-provider-smoke') &&
       source.includes('ci:commerce-provider-certification') &&
+      source.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification') &&
+      source.includes('npm run test:commerce-provider-certification-preflight-contract') &&
+      source.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification') &&
+      source.includes('data-testid="orders-provider-runtime-evidence"') &&
+      source.includes('data-testid="orders-provider-certification-runbook"') &&
       source.includes('requiredInputs'),
     'Orders handoff manifest must expose mock and live provider certification gates',
   );
@@ -197,6 +203,12 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
     'BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL',
     'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
     'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
+    'BACKY_COMMERCE_CERTIFY_PAYMENT=1 with BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_TAX=1 with BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_SHIPPING=1 with BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS=1 with BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_WEBHOOKS=1 with BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
+    'credentialed order execution check output',
     'Required inputs',
   ]) {
     assert(source.includes(providerLabel), `Orders certification handoff must name ${providerLabel}`);
@@ -2009,7 +2021,11 @@ const assertOrdersLayout = async (client) => {
       providerCertificationExport: Boolean(document.querySelector('[data-testid="orders-provider-certification"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-command-copy-button"]')) &&
+        Boolean(document.querySelector('[data-testid="orders-provider-certification-runbook"]')) &&
         document.body?.innerText?.includes('Live provider certification') &&
+        document.body?.innerText?.includes('Copy CI command') &&
+        document.body?.innerText?.includes('Live provider runbook') &&
         document.body?.innerText?.includes('Download provider JSON'),
       cronReadiness: Boolean(document.querySelector('[data-testid="orders-cron-readiness"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
