@@ -233,6 +233,13 @@ const assertCanvasEditorShortcutSource = () => {
   const componentLibrarySource = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
   const activeEditorSource = fs.readFileSync(new URL('../src/components/editor/ActiveEditorContext.tsx', import.meta.url), 'utf8');
   const richTextFormattingSource = fs.readFileSync(new URL('../src/components/editor/RichTextFormatting.tsx', import.meta.url), 'utf8');
+  const deterministicCloneStart = source.indexOf('const cloneElementTreeWithDeterministicIds');
+  const deterministicCloneEnd = deterministicCloneStart >= 0
+    ? source.indexOf('/**\n   * Paste', deterministicCloneStart)
+    : -1;
+  const deterministicCloneSource = deterministicCloneStart >= 0 && deterministicCloneEnd > deterministicCloneStart
+    ? source.slice(deterministicCloneStart, deterministicCloneEnd)
+    : '';
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
   assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
@@ -287,7 +294,17 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-inspector-layer-order-controls"') && source.includes('data-testid="editor-inspector-send-to-back"') && source.includes('data-testid="editor-inspector-bring-to-front"'), 'Editor multi-selection inspector must expose local layer-order controls');
   assert(source.includes('data-testid="editor-inspector-single-layer-order-controls"') && source.includes('data-testid="editor-inspector-single-send-backward"') && source.includes('data-testid="editor-inspector-single-bring-forward"'), 'Editor single-selection inspector must expose local layer-order controls');
   assert(source.includes('const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1') && source.includes('const duplicatedIds: string[] = [];'), 'Editor layer row duplicate/delete actions must support selected multi-layer actions');
-  assert(source.includes('const getUniqueDuplicateLayerName') && source.includes('siblingNames?: string[]') && source.includes('`${stem} Copy ${suffix}`') && source.includes('{ renameRoot: true, siblingNames }'), 'Editor duplicate actions must distinguish repeated copied custom layer names');
+  assert(source.includes('const getUniqueDuplicateLayerName') && source.includes('siblingNames?: string[]') && source.includes('`${stem} Copy ${suffix}`') && source.includes('getUniqueDuplicateLayerName(clone.name, options.siblingNames || [])') && source.includes('renameRoot: true') && source.includes('siblingNames,'), 'Editor duplicate actions must distinguish repeated copied custom layer names');
+  assert(
+    source.includes('const collectCanvasElementIds = (') &&
+      source.includes('const getNextDeterministicCloneId = (sourceId: string, usedElementIds: Set<string>): string') &&
+      source.includes('usedElementIds: Set<string>') &&
+      source.includes('collectCanvasElementIds(previousElements)') &&
+      source.includes('collectCanvasElementIds(currentElements)') &&
+      deterministicCloneSource.includes('getNextDeterministicCloneId(clone.id, options.usedElementIds)') &&
+      !deterministicCloneSource.includes('generateId()'),
+    'Editor duplicate and paste cloning must remap root and nested element ids deterministically from source ids without timestamp/random generation',
+  );
   assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
   assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
@@ -4292,6 +4309,36 @@ const waitForClipboardElementCount = async (client, expectedCount, label) => {
   throw new Error(`${label} did not reach ${expectedCount} unique elements: ${JSON.stringify(lastState)}`);
 };
 
+const normalizeDeterministicCloneIdSeed = (sourceId) => {
+  const normalized = String(sourceId || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized || 'element';
+};
+
+const nextDeterministicCloneId = (sourceId, existingIds) => {
+  const usedIds = new Set(existingIds.filter(Boolean));
+  const base = `${normalizeDeterministicCloneIdSeed(sourceId)}-copy`;
+  let candidate = base;
+  let suffix = 2;
+
+  while (usedIds.has(candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+};
+
+const clipboardStateSelectsId = (state, elementId) => (
+  state.selectedLayerIds.includes(elementId) ||
+  state.selectedText.includes(elementId) ||
+  state.multiSelectedText.includes(elementId)
+);
+
 const testClipboardEditingControls = async (client, elementId) => {
   await selectLayerById(client, elementId);
   await blurActiveElement(client);
@@ -4308,9 +4355,14 @@ const testClipboardEditingControls = async (client, elementId) => {
 
   await pressKey(client, 'v', { ctrlKey: true });
   const afterPaste = await readClipboardEditingState(client, 'after paste');
+  const expectedPastedId = nextDeterministicCloneId(elementId, before.elementIds);
   assert(
     afterPaste.elementCount === before.elementCount + 1,
     `Paste should add one canvas element: before ${JSON.stringify(before)}, after ${JSON.stringify(afterPaste)}`,
+  );
+  assert(
+    clipboardStateSelectsId(afterPaste, expectedPastedId),
+    `Paste should select deterministic clone id ${expectedPastedId}: ${JSON.stringify(afterPaste)}`,
   );
 
   await waitForEditorMutationReady(client, 'before clipboard paste undo');
@@ -4328,13 +4380,23 @@ const testClipboardEditingControls = async (client, elementId) => {
   await clickEnabledButtonByAriaLabel(client, 'Redo');
   await waitForEditorMutationReady(client, 'after clipboard paste redo');
   const afterRedoPaste = await waitForClipboardElementCount(client, before.elementCount + 1, 'after paste redo');
+  assert(
+    clipboardStateSelectsId(afterRedoPaste, expectedPastedId),
+    `Redo should restore deterministic pasted id ${expectedPastedId}: ${JSON.stringify(afterRedoPaste)}`,
+  );
 
   await blurActiveElement(client);
   await pressKey(client, 'd', { ctrlKey: true });
   const afterDuplicate = await readClipboardEditingState(client, 'after duplicate');
+  const duplicateSourceId = afterRedoPaste.selectedLayerIds[0] || expectedPastedId;
+  const expectedDuplicateId = nextDeterministicCloneId(duplicateSourceId, afterRedoPaste.elementIds);
   assert(
     afterDuplicate.elementCount === before.elementCount + 2,
     `Duplicate should add one additional canvas element: ${JSON.stringify(afterDuplicate)}`,
+  );
+  assert(
+    clipboardStateSelectsId(afterDuplicate, expectedDuplicateId),
+    `Duplicate should select deterministic clone id ${expectedDuplicateId}: ${JSON.stringify(afterDuplicate)}`,
   );
 
   await pressKey(client, 'x', { ctrlKey: true });

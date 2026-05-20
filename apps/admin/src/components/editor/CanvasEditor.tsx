@@ -151,6 +151,12 @@ type EditorHistoryEntry = {
   selectedId: string | null;
   selectedIds: string[];
 };
+type CloneElementTreeOptions = {
+  renameRoot?: boolean;
+  siblingNames?: string[];
+  usedElementIds: Set<string>;
+  rootZIndex: number;
+};
 
 const getUniqueDuplicateLayerName = (name: string, siblingNames: string[]): string => {
   const rootName = name.trim();
@@ -168,6 +174,44 @@ const getUniqueDuplicateLayerName = (name: string, siblingNames: string[]): stri
     suffix += 1;
   }
 
+  return candidate;
+};
+
+const normalizeCloneIdSeed = (sourceId: string): string => {
+  const normalized = sourceId
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized || 'element';
+};
+
+const collectCanvasElementIds = (
+  nodes: CanvasElement[],
+  ids: Set<string> = new Set<string>(),
+): Set<string> => {
+  nodes.forEach((node) => {
+    ids.add(node.id);
+    if (node.children?.length) {
+      collectCanvasElementIds(node.children, ids);
+    }
+  });
+
+  return ids;
+};
+
+const getNextDeterministicCloneId = (sourceId: string, usedElementIds: Set<string>): string => {
+  const base = `${normalizeCloneIdSeed(sourceId)}-copy`;
+  let candidate = base;
+  let suffix = 2;
+
+  while (usedElementIds.has(candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  usedElementIds.add(candidate);
   return candidate;
 };
 
@@ -2483,18 +2527,17 @@ export function CanvasEditor({
     }
   }, [getSelectedSiblingEntries]);
 
-  const cloneElementTreeWithFreshIds = useCallback(
+  const cloneElementTreeWithDeterministicIds = useCallback(
     (
       sourceElement: CanvasElement,
       x = 20,
       y = 20,
       parentId: string | null = null,
-      options: { renameRoot?: boolean; siblingNames?: string[] } = {},
+      options: CloneElementTreeOptions,
     ): CanvasElement => {
-      const highestZ = Math.max(walkTreeMaxZ(elements), 0);
       const cloneNode = (node: CanvasElement, nextParentId: string | null, isRoot = false): CanvasElement => {
         const clone = JSON.parse(JSON.stringify(node)) as CanvasElement;
-        const nextId = generateId();
+        const nextId = getNextDeterministicCloneId(clone.id, options.usedElementIds);
         const rootCopyName = isRoot && options.renameRoot && clone.name
           ? getUniqueDuplicateLayerName(clone.name, options.siblingNames || [])
           : clone.name;
@@ -2514,7 +2557,7 @@ export function CanvasEditor({
         if (isRoot) {
           nextNode.x = sourceElement.x + x;
           nextNode.y = sourceElement.y + y;
-          nextNode.zIndex = highestZ + 1;
+          nextNode.zIndex = options.rootZIndex;
         }
 
         return nextNode;
@@ -2522,7 +2565,7 @@ export function CanvasEditor({
 
       return cloneNode(sourceElement, parentId, true);
     },
-    [elements]
+    []
   );
 
   /**
@@ -2538,8 +2581,13 @@ export function CanvasEditor({
       const selectedElement = selectedId ? findElementById(previousElements, selectedId) : null;
       const canNest = selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type);
       const parentId = canNest ? selectedElement.id : null;
-      const pastedElements = clipboardElements.map((clipboardElement) => (
-        cloneElementTreeWithFreshIds(clipboardElement, 20, 20, parentId)
+      const usedElementIds = collectCanvasElementIds(previousElements);
+      const rootZIndex = Math.max(walkTreeMaxZ(previousElements), 0) + 1;
+      const pastedElements = clipboardElements.map((clipboardElement, index) => (
+        cloneElementTreeWithDeterministicIds(clipboardElement, 20, 20, parentId, {
+          usedElementIds,
+          rootZIndex: rootZIndex + index,
+        })
       ));
       let nextElements = previousElements;
       let inserted = false;
@@ -2581,7 +2629,7 @@ export function CanvasEditor({
   }, [
     addToHistory,
     clipboardElements,
-    cloneElementTreeWithFreshIds,
+    cloneElementTreeWithDeterministicIds,
     findElementById,
     isCanvasMutationDisabled,
     markChanges,
@@ -2597,6 +2645,8 @@ export function CanvasEditor({
 
     let nextElements = currentElements;
     const duplicatedIds: string[] = [];
+    const usedElementIds = collectCanvasElementIds(currentElements);
+    const rootZIndex = Math.max(walkTreeMaxZ(currentElements), 0) + 1;
     for (const entry of entries) {
       const siblingNames = (entry.parentId
         ? findElementEntry(nextElements, entry.parentId)?.element.children || []
@@ -2604,7 +2654,12 @@ export function CanvasEditor({
       )
         .map((element) => element.name)
         .filter((name): name is string => typeof name === 'string');
-      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId, { renameRoot: true, siblingNames });
+      const duplicate = cloneElementTreeWithDeterministicIds(entry.element, 20, 20, entry.parentId, {
+        renameRoot: true,
+        siblingNames,
+        usedElementIds,
+        rootZIndex: rootZIndex + duplicatedIds.length,
+      });
       const duplicated = insertElementAsSibling(nextElements, entry.element.id, duplicate);
       if (!duplicated.updated) continue;
 
@@ -2617,7 +2672,7 @@ export function CanvasEditor({
     setSelectedIds(duplicatedIds);
     setSelectedId(duplicatedIds[0] ?? null);
     updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null, duplicatedIds);
-  }, [cloneElementTreeWithFreshIds, findElementEntry, getSelectedSiblingEntries, isCanvasMutationDisabled, updateElementsWithHistory]);
+  }, [cloneElementTreeWithDeterministicIds, findElementEntry, getSelectedSiblingEntries, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   const handleZOrderChange = useCallback((action: CanvasZOrderAction) => {
     if (isCanvasMutationDisabled) return;
@@ -3087,6 +3142,8 @@ export function CanvasEditor({
 
     let nextElements = currentElements;
     const duplicatedIds: string[] = [];
+    const usedElementIds = collectCanvasElementIds(currentElements);
+    const rootZIndex = Math.max(walkTreeMaxZ(currentElements), 0) + 1;
     for (const entry of entries) {
       const siblingNames = (entry.parentId
         ? findElementEntry(nextElements, entry.parentId)?.element.children || []
@@ -3094,7 +3151,12 @@ export function CanvasEditor({
       )
         .map((element) => element.name)
         .filter((name): name is string => typeof name === 'string');
-      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId, { renameRoot: true, siblingNames });
+      const duplicate = cloneElementTreeWithDeterministicIds(entry.element, 20, 20, entry.parentId, {
+        renameRoot: true,
+        siblingNames,
+        usedElementIds,
+        rootZIndex: rootZIndex + duplicatedIds.length,
+      });
       const duplicated = insertElementAsSibling(nextElements, entry.element.id, duplicate);
       if (!duplicated.updated) continue;
 
@@ -3108,7 +3170,7 @@ export function CanvasEditor({
     setSelectedIds(duplicatedIds);
     updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null, duplicatedIds);
   }, [
-    cloneElementTreeWithFreshIds,
+    cloneElementTreeWithDeterministicIds,
     findElementEntry,
     getSelectedSiblingEntries,
     isCanvasMutationDisabled,

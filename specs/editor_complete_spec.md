@@ -239,7 +239,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ### 14. Duplicate Element
 **Current State:** ✅ Working
 - Duplicate toolbar action and Ctrl/Cmd+D duplicate selected unlocked sibling elements.
-- Duplicates receive fresh ids, are offset by 20px, and become the active selection.
+- Duplicates receive deterministic collision-safe ids derived from the copied source ids, are offset by 20px, and become the active selection.
 - Duplicating a custom-named layer appends a unique `Copy`/`Copy 2` suffix to the duplicated root name so the layer tree stays distinguishable.
 - Clipboard smoke covers duplicate after copy/paste/redo sequencing.
 
@@ -342,7 +342,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ✅ Working
 - Ctrl/Cmd+C copies selected unlocked sibling element trees into editor clipboard state.
 - Ctrl/Cmd+X cuts selected unlocked sibling element trees and keeps them available for paste.
-- Ctrl/Cmd+V pastes with fresh ids, 20px offset, nesting support for compatible selected parents, and history integration.
+- Ctrl/Cmd+V pastes with deterministic collision-safe ids for root and nested children, 20px offset, nesting support for compatible selected parents, and history integration.
 - Focused clipboard smoke verifies copy, paste, undo, redo, duplicate, cut, paste, and manual save.
 
 ### 21. Keyboard Shortcuts
