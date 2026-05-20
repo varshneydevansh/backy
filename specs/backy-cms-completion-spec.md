@@ -444,6 +444,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Nested component authoring now includes direct child-layer scope selection through the toolbar, inspector, and Shift+Cmd/Ctrl+A shortcut so container/group children can be selected for grouping, alignment, duplication, and delete flows without repeated single-child drilling.
 - Multi-selected unlocked groups in the same layer scope can now be ungrouped together from the toolbar, inspector, or Shift+Cmd/Ctrl+G command, preserving child geometry and selecting the expanded children afterward.
 - Multi-selected child layers now keep a common-parent command in the inspector and Shift+Enter shortcut path, so nested authoring can move from selected children back to the containing group without clearing selection state manually.
+- Clipboard and delete controls now expose shortcut metadata for copy, cut, paste, duplicate, and delete, and the paste control advertises whether the current paste will target the selected container/group or the canvas root.
 - Multi-selection clipboard actions now derive availability from the active sibling scope, label single versus multi-layer actions correctly, and expose copy/duplicate/cut/delete controls directly in the inspector.
 - Keep right-pane rich-text selection, media/link sub-actions, and nested block confidence covered whenever related controls are changed.
 

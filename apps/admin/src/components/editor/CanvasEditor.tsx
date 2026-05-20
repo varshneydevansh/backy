@@ -3408,6 +3408,14 @@ export function CanvasEditor({
       ? `${selectedElementTypeLabel} - ${selectedElement.id}`
       : selectedElement.id
     : null;
+  const clipboardLayerLabel = clipboardElements.length === 1 ? 'layer' : 'layers';
+  const canPasteIntoSelectedContainer = Boolean(
+    selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type),
+  );
+  const pasteTargetMode = canPasteIntoSelectedContainer ? 'selected-container' : 'canvas-root';
+  const pasteTargetLabel = canPasteIntoSelectedContainer && selectedElementLabel
+    ? `Paste ${clipboardLayerLabel} into ${selectedElementLabel}`
+    : `Paste ${clipboardLayerLabel} on canvas`;
   const selectableChildLayer = selectedElement?.children?.find((child) => (
     child.visible !== false && !child.locked
   )) ?? null;
@@ -5209,6 +5217,7 @@ export function CanvasEditor({
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title={`Copy ${selectedLayerActionLabel} (Cmd/Ctrl+C)`}
               aria-label={`Copy ${selectedLayerActionLabel}`}
+              aria-keyshortcuts="Control+C Meta+C"
               data-testid="editor-copy-selection"
             >
               <Copy className="h-4 w-4" />
@@ -5220,6 +5229,7 @@ export function CanvasEditor({
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title={`Cut ${selectedLayerActionLabel} (Cmd/Ctrl+X)`}
               aria-label={`Cut ${selectedLayerActionLabel}`}
+              aria-keyshortcuts="Control+X Meta+X"
               data-testid="editor-cut-selection"
             >
               <Scissors className="h-4 w-4" />
@@ -5229,8 +5239,12 @@ export function CanvasEditor({
               onClick={handlePaste}
               disabled={isCanvasMutationDisabled || clipboardElements.length === 0}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title={`Paste ${clipboardElements.length === 1 ? 'layer' : 'layers'} (Cmd/Ctrl+V)`}
-              aria-label={`Paste ${clipboardElements.length === 1 ? 'layer' : 'layers'}`}
+              title={`${pasteTargetLabel} (Cmd/Ctrl+V)`}
+              aria-label={pasteTargetLabel}
+              aria-keyshortcuts="Control+V Meta+V"
+              data-paste-target={pasteTargetMode}
+              data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement?.id : undefined}
+              data-clipboard-count={clipboardElements.length}
               data-testid="editor-paste-selection"
             >
               <ClipboardPaste className="h-4 w-4" />
@@ -5242,6 +5256,7 @@ export function CanvasEditor({
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title={`Duplicate ${selectedLayerActionLabel} (Cmd/Ctrl+D)`}
               aria-label={`Duplicate ${selectedLayerActionLabel}`}
+              aria-keyshortcuts="Control+D Meta+D"
               data-testid="editor-duplicate-selection"
             >
               <Copy className="h-4 w-4" />
@@ -5468,8 +5483,9 @@ export function CanvasEditor({
               onClick={deleteElement}
               disabled={isCanvasMutationDisabled || !canDeleteSelected}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Delete (Delete)"
-              aria-label="Delete"
+              title={`Delete ${selectedLayerActionLabel} (Delete/Backspace)`}
+              aria-label={`Delete ${selectedLayerActionLabel}`}
+              aria-keyshortcuts="Delete Backspace"
               data-testid="editor-delete-selection"
             >
               <Trash2 className="h-4 w-4" />
@@ -6093,6 +6109,7 @@ export function CanvasEditor({
                           className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                           title={`Copy ${selectedLayerActionLabel}`}
                           aria-label={`Copy ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Control+C Meta+C"
                           data-testid="editor-inspector-copy-selection"
                         >
                           <Copy className="h-3.5 w-3.5" />
@@ -6104,6 +6121,7 @@ export function CanvasEditor({
                           className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                           title={`Duplicate ${selectedLayerActionLabel}`}
                           aria-label={`Duplicate ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Control+D Meta+D"
                           data-testid="editor-inspector-duplicate-selection"
                         >
                           <Copy className="h-3.5 w-3.5" />
@@ -6115,6 +6133,7 @@ export function CanvasEditor({
                           className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                           title={`Cut ${selectedLayerActionLabel}`}
                           aria-label={`Cut ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Control+X Meta+X"
                           data-testid="editor-inspector-cut-selection"
                         >
                           <Scissors className="h-3.5 w-3.5" />
@@ -6126,6 +6145,7 @@ export function CanvasEditor({
                           className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                           title={`Delete ${selectedLayerActionLabel}`}
                           aria-label={`Delete ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Delete Backspace"
                           data-testid="editor-inspector-delete-selection"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
