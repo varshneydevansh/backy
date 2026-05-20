@@ -499,6 +499,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - This keeps site-wide publish, archive, and delete operations usable when an editorial library spans multiple post-library pages.
 - Source coverage is guarded by `apps/admin/scripts/blog-list-smoke.mjs`.
 
+### ✅ Product catalog bulk selection
+- The product catalog bulk selector now adds every loaded product matching the current catalog filters instead of reusing only the already-selected subset.
+- This keeps publish/draft/archive/delete/export actions reachable from an empty selection after filtering the catalog.
+- Source coverage is guarded by `apps/admin/scripts/commerce-smoke.mjs`.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.

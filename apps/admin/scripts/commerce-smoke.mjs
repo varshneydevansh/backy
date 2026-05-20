@@ -947,6 +947,9 @@ const assertProductsApiContractsSource = () => {
   );
   assert(
     source.includes("bulkUpdateCollectionRecords") &&
+      source.includes("const filteredProductIds = useMemo") &&
+      source.includes("const visibleIds = new Set(filteredProductIds)") &&
+      source.includes("filteredProductIds.filter((productId) => !current.includes(productId))") &&
       source.includes('data-testid="products-bulk-toolbar"') &&
       source.includes('data-testid="products-bulk-selection-summary"') &&
       source.includes('data-testid="products-bulk-delete-modal"') &&

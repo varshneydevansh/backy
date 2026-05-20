@@ -1174,9 +1174,9 @@ function ProductsRoute() {
     () => filteredProducts.filter((product) => selectedProductIdSet.has(product.id)),
     [filteredProducts, selectedProductIdSet],
   );
-  const selectedVisibleProductIds = useMemo(
-    () => selectedVisibleProducts.map((product) => product.id),
-    [selectedVisibleProducts],
+  const filteredProductIds = useMemo(
+    () => filteredProducts.map((product) => product.id),
+    [filteredProducts],
   );
   const hiddenSelectedProductCount = Math.max(0, selectedLoadedProducts.length - selectedVisibleProducts.length);
   const areAllVisibleProductsSelected = filteredProducts.length > 0 && selectedVisibleProducts.length === filteredProducts.length;
@@ -3145,12 +3145,12 @@ function ProductsRoute() {
 
     setPendingBulkDeleteProducts(false);
     setSelectedProductIds((current) => {
-      const visibleIds = new Set(selectedVisibleProductIds);
+      const visibleIds = new Set(filteredProductIds);
       if (!selected) {
         return current.filter((productId) => !visibleIds.has(productId));
       }
 
-      return [...current, ...selectedVisibleProductIds.filter((productId) => !current.includes(productId))];
+      return [...current, ...filteredProductIds.filter((productId) => !current.includes(productId))];
     });
   };
   const clearProductSelection = () => {
