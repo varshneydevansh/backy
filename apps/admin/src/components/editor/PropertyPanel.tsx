@@ -5363,6 +5363,23 @@ const fieldExists = (collection: Collection | null, key: string): boolean => (
   Boolean(collection?.fields.some((field) => field.key === key))
 );
 
+const buildCollectionRecordsApiUrl = (
+  siteId: string | undefined,
+  collectionId: string | undefined,
+  query: Record<string, string | null | undefined> = {},
+): string => {
+  if (!siteId || !collectionId) return '';
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    const normalizedValue = typeof value === 'string' ? value.trim() : '';
+    if (normalizedValue) {
+      params.set(key, normalizedValue);
+    }
+  });
+  const queryString = params.toString();
+  return `/api/sites/${encodeURIComponent(siteId)}/collections/${encodeURIComponent(collectionId)}/records${queryString ? `?${queryString}` : ''}`;
+};
+
 const MAX_COLLECTION_FIELD_PATH_DEPTH = 4;
 
 const fieldForFieldPath = (
@@ -6639,6 +6656,7 @@ function RepeaterDataProperties({
   const [previewReferenceLoading, setPreviewReferenceLoading] = useState(false);
   const [previewReferenceError, setPreviewReferenceError] = useState<string | null>(null);
   const [repeaterBriefCopyState, setRepeaterBriefCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [repeaterRecordsUrlCopyState, setRepeaterRecordsUrlCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const usesCurrentRecordFilter = selectedFilterValue === CURRENT_RECORD_FILTER_VALUE || selectedFilterValue === LEGACY_CURRENT_RECORD_FILTER_VALUE;
   const previewLimit = Math.min(
     Math.max(Number.parseInt(selectedLimit || '6', 10) || 6, 1),
@@ -6831,6 +6849,15 @@ function RepeaterDataProperties({
       imageSrc,
     };
   });
+  const repeaterRecordsUrl = buildCollectionRecordsApiUrl(siteId, selectedCollection?.id, {
+    q: selectedSearch,
+    fieldKey: usesCurrentRecordFilter ? null : selectedFilterField,
+    fieldValue: usesCurrentRecordFilter ? null : selectedFilterValue,
+    sortBy: selectedSortBy,
+    sortDirection: selectedSortBy ? selectedSortDirection : null,
+    limit: selectedLimit,
+    offset: selectedOffset,
+  });
   const repeaterDatasetBrief = {
     schema: 'backy.editor.repeater-dataset.v1',
     element: {
@@ -6849,6 +6876,7 @@ function RepeaterDataProperties({
     dataset: {
       id: selectedDatasetId || null,
       source: 'collection',
+      recordsUrl: repeaterRecordsUrl || null,
     },
     fields: {
       title: selectedTitleField || null,
@@ -6893,6 +6921,17 @@ function RepeaterDataProperties({
     } catch {
       setRepeaterBriefCopyState('failed');
       window.setTimeout(() => setRepeaterBriefCopyState('idle'), 2200);
+    }
+  };
+  const copyRepeaterRecordsUrl = async () => {
+    if (!repeaterRecordsUrl) return;
+    try {
+      await navigator.clipboard.writeText(repeaterRecordsUrl);
+      setRepeaterRecordsUrlCopyState('copied');
+      window.setTimeout(() => setRepeaterRecordsUrlCopyState('idle'), 1600);
+    } catch {
+      setRepeaterRecordsUrlCopyState('failed');
+      window.setTimeout(() => setRepeaterRecordsUrlCopyState('idle'), 2200);
     }
   };
 
@@ -7280,14 +7319,25 @@ function RepeaterDataProperties({
               {selectedLimit ? ` • limit ${selectedLimit}` : ''}
               {selectedColumns ? ` • ${selectedColumns} columns` : ''}
             </div>
-            <button
-              type="button"
-              onClick={() => void copyRepeaterDatasetBrief()}
-              data-testid="editor-repeater-copy-dataset-brief"
-              className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
-            >
-              {repeaterBriefCopyState === 'copied' ? 'Copied repeater brief' : repeaterBriefCopyState === 'failed' ? 'Copy failed' : 'Copy repeater brief'}
-            </button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void copyRepeaterDatasetBrief()}
+                data-testid="editor-repeater-copy-dataset-brief"
+                className="rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
+              >
+                {repeaterBriefCopyState === 'copied' ? 'Copied brief' : repeaterBriefCopyState === 'failed' ? 'Copy failed' : 'Copy brief'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyRepeaterRecordsUrl()}
+                disabled={!repeaterRecordsUrl}
+                data-testid="editor-repeater-copy-records-url"
+                className="rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {repeaterRecordsUrlCopyState === 'copied' ? 'Copied URL' : repeaterRecordsUrlCopyState === 'failed' ? 'Copy failed' : 'Copy records'}
+              </button>
+            </div>
           </div>
 
           <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-repeater-record-preview">
@@ -7441,6 +7491,7 @@ function DataBindingProperties({
   const [selectedSavedPresetId, setSelectedSavedPresetId] = useState('');
   const [slotCollectionId, setSlotCollectionId] = useState('');
   const [datasetBriefCopyState, setDatasetBriefCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [datasetRecordsUrlCopyState, setDatasetRecordsUrlCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   useEffect(() => {
     let cancelled = false;
@@ -7646,6 +7697,16 @@ function DataBindingProperties({
     }
   }, [savedPresetsForCollection, selectedSavedPresetId]);
 
+  const selectedBindingRecordsUrl = buildCollectionRecordsApiUrl(siteId, selectedCollection?.id, {
+    slug: selectedRecordPreview?.slug || null,
+    q: selectedSearch,
+    fieldKey: selectedFilterField,
+    fieldValue: selectedFilterValue,
+    sortBy: selectedSortBy,
+    sortDirection: selectedSortBy ? selectedSortDirection : null,
+    limit: selectedLimit,
+    offset: selectedOffset,
+  });
   const datasetBindingBrief = {
     schema: 'backy.editor.dataset-binding.v1',
     element: {
@@ -7659,6 +7720,7 @@ function DataBindingProperties({
       targetPath: selectedTargetPath,
       targetLabel: targetPathOptions.find((option) => option.value === selectedTargetPath)?.label || selectedTargetPath,
       mode: typeof currentBinding?.mode === 'string' ? currentBinding.mode : null,
+      recordsUrl: selectedBindingRecordsUrl || null,
     },
     collection: selectedCollection
       ? {
@@ -7717,6 +7779,17 @@ function DataBindingProperties({
     } catch {
       setDatasetBriefCopyState('failed');
       window.setTimeout(() => setDatasetBriefCopyState('idle'), 2200);
+    }
+  };
+  const copyDatasetRecordsUrl = async () => {
+    if (!selectedBindingRecordsUrl) return;
+    try {
+      await navigator.clipboard.writeText(selectedBindingRecordsUrl);
+      setDatasetRecordsUrlCopyState('copied');
+      window.setTimeout(() => setDatasetRecordsUrlCopyState('idle'), 1600);
+    } catch {
+      setDatasetRecordsUrlCopyState('failed');
+      window.setTimeout(() => setDatasetRecordsUrlCopyState('idle'), 2200);
     }
   };
 
@@ -8531,14 +8604,25 @@ function DataBindingProperties({
               {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
               {selectedLimit ? ` • limit ${selectedLimit}` : ''}
             </div>
-            <button
-              type="button"
-              onClick={() => void copyDatasetBindingBrief()}
-              data-testid="editor-data-copy-binding-brief"
-              className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
-            >
-              {datasetBriefCopyState === 'copied' ? 'Copied binding brief' : datasetBriefCopyState === 'failed' ? 'Copy failed' : 'Copy binding brief'}
-            </button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void copyDatasetBindingBrief()}
+                data-testid="editor-data-copy-binding-brief"
+                className="rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
+              >
+                {datasetBriefCopyState === 'copied' ? 'Copied brief' : datasetBriefCopyState === 'failed' ? 'Copy failed' : 'Copy brief'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyDatasetRecordsUrl()}
+                disabled={!selectedBindingRecordsUrl}
+                data-testid="editor-data-copy-records-url"
+                className="rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {datasetRecordsUrlCopyState === 'copied' ? 'Copied URL' : datasetRecordsUrlCopyState === 'failed' ? 'Copy failed' : 'Copy records'}
+              </button>
+            </div>
           </div>
 
           <button
