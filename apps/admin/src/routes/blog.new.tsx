@@ -51,6 +51,8 @@ interface BlogNewSearch {
     siteId?: string;
     focus?: 'canvas';
     designTemplate?: string;
+    frontendDesignTemplateId?: string;
+    frontendTemplate?: string;
 }
 
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
@@ -105,6 +107,8 @@ export const Route = createFileRoute('/blog/new')({
         siteId: normalizedSearchString(search.siteId),
         focus: search.focus === 'canvas' ? 'canvas' : undefined,
         designTemplate: normalizedFrontendDesignTemplateSearch(search),
+        frontendDesignTemplateId: normalizedSearchString(search.frontendDesignTemplateId),
+        frontendTemplate: normalizedSearchString(search.frontendTemplate),
     }),
     component: NewBlogPostPage,
 });

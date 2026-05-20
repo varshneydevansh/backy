@@ -4703,7 +4703,7 @@ function EditSitePage() {
           to: "/pages/new",
           search: {
             siteId: targetSiteId,
-            designTemplate: template.id,
+            frontendDesignTemplateId: template.id,
           },
         });
         return;
@@ -4712,7 +4712,7 @@ function EditSitePage() {
           to: "/blog/new",
           search: {
             siteId: targetSiteId,
-            designTemplate: template.id,
+            frontendDesignTemplateId: template.id,
           },
         });
         return;

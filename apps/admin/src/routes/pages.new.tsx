@@ -56,6 +56,8 @@ interface NewPageSearch {
     noIndex?: boolean;
     noFollow?: boolean;
     designTemplate?: string;
+    frontendDesignTemplateId?: string;
+    frontendTemplate?: string;
     collectionId?: string;
     datasetMode?: PageDatasetMode;
 }
@@ -1201,6 +1203,8 @@ export const Route = createFileRoute('/pages/new')({
         noIndex: normalizedSearchBoolean(search.noIndex),
         noFollow: normalizedSearchBoolean(search.noFollow),
         designTemplate: normalizedFrontendDesignTemplateSearch(search),
+        frontendDesignTemplateId: normalizedSearchString(search.frontendDesignTemplateId),
+        frontendTemplate: normalizedSearchString(search.frontendTemplate),
         collectionId: normalizedSearchString(search.collectionId),
         datasetMode: isPageDatasetMode(search.datasetMode) ? search.datasetMode : undefined,
     }),

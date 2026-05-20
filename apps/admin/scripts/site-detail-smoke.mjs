@@ -25,6 +25,11 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('import { EmptyState } from "@/components/ui/EmptyState";'), 'Site detail route must use the shared EmptyState component');
   assert(source.includes('title="No frontend templates captured yet"'), 'Site detail template registry must keep the empty template title visible');
   assert(source.includes('Save a frontend design contract with page, blog, form, product, collection, or section templates to populate this registry.'), 'Site detail template registry empty state must explain how templates are captured');
+  assert(
+    source.includes('frontendDesignTemplateId: template.id') &&
+      !source.includes('designTemplate: template.id'),
+    'Site detail template registry page/blog actions must deep-link with frontendDesignTemplateId, matching the template registry clone field',
+  );
   assert(source.includes('title="No site audit events yet"'), 'Site detail audit panel must keep the empty audit title visible');
   assert(source.includes('Save navigation, redirects, SEO, frontend design, or site settings to create request-id activity for this site.'), 'Site detail audit empty state must explain which actions populate activity');
   assert(source.includes('title="No webhook endpoints configured"'), 'Site detail webhooks panel must keep the empty webhook title visible');
@@ -1875,6 +1880,10 @@ const main = async () => {
 
   try {
     assertSiteDetailSourceContract();
+    if (process.env.BACKY_SITE_DETAIL_SOURCE_ONLY === '1') {
+      console.log(JSON.stringify({ ok: true, guard: 'site-detail-source' }));
+      return;
+    }
     await loginAdminApi();
     await updateUser('user-admin', { role: 'admin', status: 'active' });
     const existing = await findSiteBySlug(slug);

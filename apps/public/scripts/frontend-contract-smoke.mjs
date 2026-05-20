@@ -35,6 +35,8 @@ const apiContracts = read('../../../specs/backy-api-contracts.md');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
 const completionSpec = read('../../../specs/backy-cms-completion-spec.md');
 const adminSiteDetailPage = read('../../../apps/admin/src/routes/sites.$siteId.tsx');
+const adminPagesNewPage = read('../../../apps/admin/src/routes/pages.new.tsx');
+const adminBlogNewPage = read('../../../apps/admin/src/routes/blog.new.tsx');
 const adminFormsPage = read('../../../apps/admin/src/routes/forms.tsx');
 const adminProductsPage = read('../../../apps/admin/src/routes/products.tsx');
 const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.tsx');
@@ -315,9 +317,15 @@ assert(
 );
 
 assert(
-  adminSiteDetailPage.includes('search: { siteId: targetSiteId, frontendTemplate: template.id }') &&
+  adminSiteDetailPage.includes('frontendDesignTemplateId: template.id') &&
+    !adminSiteDetailPage.includes('designTemplate: template.id') &&
+    adminSiteDetailPage.includes('search: { siteId: targetSiteId, frontendTemplate: template.id }') &&
     adminSiteDetailPage.includes('draft: "new"') &&
     adminSiteDetailPage.includes('frontendTemplate: template.id') &&
+    adminPagesNewPage.includes('frontendDesignTemplateId?: string') &&
+    adminPagesNewPage.includes('designTemplate: normalizedFrontendDesignTemplateSearch(search)') &&
+    adminBlogNewPage.includes('frontendDesignTemplateId?: string') &&
+    adminBlogNewPage.includes('designTemplate: normalizedFrontendDesignTemplateSearch(search)') &&
     adminFormsPage.includes('frontendTemplate: normalizedSearchString(search.frontendTemplate)') &&
     adminFormsPage.includes('activeFrontendTemplateId === template.id') &&
     adminProductsPage.includes('frontendTemplate: normalizedSearchString(search.frontendTemplate)') &&
@@ -327,7 +335,7 @@ assert(
     adminCollectionsPage.includes('frontendTemplate: normalizedSearchString(search.frontendTemplate)') &&
     adminCollectionsPage.includes("resetCollectionForm({ frontendTemplateId: routeSearch.frontendTemplate || '' })") &&
     adminCollectionsPage.includes('activeFrontendTemplateId === template.id'),
-  'Admin template registry actions must deep-link non-page templates with frontendTemplate search state and preserve collection draft selection.',
+  'Admin template registry actions must deep-link page/blog templates with frontendDesignTemplateId, non-page templates with frontendTemplate, and preserve collection draft selection.',
 );
 
 assert(
