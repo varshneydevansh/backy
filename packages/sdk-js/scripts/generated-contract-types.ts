@@ -44,6 +44,7 @@ import type {
   GeneratedBackyFrontendDesignContract,
   GeneratedBackyFrontendDesignProvenance,
   GeneratedBackyFrontendManifest,
+  GeneratedBackyFrontendManifestCommerceProviderCertification,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
   GeneratedBackyFrontendManifestLaunchReadiness,
@@ -810,6 +811,7 @@ const commerceProviderCertification = {
       "export BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED='1'",
       "export BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED='1'",
       "export BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER='auto'",
+      "export BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER='auto'",
       "",
       "npm run doctor:release-certification",
       "npm run ci:commerce-provider-certification",
@@ -820,6 +822,7 @@ const commerceProviderCertification = {
       payment: ["auto", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay"],
       tax: ["auto", "stripe", "taxjar", "avalara", "http"],
       shipping: ["auto", "easypost", "shippo", "http"],
+      discount: ["auto", "stripe", "http"],
       catalog: ["auto", "shopify", "bigcommerce", "woocommerce", "etsy", "magento", "http"],
       subscription: ["auto", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "http"],
       webhook: ["auto", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "generic"],
@@ -829,12 +832,14 @@ const commerceProviderCertification = {
       "BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER",
       "BACKY_COMMERCE_CERTIFY_TAX_PROVIDER",
       "BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER",
+      "BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER",
       "BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER",
       "BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER",
       "BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER",
       "BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY",
       "BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY",
       "BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY",
+      "BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL",
       "BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL",
       "BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL",
       "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
@@ -885,7 +890,7 @@ const commerceProviderCertification = {
       evidence: "Repeatable local provider coverage.",
     },
   ],
-} satisfies GeneratedBackyOpenApiCommerceProviderCertification;
+} satisfies GeneratedBackyFrontendManifestCommerceProviderCertification & GeneratedBackyOpenApiCommerceProviderCertification;
 
 const manifest = {
   schemaVersion: "backy.frontend-manifest.v1",
@@ -1981,6 +1986,8 @@ const manifest = {
 } satisfies GeneratedBackyFrontendManifest;
 
 const commerceStorefrontContract = manifest.modules.commerce satisfies GeneratedBackyOpenApiCommerceStorefrontContract;
+const generatedManifestCommerceProviderCertification =
+  manifest.modules.commerce.providerCertification satisfies GeneratedBackyFrontendManifestCommerceProviderCertification;
 const paddleCommerceStorefrontContract = {
   ...commerceStorefrontContract,
   paymentProvider: "paddle",
@@ -4814,6 +4821,12 @@ const invalidGeneratedManifestCommerceCapabilities = {
   },
 } satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
 
+const invalidGeneratedManifestCommerceProviderCertification = {
+  ...manifest.modules.commerce,
+  // @ts-expect-error generated manifest commerce modules require a typed provider certification handoff for custom storefronts.
+  providerCertification: undefined,
+} satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
+
 const invalidGeneratedManifestCommerceRuntimeDiscovery = {
   ...manifest.modules.commerceRuntime,
   // @ts-expect-error generated manifest commerce discovery uses a versioned schema marker.
@@ -5326,8 +5339,10 @@ void invalidGeneratedManifestLiveManagementDiscovery;
 void invalidGeneratedManifestFormsRuntimeDiscovery;
 void invalidGeneratedManifestCommerceMode;
 void invalidGeneratedManifestCommerceCapabilities;
+void invalidGeneratedManifestCommerceProviderCertification;
 void invalidGeneratedManifestCommerceRuntimeDiscovery;
 void invalidSdkManifestCommerceRuntime;
+void generatedManifestCommerceProviderCertification;
 void invalidGeneratedInteractiveRegistry;
 void invalidGeneratedInteractiveSecurity;
 void sdkInteractiveComponentsContract;

@@ -136,8 +136,10 @@ includesAll(
   [
     'GeneratedBackyOpenApiCommerceProviderCertification',
     'GeneratedBackyOpenApiCommerceStorefrontContract',
+    'GeneratedBackyFrontendManifestCommerceProviderCertification',
     'paymentProvider: "none" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "manual"',
     'providerCertification: GeneratedBackyOpenApiCommerceProviderCertification',
+    'providerCertification: GeneratedBackyFrontendManifestCommerceProviderCertification',
     '"backy.commerce-provider-certification-handoff.v1"',
     '"ci:commerce-provider-certification"',
     'operatorCommandTemplate',
@@ -156,6 +158,7 @@ includesAll(
   [
     'GeneratedBackyOpenApiCommerceProviderCertification',
     'GeneratedBackyOpenApiCommerceStorefrontContract',
+    'GeneratedBackyFrontendManifestCommerceProviderCertification',
     'paymentProvider: "none" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "manual"',
     'providerCertification?:',
     '"backy.commerce-provider-certification-handoff.v1"',
@@ -219,9 +222,11 @@ includesAll(
   [
     'commerceProviderCertification',
     'commerceStorefrontContract',
+    'generatedManifestCommerceProviderCertification',
     'paddleCommerceStorefrontContract',
     'invalidCommerceStorefrontPaymentProvider',
     'providerCertification',
+    'invalidGeneratedManifestCommerceProviderCertification',
     'invalidCommerceCatalogCertification',
     'invalidCommerceOrderContractCertification',
     'operatorCommandTemplate',
@@ -235,9 +240,21 @@ includesAll(
 includesAll(
   frontendManifestSchema,
   [
+    '"commerceProviderCertification"',
+    '"providerCertification": { "$ref": "#/$defs/commerceProviderCertification" }',
+    '"backy.commerce-provider-certification-handoff.v1"',
+    '"external-live-provider-gate"',
+    '"ci:commerce-provider-smoke"',
+    '"ci:commerce-provider-certification"',
+    '"live-commerce-provider-launch"',
+    '"backy.commerce-provider-certification-env-template.v1"',
+    '"fileName": { "const": ".env.backy-commerce-provider-certification" }',
+    '"BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1"',
+    '"paymentConfigured"',
+    '"webhookSecretConfigured"',
     '"paymentProvider": { "enum": ["none", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "manual"] }',
   ],
-  'Frontend manifest commerce payment provider handoff enum',
+  'Frontend manifest commerce provider certification handoff schema',
 );
 
 includesAll(
@@ -500,6 +517,7 @@ includesAll(
     'backy.commerce-provider-certification-handoff.v1',
     'CommerceProviderCertification',
     'CommerceStorefrontContract',
+    'GeneratedBackyFrontendManifestCommerceProviderCertification',
     'GeneratedBackyOpenApiCommerceProviderCertification',
     'GeneratedBackyOpenApiCommerceStorefrontContract',
     '/products` and `/orders` admin handoff manifests',

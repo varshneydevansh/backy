@@ -273,10 +273,16 @@ assert(
     manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(site.id, commerce, productCollection, ordersCollection)') &&
     frontendManifestSchema.includes('"backy.commerce-discovery.v1"') &&
     frontendManifestSchema.includes('"backy.commerce-order-request.v1"') &&
+    frontendManifestSchema.includes('"commerceProviderCertification"') &&
+    frontendManifestSchema.includes('"providerCertification": { "$ref": "#/$defs/commerceProviderCertification" }') &&
+    frontendManifestSchema.includes('"backy.commerce-provider-certification-env-template.v1"') &&
     frontendManifestSchema.includes('"checkoutSessionStatuses"') &&
     frontendManifestSchema.includes('"providerSecretsNeverReturned"') &&
     frontendManifestSchema.includes('"PRODUCT_OUT_OF_STOCK"') &&
+    generatedSdkTypes.includes('GeneratedBackyFrontendManifestCommerceProviderCertification') &&
+    generatedSdkTypes.includes('providerCertification: GeneratedBackyFrontendManifestCommerceProviderCertification') &&
     sdkSource.includes('BackyManifestCommerceRuntimeModule') &&
+    sdkSource.includes('GeneratedBackyFrontendManifestCommerceProviderCertification') &&
     sdkSource.includes('lineItems?: BackyCommerceLineItemInput[]') &&
     sdkSource.includes('checkoutSession?: string | { id?: string; [key: string]: unknown }') &&
     openApiRoute.includes('"provider_created"') &&
@@ -284,6 +290,7 @@ assert(
     openApiRoute.includes('customerName: { type: "string" }') &&
     sdkSmoke.includes('manifest() missing commerce runtime discovery module') &&
     sdkSmoke.includes('manifest() commerce runtime missing lineItems order alias') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestCommerceProviderCertification') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceRuntimeDiscovery'),
   'Frontend manifest and SDK must expose structured commerce runtime discovery for custom frontend product catalog and checkout UIs.',
 );

@@ -16,6 +16,7 @@ export type {
   GeneratedBackyFrontendDesignContract,
   GeneratedBackyFrontendDesignProvenance,
   GeneratedBackyFrontendManifest,
+  GeneratedBackyFrontendManifestCommerceProviderCertification,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
   GeneratedBackyFrontendManifestLaunchReadiness,

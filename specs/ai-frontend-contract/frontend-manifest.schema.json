@@ -168,6 +168,140 @@
       },
       "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "scenarioEvidence", "operatorCommandTemplate", "operatorEnvTemplate", "runtime", "secretHandling"]
     },
+    "commerceProviderCertification": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schemaVersion": { "const": "backy.commerce-provider-certification-handoff.v1" },
+        "status": { "const": "external-live-provider-gate" },
+        "localMockGate": { "const": "ci:commerce-provider-smoke" },
+        "liveCertificationGate": { "const": "ci:commerce-provider-certification" },
+        "requiredFor": { "const": "live-commerce-provider-launch" },
+        "secretHandling": { "type": "string", "minLength": 1 },
+        "operatorCommandTemplate": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "command": { "type": "string", "minLength": 1 },
+            "envTemplate": { "type": "string", "minLength": 1 },
+            "envTemplateSchemaVersion": { "const": "backy.commerce-provider-certification-env-template.v1" },
+            "providerChoices": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "properties": {
+                "payment": {
+                  "type": "array",
+                  "items": { "enum": ["auto", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay"] },
+                  "contains": { "const": "stripe" }
+                },
+                "tax": {
+                  "type": "array",
+                  "items": { "enum": ["auto", "stripe", "taxjar", "avalara", "http"] },
+                  "contains": { "const": "taxjar" }
+                },
+                "shipping": {
+                  "type": "array",
+                  "items": { "enum": ["auto", "easypost", "shippo", "http"] },
+                  "contains": { "const": "easypost" }
+                },
+                "discount": {
+                  "type": "array",
+                  "items": { "enum": ["auto", "stripe", "http"] },
+                  "contains": { "const": "stripe" }
+                },
+                "catalog": {
+                  "type": "array",
+                  "items": { "enum": ["auto", "shopify", "bigcommerce", "woocommerce", "etsy", "magento", "http"] },
+                  "contains": { "const": "shopify" }
+                },
+                "subscription": {
+                  "type": "array",
+                  "items": { "enum": ["auto", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "http"] },
+                  "contains": { "const": "razorpay" }
+                },
+                "webhook": {
+                  "type": "array",
+                  "items": { "enum": ["auto", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay", "generic"] },
+                  "contains": { "const": "generic" }
+                }
+              },
+              "required": ["payment", "tax", "shipping", "discount", "catalog", "subscription", "webhook"]
+            },
+            "requiredInputs": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1" }
+            },
+            "targetInputs": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["command", "envTemplate", "envTemplateSchemaVersion", "providerChoices", "requiredInputs", "targetInputs", "secretHandling"]
+        },
+        "operatorEnvTemplate": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.commerce-provider-certification-env-template.v1" },
+            "format": { "const": "shell-env" },
+            "fileName": { "const": ".env.backy-commerce-provider-certification" },
+            "body": { "type": "string", "minLength": 1 },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["schemaVersion", "format", "fileName", "body", "secretHandling"]
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "paymentConfigured": { "type": "boolean" },
+            "taxConfigured": { "type": "boolean" },
+            "shippingConfigured": { "type": "boolean" },
+            "discountConfigured": { "type": "boolean" },
+            "catalogSyncConfigured": { "type": "boolean" },
+            "subscriptionConfigured": { "type": "boolean" },
+            "webhookSecretConfigured": { "type": "boolean" },
+            "configuredFamilies": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "missingFamilies": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["paymentConfigured", "taxConfigured", "shippingConfigured", "discountConfigured", "catalogSyncConfigured", "subscriptionConfigured", "webhookSecretConfigured", "configuredFamilies", "missingFamilies", "secretHandling"]
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "family": { "type": "string", "minLength": 1 },
+              "providers": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "gate": { "enum": ["ci:commerce-provider-certification", "ci:commerce-provider-smoke"] },
+              "requiredInputs": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "evidence": { "type": "string", "minLength": 1 }
+            },
+            "required": ["family", "providers", "gate", "requiredInputs", "evidence"]
+          }
+        }
+      },
+      "required": ["schemaVersion", "status", "localMockGate", "liveCertificationGate", "requiredFor", "secretHandling", "operatorCommandTemplate", "operatorEnvTemplate", "runtime", "groups"]
+    },
     "launchReadiness": {
       "type": "object",
       "additionalProperties": true,
@@ -1875,9 +2009,10 @@
                     "requiresManualReview": { "type": "boolean" }
                   },
                   "required": ["mode", "windowHours", "requiresManualReview"]
-                }
+                },
+                "providerCertification": { "$ref": "#/$defs/commerceProviderCertification" }
               },
-              "required": ["schemaVersion", "mode", "currency", "paymentProvider", "providerAccountId", "provider", "capabilities", "checkout", "pricing", "inventory", "webhooks", "reconciliation"]
+              "required": ["schemaVersion", "mode", "currency", "paymentProvider", "providerAccountId", "provider", "capabilities", "checkout", "pricing", "inventory", "webhooks", "reconciliation", "providerCertification"]
             },
             "commerceRuntime": {
               "type": "object",

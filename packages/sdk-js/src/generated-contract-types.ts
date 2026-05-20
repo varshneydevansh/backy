@@ -2586,6 +2586,64 @@ export type GeneratedBackyFrontendManifestDatabaseCertification = {
   [key: string]: unknown;
 };
 
+export type GeneratedBackyFrontendManifestCommerceProviderCertification = {
+  schemaVersion: "backy.commerce-provider-certification-handoff.v1";
+  status: "external-live-provider-gate";
+  localMockGate: "ci:commerce-provider-smoke";
+  liveCertificationGate: "ci:commerce-provider-certification";
+  requiredFor: "live-commerce-provider-launch";
+  secretHandling: string;
+  operatorCommandTemplate: {
+    command: string;
+    envTemplate: string;
+    envTemplateSchemaVersion: "backy.commerce-provider-certification-env-template.v1";
+    providerChoices: {
+      payment: Array<"auto" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay">;
+      tax: Array<"auto" | "stripe" | "taxjar" | "avalara" | "http">;
+      shipping: Array<"auto" | "easypost" | "shippo" | "http">;
+      discount: Array<"auto" | "stripe" | "http">;
+      catalog: Array<"auto" | "shopify" | "bigcommerce" | "woocommerce" | "etsy" | "magento" | "http">;
+      subscription: Array<"auto" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "http">;
+      webhook: Array<"auto" | "stripe" | "paypal" | "paddle" | "square" | "adyen" | "mollie" | "razorpay" | "generic">;
+      [key: string]: unknown;
+    };
+    requiredInputs: Array<string>;
+    targetInputs: Array<string>;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  operatorEnvTemplate: {
+    schemaVersion: "backy.commerce-provider-certification-env-template.v1";
+    format: "shell-env";
+    fileName: ".env.backy-commerce-provider-certification";
+    body: string;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  runtime: {
+    paymentConfigured: boolean;
+    taxConfigured: boolean;
+    shippingConfigured: boolean;
+    discountConfigured: boolean;
+    catalogSyncConfigured: boolean;
+    subscriptionConfigured: boolean;
+    webhookSecretConfigured: boolean;
+    configuredFamilies: Array<string>;
+    missingFamilies: Array<string>;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  groups: Array<{
+    family: string;
+    providers: Array<string>;
+    gate: "ci:commerce-provider-certification" | "ci:commerce-provider-smoke";
+    requiredInputs: Array<string>;
+    evidence: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+};
+
 export type GeneratedBackyFrontendManifestLaunchReadiness = {
   schemaVersion: "backy.frontend-launch-readiness.v1";
   status: "ready" | "attention" | "blocked";
@@ -3694,6 +3752,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           requiresManualReview: boolean;
           [key: string]: unknown;
         };
+        providerCertification: GeneratedBackyFrontendManifestCommerceProviderCertification;
         [key: string]: unknown;
       };
       commerceRuntime: {
