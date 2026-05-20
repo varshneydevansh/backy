@@ -1379,6 +1379,12 @@ function PageEditorRoute() {
       setIsWorkflowBusy(false);
     }
   };
+  const pendingRestoreRevisionDiff = pendingRestoreRevision
+    ? revisionDiffById.get(pendingRestoreRevision.id) || null
+    : null;
+  const pendingRestoreRevisionGraphNode = pendingRestoreRevision
+    ? pageRevisionTimelineById.get(pendingRestoreRevision.id) || null
+    : null;
 
   return (
     <PageShell
@@ -2126,8 +2132,8 @@ function PageEditorRoute() {
       </div>
 
       {pendingRestoreRevision && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="page-editor-restore-confirm">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
                 <RotateCcw className="h-5 w-5" />
@@ -2135,7 +2141,7 @@ function PageEditorRoute() {
               <div>
                 <h2 className="text-lg font-semibold text-foreground">Restore this page revision?</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  The canvas will be replaced with this saved page snapshot. Save a new revision first if you need to keep the current design.
+                  Current page fields and canvas content will be replaced by this saved snapshot.
                 </p>
               </div>
             </div>
@@ -2145,14 +2151,56 @@ function PageEditorRoute() {
               </div>
               <div>
                 {new Date(pendingRestoreRevision.createdAt).toLocaleString()} · {pendingRestoreRevision.snapshotStatus}
+                {pendingRestoreRevisionGraphNode ? ` · ${pendingRestoreRevisionGraphNode.label}` : ''}
               </div>
             </div>
+            {pendingRestoreRevisionDiff ? (
+              <div className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5 text-muted-foreground" data-testid="page-editor-restore-impact">
+                <div className="font-medium text-foreground">Restore impact</div>
+                <div className="mt-1">{pendingRestoreRevisionDiff.summary}</div>
+                <div className="mt-2 grid gap-1">
+                  <div>
+                    <span className="text-muted-foreground">Layers </span>
+                    <span className="font-mono text-foreground">
+                      {pendingRestoreRevisionDiff.currentLayerCount} current -&gt; {pendingRestoreRevisionDiff.snapshotLayerCount} snapshot
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Canvas elements </span>
+                    <span className="font-mono text-foreground">{pendingRestoreRevisionDiff.elementDiff.summary}</span>
+                  </div>
+                </div>
+                {pendingRestoreRevisionDiff.details.length ? (
+                  <div className="mt-2 grid gap-1" data-testid="page-editor-restore-impact-details">
+                    {pendingRestoreRevisionDiff.details.slice(0, 4).map((detail) => (
+                      <div key={detail.field} className="grid gap-1 border-t border-border/60 pt-1 first:border-t-0">
+                        <span className="font-semibold text-foreground">{detail.label}</span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          <span className="text-muted-foreground">Current </span>
+                          <span className="font-mono text-foreground">{detail.current}</span>
+                          <span className="text-muted-foreground"> -&gt; Snapshot </span>
+                          <span className="font-mono text-foreground">{detail.snapshot}</span>
+                        </span>
+                      </div>
+                    ))}
+                    {pendingRestoreRevisionDiff.details.length > 4 ? (
+                      <div>
+                        {pendingRestoreRevisionDiff.details.length - 4} more changed area{pendingRestoreRevisionDiff.details.length - 4 === 1 ? '' : 's'} listed on the revision card.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="mt-2">No visible field or canvas difference from the current saved page.</div>
+                )}
+              </div>
+            ) : null}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPendingRestoreRevision(null)}
                 disabled={isPageEditorBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="page-editor-cancel-restore"
               >
                 Cancel
               </button>
@@ -2162,6 +2210,7 @@ function PageEditorRoute() {
                 disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
                 title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : canEditPage ? undefined : editPagePermissionTitle}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="page-editor-confirm-restore"
               >
                 {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
               </button>

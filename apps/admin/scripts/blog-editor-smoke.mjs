@@ -42,6 +42,7 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes('RevisionCanvasVisualDiff') && source.includes('testId={`blog-editor-revision-visual-diff-${revision.id}`}') && source.includes('currentElements={canvasElements}'), 'Blog editor revision cards must show side-by-side visual canvas diffs');
   assert(visualDiffSource.includes('Visual diff focus') && visualDiffSource.includes('changeIndexById') && visualDiffSource.includes('data-testid={`${testId}-focus`}'), 'Shared revision visual diff must show numbered changed-element focus markers');
   assert(source.includes("schema: 'backy.blog-revision-graph.v1'") && source.includes('blogRevisionTimeline') && source.includes('data-testid="blog-editor-revision-graph"') && source.includes('data-testid="blog-editor-toggle-revision-graph"'), 'Blog editor revisions must expose graph timeline navigation and handoff metadata');
+  assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="blog-editor-restore-impact"') && source.includes('data-testid="blog-editor-confirm-restore"') && source.includes('Current </span>'), 'Blog editor restore confirmation must preview restore impact before rollback');
   assert(
     source.includes('getScheduledBlogEditorDateError') &&
       source.includes('Date.parse(scheduledAt)') &&

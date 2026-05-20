@@ -212,6 +212,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('RevisionCanvasVisualDiff') && source.includes('testId={`page-editor-revision-visual-diff-${revision.id}`}') && source.includes('currentElements={editorElements}'), 'Page editor revision cards must show side-by-side visual canvas diffs');
   assert(visualDiffSource.includes('Visual diff focus') && visualDiffSource.includes('changeIndexById') && visualDiffSource.includes('data-testid={`${testId}-focus`}'), 'Shared revision visual diff must show numbered changed-element focus markers');
   assert(source.includes("schema: 'backy.page-revision-graph.v1'") && source.includes('pageRevisionTimeline') && source.includes('data-testid="page-editor-revision-graph"') && source.includes('data-testid="page-editor-toggle-revision-graph"'), 'Page editor revisions must expose graph timeline navigation and handoff metadata');
+  assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
 };
 
 const assertCanvasEditorShortcutSource = () => {
