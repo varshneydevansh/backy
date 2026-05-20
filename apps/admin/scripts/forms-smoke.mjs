@@ -41,6 +41,7 @@ const assertFormsPersistenceCertificationSource = () => {
   const frontendDesignContractSource = fs.readFileSync(new URL('../../public/src/lib/frontendDesignContract.ts', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
+  assert(source.includes('scenarioEvidence'), 'Forms persistence handoff must expose scenario-level database evidence metadata');
   assert(
     source.includes('data-testid="forms-persistence-certification-download-button"') &&
       source.includes('data-testid="forms-persistence-certification-copy-button"') &&
@@ -49,6 +50,19 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('-backy-forms-persistence-certification.json') &&
       source.includes('Forms persistence certification handoff downloaded.'),
     'Forms page must expose a focused persistence certification JSON export',
+  );
+  assert(
+    source.includes('data-testid="forms-persistence-scenario-evidence"') &&
+      source.includes("schemaVersion: 'backy.forms-persistence-scenario-evidence.v1'") &&
+      source.includes('Form definition CRUD') &&
+      source.includes('Public submission intake') &&
+      source.includes('Moderation review') &&
+      source.includes('Contact share') &&
+      source.includes('Collection routing') &&
+      source.includes('Delivery and audit events') &&
+      source.includes('Consent and spam settings') &&
+      source.includes('Custom frontend contract'),
+    'Forms page must render non-secret scenario evidence for the database persistence gate',
   );
   assert(source.includes('data-testid="forms-template-pack-download-button"'), 'Forms templates panel must expose template-pack download action');
   assert(source.includes("schemaVersion: 'backy.form-template-pack.v1'"), 'Forms template export must advertise backy.form-template-pack.v1');
@@ -2419,11 +2433,16 @@ const assertLayout = async (client) => {
       document.body?.innerText?.includes('Create registration form'),
     hasPersistenceCertification: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')) &&
       Boolean(document.querySelector('[data-testid="forms-persistence-runtime-evidence"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-persistence-scenario-evidence"]')) &&
       Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder"]')) &&
       Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder-copy-button"]')) &&
       Boolean(document.querySelector('[data-testid="forms-postgres-certification-required-inputs"]')) &&
       document.body?.innerText?.includes('Persistence certification') &&
       document.body?.innerText?.includes('Runtime evidence') &&
+      document.body?.innerText?.includes('Persistence scenario evidence') &&
+      document.body?.innerText?.includes('backy.forms-persistence-scenario-evidence.v1') &&
+      document.body?.innerText?.includes('Public submission intake') &&
+      document.body?.innerText?.includes('Collection routing') &&
       document.body?.innerText?.includes('Postgres certification command builder') &&
       document.body?.innerText?.includes('BACKY_RELEASE_CERTIFY_DATABASE') &&
       document.body?.innerText?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&

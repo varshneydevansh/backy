@@ -163,6 +163,25 @@ interface FormLaunchReadinessHandoff {
   actionPlan: FormLaunchActionPlan;
   nextSteps: string[];
 }
+interface FormsPersistenceScenarioEvidence {
+  schemaVersion: 'backy.forms-persistence-scenario-evidence.v1';
+  status: 'ready' | 'attention';
+  requiredGate: string;
+  coverage: {
+    covered: number;
+    total: number;
+    missing: string[];
+  };
+  scenarios: Array<{
+    key: string;
+    label: string;
+    expectedEvidence: readonly string[];
+    nextAction: string;
+    evidenceCount: number;
+    status: 'covered' | 'missing';
+  }>;
+  secretHandling: string;
+}
 type FormPersistenceCertificationHandoff = Omit<FormsPersistenceCertification, 'runtime' | 'checks'> & {
   runtime: FormsPersistenceCertification['runtime'] | null;
   checks: Array<{
@@ -172,6 +191,7 @@ type FormPersistenceCertificationHandoff = Omit<FormsPersistenceCertification, '
     status: string;
     detail: string;
   }>;
+  scenarioEvidence: FormsPersistenceScenarioEvidence;
 };
 
 const FORMS_PERMISSION_ROLE_DEFAULTS: Record<FormsPermissionKey, Array<AuthUser['role']>> = {
@@ -599,6 +619,56 @@ const FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS = [
   'disposable target guard output',
   'DB-backed Forms smoke output',
   'non-secret workflow summary with disposable database confirmation',
+] as const;
+const FORM_PERSISTENCE_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'form-definition-crud',
+    label: 'Form definition CRUD',
+    expectedEvidence: ['form definition rows', 'field schemas', 'active/inactive state'],
+    nextAction: 'Create or update at least one persisted form definition with fields before running the DB smoke.',
+  },
+  {
+    key: 'public-submission-intake',
+    label: 'Public submission intake',
+    expectedEvidence: ['public submission row', 'request id', 'validated field values'],
+    nextAction: 'Submit a public form payload against the disposable database target.',
+  },
+  {
+    key: 'moderation-review',
+    label: 'Moderation review',
+    expectedEvidence: ['approved submission', 'rejected or spam submission', 'review metadata'],
+    nextAction: 'Approve, reject, or mark a stored submission as spam through the Forms inbox.',
+  },
+  {
+    key: 'contact-share',
+    label: 'Contact share',
+    expectedEvidence: ['contact-share mapping', 'contact record', 'dedupe metadata'],
+    nextAction: 'Enable contact sharing and approve a submission that creates or updates a contact.',
+  },
+  {
+    key: 'collection-routing',
+    label: 'Collection routing',
+    expectedEvidence: ['collection target mapping', 'created collection record', 'routing status'],
+    nextAction: 'Route an approved submission into a writable collection record.',
+  },
+  {
+    key: 'delivery-audit',
+    label: 'Delivery and audit events',
+    expectedEvidence: ['email/webhook event', 'retry state', 'audit activity'],
+    nextAction: 'Configure email or webhook delivery and capture at least one delivery or retry event.',
+  },
+  {
+    key: 'consent-spam-settings',
+    label: 'Consent and spam settings',
+    expectedEvidence: ['consent field', 'honeypot/captcha setting', 'consent retention record'],
+    nextAction: 'Add consent/spam controls and collect a submission that records consent state.',
+  },
+  {
+    key: 'custom-frontend-contract',
+    label: 'Custom frontend contract',
+    expectedEvidence: ['definition URL', 'submit URL', 'sample payload'],
+    nextAction: 'Select a form so the definition, submit, sample payload, and cURL handoff are available.',
+  },
 ] as const;
 
 type FormsPostgresDatabaseEnvAlias = 'BACKY_DATABASE_URL' | 'DATABASE_URL';
@@ -1117,6 +1187,70 @@ function FormsRoute() {
   const selectedFormContactsUrl = selectedForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/contacts?limit=100`
     : '';
+  const formPersistenceScenarioEvidence = useMemo<FormsPersistenceScenarioEvidence>(() => {
+    const allSubmissions = Object.values(inboxByForm).flatMap((inbox) => inbox.submissions || []);
+    const allDeliveryEvents = Object.values(deliveryEventsByForm).flatMap((events) => events || []);
+    const formsWithFields = forms.filter((form) => form.fields.length > 0).length;
+    const moderatedSubmissions = allSubmissions.filter((submission) => (
+      submission.status === 'approved' ||
+      submission.status === 'rejected' ||
+      submission.status === 'spam' ||
+      Boolean(submission.reviewedAt)
+    )).length;
+    const contactShareConfigured = forms.filter((form) => Boolean(form.contactShare?.enabled)).length;
+    const contactRecords = formsAnalytics?.leads?.summary.contacts || 0;
+    const collectionRoutedSubmissions = allSubmissions.filter((submission) => Boolean(submission.collectionRecord)).length;
+    const consentFieldCount = forms.reduce((sum, form) => sum + form.fields.filter(isConsentField).length, 0);
+    const spamGuardCount = forms.filter((form) => form.enableHoneypot || form.enableCaptcha).length;
+    const evidenceCounts: Record<string, number> = {
+      'form-definition-crud': formsWithFields,
+      'public-submission-intake': Math.max(metrics.submissions, allSubmissions.length),
+      'moderation-review': Math.max(metrics.approved + metrics.spam, moderatedSubmissions),
+      'contact-share': contactRecords + contactShareConfigured,
+      'collection-routing': Math.max(metrics.routedToCollections, collectionRoutedSubmissions),
+      'delivery-audit': allDeliveryEvents.length + formsAuditLogs.filter((log) => String(log.action || '').toLowerCase().includes('form')).length,
+      'consent-spam-settings': consentFieldCount + selectedConsentRecords.length + spamGuardCount,
+      'custom-frontend-contract': selectedForm && selectedFormDefinitionUrl && selectedFormSubmitUrl && selectedFormSamplePayload ? 1 : 0,
+    };
+    const scenarios = FORM_PERSISTENCE_CERTIFICATION_SCENARIOS.map((scenario) => {
+      const evidenceCount = evidenceCounts[scenario.key] || 0;
+      return {
+        ...scenario,
+        evidenceCount,
+        status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+      };
+    });
+    const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+    return {
+      schemaVersion: 'backy.forms-persistence-scenario-evidence.v1',
+      status: covered === scenarios.length ? 'ready' : 'attention',
+      requiredGate: formsPersistenceCertification?.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE,
+      coverage: {
+        covered,
+        total: scenarios.length,
+        missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+      },
+      scenarios,
+      secretHandling: 'Forms persistence scenario evidence reports only names, counts, gates, and readiness states; database URLs, credentials, submission values, IP hashes, and contact payloads stay private.',
+    };
+  }, [
+    deliveryEventsByForm,
+    forms,
+    formsAnalytics?.leads?.summary.contacts,
+    formsAuditLogs,
+    formsPersistenceCertification?.operatorGate,
+    inboxByForm,
+    metrics.approved,
+    metrics.routedToCollections,
+    metrics.spam,
+    metrics.submissions,
+    selectedConsentRecords.length,
+    selectedForm,
+    selectedFormDefinitionUrl,
+    selectedFormSamplePayload,
+    selectedFormSubmitUrl,
+  ]);
   const formPersistenceCertification = useMemo<FormPersistenceCertificationHandoff>(() => ({
     schemaVersion: 'backy.forms-persistence-certification.v1',
     status: 'external-database-gate',
@@ -1152,8 +1286,10 @@ function FormsRoute() {
     operatorCommandTemplate: formsPersistenceCertification?.operatorCommandTemplate || FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE,
     secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
     checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
+    scenarioEvidence: formPersistenceScenarioEvidence,
   }), [
     activeSiteId,
+    formPersistenceScenarioEvidence,
     formsPersistenceCertification?.coverage,
     formsPersistenceCertification?.evidenceExpectations,
     formsPersistenceCertification?.operatorGate,
@@ -3380,6 +3516,59 @@ function FormsRoute() {
             ) : null}
             <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
               Database URLs and credentials are never returned; this runtime summary exposes alias/configuration state only.
+            </div>
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="forms-persistence-scenario-evidence">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium text-foreground">Persistence scenario evidence</div>
+                <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                  Tracks the non-secret form data families operators should prove in the disposable Supabase/Postgres smoke before moving Forms out of Partial.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                  {formPersistenceCertification.scenarioEvidence.schemaVersion}
+                </span>
+                <span className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                  formPersistenceCertification.scenarioEvidence.status === 'ready'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700',
+                )}>
+                  {formPersistenceCertification.scenarioEvidence.coverage.covered}/{formPersistenceCertification.scenarioEvidence.coverage.total} scenarios
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+              {formPersistenceCertification.scenarioEvidence.requiredGate}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {formPersistenceCertification.scenarioEvidence.scenarios.map((scenario) => (
+                <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-medium text-foreground">{scenario.label}</div>
+                    <span className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                      scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                    )}>
+                      {scenario.status}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
+                  </div>
+                  {scenario.status === 'missing' ? (
+                    <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                  ) : null}
+                  <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                    Expected: {scenario.expectedEvidence.join(' | ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+              {formPersistenceCertification.scenarioEvidence.secretHandling}
             </div>
           </div>
         </div>
