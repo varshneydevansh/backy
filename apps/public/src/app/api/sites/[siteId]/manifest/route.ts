@@ -177,8 +177,13 @@ const DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS = {
 } satisfies FrontendDatabaseCertificationCommandOptions;
 
 const quoteCertificationShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteCertificationEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteCertificationShellValue(value)
+);
 
-const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCertificationCommandOptions): string => {
+const buildFrontendDatabaseCertificationEnvEntries = (
+  options: FrontendDatabaseCertificationCommandOptions,
+): Array<[string, string]> => {
   const envEntries: Array<[string, string]> = [
     ['BACKY_DATA_MODE', 'database'],
     ['BACKY_SDK_REQUIRE_DATABASE', '1'],
@@ -197,6 +202,12 @@ const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCert
   if (expectedHost) envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST', expectedHost]);
   if (expectedDatabase) envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE', expectedDatabase]);
 
+  return envEntries;
+};
+
+const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCertificationCommandOptions): string => {
+  const envEntries = buildFrontendDatabaseCertificationEnvEntries(options);
+
   return [
     `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
     `# export ${options.databaseEnvAlias}='<postgres-url>'`,
@@ -207,8 +218,21 @@ const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCert
   ].join('\n');
 };
 
+const buildFrontendDatabaseCertificationEnvTemplate = (options: FrontendDatabaseCertificationCommandOptions): string => {
+  const envEntries = buildFrontendDatabaseCertificationEnvEntries(options);
+
+  return [
+    '# Backy frontend SDK database certification environment',
+    '# Keep the disposable database URL in CI secrets or local shell variables.',
+    `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+    ...envEntries.map(([key, value]) => `${key}=${quoteCertificationEnvTemplateValue(value)}`),
+  ].join('\n');
+};
+
 const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildFrontendDatabaseCertificationCommand(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildFrontendDatabaseCertificationEnvTemplate(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.frontend-database-certification-env-template.v1',
   databaseUrlAliases: FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES,
   requiredInputs: [
     'BACKY_DATABASE_URL or DATABASE_URL',
@@ -223,6 +247,7 @@ const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   ],
+  secretHandling: 'Disposable database URLs stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
 } as const;
 const FRONTEND_DATABASE_CERTIFICATION_COVERAGE = [
   'manifest',
@@ -410,6 +435,13 @@ const frontendDatabaseCertification = {
   scenarioEvidence: buildFrontendDatabaseCertificationEvidence(frontendDatabaseCertificationRuntime),
   runtime: frontendDatabaseCertificationRuntime,
   operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+  operatorEnvTemplate: {
+    schemaVersion: 'backy.frontend-database-certification-env-template.v1',
+    format: 'shell-env',
+    fileName: '.env.backy-frontend-database-certification',
+    body: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    secretHandling: 'Generated template values are non-secret aliases and placeholders; replace the database URL placeholder with a disposable migrated Supabase/Postgres secret before execution.',
+  },
   secretHandling: 'Database URLs and service credentials stay in CI/runtime environment; the manifest exposes only non-secret gate names and requirements.',
 } as const;
 

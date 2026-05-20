@@ -317,6 +317,17 @@ const editableMap = {
   },
 } satisfies GeneratedBackyEditableMap;
 
+const frontendDatabaseCertificationEnvTemplate = [
+  "# Backy frontend SDK database certification environment",
+  "# Keep the disposable database URL in CI secrets or local shell variables.",
+  "BACKY_DATABASE_URL=<disposable-postgres-url>",
+  "BACKY_RELEASE_CERTIFY_DATABASE=1",
+  "BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1",
+  "BACKY_DATA_MODE=database",
+  "BACKY_SDK_REQUIRE_DATABASE=1",
+  "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true",
+].join("\n");
+
 const frontendDatabaseCertification = {
   schemaVersion: "backy.frontend-database-certification.v1",
   status: "external-database-gate",
@@ -393,6 +404,8 @@ const frontendDatabaseCertification = {
       "npm run doctor:release-certification",
       "npm run ci:sdk-postgres-smoke",
     ].join("\n"),
+    envTemplate: frontendDatabaseCertificationEnvTemplate,
+    envTemplateSchemaVersion: "backy.frontend-database-certification-env-template.v1",
     databaseUrlAliases: ["BACKY_DATABASE_URL", "DATABASE_URL"],
     requiredInputs: [
       "BACKY_DATABASE_URL or DATABASE_URL",
@@ -407,6 +420,16 @@ const frontendDatabaseCertification = {
       "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
       "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",
     ],
+    secretHandling:
+      "Disposable database URLs stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.",
+  },
+  operatorEnvTemplate: {
+    schemaVersion: "backy.frontend-database-certification-env-template.v1",
+    format: "shell-env",
+    fileName: ".env.backy-frontend-database-certification",
+    body: frontendDatabaseCertificationEnvTemplate,
+    secretHandling:
+      "Generated template values are non-secret aliases and placeholders; replace the database URL placeholder with a disposable migrated Supabase/Postgres secret before execution.",
   },
   runtime: {
     dataMode: "database",

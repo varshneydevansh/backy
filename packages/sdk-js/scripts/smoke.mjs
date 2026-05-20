@@ -743,12 +743,43 @@ assert(
     manifest.data.contract.databaseCertification.scenarioEvidence.secretHandling.includes('database URLs, service credentials, private orders, submissions, and contact payloads stay private'),
   'manifest() missing non-secret database certification scenario boundary',
 );
+const databaseOperatorCommandTemplate = manifest.data.contract?.databaseCertification?.operatorCommandTemplate || {};
+const databaseOperatorEnvTemplate = manifest.data.contract?.databaseCertification?.operatorEnvTemplate || {};
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('npm run ci:sdk-postgres-smoke'), 'manifest() missing SDK Postgres operator command template');
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('BACKY_SDK_REQUIRE_DATABASE'), 'manifest() missing SDK database-mode operator env');
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('npm run doctor:release-certification'), 'manifest() missing SDK release doctor command');
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.databaseUrlAliases?.includes('BACKY_DATABASE_URL'), 'manifest() missing operator BACKY_DATABASE_URL alias');
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.requiredInputs?.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'), 'manifest() missing operator disposable confirmation input');
 assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), 'manifest() missing operator database-name guard');
+assert(databaseOperatorCommandTemplate.envTemplateSchemaVersion === 'backy.frontend-database-certification-env-template.v1', 'manifest() missing SDK Postgres operator env-template schema');
+assert(
+  typeof databaseOperatorCommandTemplate.envTemplate === 'string' &&
+    databaseOperatorCommandTemplate.envTemplate.includes('BACKY_DATABASE_URL=<disposable-postgres-url>') &&
+    databaseOperatorCommandTemplate.envTemplate.includes('BACKY_SDK_REQUIRE_DATABASE=1') &&
+    databaseOperatorCommandTemplate.envTemplate.includes('BACKY_RELEASE_CERTIFY_DATABASE=1'),
+  'manifest() missing SDK Postgres operator env template body',
+);
+assert(
+  typeof databaseOperatorCommandTemplate.secretHandling === 'string' &&
+    databaseOperatorCommandTemplate.secretHandling.includes('Disposable database URLs stay in CI secrets'),
+  'manifest() missing SDK Postgres operator env-template secret boundary',
+);
+assert(databaseOperatorEnvTemplate.schemaVersion === 'backy.frontend-database-certification-env-template.v1', 'manifest() missing SDK Postgres operator env template schema');
+assert(databaseOperatorEnvTemplate.format === 'shell-env', 'manifest() SDK Postgres operator env template must be shell-env format');
+assert(databaseOperatorEnvTemplate.fileName === '.env.backy-frontend-database-certification', 'manifest() SDK Postgres operator env template filename drifted');
+assert(
+  typeof databaseOperatorEnvTemplate.body === 'string' &&
+    databaseOperatorEnvTemplate.body.includes('# Backy frontend SDK database certification environment') &&
+    databaseOperatorEnvTemplate.body.includes('BACKY_DATABASE_URL=<disposable-postgres-url>') &&
+    databaseOperatorEnvTemplate.body.includes('BACKY_SDK_REQUIRE_DATABASE=1') &&
+    databaseOperatorEnvTemplate.body.includes('BACKY_RELEASE_CERTIFY_DATABASE=1'),
+  'manifest() missing SDK Postgres operator env template body handoff',
+);
+assert(
+  typeof databaseOperatorEnvTemplate.secretHandling === 'string' &&
+    databaseOperatorEnvTemplate.secretHandling.includes('replace the database URL placeholder with a disposable migrated Supabase/Postgres secret'),
+  'manifest() missing SDK Postgres operator env template secret handling',
+);
 assert(typeof manifest.data.contract?.databaseCertification?.runtime?.databaseUrlConfigured === 'boolean', 'manifest() missing non-secret database URL runtime state');
 assert(Object.prototype.hasOwnProperty.call(manifest.data.contract.databaseCertification.runtime, 'databaseUrlAlias'), 'manifest() missing non-secret database URL alias runtime field');
 assert(typeof manifest.data.contract.databaseCertification.runtime.disposableConfirmed === 'boolean', 'manifest() missing disposable confirmation runtime state');
@@ -813,6 +844,8 @@ assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'open
 assert(openapi['x-backy-database-certification']?.schemaVersion === manifest.data.contract.databaseCertification.schemaVersion, 'openapi() missing database certification schema extension');
 assert(openapi['x-backy-database-certification']?.gate?.command === manifest.data.contract.databaseCertification.gate.command, 'openapi() database certification command drifted from manifest');
 assert(openapi['x-backy-database-certification']?.operatorCommandTemplate?.command === manifest.data.contract.databaseCertification.operatorCommandTemplate.command, 'openapi() database certification operator command drifted from manifest');
+assert(openapi['x-backy-database-certification']?.operatorCommandTemplate?.envTemplate === manifest.data.contract.databaseCertification.operatorCommandTemplate.envTemplate, 'openapi() database certification operator env template drifted from manifest');
+assert(openapi['x-backy-database-certification']?.operatorEnvTemplate?.body === manifest.data.contract.databaseCertification.operatorEnvTemplate.body, 'openapi() database certification operator env-template handoff drifted from manifest');
 assert(openapi['x-backy-database-certification']?.environment?.secretAliases?.includes('DATABASE_URL'), 'openapi() missing DATABASE_URL certification alias');
 assert(openapi['x-backy-database-certification']?.environment?.requiredConfirmationEnv === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', 'openapi() missing SDK Postgres disposable confirmation env requirement');
 assert(openapi['x-backy-database-certification']?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'), 'openapi() missing database expected-host guard');

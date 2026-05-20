@@ -2654,9 +2654,20 @@ export interface BackyFrontendDatabaseCertification {
   };
   operatorCommandTemplate: {
     command: string;
+    envTemplate: string;
+    envTemplateSchemaVersion: "backy.frontend-database-certification-env-template.v1";
     databaseUrlAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL" | string>;
     requiredInputs: string[];
     targetGuards: string[];
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  operatorEnvTemplate: {
+    schemaVersion: "backy.frontend-database-certification-env-template.v1";
+    format: "shell-env";
+    fileName: ".env.backy-frontend-database-certification";
+    body: string;
+    secretHandling: string;
     [key: string]: unknown;
   };
   runtime: {

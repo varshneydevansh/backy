@@ -102,6 +102,8 @@
           "additionalProperties": true,
           "properties": {
             "command": { "type": "string", "minLength": 1 },
+            "envTemplate": { "type": "string", "minLength": 1 },
+            "envTemplateSchemaVersion": { "const": "backy.frontend-database-certification-env-template.v1" },
             "databaseUrlAliases": {
               "type": "array",
               "items": { "enum": ["BACKY_DATABASE_URL", "DATABASE_URL"] },
@@ -120,9 +122,22 @@
                   "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE"
                 ]
               }
-            }
+            },
+            "secretHandling": { "type": "string", "minLength": 1 }
           },
-          "required": ["command", "databaseUrlAliases", "requiredInputs", "targetGuards"]
+          "required": ["command", "envTemplate", "envTemplateSchemaVersion", "databaseUrlAliases", "requiredInputs", "targetGuards", "secretHandling"]
+        },
+        "operatorEnvTemplate": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.frontend-database-certification-env-template.v1" },
+            "format": { "const": "shell-env" },
+            "fileName": { "const": ".env.backy-frontend-database-certification" },
+            "body": { "type": "string", "minLength": 1 },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["schemaVersion", "format", "fileName", "body", "secretHandling"]
         },
         "runtime": {
           "type": "object",
@@ -151,7 +166,7 @@
         },
         "secretHandling": { "type": "string", "minLength": 1 }
       },
-      "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "scenarioEvidence", "operatorCommandTemplate", "runtime", "secretHandling"]
+      "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "scenarioEvidence", "operatorCommandTemplate", "operatorEnvTemplate", "runtime", "secretHandling"]
     },
     "launchReadiness": {
       "type": "object",

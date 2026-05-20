@@ -795,7 +795,9 @@ const DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS = {
   includeReleaseDoctor: true,
 } satisfies FrontendDatabaseCertificationCommandOptions;
 
-const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCertificationCommandOptions): string => {
+const buildFrontendDatabaseCertificationEnvEntries = (
+  options: FrontendDatabaseCertificationCommandOptions,
+): Array<[string, string]> => {
   const envEntries: Array<[string, string]> = [
     ['BACKY_DATA_MODE', 'database'],
     ['BACKY_SDK_REQUIRE_DATABASE', '1'],
@@ -818,6 +820,12 @@ const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCert
     envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE', expectedDatabase]);
   }
 
+  return envEntries;
+};
+
+const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCertificationCommandOptions): string => {
+  const envEntries = buildFrontendDatabaseCertificationEnvEntries(options);
+
   return [
     `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
     `# export ${options.databaseEnvAlias}='<postgres-url>'`,
@@ -825,6 +833,17 @@ const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCert
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
     'npm run ci:sdk-postgres-smoke',
+  ].join('\n');
+};
+
+const buildFrontendDatabaseCertificationEnvTemplate = (options: FrontendDatabaseCertificationCommandOptions): string => {
+  const envEntries = buildFrontendDatabaseCertificationEnvEntries(options);
+
+  return [
+    '# Backy frontend SDK database certification environment',
+    '# Keep the disposable database URL in CI secrets or local shell variables.',
+    `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+    ...envEntries.map(([key, value]) => `${key}=${quoteEnvTemplateValue(value)}`),
   ].join('\n');
 };
 
@@ -842,12 +861,15 @@ const buildFrontendDatabaseCertificationRequiredInputs = (options: FrontendDatab
 
 const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildFrontendDatabaseCertificationCommand(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildFrontendDatabaseCertificationEnvTemplate(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.frontend-database-certification-env-template.v1',
   databaseUrlAliases: FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES,
   requiredInputs: buildFrontendDatabaseCertificationRequiredInputs(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
   targetGuards: [
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   ],
+  secretHandling: 'Disposable database URLs stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
 };
 const FRONTEND_DATABASE_CERTIFICATION_COVERAGE_FAMILIES = [
   'manifest',
@@ -2375,6 +2397,13 @@ function SettingsPage() {
       targetGuards: ['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST', 'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'],
     },
     operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+    operatorEnvTemplate: {
+      schemaVersion: 'backy.frontend-database-certification-env-template.v1',
+      format: 'shell-env',
+      fileName: '.env.backy-frontend-database-certification',
+      body: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+      secretHandling: 'Generated template values are non-secret aliases and placeholders; replace the database URL placeholder with a disposable migrated Supabase/Postgres secret before execution.',
+    },
     publicContracts: {
       manifest: '/api/sites/{siteId}/manifest#data.contract.databaseCertification',
       openApi: '/api/sites/{siteId}/openapi#x-backy-database-certification',
@@ -4444,12 +4473,17 @@ function DeliveryModeSettings({
     DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS,
   );
   const [copiedFrontendDatabaseCommand, setCopiedFrontendDatabaseCommand] = useState(false);
+  const [copiedFrontendDatabaseEnvTemplate, setCopiedFrontendDatabaseEnvTemplate] = useState(false);
   const publicApiBase = getApiBase('public');
   const adminApiBase = getApiBase('admin');
   const publicHostBase = publicApiBase.replace(/\/api$/, '');
   const publicSiteBase = `${publicHostBase}/sites`;
   const frontendDatabaseCertificationCommand = useMemo(
     () => buildFrontendDatabaseCertificationCommand(frontendDatabaseCommandOptions),
+    [frontendDatabaseCommandOptions],
+  );
+  const frontendDatabaseCertificationEnvTemplate = useMemo(
+    () => buildFrontendDatabaseCertificationEnvTemplate(frontendDatabaseCommandOptions),
     [frontendDatabaseCommandOptions],
   );
   const frontendDatabaseCertificationRequiredInputs = useMemo(
@@ -4497,6 +4531,20 @@ function DeliveryModeSettings({
       }, 1200);
     } catch {
       setCopiedEndpoint('');
+    }
+  };
+
+  const copyFrontendDatabaseCertificationEnvTemplate = async () => {
+    if (frontendDatabaseCertificationControlsDisabled) return;
+
+    try {
+      await navigator.clipboard.writeText(frontendDatabaseCertificationEnvTemplate);
+      setCopiedFrontendDatabaseEnvTemplate(true);
+      setTimeout(() => {
+        setCopiedFrontendDatabaseEnvTemplate(false);
+      }, 1400);
+    } catch {
+      setCopiedFrontendDatabaseEnvTemplate(false);
     }
   };
 
@@ -4760,17 +4808,30 @@ function DeliveryModeSettings({
                   Build the exact command for the custom-frontend SDK database smoke. Database URLs stay in CI secrets or local shell env; this builder only writes aliases and target guards.
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void copyFrontendDatabaseCertificationCommand()}
-                disabled={frontendDatabaseCertificationControlsDisabled}
-                title={frontendDatabaseCertificationControlsTitle}
-                iconStart={copiedFrontendDatabaseCommand ? <Check className="size-4" /> : <Copy className="size-4" />}
-                data-testid="settings-frontend-database-certification-command-builder-copy-button"
-              >
-                {copiedFrontendDatabaseCommand ? 'Copied command' : 'Copy guarded command'}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copyFrontendDatabaseCertificationEnvTemplate()}
+                  disabled={frontendDatabaseCertificationControlsDisabled}
+                  title={frontendDatabaseCertificationControlsTitle}
+                  iconStart={copiedFrontendDatabaseEnvTemplate ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  data-testid="settings-frontend-database-certification-env-copy-button"
+                >
+                  {copiedFrontendDatabaseEnvTemplate ? 'Copied env template' : 'Copy env template'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copyFrontendDatabaseCertificationCommand()}
+                  disabled={frontendDatabaseCertificationControlsDisabled}
+                  title={frontendDatabaseCertificationControlsTitle}
+                  iconStart={copiedFrontendDatabaseCommand ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  data-testid="settings-frontend-database-certification-command-builder-copy-button"
+                >
+                  {copiedFrontendDatabaseCommand ? 'Copied command' : 'Copy guarded command'}
+                </Button>
+              </div>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label className="text-xs">
@@ -4852,6 +4913,25 @@ function DeliveryModeSettings({
                   </span>
                 </label>
               </div>
+            </div>
+            <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="settings-frontend-database-certification-env-template">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Env template</div>
+                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                    Copy this into CI secrets or a local shell env file, then replace the database URL placeholder with a disposable migrated Supabase/Postgres target before running the guarded command.
+                  </p>
+                </div>
+                <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  backy.frontend-database-certification-env-template.v1
+                </span>
+              </div>
+              <pre
+                className="mt-2 max-h-64 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px] leading-5 text-foreground"
+                data-testid="settings-frontend-database-certification-env-template-body"
+              >
+                {frontendDatabaseCertificationEnvTemplate}
+              </pre>
             </div>
             <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="settings-frontend-database-certification-command">
               <code>{frontendDatabaseCertificationCommand}</code>

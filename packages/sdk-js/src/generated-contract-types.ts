@@ -2543,9 +2543,20 @@ export type GeneratedBackyFrontendManifestDatabaseCertification = {
   };
   operatorCommandTemplate: {
     command: string;
+    envTemplate: string;
+    envTemplateSchemaVersion: "backy.frontend-database-certification-env-template.v1";
     databaseUrlAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL">;
     requiredInputs: Array<string>;
     targetGuards: Array<"BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST" | "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE">;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  operatorEnvTemplate: {
+    schemaVersion: "backy.frontend-database-certification-env-template.v1";
+    format: "shell-env";
+    fileName: ".env.backy-frontend-database-certification";
+    body: string;
+    secretHandling: string;
     [key: string]: unknown;
   };
   runtime: {
