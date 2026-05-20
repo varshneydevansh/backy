@@ -724,6 +724,7 @@ const ORDER_PROVIDER_CERTIFICATION_SELECTORS = [
   'BACKY_COMMERCE_CERTIFY_PAYMENT=1 with BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
   'BACKY_COMMERCE_CERTIFY_TAX=1 with BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
   'BACKY_COMMERCE_CERTIFY_SHIPPING=1 with BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+  'BACKY_COMMERCE_CERTIFY_DISCOUNT=1 with BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER',
   'BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS=1 with BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER',
   'BACKY_COMMERCE_CERTIFY_WEBHOOKS=1 with BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
 ] as const;
@@ -760,6 +761,11 @@ const ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS = [
   { value: 'shippo', label: 'Shippo', description: 'Require Shippo rates, labels, refunds, and tracking credentials.' },
   { value: 'http', label: 'HTTP', description: 'Require a Settings shipping quote provider URL.' },
 ] as const;
+const ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS = [
+  { value: 'auto', label: 'Auto', description: 'Use the first configured live discount credential or endpoint.' },
+  { value: 'stripe', label: 'Stripe promotion codes', description: 'Require Stripe promotion-code lookup credentials.' },
+  { value: 'http', label: 'HTTP', description: 'Require a Settings discount quote provider URL.' },
+] as const;
 const ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS = [
   ...ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS,
   { value: 'http', label: 'HTTP', description: 'Require a Settings subscription action provider URL.' },
@@ -772,6 +778,7 @@ const ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS = [
 type OrderProviderCertificationPaymentProvider = (typeof ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS)[number]['value'];
 type OrderProviderCertificationTaxProvider = (typeof ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS)[number]['value'];
 type OrderProviderCertificationShippingProvider = (typeof ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS)[number]['value'];
+type OrderProviderCertificationDiscountProvider = (typeof ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS)[number]['value'];
 type OrderProviderCertificationSubscriptionProvider = (typeof ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS)[number]['value'];
 type OrderProviderCertificationWebhookProvider = (typeof ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS)[number]['value'];
 
@@ -782,6 +789,8 @@ type OrderProviderCertificationCommandOptions = {
   taxProvider: OrderProviderCertificationTaxProvider;
   certifyShipping: boolean;
   shippingProvider: OrderProviderCertificationShippingProvider;
+  certifyDiscount: boolean;
+  discountProvider: OrderProviderCertificationDiscountProvider;
   certifySubscriptions: boolean;
   subscriptionProvider: OrderProviderCertificationSubscriptionProvider;
   certifyWebhooks: boolean;
@@ -798,6 +807,8 @@ const DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
   taxProvider: 'auto',
   certifyShipping: true,
   shippingProvider: 'auto',
+  certifyDiscount: true,
+  discountProvider: 'auto',
   certifySubscriptions: true,
   subscriptionProvider: 'auto',
   certifyWebhooks: true,
@@ -814,6 +825,7 @@ const hasOrderProviderCertificationSelector = (options: OrderProviderCertificati
   options.certifyPayment ||
   options.certifyTax ||
   options.certifyShipping ||
+  options.certifyDiscount ||
   options.certifySubscriptions ||
   options.certifyWebhooks
 );
@@ -859,6 +871,14 @@ const ORDER_PROVIDER_CERTIFICATION_SHIPPING_INPUTS: Record<OrderProviderCertific
   shippo: ['BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY'],
   http: ['BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL'],
 };
+const ORDER_PROVIDER_CERTIFICATION_DISCOUNT_INPUTS: Record<OrderProviderCertificationDiscountProvider, string[]> = {
+  auto: [
+    'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
+    'BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL',
+  ],
+  stripe: ['BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY'],
+  http: ['BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL'],
+};
 const ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_INPUTS: Record<OrderProviderCertificationSubscriptionProvider, string[]> = {
   ...ORDER_PROVIDER_CERTIFICATION_PAYMENT_INPUTS,
   http: ['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL'],
@@ -886,6 +906,8 @@ const buildOrderProviderCertificationCommand = (options: OrderProviderCertificat
     ['BACKY_COMMERCE_CERTIFY_TAX_PROVIDER', options.taxProvider],
     ['BACKY_COMMERCE_CERTIFY_SHIPPING', orderBoolEnv(options.certifyShipping)],
     ['BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER', options.shippingProvider],
+    ['BACKY_COMMERCE_CERTIFY_DISCOUNT', orderBoolEnv(options.certifyDiscount)],
+    ['BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER', options.discountProvider],
     ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', orderBoolEnv(options.certifySubscriptions)],
     ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER', options.subscriptionProvider],
     ['BACKY_COMMERCE_CERTIFY_WEBHOOKS', orderBoolEnv(options.certifyWebhooks)],
@@ -908,6 +930,9 @@ const buildOrderProviderCertificationCommand = (options: OrderProviderCertificat
   }
   if (options.certifyShipping && options.shippingProvider === 'http') {
     envEntries.push(['BACKY_COMMERCE_SHIPPING_PROVIDER_URL', '<https-shipping-provider-url>']);
+  }
+  if (options.certifyDiscount && options.discountProvider === 'http') {
+    envEntries.push(['BACKY_COMMERCE_DISCOUNT_PROVIDER_URL', '<https-discount-provider-url>']);
   }
   if (options.certifySubscriptions && options.subscriptionProvider === 'http') {
     envEntries.push(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', '<https-subscription-action-url>']);
@@ -937,6 +962,9 @@ const buildOrderProviderCertificationRequiredInputs = (options: OrderProviderCer
     options.certifyShipping ? 'BACKY_COMMERCE_CERTIFY_SHIPPING=1' : '',
     options.certifyShipping ? 'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER' : '',
     ...(options.certifyShipping ? ORDER_PROVIDER_CERTIFICATION_SHIPPING_INPUTS[options.shippingProvider] : []),
+    options.certifyDiscount ? 'BACKY_COMMERCE_CERTIFY_DISCOUNT=1' : '',
+    options.certifyDiscount ? 'BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER' : '',
+    ...(options.certifyDiscount ? ORDER_PROVIDER_CERTIFICATION_DISCOUNT_INPUTS[options.discountProvider] : []),
     options.certifySubscriptions ? 'BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS=1' : '',
     options.certifySubscriptions ? 'BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER' : '',
     ...(options.certifySubscriptions ? ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_INPUTS[options.subscriptionProvider] : []),
@@ -956,6 +984,7 @@ const ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
     payment: ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.map((option) => option.value),
     tax: ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.map((option) => option.value),
     shipping: ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS.map((option) => option.value),
+    discount: ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS.map((option) => option.value),
     subscription: ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS.map((option) => option.value),
     webhook: ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS.map((option) => option.value),
   },
@@ -3791,7 +3820,7 @@ function OrdersRoute() {
 	                        Copy guarded command
 	                      </Button>
 	                    </div>
-	                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+	                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
 	                      {([
 	                        {
 	                          key: 'certifyPayment',
@@ -3812,6 +3841,12 @@ function OrdersRoute() {
 	                          testId: 'orders-provider-certification-shipping-toggle',
 	                        },
 	                        {
+	                          key: 'certifyDiscount',
+	                          label: 'Discount quotes',
+	                          env: 'BACKY_COMMERCE_CERTIFY_DISCOUNT',
+	                          testId: 'orders-provider-certification-discount-toggle',
+	                        },
+	                        {
 	                          key: 'certifySubscriptions',
 	                          label: 'Subscriptions',
 	                          env: 'BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS',
@@ -3830,7 +3865,7 @@ function OrdersRoute() {
 	                          testId: 'orders-provider-certification-fulfillment-toggle',
 	                        },
 	                      ] satisfies Array<{
-	                        key: 'certifyPayment' | 'certifyTax' | 'certifyShipping' | 'certifySubscriptions' | 'certifyWebhooks' | 'includeFulfillmentEvidence';
+	                        key: 'certifyPayment' | 'certifyTax' | 'certifyShipping' | 'certifyDiscount' | 'certifySubscriptions' | 'certifyWebhooks' | 'includeFulfillmentEvidence';
 	                        label: string;
 	                        env: string;
 	                        testId: string;
@@ -3853,7 +3888,7 @@ function OrdersRoute() {
 	                        </label>
 	                      ))}
 	                    </div>
-	                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+	                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 	                      <label className="text-xs">
 	                        <span className="font-semibold text-foreground">Payment/refund provider</span>
 	                        <select
@@ -3909,6 +3944,25 @@ function OrdersRoute() {
 	                        </select>
 	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
 	                          {ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS.find((option) => option.value === providerCertificationCommandOptions.shippingProvider)?.description}
+	                        </span>
+	                      </label>
+	                      <label className="text-xs">
+	                        <span className="font-semibold text-foreground">Discount provider</span>
+	                        <select
+	                          value={providerCertificationCommandOptions.discountProvider}
+	                          onChange={(event) => updateProviderCertificationCommandOptions({
+	                            discountProvider: event.target.value as OrderProviderCertificationDiscountProvider,
+	                          })}
+	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyDiscount}
+	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+	                          data-testid="orders-provider-certification-discount-provider-select"
+	                        >
+	                          {ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS.map((option) => (
+	                            <option key={option.value} value={option.value}>{option.label}</option>
+	                          ))}
+	                        </select>
+	                        <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+	                          {ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS.find((option) => option.value === providerCertificationCommandOptions.discountProvider)?.description}
 	                        </span>
 	                      </label>
 	                      <label className="text-xs">

@@ -53,6 +53,20 @@ on:
           - easypost
           - shippo
           - http
+      certify_discount:
+        description: Verify selected live discount quote credentials or endpoint are exposed through Backy runtime diagnostics.
+        required: true
+        type: boolean
+        default: true
+      discount_provider:
+        description: Expected discount provider for local demo certification. External certification remains read-only and checks deployed Settings.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - http
       certify_catalog:
         description: Verify at least one live catalog sync provider credential is exposed through Backy runtime diagnostics.
         required: true
@@ -125,6 +139,8 @@ jobs:
       BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: ${{ inputs.tax_provider }}
       BACKY_COMMERCE_CERTIFY_SHIPPING: ${{ inputs.certify_shipping && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: ${{ inputs.shipping_provider }}
+      BACKY_COMMERCE_CERTIFY_DISCOUNT: ${{ inputs.certify_discount && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER: ${{ inputs.discount_provider }}
       BACKY_COMMERCE_CERTIFY_CATALOG: ${{ inputs.certify_catalog && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: ${{ inputs.catalog_provider }}
       BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: ${{ inputs.certify_subscriptions && '1' || '0' }}
@@ -138,6 +154,8 @@ jobs:
       COMMERCE_TAX_PROVIDER_URL: ${{ vars.COMMERCE_TAX_PROVIDER_URL }}
       BACKY_COMMERCE_SHIPPING_PROVIDER_URL: ${{ vars.BACKY_COMMERCE_SHIPPING_PROVIDER_URL }}
       COMMERCE_SHIPPING_PROVIDER_URL: ${{ vars.COMMERCE_SHIPPING_PROVIDER_URL }}
+      BACKY_COMMERCE_DISCOUNT_PROVIDER_URL: ${{ vars.BACKY_COMMERCE_DISCOUNT_PROVIDER_URL }}
+      COMMERCE_DISCOUNT_PROVIDER_URL: ${{ vars.COMMERCE_DISCOUNT_PROVIDER_URL }}
       BACKY_COMMERCE_PRODUCT_SYNC_URL: ${{ vars.BACKY_COMMERCE_PRODUCT_SYNC_URL }}
       COMMERCE_PRODUCT_SYNC_URL: ${{ vars.COMMERCE_PRODUCT_SYNC_URL }}
       BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL: ${{ vars.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL }}
@@ -273,6 +291,7 @@ jobs:
             echo "| payment_provider | ${{ inputs.payment_provider }} |"
             echo "| tax_provider | ${{ inputs.tax_provider }} |"
             echo "| shipping_provider | ${{ inputs.shipping_provider }} |"
+            echo "| discount_provider | ${{ inputs.discount_provider }} |"
             echo "| catalog_provider | ${{ inputs.catalog_provider }} |"
             echo "| subscription_provider | ${{ inputs.subscription_provider }} |"
             echo "| webhook_provider | ${{ inputs.webhook_provider }} |"

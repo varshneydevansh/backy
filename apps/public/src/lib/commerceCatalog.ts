@@ -176,6 +176,7 @@ export interface CommerceStorefrontContract {
         payment: string[];
         tax: string[];
         shipping: string[];
+        discount: string[];
         catalog: string[];
         subscription: string[];
         webhook: string[];
@@ -277,6 +278,8 @@ const buildCommerceProviderCertificationCommand = (): string => {
     ['BACKY_COMMERCE_CERTIFY_TAX_PROVIDER', 'auto'],
     ['BACKY_COMMERCE_CERTIFY_SHIPPING', '1'],
     ['BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER', 'auto'],
+    ['BACKY_COMMERCE_CERTIFY_DISCOUNT', '1'],
+    ['BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER', 'auto'],
     ['BACKY_COMMERCE_CERTIFY_CATALOG', '1'],
     ['BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER', 'auto'],
     ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', '1'],
@@ -299,6 +302,7 @@ const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefr
     payment: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay'],
     tax: ['auto', 'stripe', 'taxjar', 'avalara', 'http'],
     shipping: ['auto', 'easypost', 'shippo', 'http'],
+    discount: ['auto', 'stripe', 'http'],
     catalog: ['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http'],
     subscription: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http'],
     webhook: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'generic'],
@@ -308,6 +312,7 @@ const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefr
     'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER',
@@ -316,6 +321,7 @@ const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefr
     'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY',
     'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY',
     'BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL',
+    'BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL',
     'BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL',
     'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
     'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',

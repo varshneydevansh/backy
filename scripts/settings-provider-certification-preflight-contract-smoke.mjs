@@ -114,6 +114,7 @@ includesAll(
     'payment_provider:',
     'tax_provider:',
     'shipping_provider:',
+    'discount_provider:',
     'catalog_provider:',
     'subscription_provider:',
     'webhook_provider:',
@@ -161,6 +162,7 @@ includesAll(
     'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
     'BACKY_MAGENTO_ACCESS_TOKEN',
     'MAGENTO_ACCESS_TOKEN',
@@ -184,6 +186,8 @@ includesAll(
     'COMMERCE_TAX_PROVIDER_URL',
     'BACKY_COMMERCE_SHIPPING_PROVIDER_URL',
     'COMMERCE_SHIPPING_PROVIDER_URL',
+    'BACKY_COMMERCE_DISCOUNT_PROVIDER_URL',
+    'COMMERCE_DISCOUNT_PROVIDER_URL',
     'BACKY_COMMERCE_PRODUCT_SYNC_URL',
     'COMMERCE_PRODUCT_SYNC_URL',
     'BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL',
@@ -214,6 +218,7 @@ includesAll(
     'external target configured:',
     'admin key configured:',
     'storage_provider',
+    'discount_provider',
     'webhook_provider',
     'Run Settings provider certification',
     'npm run ci:settings-provider-certification',
@@ -233,6 +238,7 @@ assertChoiceOptions(workflow, 'notification_provider', ['auto', 'webhook', 'http
 assertChoiceOptions(workflow, 'payment_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay']);
 assertChoiceOptions(workflow, 'tax_provider', ['auto', 'stripe', 'taxjar', 'avalara', 'http']);
 assertChoiceOptions(workflow, 'shipping_provider', ['auto', 'easypost', 'shippo', 'http']);
+assertChoiceOptions(workflow, 'discount_provider', ['auto', 'stripe', 'http']);
 assertChoiceOptions(workflow, 'catalog_provider', ['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http']);
 assertChoiceOptions(workflow, 'subscription_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http']);
 assertChoiceOptions(workflow, 'webhook_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'generic']);
@@ -345,6 +351,7 @@ includesAll(
     'COMMERCE_WEBHOOK_SECRET',
     'COMMERCE_TAX_PROVIDER_URL',
     'COMMERCE_SHIPPING_PROVIDER_URL',
+    'COMMERCE_DISCOUNT_PROVIDER_URL',
     'COMMERCE_PRODUCT_SYNC_URL',
     'COMMERCE_SUBSCRIPTION_ACTION_URL',
   ],

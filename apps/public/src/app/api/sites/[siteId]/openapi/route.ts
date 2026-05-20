@@ -5930,6 +5930,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                         payment: { type: "array", items: { type: "string" } },
                         tax: { type: "array", items: { type: "string" } },
                         shipping: { type: "array", items: { type: "string" } },
+                        discount: { type: "array", items: { type: "string" } },
                         catalog: { type: "array", items: { type: "string" } },
                         subscription: { type: "array", items: { type: "string" } },
                         webhook: { type: "array", items: { type: "string" } },

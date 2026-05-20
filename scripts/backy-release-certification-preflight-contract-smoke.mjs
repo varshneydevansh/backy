@@ -78,6 +78,7 @@ includesAll(
     'payment_provider:',
     'tax_provider:',
     'shipping_provider:',
+    'discount_provider:',
     'catalog_provider:',
     'subscription_provider:',
     'webhook_provider:',
@@ -126,11 +127,14 @@ includesAll(
     'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
     'BACKY_COMMERCE_TAX_PROVIDER_URL',
     'COMMERCE_TAX_PROVIDER_URL',
     'BACKY_COMMERCE_SHIPPING_PROVIDER_URL',
     'COMMERCE_SHIPPING_PROVIDER_URL',
+    'BACKY_COMMERCE_DISCOUNT_PROVIDER_URL',
+    'COMMERCE_DISCOUNT_PROVIDER_URL',
     'BACKY_COMMERCE_PRODUCT_SYNC_URL',
     'COMMERCE_PRODUCT_SYNC_URL',
     'BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL',
@@ -230,6 +234,7 @@ assertChoiceOptions(workflow, 'notification_provider', ['auto', 'webhook', 'http
 assertChoiceOptions(workflow, 'payment_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay']);
 assertChoiceOptions(workflow, 'tax_provider', ['auto', 'stripe', 'taxjar', 'avalara', 'http']);
 assertChoiceOptions(workflow, 'shipping_provider', ['auto', 'easypost', 'shippo', 'http']);
+assertChoiceOptions(workflow, 'discount_provider', ['auto', 'stripe', 'http']);
 assertChoiceOptions(workflow, 'catalog_provider', ['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http']);
 assertChoiceOptions(workflow, 'subscription_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'http']);
 assertChoiceOptions(workflow, 'webhook_provider', ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay', 'generic']);
@@ -292,7 +297,9 @@ includesAll(
     'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
+    'BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
+    'HTTP discount provider URL',
     'HTTP tax provider URL',
     'HTTP shipping provider URL',
     'HTTP catalog provider URL',
@@ -380,8 +387,12 @@ includesAll(
     'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
     'EasyPost credentials',
     'Shippo credentials',
+    'BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER',
+    'auto discount credentials',
+    'Stripe promotion-code discount credentials',
     'HTTP tax provider URL',
     'HTTP shipping provider URL',
+    'HTTP discount provider URL',
     'HTTP catalog provider URL',
     'HTTP subscription provider URL',
     'BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER',
@@ -397,6 +408,7 @@ includesAll(
     'selected Adyen subscription',
     'selected Avalara tax',
     'selected EasyPost shipping',
+    'selected HTTP discount',
     'selected BigCommerce catalog',
     'selected Magento catalog',
     'selected commerce webhook',
@@ -510,9 +522,10 @@ includesAll(
     'payment_provider',
     'tax_provider',
     'shipping_provider',
+    'discount_provider',
     'catalog_provider',
     'subscription_provider',
-    'HTTP endpoint aliases such as `COMMERCE_TAX_PROVIDER_URL`, `COMMERCE_SHIPPING_PROVIDER_URL`, `COMMERCE_PRODUCT_SYNC_URL`, and `COMMERCE_SUBSCRIPTION_ACTION_URL`',
+    'HTTP endpoint aliases such as `COMMERCE_TAX_PROVIDER_URL`, `COMMERCE_SHIPPING_PROVIDER_URL`, `COMMERCE_DISCOUNT_PROVIDER_URL`, `COMMERCE_PRODUCT_SYNC_URL`, and `COMMERCE_SUBSCRIPTION_ACTION_URL`',
     'BACKY_SUPABASE_SERVICE_ROLE_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
     'BACKY_S3_SECRET_ACCESS_KEY',

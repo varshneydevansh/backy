@@ -21,12 +21,14 @@ const adminKey = providedAdminKey || generatedAdminKey;
 const certifyPayment = process.env.BACKY_COMMERCE_CERTIFY_PAYMENT === '1';
 const certifyTax = process.env.BACKY_COMMERCE_CERTIFY_TAX === '1';
 const certifyShipping = process.env.BACKY_COMMERCE_CERTIFY_SHIPPING === '1';
+const certifyDiscount = process.env.BACKY_COMMERCE_CERTIFY_DISCOUNT === '1';
 const certifyCatalog = process.env.BACKY_COMMERCE_CERTIFY_CATALOG === '1';
 const certifySubscriptions = process.env.BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS === '1';
 const certifyWebhooks = process.env.BACKY_COMMERCE_CERTIFY_WEBHOOKS === '1';
 const requestedPaymentProvider = (process.env.BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER || 'auto').trim().toLowerCase();
 const requestedTaxProvider = (process.env.BACKY_COMMERCE_CERTIFY_TAX_PROVIDER || 'auto').trim().toLowerCase();
 const requestedShippingProvider = (process.env.BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER || 'auto').trim().toLowerCase();
+const requestedDiscountProvider = (process.env.BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER || 'auto').trim().toLowerCase();
 const requestedCatalogProvider = (process.env.BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER || 'auto').trim().toLowerCase();
 const requestedSubscriptionProvider = (process.env.BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER || 'auto').trim().toLowerCase();
 const requestedWebhookProvider = (process.env.BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER || 'auto').trim().toLowerCase();
@@ -51,6 +53,7 @@ if (requireCertification && ![
   certifyPayment,
   certifyTax,
   certifyShipping,
+  certifyDiscount,
   certifyCatalog,
   certifySubscriptions,
   certifyWebhooks,
@@ -68,6 +71,10 @@ if (!['auto', 'stripe', 'taxjar', 'avalara', 'http'].includes(requestedTaxProvid
 
 if (!['auto', 'easypost', 'shippo', 'http'].includes(requestedShippingProvider)) {
   throw new Error('BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER must be auto, easypost, shippo, or http.');
+}
+
+if (!['auto', 'stripe', 'http'].includes(requestedDiscountProvider)) {
+  throw new Error('BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER must be auto, stripe, or http.');
 }
 
 if (!['auto', 'shopify', 'bigcommerce', 'woocommerce', 'etsy', 'magento', 'http'].includes(requestedCatalogProvider)) {
@@ -194,6 +201,7 @@ const envValue = (names) => names.map((name) => stringValue(process.env[name])).
 const commerceHttpCertificationUrls = {
   taxProviderUrl: envValue(['BACKY_COMMERCE_TAX_PROVIDER_URL', 'COMMERCE_TAX_PROVIDER_URL']),
   shippingProviderUrl: envValue(['BACKY_COMMERCE_SHIPPING_PROVIDER_URL', 'COMMERCE_SHIPPING_PROVIDER_URL']),
+  discountProviderUrl: envValue(['BACKY_COMMERCE_DISCOUNT_PROVIDER_URL', 'COMMERCE_DISCOUNT_PROVIDER_URL']),
   catalogSyncProviderUrl: envValue(['BACKY_COMMERCE_PRODUCT_SYNC_URL', 'COMMERCE_PRODUCT_SYNC_URL']),
   subscriptionActionProviderUrl: envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL']),
 };
@@ -223,6 +231,7 @@ const providerLabels = {
   payment: 'payment provider credentials',
   tax: 'tax quote provider credentials',
   shipping: 'shipping quote/label provider credentials',
+  discount: 'discount quote provider credentials',
   catalog: 'catalog sync provider credentials',
   subscriptions: 'subscription lifecycle provider credentials',
   webhooks: 'commerce webhook secret',
@@ -309,6 +318,13 @@ const inferShippingCertificationProvider = () => {
   return '';
 };
 
+const inferDiscountCertificationProvider = () => {
+  if (requestedDiscountProvider !== 'auto') return requestedDiscountProvider;
+  if (process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY) return 'stripe';
+  if (commerceHttpCertificationUrls.discountProviderUrl) return 'http';
+  return '';
+};
+
 const inferCatalogCertificationProvider = () => {
   if (requestedCatalogProvider !== 'auto') return requestedCatalogProvider;
   if (
@@ -368,6 +384,10 @@ const requiredLocalShippingProvider = () => (
   !externalBaseUrl && requireCertification && certifyShipping ? inferShippingCertificationProvider() : ''
 );
 
+const requiredLocalDiscountProvider = () => (
+  !externalBaseUrl && requireCertification && certifyDiscount ? inferDiscountCertificationProvider() : ''
+);
+
 const requiredCatalogProvider = () => (
   requireCertification && certifyCatalog ? inferCatalogCertificationProvider() : ''
 );
@@ -409,6 +429,16 @@ const prepareLocalCertificationSettings = async (baseUrl, settings) => {
     }
     if (provider === 'http' && commerceHttpCertificationUrls.shippingProviderUrl && commerceHttpCertificationUrls.shippingProviderUrl !== stringValue(commerce.shippingProviderUrl)) {
       commercePatch.shippingProviderUrl = commerceHttpCertificationUrls.shippingProviderUrl;
+    }
+  }
+
+  if (certifyDiscount) {
+    const provider = inferDiscountCertificationProvider();
+    if (provider && provider !== stringValue(commerce.discountProvider)) {
+      commercePatch.discountProvider = provider;
+    }
+    if (provider === 'http' && commerceHttpCertificationUrls.discountProviderUrl && commerceHttpCertificationUrls.discountProviderUrl !== stringValue(commerce.discountProviderUrl)) {
+      commercePatch.discountProviderUrl = commerceHttpCertificationUrls.discountProviderUrl;
     }
   }
 
@@ -491,6 +521,16 @@ const shippingReady = (runtime, settings) => {
   return false;
 };
 
+const discountReady = (runtime, settings) => {
+  const commerce = configuredCommerceSettings(settings);
+  const requiredProvider = requiredLocalDiscountProvider();
+  if (!externalBaseUrl && requireCertification && certifyDiscount && !requiredProvider) return false;
+  if (requiredProvider && runtime.discountProvider !== requiredProvider) return false;
+  if (runtime.discountProvider === 'stripe') return Boolean(runtime.stripeSecretConfigured);
+  if (runtime.discountProvider === 'http') return hasHttpUrl(commerce.discountProviderUrl);
+  return false;
+};
+
 const catalogReady = (runtime) => Boolean(
   (runtime.shopifyAdminAccessTokenConfigured && runtime.shopifyStoreConfigured) ||
   (runtime.bigCommerceAccessTokenConfigured && runtime.bigCommerceStoreConfigured) ||
@@ -537,6 +577,7 @@ const buildReadiness = (runtime, settings) => ({
   payment: requestedPaymentReady(runtime),
   tax: taxReady(runtime, settings),
   shipping: shippingReady(runtime, settings),
+  discount: discountReady(runtime, settings),
   catalog: requestedCatalogReady(runtime, settings),
   subscriptions: requestedSubscriptionReady(runtime, settings),
   webhooks: requestedWebhookReady(runtime, settings),
@@ -571,6 +612,7 @@ const main = async () => {
       payment: certifyPayment,
       tax: certifyTax,
       shipping: certifyShipping,
+      discount: certifyDiscount,
       catalog: certifyCatalog,
       subscriptions: certifySubscriptions,
       webhooks: certifyWebhooks,
@@ -598,6 +640,7 @@ const main = async () => {
         payment: requestedPaymentProvider,
         tax: requestedTaxProvider,
         shipping: requestedShippingProvider,
+        discount: requestedDiscountProvider,
         catalog: requestedCatalogProvider,
         subscriptions: requestedSubscriptionProvider,
         webhooks: requestedWebhookProvider,

@@ -1071,6 +1071,7 @@ export interface BackyCommerceStorefrontContract {
         payment: string[];
         tax: string[];
         shipping: string[];
+        discount: string[];
         catalog: string[];
         subscription: string[];
         webhook: string[];

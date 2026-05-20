@@ -97,12 +97,14 @@ const notificationProvider = selected('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVI
 const paymentProvider = selected('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER');
 const taxProvider = selected('BACKY_COMMERCE_CERTIFY_TAX_PROVIDER');
 const shippingProvider = selected('BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER');
+const discountProvider = selected('BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER');
 const catalogProvider = selected('BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER');
 const subscriptionProvider = selected('BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER');
 const webhookProvider = selected('BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER');
 const requestPayment = requested('BACKY_COMMERCE_CERTIFY_PAYMENT', false);
 const requestTax = requested('BACKY_COMMERCE_CERTIFY_TAX', false);
 const requestShipping = requested('BACKY_COMMERCE_CERTIFY_SHIPPING', false);
+const requestDiscount = requested('BACKY_COMMERCE_CERTIFY_DISCOUNT', false);
 const requestCatalog = requested('BACKY_COMMERCE_CERTIFY_CATALOG', false);
 const requestSubscriptions = requested('BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', false);
 const requestWebhooks = requested('BACKY_COMMERCE_CERTIFY_WEBHOOKS', false);
@@ -214,6 +216,15 @@ const commerceChecks = [
   checkCompleteAny('Shippo credentials', providerCredentials.shippo, requestShipping && shippingProvider === 'shippo'),
   checkAny('HTTP tax provider URL', ['BACKY_COMMERCE_TAX_PROVIDER_URL', 'COMMERCE_TAX_PROVIDER_URL'], requestTax && taxProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
   checkAny('HTTP shipping provider URL', ['BACKY_COMMERCE_SHIPPING_PROVIDER_URL', 'COMMERCE_SHIPPING_PROVIDER_URL'], requestShipping && shippingProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
+  checkCompleteAny('auto discount credentials', [
+    ...providerCredentials.stripe,
+    [[
+      'BACKY_COMMERCE_DISCOUNT_PROVIDER_URL',
+      'COMMERCE_DISCOUNT_PROVIDER_URL',
+    ]],
+  ], requestDiscount && discountProvider === 'auto'),
+  checkCompleteAny('Stripe promotion-code discount credentials', providerCredentials.stripe, requestDiscount && discountProvider === 'stripe'),
+  checkAny('HTTP discount provider URL', ['BACKY_COMMERCE_DISCOUNT_PROVIDER_URL', 'COMMERCE_DISCOUNT_PROVIDER_URL'], requestDiscount && discountProvider === 'http' && !has('BACKY_COMMERCE_CERTIFICATION_BASE_URL')),
   checkCompleteAny('auto catalog credentials', [
     ...providerCredentials.shopify,
     ...providerCredentials.bigcommerce,
@@ -248,6 +259,7 @@ const commerce = {
     payment: requestPayment,
     tax: requestTax,
     shipping: requestShipping,
+    discount: requestDiscount,
     catalog: requestCatalog,
     subscriptions: requestSubscriptions,
     webhooks: requestWebhooks,
@@ -256,6 +268,7 @@ const commerce = {
     paymentProvider,
     taxProvider,
     shippingProvider,
+    discountProvider,
     catalogProvider,
     subscriptionProvider,
     webhookProvider,
@@ -285,6 +298,7 @@ const failures = [
     commerce.requested.payment,
     commerce.requested.tax,
     commerce.requested.shipping,
+    commerce.requested.discount,
     commerce.requested.catalog,
     commerce.requested.subscriptions,
     commerce.requested.webhooks,
@@ -336,7 +350,7 @@ const partialGateMap = [
     adminSourceGuard,
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
     workflow: '.github/workflows/commerce-provider-certification.yml',
-    requiredInputFamily: 'selected payment, tax, shipping, catalog, subscription, and webhook provider inputs',
+    requiredInputFamily: 'selected payment, tax, shipping, discount, catalog, subscription, and webhook provider inputs',
   },
 ];
 

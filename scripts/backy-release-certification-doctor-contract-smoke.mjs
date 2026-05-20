@@ -322,6 +322,26 @@ assert(
 );
 
 await assertMissingProvider({
+  label: 'auto discount missing credentials',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_DISCOUNT: '1',
+  },
+  failure: 'auto discount credentials',
+});
+
+const completeAutoDiscount = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFY_DISCOUNT: '1',
+  COMMERCE_DISCOUNT_PROVIDER_URL: 'https://commerce-http.example.test/discount',
+});
+assert(
+  completeAutoDiscount.code === 0,
+  `Doctor auto discount mode should accept a configured HTTP discount endpoint, got ${completeAutoDiscount.code}.`,
+);
+
+await assertMissingProvider({
   label: 'auto Shopify catalog partial credentials',
   env: {
     BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
@@ -625,6 +645,16 @@ await assertMissingProvider({
   failure: 'Shippo credentials',
 });
 
+await assertMissingProvider({
+  label: 'Stripe promotion-code discount',
+  env: {
+    BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+    BACKY_COMMERCE_CERTIFY_DISCOUNT: '1',
+    BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER: 'stripe',
+  },
+  failure: 'Stripe promotion-code discount credentials',
+});
+
 for (const { label, env, failure } of [
   {
     label: 'HTTP tax',
@@ -643,6 +673,15 @@ for (const { label, env, failure } of [
       BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: 'http',
     },
     failure: 'HTTP shipping provider URL',
+  },
+  {
+    label: 'HTTP discount',
+    env: {
+      BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: '1',
+      BACKY_COMMERCE_CERTIFY_DISCOUNT: '1',
+      BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER: 'http',
+    },
+    failure: 'HTTP discount provider URL',
   },
   {
     label: 'HTTP catalog',
@@ -821,6 +860,22 @@ for (const { label, env } of [
       BACKY_COMMERCE_CERTIFY_SHIPPING: '1',
       BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: 'http',
       COMMERCE_SHIPPING_PROVIDER_URL: 'https://commerce-http.example.test/shipping',
+    },
+  },
+  {
+    label: 'selected Stripe discount',
+    env: {
+      BACKY_COMMERCE_CERTIFY_DISCOUNT: '1',
+      BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER: 'stripe',
+      STRIPE_SECRET_KEY: 'stripe_alias_key',
+    },
+  },
+  {
+    label: 'selected HTTP discount',
+    env: {
+      BACKY_COMMERCE_CERTIFY_DISCOUNT: '1',
+      BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER: 'http',
+      COMMERCE_DISCOUNT_PROVIDER_URL: 'https://commerce-http.example.test/discount',
     },
   },
   {

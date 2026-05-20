@@ -999,6 +999,7 @@ const assertProductsApiContractsSource = () => {
       source.includes("operatorCommandTemplate") &&
       source.includes("products-provider-certification-payment-toggle") &&
       source.includes('data-testid="products-provider-certification-tax-provider-select"') &&
+      source.includes('data-testid="products-provider-certification-discount-provider-select"') &&
       source.includes('data-testid="products-provider-certification-external-target-input"') &&
       source.includes('data-testid="products-provider-certification-doctor-toggle"') &&
       source.includes("BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER") &&
@@ -1023,9 +1024,11 @@ const assertProductsApiContractsSource = () => {
     "BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY",
     "BACKY_COMMERCE_TAX_PROVIDER_URL or COMMERCE_TAX_PROVIDER_URL",
     "BACKY_COMMERCE_SHIPPING_PROVIDER_URL or COMMERCE_SHIPPING_PROVIDER_URL",
+    "BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL",
     "BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL",
     "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
     "BACKY_COMMERCE_CERTIFY_CATALOG=1 with BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER",
+    "BACKY_COMMERCE_CERTIFY_DISCOUNT=1 with BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER",
     "selected provider-family flags",
     "credentialed provider readiness check output",
     "Copy CI command",
@@ -1145,6 +1148,12 @@ const assertCommerceProviderCertificationResponse = (commerce, label) => {
       operatorTemplate.providerChoices.tax.includes("taxjar") &&
       operatorTemplate.providerChoices.tax.includes("avalara"),
     `${label} provider certification must expose tax selector choices: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.providerChoices?.discount) &&
+      operatorTemplate.providerChoices.discount.includes("stripe") &&
+      operatorTemplate.providerChoices.discount.includes("http"),
+    `${label} provider certification must expose discount selector choices: ${JSON.stringify(certification)}`,
   );
   assert(
     Array.isArray(operatorTemplate.requiredInputs) &&
@@ -3592,7 +3601,7 @@ const fillProductEditor = async (client, suffix) => {
     "Checkout URL",
     `https://checkout.example.com/${slug}`,
   );
-  await setLabeledControl(client, "Subscription", true);
+  await setLabeledControl(client, "Subscription", true, { exact: true });
   await sleep(150);
   await setLabeledControl(client, "Subscription interval", "monthly");
   await setLabeledControl(client, "Trial days", "14");

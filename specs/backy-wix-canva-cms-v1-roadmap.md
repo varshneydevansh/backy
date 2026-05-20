@@ -12,7 +12,7 @@ Backy is not yet at full Wix/Canva/WordPress parity, but the current audit has m
 The active blockers are now narrower and should be closed one page or gate at a time:
 
 1. Run the configured Supabase/Postgres service-data gates for Forms and SDK manifests against a disposable migrated database.
-2. Certify live Settings and Commerce providers, including Supabase, Vercel, storage, notification, payment, tax, shipping, catalog, subscription, and provider-managed webhook families.
+2. Certify live Settings and Commerce providers, including Supabase, Vercel, storage, notification, payment, tax, shipping, discount, catalog, subscription, and provider-managed webhook families.
 3. Keep editor parity protected with focused regression guards for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress.
 4. Keep product/order live-provider certification separate from mock-provider CI so real TaxJar/Avalara/EasyPost/Shippo/Stripe-discount/subscription behavior is proven without leaking provider secrets.
 

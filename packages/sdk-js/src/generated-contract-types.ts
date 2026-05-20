@@ -1700,6 +1700,7 @@ export type GeneratedBackyOpenApiCommerceProviderCertification = {
       payment?: Array<string>;
       tax?: Array<string>;
       shipping?: Array<string>;
+      discount?: Array<string>;
       catalog?: Array<string>;
       subscription?: Array<string>;
       webhook?: Array<string>;

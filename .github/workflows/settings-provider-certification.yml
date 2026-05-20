@@ -93,6 +93,15 @@ on:
           - easypost
           - shippo
           - http
+      discount_provider:
+        description: Expected discount quote provider for nested Commerce certification.
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - stripe
+          - http
       catalog_provider:
         description: Expected product catalog provider for nested Commerce certification.
         required: true
@@ -216,6 +225,8 @@ jobs:
       COMMERCE_TAX_PROVIDER_URL: ${{ vars.COMMERCE_TAX_PROVIDER_URL }}
       BACKY_COMMERCE_SHIPPING_PROVIDER_URL: ${{ vars.BACKY_COMMERCE_SHIPPING_PROVIDER_URL }}
       COMMERCE_SHIPPING_PROVIDER_URL: ${{ vars.COMMERCE_SHIPPING_PROVIDER_URL }}
+      BACKY_COMMERCE_DISCOUNT_PROVIDER_URL: ${{ vars.BACKY_COMMERCE_DISCOUNT_PROVIDER_URL }}
+      COMMERCE_DISCOUNT_PROVIDER_URL: ${{ vars.COMMERCE_DISCOUNT_PROVIDER_URL }}
       BACKY_COMMERCE_PRODUCT_SYNC_URL: ${{ vars.BACKY_COMMERCE_PRODUCT_SYNC_URL }}
       COMMERCE_PRODUCT_SYNC_URL: ${{ vars.COMMERCE_PRODUCT_SYNC_URL }}
       BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL: ${{ vars.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL }}
@@ -318,6 +329,8 @@ jobs:
       BACKY_COMMERCE_CERTIFY_TAX_PROVIDER: ${{ inputs.tax_provider }}
       BACKY_COMMERCE_CERTIFY_SHIPPING: ${{ inputs.certify_commerce && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER: ${{ inputs.shipping_provider }}
+      BACKY_COMMERCE_CERTIFY_DISCOUNT: ${{ inputs.certify_commerce && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER: ${{ inputs.discount_provider }}
       BACKY_COMMERCE_CERTIFY_CATALOG: ${{ inputs.certify_commerce && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER: ${{ inputs.catalog_provider }}
       BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS: ${{ inputs.certify_commerce && '1' || '0' }}
@@ -370,6 +383,7 @@ jobs:
             echo "| payment_provider | ${{ inputs.payment_provider }} |"
             echo "| tax_provider | ${{ inputs.tax_provider }} |"
             echo "| shipping_provider | ${{ inputs.shipping_provider }} |"
+            echo "| discount_provider | ${{ inputs.discount_provider }} |"
             echo "| catalog_provider | ${{ inputs.catalog_provider }} |"
             echo "| subscription_provider | ${{ inputs.subscription_provider }} |"
             echo "| webhook_provider | ${{ inputs.webhook_provider }} |"

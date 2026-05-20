@@ -104,7 +104,7 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
       'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
       'provider-specific catalog/payment credentials',
     ],
-    evidence: 'Payment, tax, shipping, catalog, subscription, refund, and webhook provider readiness for selected live families.',
+    evidence: 'Payment, tax, shipping, discount, catalog, subscription, refund, and webhook provider readiness for selected live families.',
   },
 ] as const;
 
