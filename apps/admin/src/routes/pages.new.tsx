@@ -1117,6 +1117,12 @@ const normalizedSearchString = (value: unknown): string | undefined => {
     return trimmed ? trimmed : undefined;
 };
 
+const normalizedFrontendDesignTemplateSearch = (search: Record<string, unknown>): string | undefined => (
+    normalizedSearchString(search.designTemplate)
+    || normalizedSearchString(search.frontendDesignTemplateId)
+    || normalizedSearchString(search.frontendTemplate)
+);
+
 const normalizedSearchBoolean = (value: unknown): boolean | undefined => {
     if (value === true || value === 'true') return true;
     if (value === false || value === 'false') return false;
@@ -1194,7 +1200,7 @@ export const Route = createFileRoute('/pages/new')({
         ogImage: normalizedSearchString(search.ogImage),
         noIndex: normalizedSearchBoolean(search.noIndex),
         noFollow: normalizedSearchBoolean(search.noFollow),
-        designTemplate: normalizedSearchString(search.designTemplate),
+        designTemplate: normalizedFrontendDesignTemplateSearch(search),
         collectionId: normalizedSearchString(search.collectionId),
         datasetMode: isPageDatasetMode(search.datasetMode) ? search.datasetMode : undefined,
     }),

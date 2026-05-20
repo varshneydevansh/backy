@@ -5,6 +5,8 @@ type MediaScope = 'global' | 'page' | 'post';
 type MediaVisibility = 'public' | 'private';
 type MediaListType = 'image' | 'video' | 'audio' | 'document' | 'file' | 'font' | 'other';
 
+const MAX_MEDIA_LIST_LIMIT = 100;
+
 interface ApiMediaItem {
   id: string;
   originalName?: string;
@@ -500,6 +502,8 @@ const normalizeApiTimestamp = (value: string | number): string => {
 export async function listMediaLibrary(options: MediaListOptions = {}): Promise<MediaLibraryResult> {
   const siteId = options.siteId || getDefaultMediaSiteId();
   const query = new URLSearchParams();
+  const requestedLimit = Number.isFinite(options.limit) ? Math.floor(options.limit as number) : undefined;
+  const safeLimit = requestedLimit ? Math.min(Math.max(requestedLimit, 1), MAX_MEDIA_LIST_LIMIT) : undefined;
 
   if (options.scope && options.scope !== 'all') query.set('scope', options.scope);
   if (options.visibility) query.set('visibility', options.visibility);
@@ -509,7 +513,7 @@ export async function listMediaLibrary(options: MediaListOptions = {}): Promise<
   if (options.folderId !== undefined) query.set('folderId', options.folderId || '');
   if (options.pageId) query.set('pageId', options.pageId);
   if (options.postId) query.set('postId', options.postId);
-  if (options.limit) query.set('limit', `${options.limit}`);
+  if (safeLimit) query.set('limit', `${safeLimit}`);
   if (options.offset) query.set('offset', `${options.offset}`);
 
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media?${query.toString()}`);
