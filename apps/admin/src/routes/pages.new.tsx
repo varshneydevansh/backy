@@ -4417,24 +4417,40 @@ function buildTemplateElements(input: {
                 height: 380,
                 dataBindings: [{ source: 'products', mode: 'featured', limit: 1 }],
                 props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { width: 768, height: 620 },
+                    mobile: { width: 375, height: 760 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 70, {
                         id: 'storefront-heading',
                         width: 520,
                         height: 112,
                         props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 64, width: 360, height: 116, props: { fontSize: 42 } },
+                            mobile: { x: 24, y: 64, width: 327, height: 156, props: { fontSize: 36 } },
+                        },
                     }),
                     createCanvasElement('paragraph', 76, 204, {
                         id: 'storefront-copy',
                         width: 500,
                         height: 78,
                         props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4b5563' },
+                        responsive: {
+                            tablet: { x: 56, y: 208, width: 340, height: 112, props: { fontSize: 17 } },
+                            mobile: { x: 26, y: 244, width: 323, height: 112, props: { fontSize: 16 } },
+                        },
                     }),
                     createCanvasElement('button', 76, 306, {
                         id: 'storefront-shop-button',
                         width: 178,
                         height: 50,
                         props: { label: 'Shop products', href: '#products', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '700' },
+                        responsive: {
+                            tablet: { x: 56, y: 352, width: 168, height: 50 },
+                            mobile: { x: 26, y: 386, width: 164, height: 50 },
+                        },
                     }),
                     createCanvasElement('box', 720, 54, {
                         id: 'storefront-featured-product',
@@ -4442,24 +4458,40 @@ function buildTemplateElements(input: {
                         height: 280,
                         dataBindings: [{ source: 'products', mode: 'featured', fields: ['title', 'price', 'image', 'slug'] }],
                         props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#dbe3ea', borderWidth: 1, borderStyle: 'solid', boxShadow: '0 20px 60px rgba(15, 23, 42, 0.10)' },
+                        responsive: {
+                            tablet: { x: 438, y: 82, width: 276, height: 300 },
+                            mobile: { x: 24, y: 468, width: 327, height: 238 },
+                        },
                         children: [
                             createCanvasElement('box', 24, 24, {
                                 id: 'storefront-featured-media',
                                 width: 302,
                                 height: 150,
                                 props: { backgroundColor: '#e6f3f1', borderRadius: 8 },
+                                responsive: {
+                                    tablet: { x: 20, y: 20, width: 236, height: 132 },
+                                    mobile: { x: 20, y: 20, width: 287, height: 118 },
+                                },
                             }),
                             createCanvasElement('heading', 24, 196, {
                                 id: 'storefront-featured-title',
                                 width: 220,
                                 height: 30,
                                 props: { content: 'Featured product', level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { x: 20, y: 178, width: 220 },
+                                    mobile: { x: 20, y: 160, width: 220, props: { fontSize: 19 } },
+                                },
                             }),
                             createCanvasElement('text', 24, 234, {
                                 id: 'storefront-featured-price',
                                 width: 120,
                                 height: 26,
                                 props: { content: '$49', fontSize: 17, fontWeight: '700', color: '#0f766e' },
+                                responsive: {
+                                    tablet: { x: 20, y: 222, width: 120 },
+                                    mobile: { x: 20, y: 198, width: 120 },
+                                },
                             }),
                         ],
                     }),
@@ -4471,12 +4503,20 @@ function buildTemplateElements(input: {
                 height: 380,
                 dataBindings: [{ source: 'products', mode: 'list', limit: 6, sort: 'manual' }],
                 props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                responsive: {
+                    tablet: { y: 620, width: 768, height: 460 },
+                    mobile: { y: 760, width: 375, height: 700 },
+                },
                 children: [
                     createCanvasElement('heading', 72, 50, {
                         id: 'storefront-products-heading',
                         width: 420,
                         height: 46,
                         props: { content: 'Product catalog', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                        responsive: {
+                            tablet: { x: 54, y: 48, width: 360 },
+                            mobile: { x: 24, y: 40, width: 327, props: { fontSize: 30 } },
+                        },
                     }),
                     ...['Digital kit', 'Service package', 'Featured item'].map((item, index) => createCanvasElement('box', 72 + index * 360, 132, {
                         id: `storefront-product-card-${index}`,
@@ -4484,24 +4524,40 @@ function buildTemplateElements(input: {
                         height: 198,
                         dataBindings: [{ source: 'products', mode: 'item', index }],
                         props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        responsive: {
+                            tablet: { x: 54 + index * 230, y: 132, width: 196, height: 230 },
+                            mobile: { x: 24, y: 112 + index * 178, width: 327, height: 156 },
+                        },
                         children: [
                             createCanvasElement('heading', 20, 22, {
                                 id: `storefront-product-title-${index}`,
                                 width: 230,
                                 height: 34,
                                 props: { content: item, level: 'h3', fontSize: 21, fontWeight: '750', color: '#111827' },
+                                responsive: {
+                                    tablet: { width: 154, height: 48, props: { fontSize: 18, lineHeight: 1.18 } },
+                                    mobile: { width: 230, props: { fontSize: 19 } },
+                                },
                             }),
                             createCanvasElement('paragraph', 20, 70, {
                                 id: `storefront-product-copy-${index}`,
                                 width: 240,
                                 height: 54,
                                 props: { content: 'Bind this card to product title, media, price, and detail URL.', fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
+                                responsive: {
+                                    tablet: { y: 82, width: 154, height: 78 },
+                                    mobile: { y: 58, width: 250, height: 48 },
+                                },
                             }),
                             createCanvasElement('button', 20, 142, {
                                 id: `storefront-product-button-${index}`,
                                 width: 128,
                                 height: 38,
                                 props: { label: 'View item', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontSize: 14, fontWeight: '700' },
+                                responsive: {
+                                    tablet: { y: 174, width: 122 },
+                                    mobile: { y: 112, width: 124 },
+                                },
                             }),
                         ],
                     })),
