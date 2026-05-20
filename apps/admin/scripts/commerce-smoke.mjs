@@ -1018,8 +1018,12 @@ const assertProductsApiContractsSource = () => {
       source.includes('data-testid="products-provider-certification-copy-button"') &&
       source.includes('data-testid="products-provider-certification-command-copy-button"') &&
       source.includes('data-testid="products-provider-certification-command-builder"') &&
+      source.includes('data-testid="products-provider-certification-env-copy-button"') &&
+      source.includes('data-testid="products-provider-certification-env-template"') &&
+      source.includes('data-testid="products-provider-certification-env-template-body"') &&
       source.includes('data-testid="products-provider-certification-command-builder-copy-button"') &&
       source.includes("providerCertificationHandoffText") &&
+      source.includes("providerCertificationEnvTemplate") &&
       source.includes("catalogEvidence") &&
       source.includes("endpointEvidence") &&
       source.includes("providerRuntimeEvidence") &&
@@ -1035,6 +1039,10 @@ const assertProductsApiContractsSource = () => {
       source.includes("ci:commerce-provider-certification") &&
       source.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification") &&
       source.includes("buildProductProviderCertificationCommand") &&
+      source.includes("buildProductProviderCertificationEnvTemplate") &&
+      source.includes("operatorEnvTemplate") &&
+      source.includes("backy.commerce-provider-certification-env-template.v1") &&
+      source.includes("Copy env template") &&
       source.includes("operatorCommandTemplate") &&
       source.includes("products-provider-certification-payment-toggle") &&
       source.includes('data-testid="products-provider-certification-tax-provider-select"') &&

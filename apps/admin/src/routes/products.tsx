@@ -471,6 +471,9 @@ const DEFAULT_PRODUCT_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
 } satisfies ProductProviderCertificationCommandOptions;
 
 const quoteProductShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteProductEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteProductShellValue(value)
+);
 const productBoolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 const uniqueProductCertificationInputs = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
 const hasProductProviderCertificationFamily = (options: ProductProviderCertificationCommandOptions): boolean => (
@@ -571,7 +574,9 @@ const PRODUCT_PROVIDER_CERTIFICATION_WEBHOOK_INPUTS: Record<ProductProviderCerti
   generic: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'],
 };
 
-const buildProductProviderCertificationCommand = (options: ProductProviderCertificationCommandOptions): string => {
+const buildProductProviderCertificationEnvEntries = (
+  options: ProductProviderCertificationCommandOptions,
+): Array<[string, string]> => {
   const selectedFamily = hasProductProviderCertificationFamily(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/+$/, '');
   const envEntries: Array<[string, string]> = [
@@ -619,11 +624,28 @@ const buildProductProviderCertificationCommand = (options: ProductProviderCertif
     envEntries.push(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', '<https-subscription-action-url>']);
   }
 
+  return envEntries;
+};
+
+const buildProductProviderCertificationCommand = (options: ProductProviderCertificationCommandOptions): string => {
+  const selectedFamily = hasProductProviderCertificationFamily(options);
+  const envEntries = buildProductProviderCertificationEnvEntries(options);
+
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteProductShellValue(value)}`),
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
     selectedFamily ? 'npm run ci:commerce-provider-certification' : '# Select at least one commerce provider family before running certification.',
+  ].join('\n');
+};
+
+const buildProductProviderCertificationEnvTemplate = (options: ProductProviderCertificationCommandOptions): string => {
+  const envEntries = buildProductProviderCertificationEnvEntries(options);
+
+  return [
+    '# Backy commerce provider certification environment',
+    '# Keep real provider credential values in CI secrets or local shell variables.',
+    ...envEntries.map(([key, value]) => `${key}=${quoteProductEnvTemplateValue(value)}`),
   ].join('\n');
 };
 
@@ -660,6 +682,8 @@ const buildProductProviderCertificationRequiredInputs = (options: ProductProvide
 
 const PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildProductProviderCertificationCommand(DEFAULT_PRODUCT_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildProductProviderCertificationEnvTemplate(DEFAULT_PRODUCT_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.commerce-provider-certification-env-template.v1',
   providerChoices: {
     payment: PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.map((option) => option.value),
     tax: PRODUCT_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.map((option) => option.value),
@@ -1359,6 +1383,10 @@ function ProductsRoute() {
   const providerCertificationHasSelectedFamily = hasProductProviderCertificationFamily(providerCertificationCommandOptions);
   const providerCertificationCommand = useMemo(
     () => buildProductProviderCertificationCommand(providerCertificationCommandOptions),
+    [providerCertificationCommandOptions],
+  );
+  const providerCertificationEnvTemplate = useMemo(
+    () => buildProductProviderCertificationEnvTemplate(providerCertificationCommandOptions),
     [providerCertificationCommandOptions],
   );
   const providerCertificationRequiredInputs = useMemo(
@@ -2164,7 +2192,15 @@ function ProductsRoute() {
     operatorCommandTemplate: {
       ...PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
       command: providerCertificationCommand,
+      envTemplate: providerCertificationEnvTemplate,
       requiredInputs: providerCertificationRequiredInputs,
+    },
+    operatorEnvTemplate: {
+      schemaVersion: 'backy.commerce-provider-certification-env-template.v1',
+      format: 'shell-env',
+      fileName: '.env.backy-commerce-provider-certification',
+      body: providerCertificationEnvTemplate,
+      secretHandling: 'Generated template values are non-secret selectors and placeholders; replace placeholders with CI secrets or local shell values before execution.',
     },
     preflightGates: [...PRODUCT_PROVIDER_CERTIFICATION_PREFLIGHT_GATES],
     providerSelectors: [...PRODUCT_PROVIDER_CERTIFICATION_SELECTORS],
@@ -2210,6 +2246,7 @@ function ProductsRoute() {
     productApiReady,
     productProviderCertificationEvidence,
     providerCertificationCommand,
+    providerCertificationEnvTemplate,
     providerCertificationRequiredInputs,
     providerRuntimeEvidence,
     publicBaseUrl,
@@ -4545,17 +4582,30 @@ function ProductsRoute() {
                           Select the live commerce families for this run. The command keeps credentials in CI or shell environment variables and only writes non-secret selector aliases.
                         </p>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void copyText(providerCertificationCommand, 'Products provider certification guarded command')}
-                        disabled={isProductsAccessBusy || !canExportProducts || !providerCertificationHasSelectedFamily}
-                        title={!canExportProducts ? exportPermissionTitle : !providerCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined}
-                        iconStart={<Copy className="size-4" />}
-                        data-testid="products-provider-certification-command-builder-copy-button"
-                      >
-                        Copy guarded command
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyText(providerCertificationEnvTemplate, 'Products provider certification env template')}
+                          disabled={isProductsAccessBusy || !canExportProducts || !providerCertificationHasSelectedFamily}
+                          title={!canExportProducts ? exportPermissionTitle : !providerCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined}
+                          iconStart={<Copy className="size-4" />}
+                          data-testid="products-provider-certification-env-copy-button"
+                        >
+                          Copy env template
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyText(providerCertificationCommand, 'Products provider certification guarded command')}
+                          disabled={isProductsAccessBusy || !canExportProducts || !providerCertificationHasSelectedFamily}
+                          title={!canExportProducts ? exportPermissionTitle : !providerCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined}
+                          iconStart={<Copy className="size-4" />}
+                          data-testid="products-provider-certification-command-builder-copy-button"
+                        >
+                          Copy guarded command
+                        </Button>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                       {([
@@ -4792,6 +4842,25 @@ function ProductsRoute() {
                           </span>
                         </span>
                       </label>
+                    </div>
+                    <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="products-provider-certification-env-template">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Env template</div>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            Copy this into CI secrets or a local shell env file, then replace placeholders with live provider credentials before running the guarded command.
+                          </p>
+                        </div>
+                        <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                          backy.commerce-provider-certification-env-template.v1
+                        </span>
+                      </div>
+                      <pre
+                        className="mt-2 max-h-64 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px] leading-5 text-foreground"
+                        data-testid="products-provider-certification-env-template-body"
+                      >
+                        {providerCertificationEnvTemplate}
+                      </pre>
                     </div>
                     <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
                       <div>
