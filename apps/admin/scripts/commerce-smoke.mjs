@@ -946,6 +946,16 @@ const assertProductsApiContractsSource = () => {
     "Products page must render the live provider certification handoff",
   );
   assert(
+    source.includes('data-testid="products-launch-readiness"') &&
+      source.includes('data-testid="products-launch-readiness-copy-button"') &&
+      source.includes('data-testid="products-launch-readiness-action-plan"') &&
+      source.includes("schemaVersion: 'backy.product-launch-readiness.v1'") &&
+      source.includes("selectedProductLaunchReadinessText") &&
+      source.includes("productHandoff.providerExecution.selectedProductLaunchReadiness") &&
+      source.includes("Selected-product sellability checklist for custom storefront, hosted page, and provider handoff."),
+    "Products page must render a copyable selected-product launch readiness handoff",
+  );
+  assert(
     source.includes('data-testid="products-subscription-action-plan"') &&
       source.includes("Lifecycle action plan") &&
       source.includes("backy.product-subscription-action-plan-summary.v1") &&
@@ -7086,6 +7096,8 @@ const assertProductsLayout = async (client) => {
       const providerReconciliationText = providerReconciliation?.textContent || '';
       const providerCertification = document.querySelector('[data-testid="products-provider-certification"]');
       const providerCertificationText = providerCertification?.textContent || '';
+      const productLaunchReadiness = document.querySelector('[data-testid="products-launch-readiness"]');
+      const productLaunchReadinessText = productLaunchReadiness?.textContent || '';
       return {
         width: window.innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
@@ -7137,6 +7149,19 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('backy.product-subscription-lifecycle.v1') &&
           document.body?.innerText?.includes('/api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action') &&
           document.body?.innerText?.includes('/api/sites/:siteId/commerce/webhook'),
+        hasProductLaunchReadiness: Boolean(productLaunchReadiness) &&
+          productLaunchReadinessText.includes('Product launch readiness') &&
+          productLaunchReadinessText.includes('Launch action plan') &&
+          productLaunchReadinessText.includes('backy.product-launch-readiness.v1') &&
+          productLaunchReadinessText.includes('Copy launch JSON') &&
+          (
+            productLaunchReadinessText.includes('Selected product') ||
+            (
+              productLaunchReadinessText.includes('Checkout handoff') &&
+              productLaunchReadinessText.includes('Provider catalog sync')
+            )
+          ),
+        productLaunchReadinessText,
         hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
           document.body?.innerText?.includes('Provider catalog sync') &&
           document.body?.innerText?.includes('Paddle') &&
@@ -7191,6 +7216,7 @@ const assertProductsLayout = async (client) => {
       layout.hasProductAutomation &&
       layout.hasBackendCommerceAnalytics &&
       layout.hasSubscriptionLifecycle &&
+      layout.hasProductLaunchReadiness &&
       layout.hasProviderReconciliation
     ) {
       break;
@@ -7213,6 +7239,7 @@ const assertProductsLayout = async (client) => {
       layout.hasCustomerProfileManager &&
       layout.hasSubscriptionMetadata &&
       layout.hasSubscriptionLifecycle &&
+      layout.hasProductLaunchReadiness &&
       layout.hasProviderSync &&
       layout.hasProviderReconciliation &&
       layout.hasProviderCertificationExport &&

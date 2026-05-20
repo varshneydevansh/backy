@@ -766,6 +766,55 @@ interface CommerceLineItem {
   currency: string;
 }
 
+type ProductLaunchReadinessStatus = 'ready' | 'attention' | 'blocked';
+
+interface ProductLaunchReadinessCheck {
+  key: string;
+  label: string;
+  status: ProductLaunchReadinessStatus;
+  detail: string;
+  action: string;
+  evidence: string[];
+}
+
+interface ProductLaunchReadiness {
+  schemaVersion: 'backy.product-launch-readiness.v1';
+  generatedAt: string;
+  product: {
+    id: string | null;
+    slug: string | null;
+    title: string;
+    sku: string;
+    status: string;
+    productType: ProductFormState['productType'] | null;
+  };
+  summary: {
+    status: ProductLaunchReadinessStatus;
+    score: number;
+    readyCount: number;
+    totalChecks: number;
+    blockerCount: number;
+    attentionCount: number;
+  };
+  storefront: {
+    catalogApi: string;
+    productApi: string;
+    orderIntakeApi: string;
+    orderIntakeReady: boolean;
+    productApiReady: boolean;
+  };
+  checks: ProductLaunchReadinessCheck[];
+  actionPlan: {
+    nextSteps: Array<{
+      key: string;
+      label: string;
+      priority: 'blocker' | 'attention';
+      action: string;
+    }>;
+    handoffSurfaces: string[];
+  };
+}
+
 interface FrontendProductTemplateBlueprint {
   title: string;
   slug: string;
@@ -1436,6 +1485,28 @@ function ProductsRoute() {
     () => productProviderSync(selectedProduct),
     [selectedProduct],
   );
+  const selectedProductLaunchReadiness = useMemo(
+    () => buildProductLaunchReadiness({
+      product: selectedProduct,
+      providerSync: selectedProductProviderSync,
+      productApiReady,
+      orderIntakeReady,
+      catalogApi: commerceCatalogUrl,
+      productApi: selectedProduct
+        ? commerceProductDetailUrl.replace('{productSlug}', encodeURIComponent(selectedProduct.slug))
+        : commerceProductDetailUrl,
+      orderIntakeApi: commerceOrderContractUrl,
+    }),
+    [
+      commerceCatalogUrl,
+      commerceOrderContractUrl,
+      commerceProductDetailUrl,
+      orderIntakeReady,
+      productApiReady,
+      selectedProduct,
+      selectedProductProviderSync,
+    ],
+  );
   const selectedCustomerProfile = useMemo(
     () => customerProfiles.find((customer) => customer.id === selectedCustomerProfileId) || null,
     [customerProfiles, selectedCustomerProfileId],
@@ -2004,6 +2075,7 @@ function ProductsRoute() {
       quoteProviders: 'Configured HTTP tax, shipping, and discount quote providers can adjust checkout totals before order persistence.',
       catalogSync: 'Product records can be synchronized to Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, or a configured HTTP catalog-sync provider from the Products workspace.',
       providerCertification: providerCertificationSummary,
+      selectedProductLaunchReadiness,
       reconciliation: {
         readiness: reconciliationReadiness,
         lastPreview: reconciliationResult
@@ -2218,6 +2290,7 @@ function ProductsRoute() {
     productCollection,
     productNotificationEvents,
     products,
+    selectedProductLaunchReadiness,
     providerCertificationSummary,
     publicBaseUrl,
     reconciliationReadiness,
@@ -2231,6 +2304,10 @@ function ProductsRoute() {
   ]);
   const productHandoffText = useMemo(() => JSON.stringify(productHandoff, null, 2), [productHandoff]);
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationSummary, null, 2), [providerCertificationSummary]);
+  const selectedProductLaunchReadinessText = useMemo(
+    () => JSON.stringify(selectedProductLaunchReadiness, null, 2),
+    [selectedProductLaunchReadiness],
+  );
   const productsRouteSearch = useMemo<ProductsSearch>(() => ({
     siteId: activeSiteId,
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
@@ -6067,6 +6144,116 @@ function ProductsRoute() {
                     Actions call /api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action; webhooks update lifecycle state through {selectedProductLifecycle?.contract.webhookApi || '/api/sites/:siteId/commerce/webhook'}; reconciliation repairs stale private orders through {selectedProductLifecycle?.contract.reconciliationApi || '/api/admin/sites/:siteId/commerce/reconcile'}.
                   </div>
                 </div>
+                <div
+                  className="rounded-lg border border-border bg-muted/40 p-4"
+                  data-testid="products-launch-readiness"
+                  data-launch-schema={selectedProductLaunchReadiness.schemaVersion}
+                >
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold text-foreground">Product launch readiness</h3>
+                        <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', productLaunchReadinessBadgeClass(selectedProductLaunchReadiness.summary.status))}>
+                          {formatProductLaunchReadinessStatus(selectedProductLaunchReadiness.summary.status)}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Selected-product sellability checklist for custom storefront, hosted page, and provider handoff.
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void copyText(selectedProductLaunchReadinessText, 'Product launch readiness')}
+                      disabled={isProductsAccessBusy || !canExportProducts}
+                      title={!canExportProducts ? exportPermissionTitle : undefined}
+                      iconStart={<Copy className="size-4" />}
+                      data-testid="products-launch-readiness-copy-button"
+                    >
+                      Copy launch JSON
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Score</div>
+                      <div className="mt-1 text-sm font-semibold text-foreground">{selectedProductLaunchReadiness.summary.score}%</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Ready checks</div>
+                      <div className="mt-1 text-sm font-semibold text-foreground">
+                        {selectedProductLaunchReadiness.summary.readyCount}/{selectedProductLaunchReadiness.summary.totalChecks}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Blockers</div>
+                      <div className="mt-1 text-sm font-semibold text-foreground">{selectedProductLaunchReadiness.summary.blockerCount}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <div className="text-muted-foreground">Product</div>
+                      <div className="mt-1 truncate text-sm font-semibold text-foreground">{selectedProductLaunchReadiness.product.title || 'No product selected'}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                    {selectedProductLaunchReadiness.checks.map((check) => (
+                      <div
+                        key={check.key}
+                        className="rounded-md border border-border bg-background px-3 py-2 text-xs"
+                        data-testid={`products-launch-readiness-check-${check.key}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-semibold text-foreground">{check.label}</div>
+                          <div className="flex items-center gap-1.5">
+                            {check.status === 'ready' ? (
+                              <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
+                            ) : (
+                              <AlertTriangle className={cn('size-3.5', check.status === 'blocked' ? 'text-red-600' : 'text-amber-600')} aria-hidden="true" />
+                            )}
+                            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', productLaunchReadinessBadgeClass(check.status))}>
+                              {formatProductLaunchReadinessStatus(check.status)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-1 text-muted-foreground">{check.detail}</div>
+                        {check.status !== 'ready' ? (
+                          <div className="mt-1 text-[11px] text-foreground">Action: {check.action}</div>
+                        ) : null}
+                        {check.evidence.length > 0 ? (
+                          <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                            Evidence: {check.evidence.join(' · ')}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-launch-readiness-action-plan">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-foreground">Launch action plan</div>
+                        <div className="mt-0.5 text-muted-foreground">
+                          {selectedProductLaunchReadiness.actionPlan.nextSteps.length > 0
+                            ? `${selectedProductLaunchReadiness.actionPlan.nextSteps.length} action${selectedProductLaunchReadiness.actionPlan.nextSteps.length === 1 ? '' : 's'} before launch handoff.`
+                            : 'No launch blockers or attention items for this selected product.'}
+                        </div>
+                      </div>
+                      <div className="font-mono text-[11px] text-muted-foreground">{selectedProductLaunchReadiness.schemaVersion}</div>
+                    </div>
+                    {selectedProductLaunchReadiness.actionPlan.nextSteps.length > 0 ? (
+                      <div className="mt-2 grid gap-2 md:grid-cols-2">
+                        {selectedProductLaunchReadiness.actionPlan.nextSteps.map((step) => (
+                          <div key={step.key} className="rounded-md border border-border bg-card px-3 py-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-foreground">{step.label}</span>
+                              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', step.priority === 'blocker' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700')}>
+                                {step.priority}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-muted-foreground">{step.action}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
                 <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-provider-sync">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -7304,6 +7491,326 @@ const parseProductVariants = (value: string): ProductVariant[] => formatProductV
 const serializeProductVariants = (variants: ProductVariant[]): string => (
   JSON.stringify(formatProductVariants(variants))
 );
+
+const makeProductLaunchReadiness = ({
+  generatedAt,
+  product,
+  checks,
+  catalogApi,
+  productApi,
+  orderIntakeApi,
+  orderIntakeReady,
+  productApiReady,
+}: {
+  generatedAt: string;
+  product: ProductLaunchReadiness['product'];
+  checks: ProductLaunchReadinessCheck[];
+  catalogApi: string;
+  productApi: string;
+  orderIntakeApi: string;
+  orderIntakeReady: boolean;
+  productApiReady: boolean;
+}): ProductLaunchReadiness => {
+  const readyCount = checks.filter((check) => check.status === 'ready').length;
+  const blockerCount = checks.filter((check) => check.status === 'blocked').length;
+  const attentionCount = checks.filter((check) => check.status === 'attention').length;
+  const summaryStatus: ProductLaunchReadinessStatus = blockerCount > 0
+    ? 'blocked'
+    : attentionCount > 0
+      ? 'attention'
+      : 'ready';
+
+  return {
+    schemaVersion: 'backy.product-launch-readiness.v1',
+    generatedAt,
+    product,
+    summary: {
+      status: summaryStatus,
+      score: checks.length > 0 ? Math.round((readyCount / checks.length) * 100) : 0,
+      readyCount,
+      totalChecks: checks.length,
+      blockerCount,
+      attentionCount,
+    },
+    storefront: {
+      catalogApi,
+      productApi,
+      orderIntakeApi,
+      orderIntakeReady,
+      productApiReady,
+    },
+    checks,
+    actionPlan: {
+      nextSteps: checks
+        .filter((check) => check.status !== 'ready')
+        .map((check) => ({
+          key: check.key,
+          label: check.label,
+          priority: check.status === 'blocked' ? 'blocker' : 'attention',
+          action: check.action,
+        })),
+      handoffSurfaces: [
+        'products-launch-readiness',
+        'productHandoff.providerExecution.selectedProductLaunchReadiness',
+        'backy.product-launch-readiness.v1',
+      ],
+    },
+  };
+};
+
+const buildProductLaunchReadiness = ({
+  product,
+  providerSync,
+  productApiReady,
+  orderIntakeReady,
+  catalogApi,
+  productApi,
+  orderIntakeApi,
+}: {
+  product: CollectionRecord | null;
+  providerSync: CommerceProductProviderSyncResult | null;
+  productApiReady: boolean;
+  orderIntakeReady: boolean;
+  catalogApi: string;
+  productApi: string;
+  orderIntakeApi: string;
+}): ProductLaunchReadiness => {
+  const generatedAt = new Date().toISOString();
+
+  if (!product) {
+    return makeProductLaunchReadiness({
+      generatedAt,
+      product: {
+        id: null,
+        slug: null,
+        title: '',
+        sku: '',
+        status: 'not-selected',
+        productType: null,
+      },
+      catalogApi,
+      productApi,
+      orderIntakeApi,
+      productApiReady,
+      orderIntakeReady,
+      checks: [
+        {
+          key: 'selected-product',
+          label: 'Selected product',
+          status: 'blocked',
+          detail: 'No product is selected for launch review.',
+          action: 'Select an existing product or save the current product before copying a launch handoff.',
+          evidence: ['selectedProduct=null'],
+        },
+      ],
+    });
+  }
+
+  const values = product.values || {};
+  const title = String(readProductValue(values, 'title', product.slug) || product.slug).trim();
+  const sku = String(readProductValue(values, 'sku', '') || '').trim();
+  const price = toNumber(readProductValue(values, 'price'));
+  const currency = normalizeCurrency(String(readProductValue(values, 'currency', 'USD') || 'USD'));
+  const productType = asProductType(readProductValue(values, 'productType'));
+  const stockState = getProductStockState(values);
+  const imageUrl = String(readProductValue(values, 'imageUrl', '') || '').trim();
+  const galleryImages = formatGalleryImages(readProductValue(values, 'galleryImages'));
+  const variants = formatProductVariants(readProductValue(values, 'variants'));
+  const checkoutUrl = String(readProductValue(values, 'checkoutUrl', '') || '').trim();
+  const downloadUrl = String(readProductValue(values, 'downloadUrl', '') || '').trim();
+  const shippingRequired = readProductValue(values, 'shippingRequired') !== false;
+  const shippingProfile = String(readProductValue(values, 'shippingProfile', '') || '').trim();
+  const weight = maybeFiniteNumber(readProductValue(values, 'weight'));
+  const description = String(readProductValue(values, 'description', '') || '').trim();
+  const seoTitle = String(readProductValue(values, 'seoTitle', '') || '').trim();
+  const category = String(readProductValue(values, 'category', '') || '').trim();
+  const vendor = String(readProductValue(values, 'vendor', '') || '').trim();
+  const tags = formatTags(readProductValue(values, 'tags'));
+  const scheduledAtMs = product.scheduledAt ? Date.parse(product.scheduledAt) : NaN;
+  const scheduledForFuture = Number.isFinite(scheduledAtMs) && scheduledAtMs > Date.now();
+  const hasCoreIdentity = Boolean(title && product.slug && sku);
+  const hasMedia = Boolean(imageUrl || galleryImages.length > 0);
+  const checkoutReady = Boolean(orderIntakeReady || checkoutUrl);
+
+  const publishStatus = product.status === 'published'
+    ? 'ready'
+    : product.status === 'scheduled' && scheduledForFuture
+      ? 'attention'
+      : 'blocked';
+
+  const deliveryStatus: ProductLaunchReadinessStatus = productType === 'digital'
+    ? (downloadUrl ? 'ready' : 'blocked')
+    : productType === 'physical'
+      ? (!shippingRequired || (shippingProfile && weight && weight > 0)
+          ? 'ready'
+          : shippingProfile
+            ? 'attention'
+            : 'blocked')
+      : shippingRequired
+        ? 'attention'
+        : 'ready';
+
+  const providerStatus: ProductLaunchReadinessStatus = providerSync?.status === 'synced'
+    ? 'ready'
+    : providerSync?.status === 'failed'
+      ? 'blocked'
+      : 'attention';
+
+  const checks: ProductLaunchReadinessCheck[] = [
+    {
+      key: 'storefront-api',
+      label: 'Storefront API',
+      status: productApiReady ? 'ready' : 'blocked',
+      detail: productApiReady
+        ? 'Products collection is public, schema-complete, and ready for catalog reads.'
+        : 'Products collection is not ready for public catalog/detail API handoff.',
+      action: 'Publish the products collection, enable public reads, and sync missing product fields.',
+      evidence: [productApiReady ? 'productApiReady=true' : 'productApiReady=false', catalogApi],
+    },
+    {
+      key: 'identity',
+      label: 'Product identity',
+      status: hasCoreIdentity ? 'ready' : 'blocked',
+      detail: hasCoreIdentity
+        ? `${title} has slug and SKU metadata.`
+        : 'Title, slug, and SKU are required before a storefront can address this product safely.',
+      action: 'Fill title, slug, and SKU, then save the product.',
+      evidence: [`slug=${product.slug || 'missing'}`, `sku=${sku || 'missing'}`],
+    },
+    {
+      key: 'publish-state',
+      label: 'Publish state',
+      status: publishStatus,
+      detail: product.status === 'published'
+        ? 'Product is published for public catalog reads.'
+        : product.status === 'scheduled' && scheduledForFuture
+          ? `Product is scheduled for ${formatDate(product.scheduledAt || generatedAt)}.`
+          : `Product status is ${product.status}; it is not publicly launchable yet.`,
+      action: 'Publish the product or choose a valid future scheduled launch date.',
+      evidence: [`status=${product.status}`, product.scheduledAt ? `scheduledAt=${product.scheduledAt}` : 'scheduledAt=none'],
+    },
+    {
+      key: 'pricing',
+      label: 'Pricing',
+      status: price > 0 && Boolean(currency) ? 'ready' : 'blocked',
+      detail: price > 0
+        ? `Storefront price is ${formatMoney(price, currency)}.`
+        : 'A positive product price is required for sellable storefront cards and checkout quotes.',
+      action: 'Set a positive price and three-letter currency.',
+      evidence: [`price=${price}`, `currency=${currency}`],
+    },
+    {
+      key: 'stock',
+      label: 'Stock and variants',
+      status: stockState.outOfStock ? 'blocked' : stockState.lowStock ? 'attention' : 'ready',
+      detail: stockState.outOfStock
+        ? 'Physical product is out of stock and inventory policy blocks purchase.'
+        : stockState.lowStock
+          ? `Physical stock is low at ${stockState.inventory} unit${stockState.inventory === 1 ? '' : 's'}.`
+          : variants.length > 0
+            ? `${variants.length} variant${variants.length === 1 ? '' : 's'} available for selectors.`
+            : productType === 'physical'
+              ? `${stockState.inventory} physical unit${stockState.inventory === 1 ? '' : 's'} available.`
+              : `${productType} product does not require physical stock.`,
+      action: 'Add inventory, change inventory policy to preorder/continue, or add variant stock before launch.',
+      evidence: [`productType=${productType}`, `inventory=${stockState.inventory}`, `inventoryPolicy=${stockState.inventoryPolicy}`, `variants=${variants.length}`],
+    },
+    {
+      key: 'media',
+      label: 'Product media',
+      status: hasMedia ? 'ready' : 'attention',
+      detail: hasMedia
+        ? `Primary media is present with ${galleryImages.length} gallery image${galleryImages.length === 1 ? '' : 's'}.`
+        : 'No product media is attached; storefront cards and detail pages will be text-only.',
+      action: 'Attach a central media-library image or gallery asset.',
+      evidence: [`image=${imageUrl ? 'present' : 'missing'}`, `galleryImages=${galleryImages.length}`],
+    },
+    {
+      key: 'checkout',
+      label: 'Checkout handoff',
+      status: checkoutReady ? 'ready' : 'blocked',
+      detail: orderIntakeReady
+        ? 'Backy order intake is ready for custom storefront checkout.'
+        : checkoutUrl
+          ? 'Product has a direct checkout URL for external checkout.'
+          : 'No Backy order intake or direct checkout URL is available.',
+      action: 'Publish the private orders collection for Backy order intake or add a product checkout URL.',
+      evidence: [orderIntakeReady ? 'orderIntakeReady=true' : 'orderIntakeReady=false', checkoutUrl ? 'checkoutUrl=present' : 'checkoutUrl=missing', orderIntakeApi],
+    },
+    {
+      key: 'delivery',
+      label: 'Delivery and fulfillment',
+      status: deliveryStatus,
+      detail: productType === 'digital'
+        ? (downloadUrl ? 'Digital delivery URL is attached.' : 'Digital product is missing a delivery/download URL.')
+        : productType === 'physical'
+          ? (!shippingRequired
+              ? 'Physical product is marked as not requiring shipping.'
+              : shippingProfile && weight && weight > 0
+                ? `Shipping profile ${shippingProfile} is ready with weight ${weight}.`
+                : shippingProfile
+                  ? `Shipping profile ${shippingProfile} is set, but weight is missing for provider quotes.`
+                  : 'Physical product requires shipping but has no shipping profile.')
+          : shippingRequired
+            ? 'Service product is still marked as shippable.'
+            : 'Service product delivery does not require physical shipping.',
+      action: 'Add digital delivery URL, shipping profile and weight, or turn off shipping for services.',
+      evidence: [`productType=${productType}`, `shippingRequired=${shippingRequired}`, `shippingProfile=${shippingProfile || 'missing'}`, `downloadUrl=${downloadUrl ? 'present' : 'missing'}`],
+    },
+    {
+      key: 'seo-merchandising',
+      label: 'SEO and merchandising',
+      status: description.length >= 20 && Boolean(seoTitle || title) && Boolean(category || tags.length > 0 || vendor) ? 'ready' : 'attention',
+      detail: description.length >= 20 && Boolean(category || tags.length > 0 || vendor)
+        ? 'Description, search title, and merchandising metadata are present.'
+        : 'Description, SEO title, category, tags, or vendor metadata need more detail for storefront discovery.',
+      action: 'Add a product description, SEO title, category/tags, and vendor metadata.',
+      evidence: [`descriptionChars=${description.length}`, `seoTitle=${seoTitle || title || 'missing'}`, `category=${category || 'missing'}`, `tags=${tags.length}`, `vendor=${vendor || 'missing'}`],
+    },
+    {
+      key: 'provider-sync',
+      label: 'Provider catalog sync',
+      status: providerStatus,
+      detail: providerSync?.status === 'synced'
+        ? `Catalog metadata synced through ${providerSync.provider} using ${providerSync.executionMode}.`
+        : providerSync?.status === 'failed'
+          ? `Last provider catalog sync failed: ${providerSync.error?.message || providerSync.reason || 'unknown error'}.`
+          : 'No successful provider catalog sync is recorded for this product.',
+      action: 'Run provider catalog sync or keep the launch on Backy order intake/direct checkout until provider sync succeeds.',
+      evidence: [`provider=${providerSync?.provider || 'not-run'}`, `status=${providerSync?.status || 'not-run'}`, `executionMode=${providerSync?.executionMode || 'none'}`],
+    },
+  ];
+
+  return makeProductLaunchReadiness({
+    generatedAt,
+    product: {
+      id: product.id,
+      slug: product.slug,
+      title,
+      sku,
+      status: product.status,
+      productType,
+    },
+    checks,
+    catalogApi,
+    productApi,
+    orderIntakeApi,
+    productApiReady,
+    orderIntakeReady,
+  });
+};
+
+const formatProductLaunchReadinessStatus = (status: ProductLaunchReadinessStatus): string => {
+  if (status === 'ready') return 'Ready';
+  if (status === 'blocked') return 'Blocked';
+  return 'Needs attention';
+};
+
+const productLaunchReadinessBadgeClass = (status: ProductLaunchReadinessStatus): string => {
+  if (status === 'ready') return 'bg-emerald-50 text-emerald-700';
+  if (status === 'blocked') return 'bg-red-50 text-red-700';
+  return 'bg-amber-50 text-amber-700';
+};
 
 const getMissingProductFieldKeys = (collection: Collection): string[] => {
   const existingKeys = new Set(collection.fields.map((field) => normalizeProductSchemaKey(field.key)));
