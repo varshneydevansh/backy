@@ -244,6 +244,14 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('...(responsiveGroup.responsive ? { responsive: responsiveGroup.responsive } : {})'),
     'Editor grouping must preserve tablet/mobile responsive geometry when layers are moved into a group',
   );
+  assert(
+    source.includes('const restoreUngroupedChildResponsive = (') &&
+      source.includes('const absoluteX = groupGeometry.x + childGeometry.x') &&
+      source.includes('const absoluteY = groupGeometry.y + childGeometry.y') &&
+      source.includes('const nextResponsive = restoreUngroupedChildResponsive(item, child, nextChild)') &&
+      source.includes('nextChild.responsive = nextResponsive'),
+    'Editor ungrouping must restore tablet/mobile child geometry from group-relative to absolute coordinates',
+  );
   assert(source.includes('data-testid="editor-align-left"') && source.includes('data-testid="editor-align-center"') && source.includes('data-testid="editor-align-bottom"'), 'Editor alignment toolbar buttons must expose stable test ids');
   assert(source.includes('data-testid="editor-inspector-align-controls"') && source.includes('data-testid="editor-inspector-align-left"') && source.includes('data-testid="editor-inspector-align-bottom"'), 'Editor inspector must expose multi-selection alignment controls');
   assert(!source.includes('? -minX') && source.includes('const centerX = minX + groupWidth / 2;') && source.includes('maxX - entry.element.width'), 'Editor multi-selection alignment must align selected layers to each other instead of moving the whole selection to the canvas edge');

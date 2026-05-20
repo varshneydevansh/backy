@@ -992,6 +992,67 @@ const buildResponsiveGroupChildren = (
   };
 };
 
+const restoreUngroupedChildResponsive = (
+  group: CanvasElement,
+  child: CanvasElement,
+  ungroupedChild: CanvasElement,
+): CanvasElement['responsive'] | undefined => (
+  EDITOR_RESPONSIVE_BREAKPOINTS.reduce<CanvasElement['responsive']>((acc, breakpoint) => {
+    const groupOverride = group.responsive?.[breakpoint];
+    const childOverride = child.responsive?.[breakpoint];
+    if (!groupOverride && !childOverride) {
+      return acc;
+    }
+
+    const groupGeometry = responsiveGeometryForElement(group, breakpoint);
+    const childGeometry = responsiveGeometryForElement(child, breakpoint);
+    const override: ResponsiveElementOverride = { ...(childOverride || {}) };
+    const absoluteX = groupGeometry.x + childGeometry.x;
+    const absoluteY = groupGeometry.y + childGeometry.y;
+    const absoluteZIndex = groupGeometry.zIndex + Math.max(0, childGeometry.zIndex - 1);
+    const groupHasLayoutOverride = hasResponsiveOverrideGroup(groupOverride, 'layout', group);
+
+    if (groupHasLayoutOverride || childOverride?.x !== undefined || absoluteX !== ungroupedChild.x) {
+      override.x = absoluteX;
+    } else {
+      delete override.x;
+    }
+
+    if (groupHasLayoutOverride || childOverride?.y !== undefined || absoluteY !== ungroupedChild.y) {
+      override.y = absoluteY;
+    } else {
+      delete override.y;
+    }
+
+    if (childOverride?.width !== undefined || childGeometry.width !== ungroupedChild.width) {
+      override.width = childGeometry.width;
+    } else {
+      delete override.width;
+    }
+
+    if (childOverride?.height !== undefined || childGeometry.height !== ungroupedChild.height) {
+      override.height = childGeometry.height;
+    } else {
+      delete override.height;
+    }
+
+    if (groupOverride?.zIndex !== undefined || childOverride?.zIndex !== undefined || absoluteZIndex !== (ungroupedChild.zIndex || 1)) {
+      override.zIndex = absoluteZIndex;
+    } else {
+      delete override.zIndex;
+    }
+
+    if (groupOverride?.visible !== undefined && childOverride?.visible === undefined) {
+      override.visible = groupOverride.visible;
+    }
+    if (groupOverride?.locked !== undefined && childOverride?.locked === undefined) {
+      override.locked = groupOverride.locked;
+    }
+
+    return setResponsiveOverride({ responsive: acc } as CanvasElement, breakpoint, override).responsive;
+  }, undefined)
+);
+
 const CANVAS_SIZE_PRESETS = [
   { id: 'desktop', label: 'Desktop', width: 1200, height: 800, breakpoint: 'desktop' as const },
   { id: 'wide', label: 'Wide page', width: 1440, height: 1200 },
@@ -3176,13 +3237,20 @@ export function CanvasEditor({
             ...child,
             x: item.x + child.x,
             y: item.y + child.y,
-            zIndex: (item.zIndex || 1) + index,
+            zIndex: (item.zIndex || 1) + Math.max(0, (child.zIndex || index + 1) - 1),
           };
+          const nextResponsive = restoreUngroupedChildResponsive(item, child, nextChild);
 
           if (parentId) {
             nextChild.parentId = parentId;
           } else {
             delete nextChild.parentId;
+          }
+
+          if (nextResponsive) {
+            nextChild.responsive = nextResponsive;
+          } else {
+            delete nextChild.responsive;
           }
 
           return nextChild;
