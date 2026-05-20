@@ -4674,6 +4674,18 @@ export function CanvasEditor({
         return;
       }
 
+      if (key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleToggleGridVisibility();
+        return;
+      }
+
+      if (key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleToggleSnap();
+        return;
+      }
+
       const isLayerOrderShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
         e.code === 'BracketLeft' ||
         e.code === 'BracketRight' ||
@@ -4850,6 +4862,8 @@ export function CanvasEditor({
     handleGroupSelected,
     handleUngroupSelected,
     handleToggleCanvasPanMode,
+    handleToggleGridVisibility,
+    handleToggleSnap,
     handleZoomIn,
     handleZoomOut,
     handleSelectFirstChildLayer,
@@ -5941,6 +5955,8 @@ export function CanvasEditor({
                 data-snap-enabled={snapEnabled ? 'true' : 'false'}
                 data-grid-visible={showGrid ? 'true' : 'false'}
                 data-grid-size={gridSize}
+                data-grid-keyshortcuts="toggle:G"
+                data-snap-keyshortcuts="toggle:S"
               >
                 <button
                   type="button"
@@ -5951,9 +5967,10 @@ export function CanvasEditor({
                       ? 'bg-slate-100 text-slate-800 ring-1 ring-slate-200'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950',
                   )}
-                  title={showGrid ? 'Hide grid' : 'Show grid'}
+                  title={showGrid ? 'Hide grid (G)' : 'Show grid (G)'}
                   aria-label={showGrid ? 'Hide grid' : 'Show grid'}
                   aria-pressed={showGrid}
+                  aria-keyshortcuts="G"
                   data-testid="editor-grid-visibility-toggle"
                 >
                   {showGrid ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
@@ -5967,9 +5984,10 @@ export function CanvasEditor({
                       ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950',
                   )}
-                  title={snapEnabled ? 'Disable snapping' : 'Enable snapping'}
+                  title={snapEnabled ? 'Disable snapping (S)' : 'Enable snapping (S)'}
                   aria-label={snapEnabled ? 'Disable snapping' : 'Enable snapping'}
                   aria-pressed={snapEnabled}
+                  aria-keyshortcuts="S"
                   data-testid="editor-snap-toggle"
                 >
                   <Magnet className="h-4 w-4" />

@@ -89,7 +89,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ✅ Working
 - Renders all element types
 - Handle drop events
-- Grid background in edit mode
+- Grid background in edit mode, with G/S keyboard toggles for grid visibility and snapping.
 - Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface and covered by focused smoke.
 - Smart alignment guides render during drag, snap selected elements to peer/canvas edges, and clear after release.
 - Rulers render along the canvas edge with major/minor ticks.
