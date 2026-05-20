@@ -187,6 +187,10 @@ assert(
     manifestRoute.includes("requiredPermissions:") &&
     manifestRoute.includes("read: 'pages.view'") &&
     manifestRoute.includes("update: 'pages.edit'") &&
+    manifestRoute.includes("'props.formId'") &&
+    manifestRoute.includes("'props.submitLabel'") &&
+    manifestRoute.includes("'props.options'") &&
+    manifestRoute.includes("'props.required'") &&
     manifestRoute.includes("conflict: 'PAGE_VERSION_CONFLICT'") &&
     manifestRoute.includes("postConflict: 'BLOG_VERSION_CONFLICT'") &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(input.site.id)') &&
@@ -199,6 +203,8 @@ assert(
     sdkSource.includes('BackyManifestLiveManagementModule') &&
     sdkSource.includes('post: string;') &&
     sdkSmoke.includes('manifest() missing live-management discovery module') &&
+    sdkSmoke.includes('manifest() live-management missing form id editable target') &&
+    generatedSdkSmoke.includes('props.formId') &&
     sdkSmoke.includes('manifest() live-management blog post endpoint drifted') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestLiveManagementDiscovery'),
   'Frontend manifest and SDK must expose structured live-management discovery for inline custom frontend editing.',

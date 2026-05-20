@@ -1104,7 +1104,7 @@ const manifest = {
         auditTrail: true,
         webhookDelivery: true,
       },
-      editableTargets: ["props.content", "props.href", "styles.color"],
+      editableTargets: ["props.content", "props.href", "props.formId", "props.label", "props.options", "styles.color"],
       updateBody: {
         expectedUpdatedAt: "Use the current page updatedAt value.",
         content: "Send the full Backy content document or canvas content object.",
@@ -2713,7 +2713,7 @@ const sdkManifestLiveManagement = {
     auditTrail: true,
     webhookDelivery: true,
   },
-  editableTargets: ["props.content", "props.href", "styles.color"],
+  editableTargets: ["props.content", "props.href", "props.formId", "props.label", "props.options", "styles.color"],
   updateBody: {
     expectedUpdatedAt: "Use the current page updatedAt value.",
     content: "Send the full Backy content document or canvas content object.",

@@ -735,6 +735,8 @@ assert(manifestLiveManagement.capabilities?.editableMap === true, 'manifest() li
 assert(manifestLiveManagement.capabilities?.postMetadata === true, 'manifest() live-management missing blog post metadata capability');
 assert(manifestLiveManagement.capabilities?.optimisticConcurrency === true, 'manifest() live-management missing optimistic concurrency capability');
 assert(manifestLiveManagement.editableTargets?.includes?.('props.content'), 'manifest() live-management missing content editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.formId'), 'manifest() live-management missing form id editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.options'), 'manifest() live-management missing form options editable target');
 assert(manifestLiveManagement.updateBody?.expectedUpdatedAt, 'manifest() live-management missing expectedUpdatedAt update guidance');
 assert(manifestLiveManagement.errors?.conflict === 'PAGE_VERSION_CONFLICT', 'manifest() live-management conflict code drifted');
 assert(manifestLiveManagement.errors?.postConflict === 'BLOG_VERSION_CONFLICT', 'manifest() live-management blog conflict code drifted');

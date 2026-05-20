@@ -38,14 +38,17 @@ const INLINE_TEXT_ELEMENT_TYPES = new Set(['text', 'heading', 'paragraph', 'quot
 const INLINE_LINK_ELEMENT_TYPES = new Set(['button', 'link']);
 const INLINE_IMAGE_ELEMENT_TYPES = new Set(['image']);
 const INLINE_MEDIA_ELEMENT_TYPES = new Set(['video', 'embed', 'map']);
+const INLINE_FORM_ELEMENT_TYPES = new Set(['form', 'input', 'textarea', 'select', 'checkbox', 'radio']);
 const IMAGE_OBJECT_FIT_OPTIONS = ['cover', 'contain', 'fill', 'none', 'scale-down'] as const;
 const IFRAME_LOADING_OPTIONS = ['', 'lazy', 'eager'] as const;
+const FORM_INPUT_TYPE_OPTIONS = ['', 'text', 'email', 'tel', 'url', 'number', 'date', 'datetime-local', 'time', 'month', 'search', 'password'] as const;
 const BORDER_STYLE_OPTIONS = ['', 'solid', 'dashed', 'dotted', 'double', 'none'] as const;
 const TEXT_ALIGN_OPTIONS = ['', 'left', 'center', 'right', 'justify'] as const;
 const TEXT_TRANSFORM_OPTIONS = ['', 'none', 'uppercase', 'lowercase', 'capitalize'] as const;
 const TEXT_DECORATION_OPTIONS = ['', 'none', 'underline', 'line-through', 'overline'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
 type IframeLoadingOption = typeof IFRAME_LOADING_OPTIONS[number];
+type FormInputTypeOption = typeof FORM_INPUT_TYPE_OPTIONS[number];
 type BorderStyleOption = typeof BORDER_STYLE_OPTIONS[number];
 type TextAlignOption = typeof TEXT_ALIGN_OPTIONS[number];
 type TextTransformOption = typeof TEXT_TRANSFORM_OPTIONS[number];
@@ -65,6 +68,25 @@ type InlineMediaFields = {
   muted: boolean;
   playsInline: boolean;
   allowFullScreen: boolean;
+};
+type InlineFormFields = {
+  formId: string;
+  formTitle: string;
+  submitLabel: string;
+  action: string;
+  successMessage: string;
+  formActive: boolean;
+  label: string;
+  name: string;
+  placeholder: string;
+  helpText: string;
+  defaultValue: string;
+  value: string;
+  options: string;
+  inputType: FormInputTypeOption;
+  rows: string;
+  required: boolean;
+  disabled: boolean;
 };
 type InlineAppearanceFields = {
   color: string;
@@ -344,6 +366,40 @@ const mediaFieldsFromElement = (element: Record<string, unknown> | null): Inline
   };
 };
 
+const listProp = (props: Record<string, unknown>, key: string): string => {
+  const value = props[key];
+  if (Array.isArray(value)) {
+    return value.filter((item) => typeof item === 'string' && item.trim().length > 0).join('\n');
+  }
+  return typeof value === 'string' ? value : '';
+};
+
+const formFieldsFromElement = (element: Record<string, unknown> | null): InlineFormFields => {
+  const props = elementProps(element);
+  const inputType = stringProp(props, 'inputType') || stringProp(props, 'type');
+  return {
+    formId: stringProp(props, 'formId'),
+    formTitle: stringProp(props, 'formTitle'),
+    submitLabel: stringProp(props, 'submitLabel'),
+    action: stringProp(props, 'action') || stringProp(props, 'actionUrl'),
+    successMessage: stringProp(props, 'successMessage'),
+    formActive: props.formActive !== false && stringProp(props, 'formActive').toLowerCase() !== 'false',
+    label: stringProp(props, 'label'),
+    name: stringProp(props, 'name'),
+    placeholder: stringProp(props, 'placeholder'),
+    helpText: stringProp(props, 'helpText'),
+    defaultValue: stringOrListProp(props, 'defaultValue'),
+    value: stringProp(props, 'value'),
+    options: listProp(props, 'options'),
+    inputType: FORM_INPUT_TYPE_OPTIONS.includes(inputType as FormInputTypeOption)
+      ? inputType as FormInputTypeOption
+      : 'text',
+    rows: lengthProp(props, 'rows'),
+    required: booleanProp(props, 'required'),
+    disabled: booleanProp(props, 'disabled'),
+  };
+};
+
 const appearanceFieldsFromElement = (element: Record<string, unknown> | null): InlineAppearanceFields => {
   const props = elementProps(element);
   const borderStyle = stringProp(props, 'borderStyle');
@@ -565,6 +621,78 @@ const updateElementMedia = (
   return null;
 };
 
+const formOptionLines = (value: string): string[] => (
+  value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+);
+
+const updateElementForm = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  elementType: string,
+  input: InlineFormFields,
+): Record<string, unknown> | null => {
+  if (elementType === 'form') {
+    return updateElementProps(content, elementId, {
+      formId: input.formId.trim(),
+      formTitle: input.formTitle.trim(),
+      submitLabel: input.submitLabel.trim(),
+      action: input.action.trim(),
+      successMessage: input.successMessage.trim(),
+      formActive: input.formActive,
+    });
+  }
+
+  const basePatch: Record<string, unknown> = {
+    label: input.label.trim(),
+    name: input.name.trim(),
+    helpText: input.helpText.trim(),
+    required: input.required,
+    disabled: input.disabled,
+  };
+
+  if (elementType === 'input') {
+    return updateElementProps(content, elementId, {
+      ...basePatch,
+      placeholder: input.placeholder.trim(),
+      defaultValue: input.defaultValue.trim(),
+      inputType: input.inputType || 'text',
+    });
+  }
+
+  if (elementType === 'textarea') {
+    return updateElementProps(content, elementId, {
+      ...basePatch,
+      placeholder: input.placeholder.trim(),
+      defaultValue: input.defaultValue.trim(),
+      rows: input.rows.trim(),
+    });
+  }
+
+  if (elementType === 'select') {
+    return updateElementProps(content, elementId, {
+      ...basePatch,
+      placeholder: input.placeholder.trim(),
+      defaultValue: input.defaultValue.trim(),
+      options: formOptionLines(input.options),
+    });
+  }
+
+  if (elementType === 'checkbox' || elementType === 'radio') {
+    const options = formOptionLines(input.options);
+    return updateElementProps(content, elementId, {
+      ...basePatch,
+      value: input.value.trim(),
+      defaultValue: formOptionLines(input.defaultValue),
+      options,
+    });
+  }
+
+  return null;
+};
+
 const updateElementAppearance = (
   content: Record<string, unknown> | undefined,
   elementId: string,
@@ -670,6 +798,24 @@ export function LivePageManagementOverlay({
   const [inlineMediaPlaysInline, setInlineMediaPlaysInline] = useState(false);
   const [inlineMediaAllowFullScreen, setInlineMediaAllowFullScreen] = useState(true);
   const [inlineMediaSaving, setInlineMediaSaving] = useState(false);
+  const [inlineFormId, setInlineFormId] = useState('');
+  const [inlineFormTitle, setInlineFormTitle] = useState('');
+  const [inlineFormSubmitLabel, setInlineFormSubmitLabel] = useState('');
+  const [inlineFormAction, setInlineFormAction] = useState('');
+  const [inlineFormSuccessMessage, setInlineFormSuccessMessage] = useState('');
+  const [inlineFormActive, setInlineFormActive] = useState(true);
+  const [inlineFormLabel, setInlineFormLabel] = useState('');
+  const [inlineFormName, setInlineFormName] = useState('');
+  const [inlineFormPlaceholder, setInlineFormPlaceholder] = useState('');
+  const [inlineFormHelpText, setInlineFormHelpText] = useState('');
+  const [inlineFormDefaultValue, setInlineFormDefaultValue] = useState('');
+  const [inlineFormValue, setInlineFormValue] = useState('');
+  const [inlineFormOptions, setInlineFormOptions] = useState('');
+  const [inlineFormInputType, setInlineFormInputType] = useState<FormInputTypeOption>('text');
+  const [inlineFormRows, setInlineFormRows] = useState('');
+  const [inlineFormRequired, setInlineFormRequired] = useState(false);
+  const [inlineFormDisabled, setInlineFormDisabled] = useState(false);
+  const [inlineFormSaving, setInlineFormSaving] = useState(false);
   const [inlineAppearanceColor, setInlineAppearanceColor] = useState('');
   const [inlineAppearanceBackgroundColor, setInlineAppearanceBackgroundColor] = useState('');
   const [inlineAppearanceBorderColor, setInlineAppearanceBorderColor] = useState('');
@@ -825,6 +971,23 @@ export function LivePageManagementOverlay({
       setInlineMediaMuted(false);
       setInlineMediaPlaysInline(false);
       setInlineMediaAllowFullScreen(true);
+      setInlineFormId('');
+      setInlineFormTitle('');
+      setInlineFormSubmitLabel('');
+      setInlineFormAction('');
+      setInlineFormSuccessMessage('');
+      setInlineFormActive(true);
+      setInlineFormLabel('');
+      setInlineFormName('');
+      setInlineFormPlaceholder('');
+      setInlineFormHelpText('');
+      setInlineFormDefaultValue('');
+      setInlineFormValue('');
+      setInlineFormOptions('');
+      setInlineFormInputType('text');
+      setInlineFormRows('');
+      setInlineFormRequired(false);
+      setInlineFormDisabled(false);
       setInlineAppearanceColor('');
       setInlineAppearanceBackgroundColor('');
       setInlineAppearanceBorderColor('');
@@ -879,6 +1042,7 @@ export function LivePageManagementOverlay({
   const selectedElementSupportsInlineLink = INLINE_LINK_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineImage = INLINE_IMAGE_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineMedia = INLINE_MEDIA_ELEMENT_TYPES.has(selectedElementType);
+  const selectedElementSupportsInlineForm = INLINE_FORM_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementMediaSaveDisabled = selectedElementLocked
     || inlineMediaSaving
     || (selectedElementType === 'map'
@@ -909,6 +1073,24 @@ export function LivePageManagementOverlay({
     setInlineMediaMuted(mediaFields.muted);
     setInlineMediaPlaysInline(mediaFields.playsInline);
     setInlineMediaAllowFullScreen(mediaFields.allowFullScreen);
+    const formFields = formFieldsFromElement(selectedContentElement);
+    setInlineFormId(formFields.formId);
+    setInlineFormTitle(formFields.formTitle);
+    setInlineFormSubmitLabel(formFields.submitLabel);
+    setInlineFormAction(formFields.action);
+    setInlineFormSuccessMessage(formFields.successMessage);
+    setInlineFormActive(formFields.formActive);
+    setInlineFormLabel(formFields.label);
+    setInlineFormName(formFields.name);
+    setInlineFormPlaceholder(formFields.placeholder);
+    setInlineFormHelpText(formFields.helpText);
+    setInlineFormDefaultValue(formFields.defaultValue);
+    setInlineFormValue(formFields.value);
+    setInlineFormOptions(formFields.options);
+    setInlineFormInputType(formFields.inputType);
+    setInlineFormRows(formFields.rows);
+    setInlineFormRequired(formFields.required);
+    setInlineFormDisabled(formFields.disabled);
     const appearanceFields = appearanceFieldsFromElement(selectedContentElement);
     setInlineAppearanceColor(appearanceFields.color);
     setInlineAppearanceBackgroundColor(appearanceFields.backgroundColor);
@@ -1205,6 +1387,72 @@ export function LivePageManagementOverlay({
       setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected media element.');
     } finally {
       setInlineMediaSaving(false);
+    }
+  };
+
+  const saveInlineForm = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its form settings.');
+      return;
+    }
+
+    const nextContent = updateElementForm(page.content, selectedElementId, selectedElementType, {
+      formId: inlineFormId,
+      formTitle: inlineFormTitle,
+      submitLabel: inlineFormSubmitLabel,
+      action: inlineFormAction,
+      successMessage: inlineFormSuccessMessage,
+      formActive: inlineFormActive,
+      label: inlineFormLabel,
+      name: inlineFormName,
+      placeholder: inlineFormPlaceholder,
+      helpText: inlineFormHelpText,
+      defaultValue: inlineFormDefaultValue,
+      value: inlineFormValue,
+      options: inlineFormOptions,
+      inputType: inlineFormInputType,
+      rows: inlineFormRows,
+      required: inlineFormRequired,
+      disabled: inlineFormDisabled,
+    });
+    if (!nextContent) {
+      setError('Unable to update this form element from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineFormSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected form element.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Form element saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected form element.');
+    } finally {
+      setInlineFormSaving(false);
     }
   };
 
@@ -1859,6 +2107,204 @@ export function LivePageManagementOverlay({
                     }}
                   >
                     {inlineMediaSaving ? 'Saving media...' : 'Save media'}
+                  </button>
+                </div>
+              ) : null}
+              {selectedElementSupportsInlineForm ? (
+                <div data-backy-live-form-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Form controls
+                  </span>
+                  {selectedElementType === 'form' ? (
+                    <>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Form id
+                        <input
+                          value={inlineFormId}
+                          onChange={(event) => setInlineFormId(event.target.value)}
+                          placeholder="contact-form"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Title
+                        <input
+                          value={inlineFormTitle}
+                          onChange={(event) => setInlineFormTitle(event.target.value)}
+                          placeholder="Contact us"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Submit label
+                        <input
+                          value={inlineFormSubmitLabel}
+                          onChange={(event) => setInlineFormSubmitLabel(event.target.value)}
+                          placeholder="Submit"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Action URL
+                        <input
+                          value={inlineFormAction}
+                          onChange={(event) => setInlineFormAction(event.target.value)}
+                          placeholder="/api/sites/.../forms/.../submissions"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Success message
+                        <input
+                          value={inlineFormSuccessMessage}
+                          onChange={(event) => setInlineFormSuccessMessage(event.target.value)}
+                          placeholder="Thanks. Your message was sent."
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                        <input
+                          type="checkbox"
+                          checked={inlineFormActive}
+                          onChange={(event) => setInlineFormActive(event.target.checked)}
+                        />
+                        Accept submissions
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Label
+                        <input
+                          value={inlineFormLabel}
+                          onChange={(event) => setInlineFormLabel(event.target.value)}
+                          placeholder="Email"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Field name
+                        <input
+                          value={inlineFormName}
+                          onChange={(event) => setInlineFormName(event.target.value)}
+                          placeholder="email"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      {selectedElementType === 'input' ? (
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Input type
+                          <select
+                            value={inlineFormInputType}
+                            onChange={(event) => setInlineFormInputType(event.target.value as FormInputTypeOption)}
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                          >
+                            {FORM_INPUT_TYPE_OPTIONS.map((option) => (
+                              <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {selectedElementType === 'input' || selectedElementType === 'textarea' || selectedElementType === 'select' ? (
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Placeholder
+                          <input
+                            value={inlineFormPlaceholder}
+                            onChange={(event) => setInlineFormPlaceholder(event.target.value)}
+                            placeholder="Placeholder text"
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                          />
+                        </label>
+                      ) : null}
+                      {selectedElementType === 'textarea' ? (
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Rows
+                          <input
+                            value={inlineFormRows}
+                            onChange={(event) => setInlineFormRows(event.target.value)}
+                            placeholder="5"
+                            inputMode="numeric"
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                          />
+                        </label>
+                      ) : null}
+                      {selectedElementType === 'select' || selectedElementType === 'checkbox' || selectedElementType === 'radio' ? (
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Options
+                          <textarea
+                            value={inlineFormOptions}
+                            onChange={(event) => setInlineFormOptions(event.target.value)}
+                            rows={3}
+                            placeholder="One option per line"
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, lineHeight: 1.4, padding: '8px 9px', resize: 'vertical' }}
+                          />
+                        </label>
+                      ) : null}
+                      {selectedElementType === 'checkbox' || selectedElementType === 'radio' ? (
+                        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                          Value
+                          <input
+                            value={inlineFormValue}
+                            onChange={(event) => setInlineFormValue(event.target.value)}
+                            placeholder="on"
+                            style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                          />
+                        </label>
+                      ) : null}
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Default value
+                        <input
+                          value={inlineFormDefaultValue}
+                          onChange={(event) => setInlineFormDefaultValue(event.target.value)}
+                          placeholder={selectedElementType === 'checkbox' ? 'Checked value or comma-separated values' : 'Default value'}
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Help text
+                        <input
+                          value={inlineFormHelpText}
+                          onChange={(event) => setInlineFormHelpText(event.target.value)}
+                          placeholder="Short hint under the field"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineFormRequired}
+                            onChange={(event) => setInlineFormRequired(event.target.checked)}
+                          />
+                          Required
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                          <input
+                            type="checkbox"
+                            checked={inlineFormDisabled}
+                            onChange={(event) => setInlineFormDisabled(event.target.checked)}
+                          />
+                          Disabled
+                        </label>
+                      </div>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={saveInlineForm}
+                    disabled={selectedElementLocked || inlineFormSaving}
+                    style={{
+                      justifySelf: 'start',
+                      border: 0,
+                      borderRadius: 6,
+                      background: selectedElementLocked || inlineFormSaving ? '#94a3b8' : '#2563eb',
+                      color: '#fff',
+                      cursor: selectedElementLocked || inlineFormSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      padding: '7px 10px',
+                    }}
+                  >
+                    {inlineFormSaving ? 'Saving form...' : 'Save form controls'}
                   </button>
                 </div>
               ) : null}
