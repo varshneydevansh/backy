@@ -6282,6 +6282,71 @@ export function CanvasEditor({
                           aria-label="Layer name"
                         />
                       </label>
+                      <div className="mt-3 grid grid-cols-5 gap-1.5" data-testid="editor-inspector-single-selection-actions">
+                        <button
+                          type="button"
+                          onClick={handleCopy}
+                          disabled={isCanvasMutationDisabled || !canCopySelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Copy ${selectedLayerActionLabel}`}
+                          aria-label={`Copy ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Control+C Meta+C"
+                          data-testid="editor-inspector-single-copy-selection"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDuplicate}
+                          disabled={isCanvasMutationDisabled || !canDuplicateSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Duplicate ${selectedLayerActionLabel}`}
+                          aria-label={`Duplicate ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Control+D Meta+D"
+                          data-testid="editor-inspector-single-duplicate-selection"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCut}
+                          disabled={isCanvasMutationDisabled || !canCutSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Cut ${selectedLayerActionLabel}`}
+                          aria-label={`Cut ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Control+X Meta+X"
+                          data-testid="editor-inspector-single-cut-selection"
+                        >
+                          <Scissors className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handlePaste}
+                          disabled={isCanvasMutationDisabled || clipboardElements.length === 0}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={pasteTargetLabel}
+                          aria-label={pasteTargetLabel}
+                          aria-keyshortcuts="Control+V Meta+V"
+                          data-paste-target={pasteTargetMode}
+                          data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement.id : undefined}
+                          data-clipboard-count={clipboardElements.length}
+                          data-testid="editor-inspector-single-paste-selection"
+                        >
+                          <ClipboardPaste className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={deleteElement}
+                          disabled={isCanvasMutationDisabled || !canDeleteSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Delete ${selectedLayerActionLabel}`}
+                          aria-label={`Delete ${selectedLayerActionLabel}`}
+                          aria-keyshortcuts="Delete Backspace"
+                          data-testid="editor-inspector-single-delete-selection"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                       {canSelectParentLayer && (
                         <button
                           type="button"
