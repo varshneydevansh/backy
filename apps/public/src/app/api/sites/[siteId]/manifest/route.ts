@@ -295,6 +295,140 @@ const frontendDatabaseCertification = {
   secretHandling: 'Database URLs and service credentials stay in CI/runtime environment; the manifest exposes only non-secret gate names and requirements.',
 } as const;
 
+type FrontendLaunchReadinessStatus = 'ready' | 'attention' | 'blocked';
+
+type FrontendLaunchReadinessCheck = {
+  key: string;
+  label: string;
+  status: FrontendLaunchReadinessStatus;
+  detail: string;
+  nextAction: string;
+  gate?: string;
+};
+
+const frontendLaunchStatus = (checks: FrontendLaunchReadinessCheck[]): FrontendLaunchReadinessStatus => {
+  if (checks.some((check) => check.status === 'blocked')) return 'blocked';
+  if (checks.some((check) => check.status === 'attention')) return 'attention';
+  return 'ready';
+};
+
+const buildFrontendLaunchReadiness = ({
+  siteId,
+  capabilities,
+  endpoints,
+  endpointCount,
+  routePatternCount,
+  moduleCounts,
+  databaseCertification,
+  commerceProviderCertification,
+}: {
+  siteId: string;
+  capabilities: Record<string, boolean | undefined>;
+  endpoints?: Record<string, string>;
+  endpointCount?: number;
+  routePatternCount: number;
+  moduleCounts: {
+    pages: number;
+    blogPosts: number;
+    collections: number;
+    reusableSections: number;
+    forms: number;
+    media: number;
+  };
+  databaseCertification: typeof frontendDatabaseCertification;
+  commerceProviderCertification?: unknown;
+}) => {
+  const resolvedEndpointCount = endpoints ? Object.keys(endpoints).length : endpointCount || 0;
+  const databaseReady = databaseCertification.runtime.readyForCertification;
+  const hasCommerceCertification = Boolean(commerceProviderCertification);
+  const checks: FrontendLaunchReadinessCheck[] = [
+    {
+      key: 'routing-render-contracts',
+      label: 'Routing, rendering, and OpenAPI',
+      status: capabilities.routeResolve && capabilities.renderPayload && capabilities.openApi ? 'ready' : 'blocked',
+      detail: `${routePatternCount} route pattern${routePatternCount === 1 ? '' : 's'} and ${resolvedEndpointCount} endpoint contract${resolvedEndpointCount === 1 ? '' : 's'} are advertised for this site.`,
+      nextAction: 'Wire custom frontend routing through manifest, resolve, render, and OpenAPI before building page-specific clients.',
+    },
+    {
+      key: 'content-design-modules',
+      label: 'CMS, design, and reusable content',
+      status: capabilities.collectionSchemas && capabilities.collectionRecords && capabilities.reusableSections ? 'ready' : 'attention',
+      detail: `${moduleCounts.pages} page${moduleCounts.pages === 1 ? '' : 's'}, ${moduleCounts.blogPosts} blog post${moduleCounts.blogPosts === 1 ? '' : 's'}, ${moduleCounts.collections} public collection${moduleCounts.collections === 1 ? '' : 's'}, and ${moduleCounts.reusableSections} reusable section${moduleCounts.reusableSections === 1 ? '' : 's'} are discoverable.`,
+      nextAction: 'Publish representative pages, collection records, and reusable sections so custom frontends can render realistic site shapes.',
+    },
+    {
+      key: 'media-font-delivery',
+      label: 'Media, files, and fonts',
+      status: capabilities.mediaLibrary ? 'ready' : 'blocked',
+      detail: `${moduleCounts.media} public media asset${moduleCounts.media === 1 ? '' : 's'} are visible; font discovery is ${capabilities.uploadedFonts ? 'available' : 'empty for this site'}.`,
+      nextAction: 'Use the media and font endpoints for frontend assets; keep private file delivery behind signed URLs.',
+    },
+    {
+      key: 'visitor-interactions',
+      label: 'Forms, comments, and events',
+      status: capabilities.forms || capabilities.comments ? 'ready' : 'attention',
+      detail: `${moduleCounts.forms} active form${moduleCounts.forms === 1 ? '' : 's'} are exposed; comments and events contracts remain available through public interaction endpoints.`,
+      nextAction: 'Bind frontend forms/comments to Backy public endpoints and keep submissions, contacts, and moderation queues private.',
+    },
+    {
+      key: 'commerce-handoff',
+      label: 'Commerce and provider handoff',
+      status: capabilities.commerceCatalog && capabilities.commerceOrderIntake ? 'ready' : capabilities.commerceCatalog ? 'attention' : 'attention',
+      detail: capabilities.commerceCatalog
+        ? `Commerce catalog is exposed and order intake is ${capabilities.commerceOrderIntake ? 'available' : 'waiting on a private orders queue'}.`
+        : 'No public product catalog is exposed for this site yet.',
+      nextAction: 'Publish the product catalog and keep orders private before connecting storefront checkout flows.',
+      gate: hasCommerceCertification ? 'npm run ci:commerce-provider-certification' : undefined,
+    },
+    {
+      key: 'live-management',
+      label: 'Preview and live management',
+      status: capabilities.previewTokens && Boolean(endpoints?.liveManagePage || endpoints?.liveManagePost) ? 'ready' : 'attention',
+      detail: 'Preview-token reads and live page/blog management endpoint templates let authenticated custom frontends edit without admin UI scraping.',
+      nextAction: 'Use manifest live-management endpoint templates with authenticated sessions for frontend editing overlays.',
+    },
+    {
+      key: 'database-certification',
+      label: 'Database certification',
+      status: databaseReady ? 'ready' : 'blocked',
+      detail: databaseReady
+        ? 'Disposable database confirmation and database URL alias are present for SDK certification.'
+        : `SDK Postgres certification still needs ${databaseCertification.runtime.missing.join(', ') || 'a disposable migrated database target'}.`,
+      nextAction: 'Run the disposable SDK Postgres smoke before treating manifest/OpenAPI/SDK service data as production certified.',
+      gate: databaseCertification.gate.command,
+    },
+  ];
+  const score = Math.round((checks.filter((check) => check.status === 'ready').length / checks.length) * 100);
+  const blockingChecks = checks.filter((check) => check.status === 'blocked');
+  const attentionChecks = checks.filter((check) => check.status === 'attention');
+
+  return {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 'backy.frontend-launch-readiness.v1',
+    status: frontendLaunchStatus(checks),
+    score,
+    siteId,
+    endpointCount: resolvedEndpointCount,
+    routePatternCount,
+    moduleCounts,
+    checks,
+    actionPlan: {
+      schemaVersion: 'backy.frontend-launch-action-plan.v1',
+      nextAction: [...blockingChecks, ...attentionChecks][0]?.nextAction || 'Custom frontend contract is ready; keep SDK/database certification evidence attached to releases.',
+      blockingChecks: blockingChecks.map((check) => check.key),
+      attentionChecks: attentionChecks.map((check) => check.key),
+      recommendedCommands: Array.from(new Set([...blockingChecks, ...attentionChecks].map((check) => check.gate).filter((gate): gate is string => Boolean(gate)))),
+    },
+    privacy: {
+      includesSecretValues: false,
+      publicManifestExcludesPrivateQueues: true,
+      adminEndpointsRequireAuth: true,
+      submissionAndOrderPayloadsPrivate: true,
+      secretHandling: 'Launch readiness exposes endpoint templates, booleans, counts, schema names, and certification gates only; database URLs, provider keys, order records, and submission values are never returned.',
+    },
+  };
+};
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const hasPublicOrderCollectionAccess = (permissions: {
@@ -1407,7 +1541,7 @@ const buildRepositoryManifest = (
   const interactiveComponents = buildInteractiveComponentManifestContract();
   const routePatterns = manifestRoutePatterns(input.site.id, publicCollections);
 
-  return {
+  const manifest = {
     success: true,
     requestId: input.requestId,
     data: {
@@ -1428,6 +1562,7 @@ const buildRepositoryManifest = (
         version: 'backy.ai-frontend.v1',
         docs: '/specs/ai-frontend-contract/README.md',
         databaseCertification: frontendDatabaseCertification,
+        frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null,
         schemas: {
           manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
           renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
@@ -1648,6 +1783,25 @@ const buildRepositoryManifest = (
       }))),
     },
   };
+
+  manifest.data.contract.frontendLaunchReadiness = buildFrontendLaunchReadiness({
+    siteId: input.site.id,
+    capabilities: manifest.data.capabilities,
+    endpoints: manifest.data.endpoints,
+    routePatternCount: routePatterns.length,
+    moduleCounts: {
+      pages: input.pages.length,
+      blogPosts: input.posts.length,
+      collections: publicCollections.length,
+      reusableSections: input.reusableSections.length,
+      forms: input.forms.length,
+      media: input.media.length,
+    },
+    databaseCertification: frontendDatabaseCertification,
+    commerceProviderCertification: commerce.providerCertification,
+  });
+
+  return manifest;
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -1768,6 +1922,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           version: 'backy.ai-frontend.v1',
           docs: '/specs/ai-frontend-contract/README.md',
           databaseCertification: frontendDatabaseCertification,
+          frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null,
           schemas: {
             manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
             renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
@@ -1987,6 +2142,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         navigation: getSiteNavigation(site.id),
       },
     };
+
+    manifest.data.contract.frontendLaunchReadiness = buildFrontendLaunchReadiness({
+      siteId: site.id,
+      capabilities: manifest.data.capabilities,
+      endpoints: manifest.data.endpoints,
+      routePatternCount: routePatterns.length,
+      moduleCounts: {
+        pages: pages.length,
+        blogPosts: posts.length,
+        collections: collections.length,
+        reusableSections: reusableSections.length,
+        forms: forms.length,
+        media: media.pagination.total,
+      },
+      databaseCertification: frontendDatabaseCertification,
+      commerceProviderCertification: commerce.providerCertification,
+    });
 
     return publicContractJson(manifest, {
       requestId,

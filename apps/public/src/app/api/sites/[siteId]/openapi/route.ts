@@ -7,6 +7,7 @@
 import { NextRequest } from "next/server";
 import type { SiteSettings } from "@backy-cms/core";
 import {
+  getMediaList,
   getSiteByIdOrSlug,
   listCollections,
   listFormsBySite,
@@ -232,6 +233,110 @@ const frontendDatabaseCertification = {
   secretHandling:
     "Database URLs and service credentials stay in CI/runtime environment; OpenAPI exposes only non-secret gate names and requirements.",
 } as const;
+
+type FrontendLaunchReadinessStatus = "ready" | "attention" | "blocked";
+
+type FrontendLaunchReadinessCheck = {
+  key: string;
+  label: string;
+  status: FrontendLaunchReadinessStatus;
+  detail: string;
+  nextAction: string;
+  gate?: string;
+};
+
+const frontendLaunchStatus = (
+  checks: FrontendLaunchReadinessCheck[],
+): FrontendLaunchReadinessStatus => {
+  if (checks.some((check) => check.status === "blocked")) return "blocked";
+  if (checks.some((check) => check.status === "attention")) return "attention";
+  return "ready";
+};
+
+const buildFrontendLaunchReadiness = ({
+  siteId,
+  endpointCount,
+  routePatternCount,
+  moduleCounts,
+  capabilities,
+}: {
+  siteId: string;
+  endpointCount: number;
+  routePatternCount: number;
+  moduleCounts: {
+    collections: number;
+    reusableSections: number;
+    forms: number;
+    media: number;
+  };
+  capabilities: Record<string, boolean | undefined>;
+}) => {
+  const databaseReady = frontendDatabaseCertification.runtime.readyForCertification;
+  const checks: FrontendLaunchReadinessCheck[] = [
+    {
+      key: "routing-render-contracts",
+      label: "Routing, rendering, and OpenAPI",
+      status: "ready",
+      detail: `${routePatternCount} route pattern${routePatternCount === 1 ? "" : "s"} and ${endpointCount} OpenAPI path contract${endpointCount === 1 ? "" : "s"} are advertised for this site.`,
+      nextAction: "Use manifest, resolve, render, and OpenAPI contracts before hardcoding custom frontend routes.",
+    },
+    {
+      key: "cms-service-data",
+      label: "CMS service data",
+      status: moduleCounts.collections > 0 || moduleCounts.reusableSections > 0 ? "ready" : "attention",
+      detail: `${moduleCounts.collections} collection${moduleCounts.collections === 1 ? "" : "s"}, ${moduleCounts.reusableSections} reusable section${moduleCounts.reusableSections === 1 ? "" : "s"}, ${moduleCounts.forms} form${moduleCounts.forms === 1 ? "" : "s"}, and ${moduleCounts.media} public media asset${moduleCounts.media === 1 ? "" : "s"} are reflected in the OpenAPI document.`,
+      nextAction: "Publish representative collections, reusable sections, forms, and media before certifying generated frontend clients.",
+    },
+    {
+      key: "commerce-handoff",
+      label: "Commerce handoff",
+      status: capabilities.commerceCatalog && capabilities.commerceOrderIntake ? "ready" : "attention",
+      detail: capabilities.commerceCatalog
+        ? `Commerce catalog is documented and order intake is ${capabilities.commerceOrderIntake ? "available" : "waiting on private orders collection readiness"}.`
+        : "No public commerce catalog is documented for this site yet.",
+      nextAction: "Keep product catalog public and order queues private before wiring storefront checkout.",
+      gate: "npm run ci:commerce-provider-certification",
+    },
+    {
+      key: "database-certification",
+      label: "Database certification",
+      status: databaseReady ? "ready" : "blocked",
+      detail: databaseReady
+        ? "SDK Postgres certification runtime inputs are ready."
+        : `SDK Postgres certification still needs ${frontendDatabaseCertification.runtime.missing.join(", ") || "a disposable migrated database target"}.`,
+      nextAction: "Run the disposable SDK Postgres smoke before treating manifest/OpenAPI/SDK service data as production certified.",
+      gate: frontendDatabaseCertification.gate.command,
+    },
+  ];
+  const blockingChecks = checks.filter((check) => check.status === "blocked");
+  const attentionChecks = checks.filter((check) => check.status === "attention");
+
+  return {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: "backy.frontend-launch-readiness.v1",
+    status: frontendLaunchStatus(checks),
+    score: Math.round((checks.filter((check) => check.status === "ready").length / checks.length) * 100),
+    siteId,
+    endpointCount,
+    routePatternCount,
+    moduleCounts,
+    checks,
+    actionPlan: {
+      schemaVersion: "backy.frontend-launch-action-plan.v1",
+      nextAction: [...blockingChecks, ...attentionChecks][0]?.nextAction || "Custom frontend OpenAPI contract is ready; attach database certification evidence to releases.",
+      blockingChecks: blockingChecks.map((check) => check.key),
+      attentionChecks: attentionChecks.map((check) => check.key),
+      recommendedCommands: Array.from(new Set([...blockingChecks, ...attentionChecks].map((check) => check.gate).filter((gate): gate is string => Boolean(gate)))),
+    },
+    privacy: {
+      includesSecretValues: false,
+      publicManifestExcludesPrivateQueues: true,
+      adminEndpointsRequireAuth: true,
+      submissionAndOrderPayloadsPrivate: true,
+      secretHandling: "Launch readiness exposes endpoint counts, booleans, schema names, and certification gates only; database URLs, provider keys, order records, and submission values are never returned.",
+    },
+  };
+};
 
 const pathParameter = (
   name: string,
@@ -505,6 +610,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           })
         ).items
       : listReusableSections(site.id, { status: "active" });
+    const media = repositories
+      ? await repositories.media.list({
+          siteId: site.id,
+          visibility: "public",
+          limit: 1,
+          offset: 0,
+        })
+      : getMediaList(site.id, { visibility: "public", limit: 1, offset: 0 });
     const collectionIds = collections.map((collection) => collection.id);
     const hasCommerceCatalog = collections.some(
       (collection) => collection.slug === PRODUCT_COLLECTION_SLUG,
@@ -523,11 +636,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     ).filter((rule) => rule.enabled);
     const blogFeed = blogFeedDiscovery(site);
     const delivery = deliveryDiscovery(origin, site);
+    const frontendLaunchReadiness = buildFrontendLaunchReadiness({
+      siteId: site.id,
+      endpointCount: 34 + collectionIds.length * 2 + formIds.length * 4 + reusableSectionIds.length,
+      routePatternCount: 2 + collections.length * 2 + redirectRules.length,
+      moduleCounts: {
+        collections: collections.length,
+        reusableSections: reusableSections.length,
+        forms: forms.length,
+        media: media.pagination.total,
+      },
+      capabilities: {
+        commerceCatalog: hasCommerceCatalog,
+        commerceOrderIntake: hasCommerceCatalog && hasPrivateOrders,
+      },
+    });
 
     return publicContractJson(
       {
         openapi: "3.1.0",
         "x-backy-database-certification": frontendDatabaseCertification,
+        "x-backy-frontend-launch-readiness": frontendLaunchReadiness,
         info: {
           title: `${site.name} Backy Public API`,
           version: "backy-public.v1",

@@ -19,6 +19,7 @@ export interface GeneratedBackyOpenApiOperation {
 export interface GeneratedBackyOpenApiDocument {
   openapi: string;
   "x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification;
+  "x-backy-frontend-launch-readiness"?: GeneratedBackyFrontendManifestLaunchReadiness;
   info: { title: string; version: string; description?: string; [key: string]: unknown };
   servers?: Array<{ url: string; [key: string]: unknown }>;
   paths: Record<string, Partial<Record<"get" | "post" | "put" | "patch" | "delete", GeneratedBackyOpenApiOperation>> & Record<string, unknown>>;
@@ -2542,6 +2543,50 @@ export type GeneratedBackyFrontendManifestDatabaseCertification = {
   [key: string]: unknown;
 };
 
+export type GeneratedBackyFrontendManifestLaunchReadiness = {
+  schemaVersion: "backy.frontend-launch-readiness.v1";
+  status: "ready" | "attention" | "blocked";
+  score: number;
+  siteId: string;
+  endpointCount: number;
+  routePatternCount: number;
+  moduleCounts: {
+    pages?: number;
+    blogPosts?: number;
+    collections?: number;
+    reusableSections?: number;
+    forms?: number;
+    media?: number;
+    [key: string]: unknown;
+  };
+  checks: Array<{
+    key: string;
+    label: string;
+    status: "ready" | "attention" | "blocked";
+    detail: string;
+    nextAction: string;
+    gate?: string;
+    [key: string]: unknown;
+  }>;
+  actionPlan: {
+    schemaVersion: "backy.frontend-launch-action-plan.v1";
+    nextAction: string;
+    blockingChecks: Array<string>;
+    attentionChecks: Array<string>;
+    recommendedCommands: Array<string>;
+    [key: string]: unknown;
+  };
+  privacy: {
+    includesSecretValues: false;
+    publicManifestExcludesPrivateQueues: boolean;
+    adminEndpointsRequireAuth: boolean;
+    submissionAndOrderPayloadsPrivate: boolean;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export type GeneratedBackyFrontendManifestNavigationItem = {
   id: string;
   type: "page" | "route" | "url";
@@ -2648,6 +2693,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
       version: "backy.ai-frontend.v1";
       docs?: string;
       databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification;
+      frontendLaunchReadiness: GeneratedBackyFrontendManifestLaunchReadiness;
       schemas: {
         manifest: string;
         renderPayload: string;

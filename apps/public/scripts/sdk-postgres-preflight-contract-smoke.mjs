@@ -62,6 +62,28 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildFrontendLaunchReadiness') &&
+    manifestRoute.includes("schemaVersion: 'backy.frontend-launch-readiness.v1'") &&
+    manifestRoute.includes("schemaVersion: 'backy.frontend-launch-action-plan.v1'") &&
+    manifestRoute.includes('frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null') &&
+    manifestRoute.includes('manifest.data.contract.frontendLaunchReadiness = buildFrontendLaunchReadiness') &&
+    manifestRoute.includes("key: 'routing-render-contracts'") &&
+    manifestRoute.includes("key: 'content-design-modules'") &&
+    manifestRoute.includes("key: 'media-font-delivery'") &&
+    manifestRoute.includes("key: 'visitor-interactions'") &&
+    manifestRoute.includes("key: 'commerce-handoff'") &&
+    manifestRoute.includes("key: 'live-management'") &&
+    manifestRoute.includes("key: 'database-certification'") &&
+    manifestRoute.includes('databaseCertification.gate.command') &&
+    manifestRoute.includes('commerceProviderCertification') &&
+    manifestRoute.includes('publicManifestExcludesPrivateQueues: true') &&
+    manifestRoute.includes('adminEndpointsRequireAuth: true') &&
+    manifestRoute.includes('submissionAndOrderPayloadsPrivate: true') &&
+    manifestRoute.includes('Launch readiness exposes endpoint templates, booleans, counts, schema names, and certification gates only'),
+  'Frontend manifest must expose a non-secret launch-readiness summary for custom frontend operators.',
+);
+
+assert(
     settingsRoute.includes('data-testid="settings-frontend-database-certification"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-copy-button"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-download-button"') &&
@@ -122,6 +144,25 @@ assert(
 );
 
 assert(
+  openApiRoute.includes('buildFrontendLaunchReadiness') &&
+    openApiRoute.includes('"x-backy-frontend-launch-readiness": frontendLaunchReadiness') &&
+    openApiRoute.includes('backy.frontend-launch-readiness.v1') &&
+    openApiRoute.includes('backy.frontend-launch-action-plan.v1') &&
+    openApiRoute.includes('getMediaList') &&
+    openApiRoute.includes('media.pagination.total') &&
+    openApiRoute.includes('routing-render-contracts') &&
+    openApiRoute.includes('cms-service-data') &&
+    openApiRoute.includes('commerce-handoff') &&
+    openApiRoute.includes('database-certification') &&
+    openApiRoute.includes('frontendDatabaseCertification.gate.command') &&
+    openApiRoute.includes('publicManifestExcludesPrivateQueues: true') &&
+    openApiRoute.includes('adminEndpointsRequireAuth: true') &&
+    openApiRoute.includes('submissionAndOrderPayloadsPrivate: true') &&
+    openApiRoute.includes('Launch readiness exposes endpoint counts, booleans, schema names, and certification gates only'),
+  'Site-scoped OpenAPI must mirror the non-secret custom-frontend launch readiness extension.',
+);
+
+assert(
   frontendManifestSchema.includes('"databaseCertification"') &&
     frontendManifestSchema.includes('"backy.frontend-database-certification.v1"') &&
     frontendManifestSchema.includes('"npm run ci:sdk-postgres-smoke"') &&
@@ -140,6 +181,22 @@ assert(
 );
 
 assert(
+  frontendManifestSchema.includes('"launchReadiness"') &&
+    frontendManifestSchema.includes('"backy.frontend-launch-readiness.v1"') &&
+    frontendManifestSchema.includes('"backy.frontend-launch-action-plan.v1"') &&
+    frontendManifestSchema.includes('"status": { "enum": ["ready", "attention", "blocked"] }') &&
+    frontendManifestSchema.includes('"score": { "type": "integer", "minimum": 0, "maximum": 100 }') &&
+    frontendManifestSchema.includes('"moduleCounts"') &&
+    frontendManifestSchema.includes('"checks"') &&
+    frontendManifestSchema.includes('"actionPlan"') &&
+    frontendManifestSchema.includes('"privacy"') &&
+    frontendManifestSchema.includes('"includesSecretValues": { "const": false }') &&
+    frontendManifestSchema.includes('"frontendLaunchReadiness": { "$ref": "#/$defs/launchReadiness" }') &&
+    frontendManifestSchema.includes('"version", "schemas", "databaseCertification", "frontendLaunchReadiness"'),
+  'Frontend manifest schema must require and type the launch-readiness handoff.',
+);
+
+assert(
   generatedSdkTypes.includes('GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('"x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification') &&
@@ -151,6 +208,17 @@ assert(
     generatedSdkTypes.includes('readyForCertification: boolean') &&
     generatedSdkTypes.includes('"npm run test:frontend-contract-types"'),
   'Generated SDK types must export the manifest/OpenAPI database certification contract.',
+);
+
+assert(
+  generatedSdkTypes.includes('GeneratedBackyFrontendManifestLaunchReadiness') &&
+    generatedSdkTypes.includes('"x-backy-frontend-launch-readiness"?: GeneratedBackyFrontendManifestLaunchReadiness') &&
+    generatedSdkTypes.includes('frontendLaunchReadiness: GeneratedBackyFrontendManifestLaunchReadiness') &&
+    generatedSdkTypes.includes('schemaVersion: "backy.frontend-launch-readiness.v1"') &&
+    generatedSdkTypes.includes('schemaVersion: "backy.frontend-launch-action-plan.v1"') &&
+    generatedSdkTypes.includes('includesSecretValues: false') &&
+    generatedSdkTypes.includes('recommendedCommands: Array<string>'),
+  'Generated SDK types must export the manifest/OpenAPI launch-readiness contract.',
 );
 
 assert(
@@ -166,6 +234,20 @@ assert(
     generatedSdkTypeSmoke.includes('export BACKY_SDK_REQUIRE_DATABASE') &&
     generatedSdkTypeSmoke.includes('satisfies BackyFrontendDatabaseCertification'),
   'SDK convenience manifest types must expose the same database certification runtime handoff as generated types.',
+);
+
+assert(
+  sdkIndex.includes('GeneratedBackyFrontendManifestLaunchReadiness') &&
+    sdkIndex.includes('export interface BackyFrontendLaunchReadiness') &&
+    sdkIndex.includes('schemaVersion: "backy.frontend-launch-readiness.v1"') &&
+    sdkIndex.includes('schemaVersion: "backy.frontend-launch-action-plan.v1"') &&
+    sdkIndex.includes('includesSecretValues: false') &&
+    sdkIndex.includes('frontendLaunchReadiness: BackyFrontendLaunchReadiness') &&
+    generatedSdkTypeSmoke.includes('frontendLaunchReadiness') &&
+    generatedSdkTypeSmoke.includes('convenienceFrontendLaunchReadiness') &&
+    generatedSdkTypeSmoke.includes('satisfies BackyFrontendLaunchReadiness') &&
+    generatedSdkTypeSmoke.includes('satisfies GeneratedBackyFrontendManifestLaunchReadiness'),
+  'SDK convenience manifest types must expose the same launch-readiness handoff as generated types.',
 );
 
 assert(
@@ -234,6 +316,24 @@ assert(
     sdkSmoke.includes('openapi() missing interactive component database certification coverage') &&
     sdkSmoke.includes('openapi() missing non-secret database certification boundary'),
   'SDK smoke must response-test the manifest/OpenAPI database certification handoff.',
+);
+
+assert(
+  sdkSmoke.includes('manifest() missing frontend launch readiness schema') &&
+    sdkSmoke.includes('manifest() frontend launch readiness status drifted') &&
+    sdkSmoke.includes('manifest() missing frontend launch readiness score') &&
+    sdkSmoke.includes('manifest() missing frontend launch action plan schema') &&
+    sdkSmoke.includes('manifest() missing routing/render launch readiness check') &&
+    sdkSmoke.includes('manifest() missing database launch readiness check') &&
+    sdkSmoke.includes('manifest() launch readiness must not include secret values') &&
+    sdkSmoke.includes('manifest() launch readiness missing admin auth boundary') &&
+    sdkSmoke.includes('manifest() launch readiness missing SDK Postgres recommended command') &&
+    sdkSmoke.includes('openapi() missing frontend launch readiness extension') &&
+    sdkSmoke.includes('openapi() missing frontend launch action plan extension') &&
+    sdkSmoke.includes('openapi() missing database frontend launch check') &&
+    sdkSmoke.includes('openapi() launch readiness must not include secret values') &&
+    sdkSmoke.includes('openapi() launch readiness missing SDK Postgres recommended command'),
+  'SDK smoke must response-test the manifest/OpenAPI launch-readiness handoff.',
 );
 
 assert(
@@ -387,11 +487,33 @@ assert(
 );
 
 assert(
+  sdkReadme.includes('data.contract.frontendLaunchReadiness') &&
+    sdkReadme.includes('x-backy-frontend-launch-readiness') &&
+    sdkReadme.includes('BackyFrontendLaunchReadiness') &&
+    sdkReadme.includes('GeneratedBackyFrontendManifestLaunchReadiness') &&
+    sdkReadme.includes('backy.frontend-launch-readiness.v1') &&
+    sdkReadme.includes('backy.frontend-launch-action-plan.v1') &&
+    sdkReadme.includes('routing/render, CMS/design, media/font, visitor interaction, commerce, live-management, and database-certification checks') &&
+    sdkReadme.includes('does not expose database URLs, provider keys, order records, or submission values'),
+  'SDK README must document the manifest/OpenAPI custom-frontend launch-readiness handoff.',
+);
+
+assert(
   apiContracts.includes('forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database') &&
     apiContracts.includes('against `BACKY_DATABASE_URL`/`DATABASE_URL` only after `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true`') &&
     apiContracts.includes('`operatorCommandTemplate` for a copyable guarded command with `BACKY_SDK_REQUIRE_DATABASE=1` and `npm run doctor:release-certification`') &&
     apiContracts.includes('sdk-postgres-smoke.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database'),
   'API contracts must document both database secret aliases and the SDK disposable confirmation env for Postgres manual gates.',
+);
+
+assert(
+  apiContracts.includes('data.contract.frontendLaunchReadiness') &&
+    apiContracts.includes('x-backy-frontend-launch-readiness') &&
+    apiContracts.includes('backy.frontend-launch-readiness.v1') &&
+    apiContracts.includes('backy.frontend-launch-action-plan.v1') &&
+    apiContracts.includes('routing/render, CMS/design, media/font, visitor interaction, commerce, live-management, and database-certification checks') &&
+    apiContracts.includes('without exposing database URLs, provider secrets, private order records, or form submission values'),
+  'API contracts must document the non-secret custom-frontend launch-readiness contract.',
 );
 
 assert(
@@ -412,6 +534,19 @@ assert(
     audit.includes('test:sdk-postgres-disposable-guard') &&
     audit.includes('public manifest, OpenAPI, render, media, CMS, forms, comments, events, commerce, and interactive-component service-data verification'),
   'Page completion audit must document the SDK Postgres preflight coverage.',
+);
+
+assert(
+  audit.includes('Frontend launch readiness contract') &&
+    audit.includes('data.contract.frontendLaunchReadiness') &&
+    audit.includes('x-backy-frontend-launch-readiness') &&
+    audit.includes('BackyFrontendLaunchReadiness') &&
+    audit.includes('GeneratedBackyFrontendManifestLaunchReadiness') &&
+    audit.includes('backy.frontend-launch-readiness.v1') &&
+    audit.includes('backy.frontend-launch-action-plan.v1') &&
+    audit.includes('routing/render, CMS/design, media/font, visitor interaction, commerce, live-management, and database-certification checks') &&
+    audit.includes('private order/submission payloads and provider/database secrets out of public responses'),
+  'Page completion audit must document the custom-frontend launch readiness contract.',
 );
 
 console.log(JSON.stringify({

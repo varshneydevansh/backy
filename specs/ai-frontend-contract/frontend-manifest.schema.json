@@ -110,6 +110,71 @@
       },
       "required": ["schemaVersion", "status", "requiredFor", "gate", "environment", "requires", "coverage", "operatorCommandTemplate", "runtime", "secretHandling"]
     },
+    "launchReadiness": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schemaVersion": { "const": "backy.frontend-launch-readiness.v1" },
+        "status": { "enum": ["ready", "attention", "blocked"] },
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "siteId": { "type": "string", "minLength": 1 },
+        "endpointCount": { "type": "integer", "minimum": 0 },
+        "routePatternCount": { "type": "integer", "minimum": 0 },
+        "moduleCounts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "properties": {
+            "pages": { "type": "integer", "minimum": 0 },
+            "blogPosts": { "type": "integer", "minimum": 0 },
+            "collections": { "type": "integer", "minimum": 0 },
+            "reusableSections": { "type": "integer", "minimum": 0 },
+            "forms": { "type": "integer", "minimum": 0 },
+            "media": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "key": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "status": { "enum": ["ready", "attention", "blocked"] },
+              "detail": { "type": "string", "minLength": 1 },
+              "nextAction": { "type": "string", "minLength": 1 },
+              "gate": { "type": "string", "minLength": 1 }
+            },
+            "required": ["key", "label", "status", "detail", "nextAction"]
+          }
+        },
+        "actionPlan": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.frontend-launch-action-plan.v1" },
+            "nextAction": { "type": "string", "minLength": 1 },
+            "blockingChecks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "attentionChecks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "recommendedCommands": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          },
+          "required": ["schemaVersion", "nextAction", "blockingChecks", "attentionChecks", "recommendedCommands"]
+        },
+        "privacy": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "includesSecretValues": { "const": false },
+            "publicManifestExcludesPrivateQueues": { "type": "boolean" },
+            "adminEndpointsRequireAuth": { "type": "boolean" },
+            "submissionAndOrderPayloadsPrivate": { "type": "boolean" },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["includesSecretValues", "publicManifestExcludesPrivateQueues", "adminEndpointsRequireAuth", "submissionAndOrderPayloadsPrivate", "secretHandling"]
+        }
+      },
+      "required": ["schemaVersion", "status", "score", "siteId", "endpointCount", "routePatternCount", "moduleCounts", "checks", "actionPlan", "privacy"]
+    },
     "navigationItem": {
       "type": "object",
       "additionalProperties": true,
@@ -272,6 +337,7 @@
             "version": { "const": "backy.ai-frontend.v1" },
             "docs": { "type": "string", "minLength": 1 },
             "databaseCertification": { "$ref": "#/$defs/databaseCertification" },
+            "frontendLaunchReadiness": { "$ref": "#/$defs/launchReadiness" },
             "schemas": {
               "type": "object",
               "additionalProperties": { "type": "string" },
@@ -286,7 +352,7 @@
               "required": ["manifest", "renderPayload", "themeTokens", "elementActions", "dataBindings", "editableMap"]
             }
           },
-          "required": ["version", "schemas", "databaseCertification"]
+          "required": ["version", "schemas", "databaseCertification", "frontendLaunchReadiness"]
         },
         "capabilities": {
           "type": "object",

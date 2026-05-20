@@ -752,6 +752,15 @@ assert(
     manifest.data.contract.databaseCertification.secretHandling.includes('Database URLs and service credentials stay in CI/runtime environment'),
   'manifest() missing non-secret database certification boundary',
 );
+assert(manifest.data.contract?.frontendLaunchReadiness?.schemaVersion === 'backy.frontend-launch-readiness.v1', 'manifest() missing frontend launch readiness schema');
+assert(['ready', 'attention', 'blocked'].includes(manifest.data.contract.frontendLaunchReadiness.status), 'manifest() frontend launch readiness status drifted');
+assert(typeof manifest.data.contract.frontendLaunchReadiness.score === 'number', 'manifest() missing frontend launch readiness score');
+assert(manifest.data.contract.frontendLaunchReadiness.actionPlan?.schemaVersion === 'backy.frontend-launch-action-plan.v1', 'manifest() missing frontend launch action plan schema');
+assert(manifest.data.contract.frontendLaunchReadiness.checks?.some((check) => check.key === 'routing-render-contracts'), 'manifest() missing routing/render launch readiness check');
+assert(manifest.data.contract.frontendLaunchReadiness.checks?.some((check) => check.key === 'database-certification'), 'manifest() missing database launch readiness check');
+assert(manifest.data.contract.frontendLaunchReadiness.privacy?.includesSecretValues === false, 'manifest() launch readiness must not include secret values');
+assert(manifest.data.contract.frontendLaunchReadiness.privacy?.adminEndpointsRequireAuth === true, 'manifest() launch readiness missing admin auth boundary');
+assert(manifest.data.contract.frontendLaunchReadiness.actionPlan?.recommendedCommands?.includes('npm run ci:sdk-postgres-smoke'), 'manifest() launch readiness missing SDK Postgres recommended command');
 assert(manifest.data.delivery?.defaultLocale === 'en', 'manifest() missing default locale discovery');
 assert(manifest.data.delivery?.localeStrategy === 'none', 'manifest() missing locale strategy discovery');
 assert(manifest.data.delivery?.domains?.some?.((domain) => domain.type === 'managed' && typeof domain.baseUrl === 'string'), 'manifest() missing managed domain discovery');
@@ -806,6 +815,11 @@ assert(
     openapi['x-backy-database-certification'].secretHandling.includes('OpenAPI exposes only non-secret gate names and requirements'),
   'openapi() missing non-secret database certification boundary',
 );
+assert(openapi['x-backy-frontend-launch-readiness']?.schemaVersion === manifest.data.contract.frontendLaunchReadiness.schemaVersion, 'openapi() missing frontend launch readiness extension');
+assert(openapi['x-backy-frontend-launch-readiness']?.actionPlan?.schemaVersion === 'backy.frontend-launch-action-plan.v1', 'openapi() missing frontend launch action plan extension');
+assert(openapi['x-backy-frontend-launch-readiness']?.checks?.some((check) => check.key === 'database-certification'), 'openapi() missing database frontend launch check');
+assert(openapi['x-backy-frontend-launch-readiness']?.privacy?.includesSecretValues === false, 'openapi() launch readiness must not include secret values');
+assert(openapi['x-backy-frontend-launch-readiness']?.actionPlan?.recommendedCommands?.includes('npm run ci:sdk-postgres-smoke'), 'openapi() launch readiness missing SDK Postgres recommended command');
 assert(openapi['x-backy']?.delivery?.defaultLocale === manifest.data.delivery.defaultLocale, 'openapi() missing delivery locale discovery extension');
 assert(openapi['x-backy']?.delivery?.canonicalBaseUrl === manifest.data.delivery.canonicalBaseUrl, 'openapi() missing delivery canonical base extension');
 assert(openapi.components?.schemas?.RedirectRoute, 'openapi() missing redirect route schema');

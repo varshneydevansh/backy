@@ -18,6 +18,7 @@ export type {
   GeneratedBackyFrontendManifest,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
+  GeneratedBackyFrontendManifestLaunchReadiness,
   GeneratedBackyFrontendManifestNavigationItem,
   GeneratedBackyInteractiveControl,
   GeneratedBackyInteractiveFallback,
@@ -2653,10 +2654,55 @@ export interface BackyFrontendDatabaseCertification {
   [key: string]: unknown;
 }
 
+export interface BackyFrontendLaunchReadiness {
+  schemaVersion: "backy.frontend-launch-readiness.v1";
+  status: "ready" | "attention" | "blocked";
+  score: number;
+  siteId: string;
+  endpointCount: number;
+  routePatternCount: number;
+  moduleCounts: {
+    pages?: number;
+    blogPosts?: number;
+    collections?: number;
+    reusableSections?: number;
+    forms?: number;
+    media?: number;
+    [key: string]: unknown;
+  };
+  checks: Array<{
+    key: string;
+    label: string;
+    status: "ready" | "attention" | "blocked";
+    detail: string;
+    nextAction: string;
+    gate?: string;
+    [key: string]: unknown;
+  }>;
+  actionPlan: {
+    schemaVersion: "backy.frontend-launch-action-plan.v1";
+    nextAction: string;
+    blockingChecks: string[];
+    attentionChecks: string[];
+    recommendedCommands: string[];
+    [key: string]: unknown;
+  };
+  privacy: {
+    includesSecretValues: false;
+    publicManifestExcludesPrivateQueues: boolean;
+    adminEndpointsRequireAuth: boolean;
+    submissionAndOrderPayloadsPrivate: boolean;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifestContract {
   version?: string;
   schemas?: Record<string, string>;
   databaseCertification: BackyFrontendDatabaseCertification;
+  frontendLaunchReadiness: BackyFrontendLaunchReadiness;
   [key: string]: unknown;
 }
 

@@ -26,6 +26,7 @@ import type {
   BackyManifestRoutePattern,
   BackyManifestDeliveryDiscovery,
   BackyFrontendDatabaseCertification,
+  BackyFrontendLaunchReadiness,
   BackyManifestFormDefinition,
   BackyManifestFormsRuntimeModule,
   BackyManifestLiveManagementModule,
@@ -45,6 +46,7 @@ import type {
   GeneratedBackyFrontendManifest,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
+  GeneratedBackyFrontendManifestLaunchReadiness,
   GeneratedBackyFrontendManifestNavigationItem,
   GeneratedBackyInteractiveControl,
   GeneratedBackyInteractiveFallback,
@@ -386,6 +388,58 @@ const frontendDatabaseCertification = {
 } satisfies GeneratedBackyFrontendManifestDatabaseCertification;
 
 const convenienceFrontendDatabaseCertification = frontendDatabaseCertification satisfies BackyFrontendDatabaseCertification;
+
+const frontendLaunchReadiness = {
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  schemaVersion: "backy.frontend-launch-readiness.v1",
+  status: "blocked",
+  score: 57,
+  siteId: "site-demo",
+  endpointCount: 38,
+  routePatternCount: 6,
+  moduleCounts: {
+    pages: 2,
+    blogPosts: 1,
+    collections: 1,
+    reusableSections: 1,
+    forms: 1,
+    media: 4,
+  },
+  checks: [
+    {
+      key: "routing-render-contracts",
+      label: "Routing, rendering, and OpenAPI",
+      status: "ready",
+      detail: "Route and endpoint contracts are advertised.",
+      nextAction: "Use manifest, resolve, render, and OpenAPI contracts before hardcoding routes.",
+    },
+    {
+      key: "database-certification",
+      label: "Database certification",
+      status: "blocked",
+      detail: "SDK Postgres certification still needs a disposable database target.",
+      nextAction: "Run the disposable SDK Postgres smoke.",
+      gate: "npm run ci:sdk-postgres-smoke",
+    },
+  ],
+  actionPlan: {
+    schemaVersion: "backy.frontend-launch-action-plan.v1",
+    nextAction: "Run the disposable SDK Postgres smoke.",
+    blockingChecks: ["database-certification"],
+    attentionChecks: [],
+    recommendedCommands: ["npm run ci:sdk-postgres-smoke"],
+  },
+  privacy: {
+    includesSecretValues: false,
+    publicManifestExcludesPrivateQueues: true,
+    adminEndpointsRequireAuth: true,
+    submissionAndOrderPayloadsPrivate: true,
+    secretHandling:
+      "Launch readiness exposes endpoint templates, booleans, counts, schema names, and certification gates only.",
+  },
+} satisfies GeneratedBackyFrontendManifestLaunchReadiness;
+
+const convenienceFrontendLaunchReadiness = frontendLaunchReadiness satisfies BackyFrontendLaunchReadiness;
 
 const interactiveControl = {
   key: "rounds",
@@ -771,6 +825,7 @@ const manifest = {
     version: "backy.ai-frontend.v1",
     docs: "/specs/ai-frontend-contract/README.md",
     databaseCertification: frontendDatabaseCertification,
+    frontendLaunchReadiness,
     schemas: {
       manifest: "frontend-manifest.schema.json",
       renderPayload: "content-payload.schema.json",
@@ -4986,6 +5041,7 @@ void renderFrontendDesignContract;
 void frontendDesignProvenance;
 void renderFrontendDesign;
 void convenienceFrontendDatabaseCertification;
+void convenienceFrontendLaunchReadiness;
 void manifestNavigationItem;
 void manifestEnvelope;
 void openApi;
