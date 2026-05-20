@@ -6166,6 +6166,34 @@ export function CanvasEditor({
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2" data-testid="editor-inspector-selection-state-actions">
+                        <button
+                          type="button"
+                          onClick={handleSelectedVisibilityToggle}
+                          disabled={isCanvasMutationDisabled || !canToggleSelectedVisibility}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
+                          aria-label={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
+                          aria-pressed={selectedLayersAreHidden}
+                          data-testid="editor-inspector-toggle-selection-visibility"
+                        >
+                          {selectedLayersAreHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          {selectedLayersAreHidden ? 'Show' : 'Hide'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSelectedLockToggle}
+                          disabled={isCanvasMutationDisabled || selectedActiveElements.length === 0}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
+                          aria-label={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
+                          aria-pressed={selectedLayersAreLocked}
+                          data-testid="editor-inspector-toggle-selection-lock"
+                        >
+                          {selectedLayersAreLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                          {selectedLayersAreLocked ? 'Unlock' : 'Lock'}
+                        </button>
+                      </div>
                       <div className="mt-3 grid grid-cols-6 gap-1.5" data-testid="editor-inspector-align-controls">
                         <button
                           type="button"
@@ -6360,6 +6388,34 @@ export function CanvasEditor({
                           data-testid="editor-inspector-single-delete-selection"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2" data-testid="editor-inspector-single-selection-state-actions">
+                        <button
+                          type="button"
+                          onClick={handleSelectedVisibilityToggle}
+                          disabled={isCanvasMutationDisabled || !canToggleSelectedVisibility}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
+                          aria-label={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
+                          aria-pressed={selectedLayersAreHidden}
+                          data-testid="editor-inspector-single-toggle-selection-visibility"
+                        >
+                          {selectedLayersAreHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          {selectedLayersAreHidden ? 'Show' : 'Hide'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSelectedLockToggle}
+                          disabled={isCanvasMutationDisabled || selectedActiveElements.length === 0}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
+                          aria-label={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
+                          aria-pressed={selectedLayersAreLocked}
+                          data-testid="editor-inspector-single-toggle-selection-lock"
+                        >
+                          {selectedLayersAreLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                          {selectedLayersAreLocked ? 'Unlock' : 'Lock'}
                         </button>
                       </div>
                       {canSelectParentLayer && (

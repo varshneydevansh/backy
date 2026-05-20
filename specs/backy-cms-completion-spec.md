@@ -447,6 +447,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Clipboard and delete controls now expose shortcut metadata for copy, cut, paste, duplicate, and delete, and the paste control advertises whether the current paste will target the selected container/group or the canvas root.
 - Multi-selection clipboard actions now derive availability from the active sibling scope, label single versus multi-layer actions correctly, and expose copy/duplicate/cut/paste/delete controls directly in the inspector.
 - Single selected layers now expose copy, duplicate, cut, paste, and delete directly in the inspector with the same shortcut and paste-target metadata as the toolbar, so nested component editing does not require leaving the properties panel for common layer operations.
+- Single and multi-layer inspectors now expose local hide/show and lock/unlock controls backed by the same selected-layer handlers as the toolbar, keeping common layer state changes available while editing properties.
 - Keep right-pane rich-text selection, media/link sub-actions, and nested block confidence covered whenever related controls are changed.
 
 ### 9.2 Media/asset UX gaps
