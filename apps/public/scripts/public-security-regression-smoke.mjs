@@ -1709,13 +1709,33 @@ assertIncludes(
 );
 assertIncludes(
   hostedSiteRoute,
-  "resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken })",
-  "hosted database renderer must reuse the repository route resolver",
+  "const routeHost = await getHostedRouteHost(resolvedSearchParams);",
+  "hosted renderer must resolve host/domain context before route matching",
+);
+assertIncludes(
+  hostedSiteRoute,
+  "const hostedSite = await getSite(subdomain, routeHost);",
+  "hosted renderer must resolve sites by request host before slug fallback",
+);
+assertIncludes(
+  hostedSiteRoute,
+  "resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken, host: routeHost })",
+  "hosted database renderer must reuse the repository route resolver with host context",
+);
+assertIncludes(
+  hostedSiteRoute,
+  "resolveSiteRoute(site, routePath, { previewToken, host: routeHost })",
+  "hosted demo renderer must reuse the route resolver with host context",
 );
 assertIncludes(
   hostedSiteRoute,
   "getResolvedRepositoryDynamicCollectionRoute(hostedSite, route)",
   "hosted database dynamic routes must hydrate content from resolved route decisions",
+);
+assertIncludes(
+  hostedSiteRoute,
+  "publicRouteHostMatchesSite(candidate, normalizedHost)",
+  "hosted renderer must match custom, verification, and locale domains before slug fallback",
 );
 assertExcludes(
   hostedSiteRoute,

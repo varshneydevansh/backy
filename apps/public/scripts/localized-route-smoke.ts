@@ -5,6 +5,10 @@ import {
   resolveLocalizedRoutePath,
 } from '../src/lib/siteLocalization';
 import {
+  normalizePublicRouteHost,
+  publicRouteHostMatchesSite,
+} from '../src/lib/publicRouteHost';
+import {
   withLocalizedResolvedRoute,
   type ResolvedSiteRoute,
 } from '../src/lib/routeResolver';
@@ -52,6 +56,15 @@ assert.equal(domainLocalized.locale.code, 'fr');
 assert.equal(domainLocalized.locale.domain, 'fr.example.com');
 assert.equal(domainLocalized.matchedBy, 'domain');
 assert.equal(applyLocalePrefixToPath('/about', domainLocalized), '/about');
+assert.equal(normalizePublicRouteHost('https://www.fr.example.com:443/path'), 'fr.example.com');
+assert.equal(publicRouteHostMatchesSite({
+  customDomain: 'example.com',
+  settings: domainSettings,
+}, 'www.fr.example.com'), true);
+assert.equal(publicRouteHostMatchesSite({
+  customDomain: 'example.com',
+  settings: domainSettings,
+}, 'other.example.com'), false);
 
 const routed = withLocalizedResolvedRoute({
   type: 'page',

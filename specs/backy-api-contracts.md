@@ -309,6 +309,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/seo?format=sitemap`
 - `GET /api/sites/:siteId/seo?format=robots`
   - Hosted Backy sites also expose crawlable `GET /sites/:siteSlug/sitemap.xml` and `GET /sites/:siteSlug/robots.txt` routes. Hosted sitemap/robots success and 404 text responses carry the public contract/cache headers; missing or unpublished sites use `x-backy-cache-scope: error` with `no-store`.
+  - Hosted catch-all HTML pages resolve request hosts against site custom domains, Settings verification domains, and configured locale domains before falling back to the managed site slug, then pass that host into route matching so hosted metadata/render output follows the same locale-domain rules as public render/resolve APIs.
   - Public SEO discovery contract for custom frontends and default generated frontends.
   - JSON response uses `{ success, requestId, data: { site, defaults, routes, sitemap, robots } }`; `defaults.jsonLd` carries site-level structured data objects for frontend head rendering, and legacy top-level `routes` remains for compatibility.
   - Routes include publishable pages, blog posts, dynamic collection lists, and dynamic collection item records with canonical path, title, description, robots flags, Open Graph basics, route-specific JSON-LD objects, keywords, priority, change frequency, and update timestamps.

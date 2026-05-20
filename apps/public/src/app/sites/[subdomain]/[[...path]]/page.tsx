@@ -8,6 +8,7 @@
  */
 
 import { notFound, permanentRedirect, redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
 import {
     getCanonicalPathForPage,
@@ -15,6 +16,7 @@ import {
     getMediaList,
     getPageByPath,
     getSiteByIdOrSlug,
+    getSites,
     listCollectionRecords,
     listCollections,
     validatePreviewToken,
@@ -44,6 +46,7 @@ import {
     resolveRepositorySiteRoute,
 } from '@/lib/repositoryRouteResolver';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
+import { normalizePublicRouteHost, publicRouteHostMatchesSite } from '@/lib/publicRouteHost';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -64,11 +67,34 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-async function getSite(subdomain: string) {
+async function getSite(subdomain: string, requestHost?: string | null) {
+    const normalizedHost = normalizePublicRouteHost(requestHost);
+
     if (!shouldUseDemoStoreFallback()) {
         const repositories = await getRequiredDatabaseRepositories();
+        if (normalizedHost) {
+            const result = await repositories.sites.list({
+                status: 'published',
+                limit: 100,
+                offset: 0,
+            });
+            const hostMatchedSite = result.items.find((candidate) => (
+                candidate.isPublished && publicRouteHostMatchesSite(candidate, normalizedHost)
+            ));
+            if (hostMatchedSite) {
+                return { mode: 'database', site: hostMatchedSite, repositories } as HostedSite;
+            }
+        }
+
         const site = await repositories.sites.getById(subdomain) || await repositories.sites.getBySlug(subdomain);
         return site?.isPublished ? { mode: 'database', site, repositories } as HostedSite : null;
+    }
+
+    if (normalizedHost) {
+        const hostMatchedSite = getSites().find((candidate) => publicRouteHostMatchesSite(candidate, normalizedHost));
+        if (hostMatchedSite) {
+            return { mode: 'demo', site: hostMatchedSite, repositories: null } as HostedSite;
+        }
     }
 
     const site = getSiteByIdOrSlug(subdomain);
@@ -408,6 +434,8 @@ interface PageProps {
         previewToken?: string | string[];
         backyManage?: string | string[];
         manage?: string | string[];
+        host?: string | string[];
+        domain?: string | string[];
     }>;
 }
 
@@ -418,6 +446,18 @@ const firstParam = (value: string | string[] | undefined): string | undefined =>
 const isLiveManageRequested = (value: string | undefined): boolean => (
     value === '1' || value === 'true' || value === 'yes'
 );
+
+const getHostedRouteHost = async (
+    searchParams: Awaited<NonNullable<PageProps['searchParams']>> | undefined,
+): Promise<string | null> => {
+    const requestHeaders = await headers();
+    return normalizePublicRouteHost(
+        firstParam(searchParams?.host)
+        || firstParam(searchParams?.domain)
+        || requestHeaders.get('x-forwarded-host')
+        || requestHeaders.get('host'),
+    );
+};
 
 const adminAppUrl = () => (
     process.env.BACKY_ADMIN_APP_URL ||
@@ -447,15 +487,17 @@ function applyResolvedHostedRouteRedirect(route: ResolvedSiteRoute | null) {
 
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
     const { subdomain, path } = await params;
-    const previewToken = firstParam((await searchParams)?.previewToken);
+    const resolvedSearchParams = await searchParams;
+    const previewToken = firstParam(resolvedSearchParams?.previewToken);
     const routePath = routePathFromParts(path);
+    const routeHost = await getHostedRouteHost(resolvedSearchParams);
 
-    const hostedSite = await getSite(subdomain);
+    const hostedSite = await getSite(subdomain, routeHost);
     if (!hostedSite) return { title: 'Page Not Found' };
 
     if (hostedSite.mode === 'database') {
         const { site } = hostedSite;
-        const route = await resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken });
+        const route = await resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken, host: routeHost });
         applyResolvedHostedRouteRedirect(route);
 
         if (!route) {
@@ -521,7 +563,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             return { title: 'Page Not Found' };
         }
 
-        const canonicalPath = canonicalPathForRepositoryPage(page);
+        const canonicalPath = route.canonical || canonicalPathForRepositoryPage(page);
         return {
             title: typeof page.meta?.title === 'string' ? page.meta.title : page.title,
             description: typeof page.meta?.description === 'string' ? page.meta.description : page.description || '',
@@ -544,7 +586,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     }
 
     const { site } = hostedSite;
-    const route = resolveSiteRoute(site, routePath, { previewToken });
+    const route = resolveSiteRoute(site, routePath, { previewToken, host: routeHost });
     applyResolvedHostedRouteRedirect(route);
 
     if (!route) {
@@ -643,16 +685,17 @@ export default async function SitePage({ params, searchParams }: PageProps) {
         firstParam(resolvedSearchParams?.backyManage) || firstParam(resolvedSearchParams?.manage),
     );
     const routePath = routePathFromParts(path);
+    const routeHost = await getHostedRouteHost(resolvedSearchParams);
 
     // Fetch site and page data
-    const hostedSite = await getSite(subdomain);
+    const hostedSite = await getSite(subdomain, routeHost);
     if (!hostedSite) {
         notFound();
     }
 
     if (hostedSite.mode === 'database') {
         const { site } = hostedSite;
-        const route = await resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken });
+        const route = await resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken, host: routeHost });
         applyResolvedHostedRouteRedirect(route);
 
         if (!route) {
@@ -736,7 +779,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
     }
 
     const { site } = hostedSite;
-    const route = resolveSiteRoute(site, routePath, { previewToken });
+    const route = resolveSiteRoute(site, routePath, { previewToken, host: routeHost });
     applyResolvedHostedRouteRedirect(route);
 
     if (!route) {
