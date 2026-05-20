@@ -1582,6 +1582,13 @@ export interface ProductSubscriptionLifecycle {
     revenue: number;
     units: number;
   };
+  actionPlan?: {
+    schemaVersion: 'backy.product-subscription-action-plan-summary.v1';
+    attentionRequired: number;
+    executableNow: number;
+    handoffRequired: number;
+    retryRecommended: number;
+  };
   subscriptions: Array<{
     id: string;
     slug: string;
@@ -1595,6 +1602,23 @@ export interface ProductSubscriptionLifecycle {
     subscriptionReference: string;
     actionExecutionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
     actionExecutionModes?: Record<'pause' | 'resume' | 'cancel', 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff'>;
+    actionPlan?: {
+      schemaVersion: 'backy.product-subscription-action-plan.v1';
+      status: 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
+      attention: boolean;
+      recommendedAction: 'pause' | 'resume' | 'cancel' | 'none';
+      recommendation: string;
+      retryRecommended: boolean;
+      handoffRequired: boolean;
+      availableActions: Array<{
+        action: 'pause' | 'resume' | 'cancel';
+        enabled: boolean;
+        executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
+        requiresHandoff: boolean;
+        reason: string;
+      }>;
+      nextExpectedEvents: string[];
+    };
     actionHistory: Array<{
       id: string;
       schemaVersion: string;

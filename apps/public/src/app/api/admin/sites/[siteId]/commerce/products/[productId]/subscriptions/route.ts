@@ -31,6 +31,7 @@ const SCHEMA_VERSION = 'backy.product-subscription-lifecycle.v1';
 const ORDER_LIMIT = 1000;
 type SubscriptionLifecycleOperatorAction = 'pause' | 'resume' | 'cancel';
 type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
+type SubscriptionLifecycleStatus = 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
 
 const SUBSCRIPTION_OPERATOR_ACTIONS: SubscriptionLifecycleOperatorAction[] = ['pause', 'resume', 'cancel'];
 
@@ -174,7 +175,7 @@ const isSubscriptionOrder = (items: Array<Record<string, unknown>>, values: Reco
   );
 };
 
-const lifecycleStatus = (values: Record<string, unknown>): 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending' => {
+const lifecycleStatus = (values: Record<string, unknown>): SubscriptionLifecycleStatus => {
   const notes = textValue(values.notes).toLowerCase();
   const paymentStatus = textValue(values.paymentstatus).toLowerCase();
   const fulfillmentStatus = textValue(values.fulfillmentstatus).toLowerCase();
@@ -341,6 +342,99 @@ const subscriptionHasExecutableAction = (
   subscription: { actionExecutionModes: Record<SubscriptionLifecycleOperatorAction, SubscriptionActionExecutionMode> },
 ): boolean => SUBSCRIPTION_OPERATOR_ACTIONS.some((action) => subscription.actionExecutionModes[action] !== 'handoff');
 
+const subscriptionActionAvailability = (
+  status: SubscriptionLifecycleStatus,
+  subscriptionReference: string,
+  modes: Record<SubscriptionLifecycleOperatorAction, SubscriptionActionExecutionMode>,
+) => SUBSCRIPTION_OPERATOR_ACTIONS.map((action) => {
+  let enabled = Boolean(subscriptionReference);
+  let reason = '';
+
+  if (!subscriptionReference) {
+    reason = 'Provider subscription reference required before running lifecycle actions.';
+  } else if (status === 'cancelled') {
+    enabled = false;
+    reason = 'Subscription is already cancelled.';
+  } else if (action === 'pause' && status === 'paused') {
+    enabled = false;
+    reason = 'Subscription is already paused.';
+  } else if (action === 'resume' && (status === 'active' || status === 'renewal')) {
+    enabled = false;
+    reason = 'Subscription is already active.';
+  } else if (action === 'resume' && status === 'pending') {
+    enabled = false;
+    reason = 'Wait for provider checkout or webhook settlement before resuming.';
+  }
+
+  const executionMode = modes[action];
+  return {
+    action,
+    enabled,
+    executionMode,
+    requiresHandoff: enabled && executionMode === 'handoff',
+    reason: reason || (
+      executionMode === 'handoff'
+        ? 'No direct provider execution is configured; Backy will persist a manual handoff action.'
+        : `Ready to ${action} through ${executionMode}.`
+    ),
+  };
+});
+
+const buildSubscriptionActionPlan = (
+  status: SubscriptionLifecycleStatus,
+  subscriptionReference: string,
+  modes: Record<SubscriptionLifecycleOperatorAction, SubscriptionActionExecutionMode>,
+  actionHistory: ReturnType<typeof subscriptionActionHistory>,
+) => {
+  const availableActions = subscriptionActionAvailability(status, subscriptionReference, modes);
+  const lastAction = actionHistory[0] || null;
+  const retryRecommended = Boolean(lastAction && ['failed', 'requires_action'].includes(lastAction.status));
+  const attention = ['dunning', 'paused', 'trial_will_end', 'pending'].includes(status) || retryRecommended;
+
+  const recommendedAction: SubscriptionLifecycleOperatorAction | 'none' = (() => {
+    if (!subscriptionReference || status === 'cancelled') return 'none';
+    if (retryRecommended && ['pause', 'resume', 'cancel'].includes(lastAction?.action || '')) {
+      return lastAction?.action as SubscriptionLifecycleOperatorAction;
+    }
+    if (status === 'paused') return 'resume';
+    if (status === 'dunning') return 'resume';
+    if (status === 'trial_will_end') return 'cancel';
+    return 'none';
+  })();
+
+  const recommendation = (() => {
+    if (!subscriptionReference) return 'Attach or recover the provider subscription reference before operator actions can run.';
+    if (retryRecommended) return 'The latest action needs follow-up; retry after fixing provider credentials or complete the handoff manually.';
+    if (status === 'paused') return 'Subscription is paused; resume when the customer is ready or cancel if churn is confirmed.';
+    if (status === 'dunning') return 'Payment recovery is in progress; resume after provider/customer recovery or cancel if collection fails.';
+    if (status === 'trial_will_end') return 'Trial is ending; review retention and cancel only when the customer opts out.';
+    if (status === 'pending') return 'Checkout or webhook settlement is pending; wait for provider settlement before lifecycle changes.';
+    if (status === 'cancelled') return 'Subscription is already cancelled; no further operator lifecycle action is available.';
+    return 'No operator lifecycle action is currently required.';
+  })();
+
+  return {
+    schemaVersion: 'backy.product-subscription-action-plan.v1',
+    status,
+    attention,
+    recommendedAction,
+    recommendation,
+    retryRecommended,
+    handoffRequired: availableActions.some((action) => action.requiresHandoff),
+    availableActions,
+    nextExpectedEvents: [
+      'checkout.session.completed',
+      'invoice.payment_succeeded',
+      'invoice.payment_failed',
+      'customer.subscription.updated',
+      'customer.subscription.paused',
+      'customer.subscription.resumed',
+      'customer.subscription.trial_will_end',
+      'customer.subscription.deleted',
+    ],
+  };
+};
+
 const timestampValue = (record: SourceRecord): number => {
   const timestamp = Date.parse(record.updatedAt || record.createdAt || '');
   return Number.isFinite(timestamp) ? timestamp : 0;
@@ -397,6 +491,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
       const actionExecutionModes = subscriptionActionExecutionModes(paymentProvider, subscriptionReference, values);
       const actionExecutionMode = preferredSubscriptionActionExecutionMode(actionExecutionModes);
       const actionHistory = subscriptionActionHistory(values.subscriptionactionhistory, subscriptionReference);
+      const actionPlan = buildSubscriptionActionPlan(status, subscriptionReference, actionExecutionModes, actionHistory);
 
       return {
         id: order.id,
@@ -411,6 +506,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         subscriptionReference,
         actionExecutionMode,
         actionExecutionModes,
+        actionPlan,
         actionHistory,
         lastAction: actionHistory[0] || null,
         checkoutSessionId: textValue(values.checkoutsessionid),
@@ -429,6 +525,16 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         })),
       };
     });
+
+  const actionPlanSummary = {
+    schemaVersion: 'backy.product-subscription-action-plan-summary.v1',
+    attentionRequired: subscriptions.filter((subscription) => subscription.actionPlan.attention).length,
+    executableNow: subscriptions.filter((subscription) => (
+      subscription.actionPlan.availableActions.some((action) => action.enabled && action.executionMode !== 'handoff')
+    )).length,
+    handoffRequired: subscriptions.filter((subscription) => subscription.actionPlan.handoffRequired).length,
+    retryRecommended: subscriptions.filter((subscription) => subscription.actionPlan.retryRecommended).length,
+  };
 
   const httpActionAdapterConfigured = Boolean(subscriptionActionProviderUrl());
   const adyenSupportedActions = httpActionAdapterConfigured ? SUBSCRIPTION_OPERATOR_ACTIONS : ['cancel'];
@@ -551,6 +657,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
       subscription: product.subscription,
     },
     summary,
+    actionPlan: actionPlanSummary,
     subscriptions: subscriptions.slice(0, 25),
     execution,
     contract: {

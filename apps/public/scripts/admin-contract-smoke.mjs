@@ -1124,6 +1124,25 @@ async function cleanup() {
   }
 }
 
+function assertProductSubscriptionActionPlanSource() {
+  const productsRouteSource = fs.readFileSync(
+    new URL('../../admin/src/routes/products.tsx', import.meta.url),
+    'utf8',
+  );
+  const lifecycleRouteSource = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/route.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert(lifecycleRouteSource.includes('buildSubscriptionActionPlan'), 'product subscription lifecycle API must build per-order action plans');
+  assert(lifecycleRouteSource.includes('backy.product-subscription-action-plan.v1'), 'product subscription lifecycle API must expose the action-plan schema');
+  assert(lifecycleRouteSource.includes('backy.product-subscription-action-plan-summary.v1'), 'product subscription lifecycle API must expose the action-plan summary schema');
+  assert(lifecycleRouteSource.includes('availableActions') && lifecycleRouteSource.includes('handoffRequired'), 'product subscription lifecycle API must expose action availability and handoff state');
+  assert(productsRouteSource.includes('data-testid="products-subscription-action-plan"'), 'Products page must render the subscription action-plan panel');
+  assert(productsRouteSource.includes('subscription.actionPlan.recommendation'), 'Products page must render per-subscription action recommendations');
+  assert(productsRouteSource.includes('subscription.actionPlan.handoffRequired'), 'Products page must render per-subscription handoff warnings');
+}
+
 if (process.env.BACKY_ADMIN_CONTRACT_SOURCE_GUARD === '1') {
   assertInteractiveSandboxRouteSource();
   assertInteractiveContractSource();
@@ -1132,6 +1151,7 @@ if (process.env.BACKY_ADMIN_CONTRACT_SOURCE_GUARD === '1') {
   assertNavigationContractSource();
   assertAdminSettingsContractSource();
   assertAdminPageContentValidationSource();
+  assertProductSubscriptionActionPlanSource();
   console.log(JSON.stringify({ ok: true, guard: 'admin-contract-source' }));
   process.exit(0);
 }
@@ -1142,6 +1162,7 @@ try {
   assertSiteSettingsLocalizationSource();
   assertNavigationContractSource();
   assertAdminPageContentValidationSource();
+  assertProductSubscriptionActionPlanSource();
   await loginAdminApi();
   const initialSettings = await request('/api/admin/settings');
   const allowedAdminDomains = parseAllowedEmailDomains(initialSettings.json?.data?.settings?.auth?.allowedEmailDomains);

@@ -946,6 +946,14 @@ const assertProductsApiContractsSource = () => {
     "Products page must render the live provider certification handoff",
   );
   assert(
+    source.includes('data-testid="products-subscription-action-plan"') &&
+      source.includes("Lifecycle action plan") &&
+      source.includes("backy.product-subscription-action-plan-summary.v1") &&
+      source.includes("subscription.actionPlan.recommendation") &&
+      source.includes("subscription.actionPlan.handoffRequired"),
+    "Products page must render the subscription lifecycle action plan and per-subscription recommendations",
+  );
+  assert(
     source.includes("bulkUpdateCollectionRecords") &&
       source.includes("const filteredProductIds = useMemo") &&
       source.includes("const visibleIds = new Set(filteredProductIds)") &&
@@ -1086,8 +1094,11 @@ const assertProductsApiContractsSource = () => {
       lifecycleSource.includes("lifecycleResponse") &&
       lifecycleSource.includes("backy.product-subscription-lifecycle.v1") &&
       lifecycleSource.includes("actionExecutionModes") &&
+      lifecycleSource.includes("buildSubscriptionActionPlan") &&
+      lifecycleSource.includes("backy.product-subscription-action-plan.v1") &&
+      lifecycleSource.includes("actionPlanSummary") &&
       lifecycleSource.includes("razorpayCredentialsConfigured"),
-    "Product subscription lifecycle endpoint must emit Backy contract/cache headers",
+    "Product subscription lifecycle endpoint must emit Backy contract/cache headers and action planning metadata",
   );
   assert(
     actionSource.includes("publicContractJson") &&
@@ -6127,6 +6138,25 @@ const assertStripeCheckoutExecution = async ({
       `Product subscription lifecycle did not expose per-action execution readiness: ${JSON.stringify(stripeLifecycleEntry)}`,
     );
     assert(
+      stripeLifecycleEntry?.actionPlan?.schemaVersion ===
+        "backy.product-subscription-action-plan.v1" &&
+        Array.isArray(stripeLifecycleEntry?.actionPlan?.availableActions) &&
+        stripeLifecycleEntry.actionPlan.availableActions.some(
+          (action) =>
+            action.action === "cancel" &&
+            action.enabled === true &&
+            action.executionMode === "stripe-api",
+        ),
+      `Product subscription lifecycle did not expose per-order action plan: ${JSON.stringify(stripeLifecycleEntry)}`,
+    );
+    assert(
+      lifecycle.actionPlan?.schemaVersion ===
+        "backy.product-subscription-action-plan-summary.v1" &&
+        Number.isFinite(lifecycle.actionPlan.attentionRequired) &&
+        Number.isFinite(lifecycle.actionPlan.executableNow),
+      `Product subscription lifecycle did not expose action plan summary: ${JSON.stringify(lifecycle?.actionPlan)}`,
+    );
+    assert(
       lifecycle.execution?.schemaVersion ===
         "backy.product-subscription-execution-readiness.v1",
       `Product subscription execution readiness schema was unexpected: ${JSON.stringify(lifecycle?.execution)}`,
@@ -7099,6 +7129,8 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('Trial days'),
         hasSubscriptionLifecycle: Boolean(document.querySelector('[data-testid="products-subscription-lifecycle"]')) &&
           document.body?.innerText?.includes('Subscription lifecycle') &&
+          document.body?.innerText?.includes('Lifecycle action plan') &&
+          document.body?.innerText?.includes('backy.product-subscription-action-plan-summary.v1') &&
           document.body?.innerText?.includes('Action execution readiness') &&
           document.body?.innerText?.includes('backy.product-subscription-execution-readiness.v1') &&
           document.body?.innerText?.includes('Recent subscription orders') &&

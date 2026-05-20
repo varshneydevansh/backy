@@ -146,7 +146,7 @@ const PRODUCT_API_CONTRACTS = [
     endpointKey: 'productSubscriptions',
     schemaVersion: 'backy.product-subscription-lifecycle.v1',
     cacheScope: 'private',
-    detail: 'Product-scoped subscription order summary, lifecycle states, provider readiness, and bounded action history.',
+    detail: 'Product-scoped subscription order summary, lifecycle states, action-plan recommendations, provider readiness, and bounded action history.',
   },
   {
     key: 'subscription-action',
@@ -5868,7 +5868,7 @@ function ProductsRoute() {
                       Subscription action {productLifecycleActionMessage}.
                     </div>
                   ) : null}
-                  <div className="grid gap-3 md:grid-cols-4">
+                  <div className="grid gap-3 md:grid-cols-5">
                     <div>
                       <div className="text-[11px] uppercase text-muted-foreground">Subscriptions</div>
                       <div className="mt-1 text-sm font-medium text-foreground">{selectedProductLifecycle?.summary.total ?? 0}</div>
@@ -5884,6 +5884,10 @@ function ProductsRoute() {
                       <div className="mt-1 text-sm font-medium text-foreground">
                         {(selectedProductLifecycle?.summary.dunning ?? 0) + (selectedProductLifecycle?.summary.paused ?? 0) + (selectedProductLifecycle?.summary.trialEnding ?? 0)}
                       </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Action needed</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">{selectedProductLifecycle?.actionPlan?.attentionRequired ?? 0}</div>
                     </div>
                     <div>
                       <div className="text-[11px] uppercase text-muted-foreground">Product revenue</div>
@@ -5904,6 +5908,32 @@ function ProductsRoute() {
                         <div className="mt-1 font-semibold text-foreground">{value}</div>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="products-subscription-action-plan">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">Lifecycle action plan</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          Recommended operator work, executable actions, and handoff load for the selected product.
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {selectedProductLifecycle?.actionPlan?.schemaVersion || 'backy.product-subscription-action-plan-summary.v1'}
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-4">
+                      {[
+                        ['Attention', selectedProductLifecycle?.actionPlan?.attentionRequired ?? 0],
+                        ['Executable now', selectedProductLifecycle?.actionPlan?.executableNow ?? 0],
+                        ['Manual handoff', selectedProductLifecycle?.actionPlan?.handoffRequired ?? 0],
+                        ['Retry/follow-up', selectedProductLifecycle?.actionPlan?.retryRecommended ?? 0],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-md border border-border bg-card px-3 py-2 text-xs">
+                          <div className="text-muted-foreground">{label}</div>
+                          <div className="mt-1 font-semibold text-foreground">{value}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="products-subscription-execution-readiness">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -5947,64 +5977,84 @@ function ProductsRoute() {
                       <div className="text-[11px] text-muted-foreground">{selectedProductLifecycle?.schemaVersion || 'backy.product-subscription-lifecycle.v1'}</div>
                     </div>
                     <div className="mt-2 space-y-2">
-                      {selectedProductLifecycle?.subscriptions.length ? selectedProductLifecycle.subscriptions.slice(0, 3).map((subscription) => (
-                        <div key={subscription.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-xs">
-                          <div>
-                            <div className="font-medium text-foreground">{subscription.orderNumber}</div>
-                            <div className="mt-0.5 text-muted-foreground">
-                              {subscription.customerEmail || subscription.customerName || 'Unknown customer'}
-                              {subscription.subscriptionReference ? ` · ${subscription.subscriptionReference}` : ''}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-medium text-foreground">{subscription.lifecycleStatus.replace(/_/g, ' ')}</div>
-                            <div className="mt-0.5 text-muted-foreground">{formatMoney(subscription.productRevenue, subscription.currency)} · {subscription.productUnits} unit{subscription.productUnits === 1 ? '' : 's'}</div>
-                            <div className="mt-0.5 text-muted-foreground">{subscription.paymentProvider || 'manual'} · {subscription.actionExecutionMode}</div>
-                            {subscription.actionExecutionModes ? (
-                              <div className="mt-0.5 max-w-72 break-words text-muted-foreground">
-                                pause {subscription.actionExecutionModes.pause} · resume {subscription.actionExecutionModes.resume} · cancel {subscription.actionExecutionModes.cancel}
-                              </div>
-                            ) : null}
-                            {subscription.lastAction ? (
+                      {selectedProductLifecycle?.subscriptions.length ? selectedProductLifecycle.subscriptions.slice(0, 6).map((subscription) => {
+                        const pausePlan = subscription.actionPlan?.availableActions.find((action) => action.action === 'pause');
+                        const resumePlan = subscription.actionPlan?.availableActions.find((action) => action.action === 'resume');
+                        const cancelPlan = subscription.actionPlan?.availableActions.find((action) => action.action === 'cancel');
+                        const actionDisabled = (plan: typeof pausePlan) => !plan?.enabled || productLifecycleActionBusy !== null || !canEditProducts;
+                        const actionTitle = (plan: typeof pausePlan) => (
+                          !canEditProducts ? editPermissionTitle : plan?.reason
+                        );
+
+                        return (
+                          <div key={subscription.id} className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-xs">
+                            <div className="max-w-xl">
+                              <div className="font-medium text-foreground">{subscription.orderNumber}</div>
                               <div className="mt-0.5 text-muted-foreground">
-                                Last action {subscription.lastAction.action} {subscription.lastAction.status} via {subscription.lastAction.executionMode}
+                                {subscription.customerEmail || subscription.customerName || 'Unknown customer'}
+                                {subscription.subscriptionReference ? ` · ${subscription.subscriptionReference}` : ''}
                               </div>
-                            ) : null}
-                            <div className="mt-2 flex flex-wrap justify-end gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'pause', subscription.subscriptionReference)}
-                                disabled={!subscription.subscriptionReference || subscription.lifecycleStatus === 'paused' || subscription.lifecycleStatus === 'cancelled' || productLifecycleActionBusy !== null || !canEditProducts}
-                                title={!canEditProducts ? editPermissionTitle : undefined}
-                                iconStart={<Pause className="size-3.5" />}
-                              >
-                                Pause
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'resume', subscription.subscriptionReference)}
-                                disabled={!subscription.subscriptionReference || subscription.lifecycleStatus === 'active' || subscription.lifecycleStatus === 'renewal' || subscription.lifecycleStatus === 'cancelled' || productLifecycleActionBusy !== null || !canEditProducts}
-                                title={!canEditProducts ? editPermissionTitle : undefined}
-                                iconStart={<Play className="size-3.5" />}
-                              >
-                                Resume
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'cancel', subscription.subscriptionReference)}
-                                disabled={!subscription.subscriptionReference || subscription.lifecycleStatus === 'cancelled' || productLifecycleActionBusy !== null || !canEditProducts}
-                                title={!canEditProducts ? editPermissionTitle : undefined}
-                                iconStart={<Archive className="size-3.5" />}
-                              >
-                                Cancel
-                              </Button>
+                              {subscription.actionPlan ? (
+                                <div className="mt-2 rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-muted-foreground">
+                                  <div className="font-semibold text-foreground">
+                                    Recommended: {subscription.actionPlan.recommendedAction === 'none' ? 'No action' : subscription.actionPlan.recommendedAction}
+                                    {subscription.actionPlan.attention ? ' · attention needed' : ''}
+                                  </div>
+                                  <div className="mt-0.5">{subscription.actionPlan.recommendation}</div>
+                                  <div className="mt-1 break-words">
+                                    Pause {pausePlan?.executionMode || 'handoff'} · Resume {resumePlan?.executionMode || 'handoff'} · Cancel {cancelPlan?.executionMode || 'handoff'}
+                                  </div>
+                                  {subscription.actionPlan.handoffRequired ? (
+                                    <div className="mt-0.5 text-amber-700">One or more enabled actions will create a manual handoff.</div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="text-right">
+                              <div className="font-medium text-foreground">{subscription.lifecycleStatus.replace(/_/g, ' ')}</div>
+                              <div className="mt-0.5 text-muted-foreground">{formatMoney(subscription.productRevenue, subscription.currency)} · {subscription.productUnits} unit{subscription.productUnits === 1 ? '' : 's'}</div>
+                              <div className="mt-0.5 text-muted-foreground">{subscription.paymentProvider || 'manual'} · {subscription.actionExecutionMode}</div>
+                              {subscription.lastAction ? (
+                                <div className="mt-0.5 text-muted-foreground">
+                                  Last action {subscription.lastAction.action} {subscription.lastAction.status} via {subscription.lastAction.executionMode}
+                                </div>
+                              ) : null}
+                              <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'pause', subscription.subscriptionReference)}
+                                  disabled={actionDisabled(pausePlan)}
+                                  title={actionTitle(pausePlan)}
+                                  iconStart={<Pause className="size-3.5" />}
+                                >
+                                  Pause
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'resume', subscription.subscriptionReference)}
+                                  disabled={actionDisabled(resumePlan)}
+                                  title={actionTitle(resumePlan)}
+                                  iconStart={<Play className="size-3.5" />}
+                                >
+                                  Resume
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'cancel', subscription.subscriptionReference)}
+                                  disabled={actionDisabled(cancelPlan)}
+                                  title={actionTitle(cancelPlan)}
+                                  iconStart={<Archive className="size-3.5" />}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )) : (
+                        );
+                      }) : (
                         <EmptyState
                           icon={Package}
                           title="No subscription orders yet"
