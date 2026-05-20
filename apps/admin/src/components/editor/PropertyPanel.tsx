@@ -5173,6 +5173,17 @@ const REPEATER_FIELD_BINDING_SLOT_TARGET_PROPS: Record<string, 'titleField' | 'd
   'props.imageField': 'imageField',
   'props.metaField': 'metaField',
 };
+const REPEATER_COLLECTION_BINDING_PROP_KEYS = [
+  'collectionId',
+  'datasetId',
+  'titleField',
+  'descriptionField',
+  'imageField',
+  'metaField',
+  'query',
+  'limit',
+  'offset',
+] as const;
 
 const BINDING_SLOT_FIELD_ALIASES: Record<string, string[]> = {
   title: ['title', 'name', 'label'],
@@ -6034,6 +6045,75 @@ const applyChildBindingSlots = (
   };
 };
 
+const collectionBindingCountForElement = (element: CanvasElement): number => {
+  const directBindings = (Array.isArray(element.dataBindings) ? element.dataBindings : [])
+    .filter((binding) => getBindingSource(binding)?.kind === 'collection').length;
+  const repeaterBindingProps = normalizeCanvasElementType(element.type) === 'repeater'
+    ? REPEATER_COLLECTION_BINDING_PROP_KEYS.filter((key) => element.props?.[key] !== undefined).length
+    : 0;
+  const childBindings = (element.children || [])
+    .reduce((total, child) => total + collectionBindingCountForElement(child), 0);
+
+  return directBindings + repeaterBindingProps + childBindings;
+};
+
+const clearCollectionBindingsFromElement = (
+  element: CanvasElement,
+): { element: CanvasElement; cleared: number } => {
+  let cleared = 0;
+  let nextElement: CanvasElement = element;
+  const existingBindings = Array.isArray(element.dataBindings) ? element.dataBindings : [];
+  const retainedBindings = existingBindings.filter((binding) => getBindingSource(binding)?.kind !== 'collection');
+
+  if (retainedBindings.length !== existingBindings.length) {
+    cleared += existingBindings.length - retainedBindings.length;
+    nextElement = {
+      ...nextElement,
+      dataBindings: retainedBindings.length > 0 ? retainedBindings : undefined,
+    };
+    if (retainedBindings.length === 0) {
+      delete nextElement.dataBindings;
+    }
+  }
+
+  if (normalizeCanvasElementType(element.type) === 'repeater' && element.props) {
+    const nextProps: ElementProps = { ...element.props };
+    let clearedProps = 0;
+    REPEATER_COLLECTION_BINDING_PROP_KEYS.forEach((key) => {
+      if (nextProps[key] !== undefined) {
+        delete nextProps[key];
+        clearedProps += 1;
+      }
+    });
+    if (clearedProps > 0) {
+      cleared += clearedProps;
+      nextElement = {
+        ...nextElement,
+        props: nextProps,
+      };
+    }
+  }
+
+  if (element.children?.length) {
+    let childCleared = 0;
+    const nextChildren = element.children.map((child) => {
+      const result = clearCollectionBindingsFromElement(child);
+      childCleared += result.cleared;
+      return result.element;
+    });
+
+    if (childCleared > 0) {
+      cleared += childCleared;
+      nextElement = {
+        ...nextElement,
+        children: nextChildren,
+      };
+    }
+  }
+
+  return { element: nextElement, cleared };
+};
+
 function CollectionFilterValueControl({
   testId,
   field,
@@ -6117,9 +6197,11 @@ interface PresetBindingSlotsPanelProps {
   selectedFieldKey: string;
   selectedSourcePath: string;
   selectedTargetPath: string;
+  clearableBindingCount: number;
   onCollectionChange: (collectionId: string) => void;
   onApplySlot: (slot: ComponentBindingSlot, fieldPath: string) => void;
   onApplyAllSlots: () => void;
+  onClearAllSlots: () => void;
   onApplyChildSlots: () => void;
 }
 
@@ -6133,9 +6215,11 @@ function PresetBindingSlotsPanel({
   selectedFieldKey,
   selectedSourcePath,
   selectedTargetPath,
+  clearableBindingCount,
   onCollectionChange,
   onApplySlot,
   onApplyAllSlots,
+  onClearAllSlots,
   onApplyChildSlots,
 }: PresetBindingSlotsPanelProps) {
   const slots = Array.isArray(element.bindingSlots) ? element.bindingSlots : [];
@@ -6177,15 +6261,26 @@ function PresetBindingSlotsPanel({
           ))}
         </select>
 
-        <button
-          type="button"
-          onClick={onApplyAllSlots}
-          disabled={!selectedCollection || allApplicableCount === 0}
-          data-testid="editor-data-apply-all-binding-slots"
-          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Apply all matching slots
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onApplyAllSlots}
+            disabled={!selectedCollection || allApplicableCount === 0}
+            data-testid="editor-data-apply-all-binding-slots"
+            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Apply all
+          </button>
+          <button
+            type="button"
+            onClick={onClearAllSlots}
+            disabled={clearableBindingCount === 0}
+            data-testid="editor-data-clear-all-binding-slots"
+            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Clear all
+          </button>
+        </div>
 
         {slots.map((slot) => {
           const fieldCandidates = bindingSlotFieldCandidates(slot);
@@ -7255,6 +7350,10 @@ function DataBindingProperties({
     () => childBindingSlotSummary(element, activeSlotCollection, collections),
     [activeSlotCollection, collections, element],
   );
+  const clearableBindingCount = useMemo(
+    () => collectionBindingCountForElement(element),
+    [element],
+  );
 
   useEffect(() => {
     if (collections.length === 0) {
@@ -7443,6 +7542,17 @@ function DataBindingProperties({
     }
   };
 
+  const clearAllBindingSlots = () => {
+    const result = clearCollectionBindingsFromElement(element);
+    if (result.cleared === 0) return;
+
+    const updates: Partial<CanvasElement> = {};
+    if (result.element.props !== element.props) updates.props = result.element.props;
+    if (result.element.dataBindings !== element.dataBindings) updates.dataBindings = result.element.dataBindings;
+    if (result.element.children !== element.children) updates.children = result.element.children;
+    onChange(updates);
+  };
+
   const clearBinding = () => {
     onChange({
       dataBindings: (Array.isArray(element.dataBindings) ? element.dataBindings : [])
@@ -7583,9 +7693,11 @@ function DataBindingProperties({
           selectedFieldKey={selectedFieldKey}
           selectedSourcePath={selectedSourcePath}
           selectedTargetPath={selectedTargetPath}
+          clearableBindingCount={clearableBindingCount}
           onCollectionChange={setSlotCollectionId}
           onApplySlot={applyBindingSlot}
           onApplyAllSlots={applyAllBindingSlots}
+          onClearAllSlots={clearAllBindingSlots}
           onApplyChildSlots={applyChildSlots}
         />
         <RepeaterDataProperties
@@ -7632,9 +7744,11 @@ function DataBindingProperties({
         selectedFieldKey={selectedFieldKey}
         selectedSourcePath={selectedSourcePath}
         selectedTargetPath={selectedTargetPath}
+        clearableBindingCount={clearableBindingCount}
         onCollectionChange={setSlotCollectionId}
         onApplySlot={applyBindingSlot}
         onApplyAllSlots={applyAllBindingSlots}
+        onClearAllSlots={clearAllBindingSlots}
         onApplyChildSlots={applyChildSlots}
       />
 
