@@ -20,10 +20,12 @@ const generatedSdkTypeSmoke = read('../../../packages/sdk-js/scripts/generated-c
 const nextConfig = read('../next.config.js');
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
+const adminSettingsRoute = read('../src/app/api/admin/settings/route.ts');
 const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const sdkIndex = read('../../../packages/sdk-js/src/index.ts');
 const settingsRoute = read('../../../apps/admin/src/routes/settings.tsx');
+const adminContentApi = read('../../../apps/admin/src/lib/adminContentApi.ts');
 const rootPackage = read('../../../package.json');
 const sdkPostgresWorkflow = read('../../../.github/workflows/sdk-postgres-smoke.yml');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
@@ -69,6 +71,43 @@ assert(
     manifestRoute.includes("'interactive-components'") &&
     manifestRoute.includes('Database URLs and service credentials stay in CI/runtime environment'),
   'Frontend manifest must expose a non-secret SDK Postgres database certification handoff.',
+);
+
+assert(
+  adminSettingsRoute.includes('frontendDatabaseCertification: frontendDatabaseCertificationContract(') &&
+    adminSettingsRoute.includes("schemaVersion: 'backy.frontend-database-certification.v1'") &&
+    adminSettingsRoute.includes("source: 'admin-settings-api'") &&
+    adminSettingsRoute.includes("command: 'npm run ci:sdk-postgres-smoke'") &&
+    adminSettingsRoute.includes("workflow: '.github/workflows/sdk-postgres-smoke.yml'") &&
+    adminSettingsRoute.includes("localPreflight: 'npm run test:sdk-postgres-preflight-contract'") &&
+    adminSettingsRoute.includes("disposableGuard: 'npm run test:sdk-postgres-disposable-guard'") &&
+    adminSettingsRoute.includes("'BACKY_DATABASE_URL', 'DATABASE_URL'") &&
+    adminSettingsRoute.includes("requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'") &&
+    adminSettingsRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
+    adminSettingsRoute.includes('operatorEnvTemplate') &&
+    adminSettingsRoute.includes('buildFrontendDatabaseCertificationCommand') &&
+    adminSettingsRoute.includes('buildFrontendDatabaseCertificationEnvTemplate') &&
+    adminSettingsRoute.includes("'BACKY_SDK_REQUIRE_DATABASE', '1'") &&
+    adminSettingsRoute.includes("'BACKY_RELEASE_CERTIFY_DATABASE', '1'") &&
+    adminSettingsRoute.includes('backy.frontend-database-certification-env-template.v1') &&
+    adminSettingsRoute.includes('.env.backy-frontend-database-certification') &&
+    adminSettingsRoute.includes('getFrontendDatabaseCertificationRuntime') &&
+    adminSettingsRoute.includes('databaseUrlConfigured') &&
+    adminSettingsRoute.includes('readyForCertification') &&
+    adminSettingsRoute.includes('scenarioEvidence') &&
+    adminSettingsRoute.includes('backy.frontend-database-certification-evidence.v1') &&
+    adminSettingsRoute.includes("'generated-sdk'") &&
+    adminSettingsRoute.includes('Database URLs and service credentials stay in CI/runtime environment'),
+  'Admin Settings API must mirror the non-secret SDK Postgres certification handoff for custom admin clients.',
+);
+
+assert(
+  adminContentApi.includes('export interface FrontendDatabaseCertificationHandoff') &&
+    adminContentApi.includes("schemaVersion: 'backy.frontend-database-certification.v1'") &&
+    adminContentApi.includes("schemaVersion: 'backy.frontend-database-certification-evidence.v1'") &&
+    adminContentApi.includes('frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff') &&
+    adminContentApi.includes('frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification'),
+  'Admin content API must type and preserve the Settings frontend database certification handoff.',
 );
 
 assert(

@@ -241,6 +241,16 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('const runtimeCommerce = getCommerceRuntimeSummary(settings)') && source.includes('runtimeCommerce,'), 'Admin settings response must include commerce runtime diagnostics');
   assert(source.includes('const runtimeInteractiveComponents = getInteractiveComponentRuntimeSummary()') && source.includes('runtimeInteractiveComponents,'), 'Admin settings response must include interactive runtime diagnostics');
   assert(source.includes('providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence, providerCertificationScenarioEvidence)'), 'Admin settings response must include provider certification metadata');
+  assert(source.includes('frontendDatabaseCertification: frontendDatabaseCertificationContract('), 'Admin settings response must include frontend database certification metadata');
+  assert(source.includes("source: 'admin-settings-api'"), 'Admin settings frontend database certification must identify the API source');
+  assert(source.includes('backy.frontend-database-certification.v1'), 'Admin settings frontend database certification must expose a stable handoff schema');
+  assert(source.includes('buildFrontendDatabaseCertificationScenarioEvidence'), 'Admin settings frontend database certification must build scenario evidence for custom admin clients');
+  assert(source.includes('backy.frontend-database-certification-evidence.v1'), 'Admin settings frontend database certification must expose a stable scenario-evidence schema');
+  assert(source.includes('backy.frontend-database-certification-env-template.v1'), 'Admin settings frontend database certification must expose a stable env-template schema');
+  assert(source.includes('.env.backy-frontend-database-certification'), 'Admin settings frontend database certification must expose the frontend database env-template filename');
+  assert(source.includes('BACKY_SDK_REQUIRE_DATABASE') && source.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED'), 'Admin settings frontend database certification must expose SDK database guard envs');
+  assert(source.includes('npm run ci:sdk-postgres-smoke'), 'Admin settings frontend database certification must expose the SDK Postgres gate');
+  assert(source.includes('npm run test:sdk-postgres-disposable-guard'), 'Admin settings frontend database certification must expose the disposable database guard');
   assert(source.includes('backy.settings-provider-certification-handoff.v1'), 'Admin settings provider certification must expose a stable handoff schema');
   assert(source.includes('buildProviderCertificationScenarioEvidence'), 'Admin settings provider certification must build scenario evidence for custom admin clients');
   assert(source.includes('backy.settings-provider-certification-evidence.v1'), 'Admin settings provider certification must expose a stable scenario-evidence schema');
@@ -314,7 +324,9 @@ function assertAdminSettingsContractSource() {
   assert(apiContracts.includes('settings.api_keys.issue'), 'API contracts must document service key issue audit events');
   assert(apiContracts.includes('settings.api_keys.revoke'), 'API contracts must document service key revoke audit events');
   assert(apiContracts.includes('data.settings.providerCertification'), 'API contracts must document admin Settings provider certification handoff');
+  assert(apiContracts.includes('data.settings.frontendDatabaseCertification'), 'API contracts must document admin Settings frontend database certification handoff');
   assert(apiContracts.includes('backy.settings-provider-certification-handoff.v1'), 'API contracts must document Settings provider certification schema');
+  assert(apiContracts.includes('backy.frontend-database-certification.v1'), 'API contracts must document Settings frontend database certification schema');
   assert(apiContracts.includes('operatorEnvTemplate` for `.env.backy-settings-provider-certification`'), 'API contracts must document Settings provider env-template handoff');
   assert(apiContracts.includes('BACKY_COMMERCE_WEBHOOK_SECRET`/`COMMERCE_WEBHOOK_SECRET'), 'API contracts must document provider certification alias families');
 }
@@ -7836,6 +7848,54 @@ try {
     assert(Array.isArray(json?.data?.settings?.runtimeVercel?.missing), `${url} missing runtime Vercel missing list`);
     assert(!JSON.stringify(json.data.settings.runtimeStorage).includes('SECRET'), `${url} exposed storage secret names or values`);
     assert(!JSON.stringify(json.data.settings.runtimeSupabase).includes('SERVICE_ROLE'), `${url} exposed Supabase secret env names or values`);
+    const frontendDatabaseCertification = json?.data?.settings?.frontendDatabaseCertification;
+    assert(frontendDatabaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', `${url} missing frontend database certification schema version`);
+    assert(frontendDatabaseCertification?.status === 'external-database-gate', `${url} missing frontend database certification status`);
+    assert(frontendDatabaseCertification?.requiredFor === 'production-custom-frontends', `${url} missing frontend database certification requirement`);
+    assert(frontendDatabaseCertification?.source === 'admin-settings-api', `${url} missing frontend database certification API source`);
+    assert(frontendDatabaseCertification.gate?.command === 'npm run ci:sdk-postgres-smoke', `${url} missing frontend database certification gate`);
+    assert(frontendDatabaseCertification.gate?.workflow === '.github/workflows/sdk-postgres-smoke.yml', `${url} missing frontend database certification workflow`);
+    assert(frontendDatabaseCertification.gate?.localPreflight === 'npm run test:sdk-postgres-preflight-contract', `${url} missing frontend database certification preflight`);
+    assert(frontendDatabaseCertification.gate?.disposableGuard === 'npm run test:sdk-postgres-disposable-guard', `${url} missing frontend database certification disposable guard`);
+    assert(
+      Array.isArray(frontendDatabaseCertification.environment?.secretAliases) &&
+        frontendDatabaseCertification.environment.secretAliases.includes('BACKY_DATABASE_URL') &&
+        frontendDatabaseCertification.environment.secretAliases.includes('DATABASE_URL') &&
+        frontendDatabaseCertification.environment.requiredConfirmationEnv === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
+      `${url} missing frontend database certification environment aliases`,
+    );
+    assert(frontendDatabaseCertification?.operatorCommandTemplate, `${url} missing frontend database certification operatorCommandTemplate`);
+    assert(frontendDatabaseCertification.operatorCommandTemplate.envTemplateSchemaVersion === 'backy.frontend-database-certification-env-template.v1', `${url} missing frontend database certification command-template env schema`);
+    assert(
+      typeof frontendDatabaseCertification.operatorCommandTemplate.envTemplate === 'string' &&
+        frontendDatabaseCertification.operatorCommandTemplate.envTemplate.includes('# Backy frontend SDK database certification environment') &&
+        frontendDatabaseCertification.operatorCommandTemplate.envTemplate.includes('BACKY_DATA_MODE=database') &&
+        frontendDatabaseCertification.operatorCommandTemplate.envTemplate.includes('BACKY_SDK_REQUIRE_DATABASE=1'),
+      `${url} missing frontend database certification command-template env body`,
+    );
+    assert(frontendDatabaseCertification?.operatorEnvTemplate, `${url} missing frontend database certification operatorEnvTemplate`);
+    assert(frontendDatabaseCertification.operatorEnvTemplate.schemaVersion === 'backy.frontend-database-certification-env-template.v1', `${url} missing frontend database certification env-template schema`);
+    assert(frontendDatabaseCertification.operatorEnvTemplate.fileName === '.env.backy-frontend-database-certification', `${url} missing frontend database certification env-template filename`);
+    assert(frontendDatabaseCertification?.runtime?.dataMode, `${url} missing frontend database certification runtime data mode`);
+    assert(typeof frontendDatabaseCertification.runtime?.databaseUrlConfigured === 'boolean', `${url} missing frontend database certification database URL readiness`);
+    assert(typeof frontendDatabaseCertification.runtime?.readyForCertification === 'boolean', `${url} missing frontend database certification ready flag`);
+    assert(Array.isArray(frontendDatabaseCertification.runtime?.missing), `${url} missing frontend database certification missing inputs`);
+    assert(
+      frontendDatabaseCertification.scenarioEvidence?.schemaVersion === 'backy.frontend-database-certification-evidence.v1' &&
+        frontendDatabaseCertification.scenarioEvidence.requiredGate === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke' &&
+        frontendDatabaseCertification.scenarioEvidence.coverage?.total === 9 &&
+        frontendDatabaseCertification.scenarioEvidence.scenarios?.some((scenario) => scenario.key === 'manifest-openapi-discovery') &&
+        frontendDatabaseCertification.scenarioEvidence.scenarios?.some((scenario) => scenario.key === 'generated-sdk-cache') &&
+        frontendDatabaseCertification.scenarioEvidence.scenarios?.some((scenario) => scenario.key === 'database-runtime-guard'),
+      `${url} missing frontend database certification scenario evidence`,
+    );
+    assert(
+      typeof frontendDatabaseCertification?.secretHandling === 'string' &&
+        frontendDatabaseCertification.secretHandling.includes('Database URLs and service credentials stay in CI/runtime environment'),
+      `${url} missing frontend database certification secret-handling guidance`,
+    );
+    assert(!JSON.stringify(frontendDatabaseCertification).includes('postgres://'), `${url} exposed a database URL in frontend database certification`);
+    assert(!JSON.stringify(frontendDatabaseCertification).includes('SERVICE_ROLE'), `${url} exposed service-role material in frontend database certification`);
     const providerCertification = json?.data?.settings?.providerCertification;
     assert(providerCertification?.schemaVersion === 'backy.settings-provider-certification-handoff.v1', `${url} missing provider certification schema version`);
     assert(providerCertification?.status === 'external-live-provider-gate', `${url} missing provider certification status`);

@@ -1287,6 +1287,79 @@ interface ApiDeleteCommentBlocklistResponse {
   };
 }
 
+export interface FrontendDatabaseCertificationHandoff {
+  schemaVersion: 'backy.frontend-database-certification.v1';
+  status: 'external-database-gate';
+  requiredFor: 'production-custom-frontends';
+  source?: string;
+  gate: {
+    command: string;
+    workflow: string;
+    localPreflight: string;
+    disposableGuard?: string;
+    typeContract?: string;
+  };
+  environment: {
+    dataMode: 'database';
+    secretAliases: string[];
+    requiredConfirmationEnv: string;
+    targetGuards: string[];
+  };
+  requires: string[];
+  coverage?: readonly string[];
+  runtime?: {
+    dataMode?: string;
+    databaseProvider?: string;
+    databaseHostConfigured?: boolean;
+    databaseNameConfigured?: boolean;
+    databaseUrlConfigured?: boolean;
+    databaseUrlAlias?: string | null;
+    disposableConfirmed?: boolean;
+    expectedHostConfigured?: boolean;
+    expectedDatabaseConfigured?: boolean;
+    publicApiReady?: boolean;
+    readyForCertification?: boolean;
+    missing?: string[];
+    secretHandling?: string;
+  };
+  scenarioEvidence?: {
+    schemaVersion: 'backy.frontend-database-certification-evidence.v1';
+    status: 'ready' | 'attention';
+    requiredGate: string;
+    coverage: {
+      covered: number;
+      total: number;
+      missing: string[];
+    };
+    scenarios: Array<{
+      key: string;
+      label: string;
+      expectedEvidence: readonly string[];
+      nextAction: string;
+      evidenceCount: number;
+      status: 'covered' | 'missing';
+    }>;
+    secretHandling: string;
+  };
+  operatorCommandTemplate?: {
+    command: string;
+    envTemplate?: string;
+    envTemplateSchemaVersion?: string;
+    databaseUrlAliases: string[];
+    requiredInputs: string[];
+    targetGuards: string[];
+    secretHandling?: string;
+  };
+  operatorEnvTemplate?: {
+    schemaVersion: string;
+    format: string;
+    fileName: string;
+    body: string;
+    secretHandling: string;
+  };
+  secretHandling: string;
+}
+
 interface ApiSettings {
   deliveryMode: SiteSettingsInput['deliveryMode'];
   apiKeys: {
@@ -1304,6 +1377,7 @@ interface ApiSettings {
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
   runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
+  frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff;
   updatedAt?: string;
 }
 
@@ -2628,6 +2702,7 @@ export interface SiteSettingsInput {
     exposedContractHeaders: string[];
     missing: string[];
   };
+  frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff;
   runtimeVercel?: {
     configured: boolean;
     onVercel?: boolean;
@@ -5267,6 +5342,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
     runtimePublicApi: payload.data.settings.runtimePublicApi,
+    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
   };
 }
 
@@ -5298,6 +5374,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
     runtimePublicApi: payload.data.settings.runtimePublicApi,
+    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
   };
 }
 
@@ -5329,6 +5406,7 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
     runtimePublicApi: payload.data.settings.runtimePublicApi,
+    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
   };
 }
 
@@ -5364,6 +5442,7 @@ export async function issueSettingsAdminApiKey(label: string): Promise<{
       runtimeCommerce: payload.data.settings.runtimeCommerce,
       runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
       runtimePublicApi: payload.data.settings.runtimePublicApi,
+      frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
     },
     issuedKey: payload.data.issuedKey,
   };
@@ -5397,6 +5476,7 @@ export async function revokeSettingsAdminApiKey(keyId: string): Promise<SiteSett
     runtimeCommerce: payload.data.settings.runtimeCommerce,
     runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
     runtimePublicApi: payload.data.settings.runtimePublicApi,
+    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
   };
 }
 
