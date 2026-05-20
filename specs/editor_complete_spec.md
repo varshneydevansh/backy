@@ -528,7 +528,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Media upload modal
 - ✅ Element locking
 - ⚠️ Page templates
-  - Static composed library presets now exist for hero, feature-grid, lead-capture form, blog post card, latest posts, category list, and related content sections.
+  - Static composed library presets now exist for hero, feature-grid, lead-capture form, blog post card, latest posts, category list, and related content sections; latest posts, category list, and related content sections now seed collection-ready repeaters for dynamic archive/taxonomy/related-content widgets.
   - Component-library presets can now carry root and child tablet/mobile responsive overrides, and the blog/content presets seed narrower-canvas geometry instead of relying on desktop-only placement after insertion.
   - Blog/content presets now carry root and child binding-slot metadata for post title, excerpt, featured image, link, category/taxonomy, and collection-record targets; the Data panel exposes those slots and can apply matching selected-collection fields as real `dataBindings`.
   - Selecting a composed card/section can now apply matching child binding slots across descendants in one editor history step, including named root slots that target child repeaters, repeater collection/field props, and virtual record slug/URL targets for link slots.
