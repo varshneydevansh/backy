@@ -528,7 +528,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Media upload modal
 - ✅ Element locking
 - ⚠️ Page templates
-  - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
+  - Static composed library presets now exist for hero, feature-grid, lead-capture form, blog post card, latest posts, category list, and related content sections.
   - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
   - Site frontend design contracts now persist page/blog template registries, and admin page/blog create APIs can seed editable content plus design provenance from `frontendDesignTemplateId`.
   - Blog-create smoke now exercises `frontendDesignTemplateId` handoff for captured frontend blog templates and verifies the selected template wrapper, autosave/recovery state, mobile override authoring, and persisted post metadata.

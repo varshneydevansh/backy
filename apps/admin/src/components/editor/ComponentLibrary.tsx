@@ -224,6 +224,7 @@ export function ComponentLibrary({
   const categories = [
     { id: FAVORITES_CATEGORY_ID, name: 'Favorites', color: 'bg-yellow-400' },
     { id: 'basic', name: 'Basic', color: 'bg-blue-500' },
+    { id: 'content', name: 'Content', color: 'bg-indigo-500' },
     { id: 'media', name: 'Media', color: 'bg-purple-500' },
     { id: 'layout', name: 'Layout', color: 'bg-green-500' },
     { id: 'form', name: 'Form', color: 'bg-orange-500' },
@@ -369,7 +370,7 @@ export function ComponentLibrary({
           <EmptyState
             icon={Search}
             title="No components match this view"
-            description="Clear the search or switch categories to find layout blocks, media, forms, commerce, and reusable sections."
+            description="Clear the search or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections."
           />
         )}
       </div>
@@ -703,6 +704,8 @@ function LibraryItem({
         return Sparkles;
       case 'LayoutGrid':
         return LayoutGrid;
+      case 'BookmarkPlus':
+        return BookmarkPlus;
       default:
         return Square;
     }

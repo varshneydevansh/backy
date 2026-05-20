@@ -335,9 +335,15 @@ const assertInteractiveRegistryVersionPinningSource = () => {
 
 const assertComponentLibraryEmptyStateSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
+  const catalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor component library must use the shared EmptyState component');
   assert(source.includes('title="No components match this view"'), 'Editor component library empty search state must keep the shared title visible');
-  assert(source.includes('Clear the search or switch categories to find layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
+  assert(source.includes('Clear the search or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
+  assert(source.includes("{ id: 'content', name: 'Content'") && source.includes("case 'BookmarkPlus':"), 'Editor component library must expose a content category and icon mapping for blog/content presets');
+  for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
+    assert(catalogSource.includes(`id: '${contentPreset}'`), `Editor catalog must include ${contentPreset}`);
+  }
+  assert(catalogSource.includes("contentRole: 'latest-posts'") && catalogSource.includes("datasetId: 'dataset_latest_posts'"), 'Latest posts preset must carry content role and collection-ready repeater metadata');
 };
 
 const assertMediaLibraryModalEmptyStateSource = () => {
@@ -8467,6 +8473,10 @@ const testComponentLibraryControls = async (client) => {
   assert(initial.itemIds.includes('image'), `Image component missing from library: ${JSON.stringify(initial)}`);
   assert(initial.itemIds.includes('html'), `HTML component missing from library: ${JSON.stringify(initial)}`);
   assert(initial.itemIds.includes('table'), `Table component missing from library: ${JSON.stringify(initial)}`);
+  for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
+    assert(initial.itemIds.includes(contentPreset), `${contentPreset} content preset missing from library: ${JSON.stringify(initial)}`);
+  }
+  assert(initial.categories.some((category) => category.id === 'content'), `Content component category missing: ${JSON.stringify(initial)}`);
 
   await setFormControlByTestId(client, 'editor-component-search', 'divider');
   await sleep(150);
