@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Flag, Globe, History, Image as ImageIcon, Maximize2, MessageSquare, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound, X, XCircle } from 'lucide-react';
 import {
     AdminContentApiError,
@@ -513,7 +513,7 @@ function EditBlogPostPage() {
         setReadinessError((current) => current ? null : current);
     };
 
-    useEffect(() => {
+    const loadBlogEditorPermissions = useCallback(() => {
         let cancelled = false;
         setPermissionError(null);
 
@@ -550,6 +550,8 @@ function EditBlogPostPage() {
             cancelled = true;
         };
     }, [currentAdmin?.id]);
+
+    useEffect(() => loadBlogEditorPermissions(), [loadBlogEditorPermissions]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1955,8 +1957,35 @@ function EditBlogPostPage() {
                     </Notice>
                 )}
                 {permissionError && (
-                    <Notice tone="warning" className="mb-4">
-                        {permissionError}
+                    <Notice
+                        tone="warning"
+                        title="Blog editor permissions could not be verified"
+                        className="mb-4"
+                        role="alert"
+                        data-testid="blog-editor-permission-state"
+                    >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{permissionError}</span>
+                            <div className="flex shrink-0 flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={loadBlogEditorPermissions}
+                                    disabled={isPermissionsLoading}
+                                    aria-label="Retry loading blog editor permissions"
+                                    iconStart={<RefreshCw className={cn('size-3.5', isPermissionsLoading && 'animate-spin')} />}
+                                >
+                                    Retry permissions
+                                </Button>
+                                <Link
+                                    to="/users"
+                                    className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring"
+                                >
+                                    Review users
+                                </Link>
+                            </div>
+                        </div>
                     </Notice>
                 )}
                 {workflowNotice && (

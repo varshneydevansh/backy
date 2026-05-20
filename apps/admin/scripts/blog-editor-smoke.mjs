@@ -53,6 +53,16 @@ const assertBlogEditorFallbackIsReadOnly = () => {
       source.includes('Choose a future publish date before scheduling changes.'),
     'Blog editor must block scheduled posts with non-future publish dates before save',
   );
+  assert(
+    source.includes('const loadBlogEditorPermissions = useCallback(() => {') &&
+      source.includes('data-testid="blog-editor-permission-state"') &&
+      source.includes('Blog editor permissions could not be verified') &&
+      source.includes('aria-label="Retry loading blog editor permissions"') &&
+      source.includes('Retry permissions') &&
+      source.includes('to="/users"') &&
+      source.includes('Review users'),
+    'Blog editor permission alert must expose retryable permission recovery and user-access handoff',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
