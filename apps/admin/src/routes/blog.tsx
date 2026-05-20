@@ -60,7 +60,7 @@ const BLOG_CONTROL_AREAS = [
   },
   {
     title: 'Bulk actions',
-    detail: 'Select visible posts, publish, archive, delete, and clear selections.',
+    detail: 'Select visible or filtered posts, publish, archive, delete, and clear selections.',
     href: '#blog-bulk',
   },
   {
@@ -287,6 +287,9 @@ function BlogListView() {
         ? canDeleteBlog
         : false;
   const canSelectBlogRows = canPublishBlog || canEditBlog || canDeleteBlog;
+  const bulkSelectionPermissionTitle = canSelectBlogRows
+    ? undefined
+    : 'Your account needs pages.edit, pages.publish, or pages.delete to select blog posts for bulk actions.';
   const isPostMutationBusy = mutatingPostId !== null;
   const isPostPreviewBusy = previewingPostId !== null;
   const isTaxonomyBusy = Boolean(mutatingTaxonomyKey);
@@ -1129,7 +1132,8 @@ function BlogListView() {
     currentPage,
     setCurrentPage,
     totalPages,
-    totalItems
+    totalItems,
+    filteredData: filteredPosts,
   } = useDataTable({
     data: visiblePosts,
     columns,
@@ -1168,8 +1172,11 @@ function BlogListView() {
     setSelectedPostIds(new Set());
   }, [routerState.location.search, selectedSiteId, sites, setCurrentPage, setSearchQuery]);
   const selectedCurrentRows = data.filter((post) => selectedPostIds.has(post.id));
+  const selectedFilteredPosts = filteredPosts.filter((post) => selectedPostIds.has(post.id));
   const visiblePostIdSet = useMemo(() => new Set(data.map((post) => post.id)), [data]);
   const hiddenSelectedCount = Math.max(0, selectedPosts.length - selectedCurrentRows.length);
+  const filteredSelectionMode = filteredPosts.length > data.length ? 'all-filtered' : 'visible-page';
+  const allFilteredPostsSelected = filteredPosts.length > 0 && selectedFilteredPosts.length === filteredPosts.length;
   const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPosts.length, pendingBulkDelete);
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
   const hasPosts = siteScopedPosts.length > 0;
@@ -2079,10 +2086,24 @@ function BlogListView() {
             type="button"
             onClick={() => setPostSelection(data, selectedCurrentRows.length !== data.length)}
             disabled={data.length === 0 || isBlogWorkflowBusy || !canSelectBlogRows}
+            title={bulkSelectionPermissionTitle}
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {selectedCurrentRows.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
           </button>
+          {filteredPosts.length > data.length && (
+            <button
+              type="button"
+              onClick={() => setPostSelection(filteredPosts, !allFilteredPostsSelected)}
+              disabled={filteredPosts.length === 0 || isBlogWorkflowBusy || !canSelectBlogRows}
+              title={bulkSelectionPermissionTitle || 'Select every post matching the current search, status, taxonomy, and author filters'}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="blog-bulk-select-filtered"
+              data-selection-mode={filteredSelectionMode}
+            >
+              {allFilteredPostsSelected ? 'Clear filtered' : `Select all filtered (${filteredPosts.length})`}
+            </button>
+          )}
           <select
             value={bulkAction}
             disabled={isBlogWorkflowBusy || !canSelectBlogRows}

@@ -494,6 +494,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - This keeps site-wide publish, unpublish, archive, and delete operations usable when a large site spans multiple page-library pages.
 - Source coverage is guarded by `apps/admin/scripts/pages-list-smoke.mjs`.
 
+### ✅ Blog list filtered bulk selection
+- The blog list bulk toolbar can now select or clear every post matching the current search/status/category/tag/author filters, not only the currently paginated table rows.
+- This keeps site-wide publish, archive, and delete operations usable when an editorial library spans multiple post-library pages.
+- Source coverage is guarded by `apps/admin/scripts/blog-list-smoke.mjs`.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.

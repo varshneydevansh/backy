@@ -45,6 +45,15 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
       source.includes('Schedule integrity'),
     'Blog list must surface scheduled post health in the table, export, handoff, and readiness checklist',
   );
+  assert(
+    source.includes('filteredData: filteredPosts') &&
+      source.includes('const selectedFilteredPosts = filteredPosts.filter') &&
+      source.includes('const allFilteredPostsSelected = filteredPosts.length > 0 && selectedFilteredPosts.length === filteredPosts.length') &&
+      source.includes('data-testid="blog-bulk-select-filtered"') &&
+      source.includes('Select all filtered') &&
+      source.includes('setPostSelection(filteredPosts, !allFilteredPostsSelected)'),
+    'Blog bulk toolbar must select or clear every post matching the current search/status/taxonomy/author filters, not only the visible page',
+  );
   assert(!completionSpec.includes('Missing dedicated blog content model'), 'Completion spec must not regress to stale blog-missing language');
   assert(completionSpec.includes('Blog authoring is implemented through the dedicated admin blog surfaces'), 'Completion spec must document current blog authoring implementation');
   assert(completionSpec.includes('templateType: "blogPost"'), 'Completion spec must document frontend-design blog template provenance');
