@@ -213,6 +213,19 @@ type BlogRevisionDiffDetail = {
     current: string;
 };
 
+type BlogRevisionTimelineNode = {
+    id: string;
+    position: number;
+    total: number;
+    label: string;
+    newerId: string | null;
+    olderId: string | null;
+    isLatest: boolean;
+    isOldest: boolean;
+};
+
+const BLOG_REVISION_COLLAPSED_COUNT = 6;
+
 const getBlogCanvasTreeStats = (elements: CanvasElement[]): BlogCanvasTreeStats => {
     let totalLayerCount = 0;
     let containerLayerCount = 0;
@@ -412,6 +425,7 @@ function EditBlogPostPage() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
     const [revisions, setRevisions] = useState<ContentRevision[]>([]);
+    const [isRevisionTimelineExpanded, setIsRevisionTimelineExpanded] = useState(false);
     const [authors, setAuthors] = useState<BlogAuthor[]>([]);
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
@@ -743,6 +757,32 @@ function EditBlogPostPage() {
         status,
         title,
     ]);
+    const blogRevisionTimeline = useMemo<BlogRevisionTimelineNode[]>(() => revisions.map((revision, index) => ({
+        id: revision.id,
+        position: index + 1,
+        total: revisions.length,
+        label: `Revision ${index + 1} of ${revisions.length}`,
+        newerId: revisions[index - 1]?.id || null,
+        olderId: revisions[index + 1]?.id || null,
+        isLatest: index === 0,
+        isOldest: index === revisions.length - 1,
+    })), [revisions]);
+    const blogRevisionTimelineById = useMemo(
+        () => new Map(blogRevisionTimeline.map((node) => [node.id, node])),
+        [blogRevisionTimeline],
+    );
+    const visibleRevisions = useMemo(
+        () => (isRevisionTimelineExpanded ? revisions : revisions.slice(0, BLOG_REVISION_COLLAPSED_COUNT)),
+        [isRevisionTimelineExpanded, revisions],
+    );
+    const visibleRevisionIds = useMemo(() => new Set(visibleRevisions.map((revision) => revision.id)), [visibleRevisions]);
+    const hiddenRevisionCount = Math.max(0, revisions.length - visibleRevisions.length);
+    const expandRevisionTimelineTo = (revisionId: string) => {
+        setIsRevisionTimelineExpanded(true);
+        window.setTimeout(() => {
+            document.getElementById(`blog-editor-revision-${revisionId}`)?.scrollIntoView({ block: 'start' });
+        }, 0);
+    };
     const interactiveReadinessIssues = useMemo(
       () => collectInteractiveReadinessIssues(canvasElements),
       [canvasElements],
@@ -1656,6 +1696,7 @@ function EditBlogPostPage() {
             note: revision.note,
             createdAt: revision.createdAt,
             status: revision.snapshotStatus,
+            graph: blogRevisionTimelineById.get(revision.id),
             snapshot: {
                 title: revision.snapshotTitle,
                 slug: revision.snapshotSlug,
@@ -1669,6 +1710,13 @@ function EditBlogPostPage() {
             },
             compareToCurrent: revisionDiffById.get(revision.id),
         })),
+        revisionGraph: {
+            schema: 'backy.blog-revision-graph.v1',
+            total: blogRevisionTimeline.length,
+            order: 'newest-first',
+            collapsedCount: BLOG_REVISION_COLLAPSED_COUNT,
+            nodes: blogRevisionTimeline,
+        },
         preview: previewUrl
             ? {
                 url: previewUrl,
@@ -1745,6 +1793,7 @@ function EditBlogPostPage() {
             note: revision.note,
             createdAt: revision.createdAt,
             createdBy: revision.createdBy,
+            graph: blogRevisionTimelineById.get(revision.id) || null,
             snapshot: {
                 title: revision.snapshotTitle,
                 slug: revision.snapshotSlug,
@@ -2905,20 +2954,104 @@ function EditBlogPostPage() {
                                     />
                                 ) : (
                                     <div className="grid gap-2">
-                                        {revisions.slice(0, 6).map((revision) => {
+                                        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground" data-testid="blog-editor-revision-graph">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <span className="font-medium text-foreground">Revision timeline</span>
+                                                    <span> · {revisions.length} saved node{revisions.length === 1 ? '' : 's'} newest to oldest</span>
+                                                </div>
+                                                {revisions.length > BLOG_REVISION_COLLAPSED_COUNT ? (
+                                                    <button
+                                                        type="button"
+                                                        className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
+                                                        onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
+                                                        disabled={editorActionBusy}
+                                                        data-testid="blog-editor-toggle-revision-graph"
+                                                    >
+                                                        {isRevisionTimelineExpanded ? 'Show latest' : `Show all ${revisions.length}`}
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                {blogRevisionTimeline.map((node) => {
+                                                    const isNodeVisible = visibleRevisionIds.has(node.id);
+                                                    const nodeClassName = cn(
+                                                        'rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary',
+                                                        !isNodeVisible ? 'opacity-60' : '',
+                                                    );
+
+                                                    return isNodeVisible ? (
+                                                        <a
+                                                            key={node.id}
+                                                            href={`#blog-editor-revision-${node.id}`}
+                                                            className={nodeClassName}
+                                                            data-testid={`blog-editor-revision-graph-node-${node.id}`}
+                                                        >
+                                                            {node.position}
+                                                        </a>
+                                                    ) : (
+                                                        <button
+                                                            key={node.id}
+                                                            type="button"
+                                                            className={nodeClassName}
+                                                            onClick={() => expandRevisionTimelineTo(node.id)}
+                                                            disabled={editorActionBusy}
+                                                            data-testid={`blog-editor-revision-graph-node-${node.id}`}
+                                                        >
+                                                            {node.position}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            {hiddenRevisionCount > 0 ? (
+                                                <div className="mt-1">Showing latest {visibleRevisions.length}; {hiddenRevisionCount} older revision{hiddenRevisionCount === 1 ? '' : 's'} remain in the graph.</div>
+                                            ) : null}
+                                        </div>
+
+                                        {visibleRevisions.map((revision) => {
                                             const revisionDiff = revisionDiffById.get(revision.id);
                                             const layerDelta = revisionDiff?.layerDelta || 0;
+                                            const revisionGraphNode = blogRevisionTimelineById.get(revision.id);
 
                                             return (
-                                                <div key={revision.id} className="rounded-lg border border-border px-3 py-2">
+                                                <div key={revision.id} id={`blog-editor-revision-${revision.id}`} className="scroll-mt-24 rounded-lg border border-border px-3 py-2">
                                                     <div className="flex items-start justify-between gap-3">
                                                         <div className="min-w-0">
                                                             <div className="truncate text-sm font-medium">{revision.note || 'Revision snapshot'}</div>
                                                             <div className="text-xs text-muted-foreground">
                                                                 {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                                                                {revisionGraphNode ? ` · ${revisionGraphNode.label}${revisionGraphNode.isLatest ? ' · latest' : revisionGraphNode.isOldest ? ' · oldest' : ''}` : ''}
                                                             </div>
                                                         </div>
                                                         <div className="flex shrink-0 items-center gap-1">
+                                                            {revisionGraphNode?.newerId ? (
+                                                                <a
+                                                                    href={`#blog-editor-revision-${revisionGraphNode.newerId}`}
+                                                                    className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                                    data-testid={`blog-editor-revision-newer-${revision.id}`}
+                                                                >
+                                                                    Newer
+                                                                </a>
+                                                            ) : null}
+                                                            {revisionGraphNode?.olderId && visibleRevisionIds.has(revisionGraphNode.olderId) ? (
+                                                                <a
+                                                                    href={`#blog-editor-revision-${revisionGraphNode.olderId}`}
+                                                                    className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                                    data-testid={`blog-editor-revision-older-${revision.id}`}
+                                                                >
+                                                                    Older
+                                                                </a>
+                                                            ) : revisionGraphNode?.olderId ? (
+                                                                <button
+                                                                    type="button"
+                                                                    className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                                                    onClick={() => expandRevisionTimelineTo(revisionGraphNode.olderId || revision.id)}
+                                                                    disabled={editorActionBusy}
+                                                                    data-testid={`blog-editor-revision-older-${revision.id}`}
+                                                                >
+                                                                    Older
+                                                                </button>
+                                                            ) : null}
                                                             <button
                                                                 type="button"
                                                                 disabled={editorActionBusy}
