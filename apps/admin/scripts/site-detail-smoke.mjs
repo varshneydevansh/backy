@@ -48,6 +48,21 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('Lead-share contacts that match the active form and status filter will appear here.'), 'Site detail contacts empty state must explain filtered contacts');
   assert(source.includes('title="No comments in the selected state"'), 'Site detail comments panel must keep the filtered empty comments title visible');
   assert(source.includes('Comments that match the active moderation status will appear here for review and bulk actions.'), 'Site detail comments empty state must explain filtered moderation results');
+  assert(
+    source.includes('const selectedCommentSet = useMemo') &&
+      source.includes('const selectedLoadedComments = useMemo') &&
+      source.includes('const hiddenSelectedCommentCount = Math.max') &&
+      source.includes('const toggleLoadedCommentSelection') &&
+      source.includes('data-testid="site-detail-comments-selection-summary"') &&
+      source.includes('data-testid="site-detail-comments-clear-selection"') &&
+      source.includes('outside this loaded view'),
+    'Site detail comments moderation must summarize loaded selected comments and expose loaded-selection controls',
+  );
+  assert(
+    source.includes('const selectedCommentIds = selectedLoadedCommentIds') &&
+      source.includes('commentIds: selectedCommentIds'),
+    'Site detail bulk comment moderation must apply only to selected loaded comments',
+  );
   assert(source.includes('import { Notice } from "@/components/ui/Notice";'), 'Site detail workflow errors must use the shared Notice component');
   assert(source.includes('Workflow automation needs the Backy public API server'), 'Site detail workflow errors must explain public API setup/offline state');
   assert(source.includes('VITE_BACKY_PUBLIC_API_BASE_URL'), 'Site detail workflow setup message must name the public API base URL env var');

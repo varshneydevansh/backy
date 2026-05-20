@@ -534,6 +534,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - The selected-comment summary now reports hidden selected comments and includes a clear-selection action, matching the private moderation handoff manifest.
 - Source coverage is guarded by `apps/admin/scripts/comments-smoke.mjs`.
 
+### ✅ Site detail comments selection
+- The site detail workspace comments panel can now select every loaded comment in the active moderation view before approve, reject, spam, or block actions.
+- Site-level bulk comment moderation sends only selected loaded comment IDs and summarizes stale selections before action.
+- Source coverage is guarded by `apps/admin/scripts/site-detail-smoke.mjs`.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.

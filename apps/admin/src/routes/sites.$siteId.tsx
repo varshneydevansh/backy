@@ -1927,6 +1927,26 @@ function EditSitePage() {
   const isCommentPolicyDisabled =
     commentPolicyLoading || commentPolicySaving || !canConfigureComments;
   const isCommentViewDisabled = state.commentsLoading || !canViewComments;
+  const selectedCommentSet = useMemo(
+    () => new Set(state.selectedCommentIds),
+    [state.selectedCommentIds],
+  );
+  const selectedLoadedComments = useMemo(
+    () =>
+      state.comments.filter((comment) => selectedCommentSet.has(comment.id)),
+    [selectedCommentSet, state.comments],
+  );
+  const selectedLoadedCommentIds = useMemo(
+    () => selectedLoadedComments.map((comment) => comment.id),
+    [selectedLoadedComments],
+  );
+  const hiddenSelectedCommentCount = Math.max(
+    0,
+    state.selectedCommentIds.length - selectedLoadedCommentIds.length,
+  );
+  const allLoadedCommentsSelected =
+    state.comments.length > 0 &&
+    state.comments.every((comment) => selectedCommentSet.has(comment.id));
 
   useEffect(() => {
     let cancelled = false;
@@ -3721,6 +3741,18 @@ function EditSitePage() {
     setState((prev) => ({ ...prev, selectedCommentIds: [] }));
   };
 
+  const toggleLoadedCommentSelection = (checked: boolean) => {
+    if (isCommentViewDisabled || !canManageComments) return;
+
+    const loadedIds = state.comments.map((comment) => comment.id);
+    setState((prev) => ({
+      ...prev,
+      selectedCommentIds: checked
+        ? Array.from(new Set([...prev.selectedCommentIds, ...loadedIds]))
+        : prev.selectedCommentIds.filter((id) => !loadedIds.includes(id)),
+    }));
+  };
+
   const updateCommentStatus = async (
     comment: Comment,
     status: Comment["status"],
@@ -4023,7 +4055,8 @@ function EditSitePage() {
   };
 
   const applyBulkCommentAction = async (status: Comment["status"]) => {
-    if (!siteApiId || state.selectedCommentIds.length === 0) return;
+    const selectedCommentIds = selectedLoadedCommentIds;
+    if (!siteApiId || selectedCommentIds.length === 0) return;
     if (!canManageComments) {
       setWorkflowError(commentsManageDeniedMessage);
       return;
@@ -4036,7 +4069,7 @@ function EditSitePage() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            commentIds: state.selectedCommentIds,
+            commentIds: selectedCommentIds,
             status,
             reviewedBy: "admin",
             actor: "admin",
@@ -9233,8 +9266,14 @@ function EditSitePage() {
                     <h3 className="font-semibold">Comments moderation</h3>
                     <div className="flex items-center gap-2">
                       {state.selectedCommentIds.length > 0 ? (
-                        <span className="text-sm text-muted-foreground">
-                          {state.selectedCommentIds.length} selected
+                        <span
+                          className="text-sm text-muted-foreground"
+                          data-testid="site-detail-comments-selection-summary"
+                        >
+                          {selectedLoadedCommentIds.length} selected
+                          {hiddenSelectedCommentCount > 0
+                            ? ` · ${hiddenSelectedCommentCount} outside this loaded view`
+                            : ""}
                         </span>
                       ) : null}
                       <button
@@ -9391,12 +9430,33 @@ function EditSitePage() {
                       />
                     </label>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={allLoadedCommentsSelected}
+                        onChange={(event) =>
+                          toggleLoadedCommentSelection(event.target.checked)
+                        }
+                        disabled={
+                          !state.comments.length ||
+                          isCommentViewDisabled ||
+                          !canManageComments
+                        }
+                        title={
+                          canManageComments
+                            ? undefined
+                            : commentsManagePermissionTitle
+                        }
+                        aria-label="Select loaded site comments"
+                      />
+                      Select loaded
+                    </label>
                     <button
                       type="button"
                       onClick={() => void applyBulkCommentAction("approved")}
                       disabled={
-                        !state.selectedCommentIds.length ||
+                        !selectedLoadedCommentIds.length ||
                         actionBusyId === "bulk-comment" ||
                         !canManageComments
                       }
@@ -9414,7 +9474,7 @@ function EditSitePage() {
                       type="button"
                       onClick={() => void applyBulkCommentAction("rejected")}
                       disabled={
-                        !state.selectedCommentIds.length ||
+                        !selectedLoadedCommentIds.length ||
                         actionBusyId === "bulk-comment" ||
                         !canManageComments
                       }
@@ -9432,7 +9492,7 @@ function EditSitePage() {
                       type="button"
                       onClick={() => void applyBulkCommentAction("spam")}
                       disabled={
-                        !state.selectedCommentIds.length ||
+                        !selectedLoadedCommentIds.length ||
                         actionBusyId === "bulk-comment" ||
                         !canManageComments
                       }
@@ -9450,7 +9510,7 @@ function EditSitePage() {
                       type="button"
                       onClick={() => void applyBulkCommentAction("blocked")}
                       disabled={
-                        !state.selectedCommentIds.length ||
+                        !selectedLoadedCommentIds.length ||
                         actionBusyId === "bulk-comment" ||
                         !canManageComments
                       }
@@ -9468,6 +9528,7 @@ function EditSitePage() {
                       type="button"
                       onClick={clearCommentSelection}
                       disabled={!state.selectedCommentIds.length}
+                      data-testid="site-detail-comments-clear-selection"
                       className="text-xs px-2 py-1 rounded-md border hover:bg-slate-50"
                     >
                       Clear selection
@@ -9494,9 +9555,7 @@ function EditSitePage() {
                             <label className="flex items-center gap-2">
                               <input
                                 type="checkbox"
-                                checked={state.selectedCommentIds.includes(
-                                  comment.id,
-                                )}
+                                checked={selectedCommentSet.has(comment.id)}
                                 onChange={(event) =>
                                   toggleCommentSelection(
                                     comment.id,

@@ -105,6 +105,7 @@ Legend:
 #### `/sites/$siteId` (`sites.$siteId.tsx`)
 - ✅ Details view links to pages/media and reads the backend-backed site model for the current audit scope.
 - ✅ Page/site association, status, settings, and nested route access are covered by admin site-scope tests.
+- ✅ Site-level comments moderation now has loaded-comment select-all, selected loaded/stale summaries, and bulk approve/reject/spam/block actions scoped to loaded selected comments.
 - ⚠️ Live domain/provider verification remains externally gated.
 
 #### `/pages` (`pages.tsx`)

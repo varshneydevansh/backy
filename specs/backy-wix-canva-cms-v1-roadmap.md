@@ -132,7 +132,7 @@ It explicitly excludes:
 2. `/login`: secure auth, session middleware, reset flow
 3. `/sites`: create/list/edit site with ownership and domain assignment
 4. `/sites.new`: schema validation + backend success/fail states
-5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, theme-token editing, navigation/redirect/SEO editors, form/comment operations, frontend handoff, site-level comment policy controls, and backend permission/ownership scoping; remaining work is live domain/deploy execution and deeper workflow polish
+5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, theme-token editing, navigation/redirect/SEO editors, form/comment operations, loaded-comment bulk moderation summaries, frontend handoff, site-level comment policy controls, and backend permission/ownership scoping; remaining work is live domain/deploy execution and deeper workflow polish
 6. `/pages`: persisted filtering, paging, search, status chips
 7. `/pages.new`: slug uniqueness + template starter + validation
 8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring for `interactiveFigure`/`codeComponent` blocks; uploaded/signed custom component bundles, hostile-bundle browser security fixtures, component usage governance, and production repository smoke are now covered for the current platform scope
