@@ -169,6 +169,55 @@ type PageRevisionTimelineNode = {
   olderId: string | null;
   isLatest: boolean;
   isOldest: boolean;
+  branchId: string;
+  branchLabel: string;
+  branchLane: number;
+  branchRole: PageRevisionBranchRole;
+  chronologicalParentId: string | null;
+  chronologicalChildId: string | null;
+  restoreTargetId: string | null;
+  restoreTargetPosition: number | null;
+  restoreTargetLabel: string | null;
+  restoreEdgeId: string | null;
+};
+
+type PageRevisionBranchRole = 'trunk' | 'restore-checkpoint' | 'restore-branch';
+
+type PageRevisionGraphEdge = {
+  id: string;
+  fromId: string;
+  toId: string;
+  kind: 'chronological' | 'rollback-target';
+  label: string;
+  inferred: boolean;
+};
+
+type PageRevisionBranchSummary = {
+  id: string;
+  label: string;
+  lane: number;
+  nodeIds: string[];
+  branchPointRevisionId: string | null;
+  restoreTargetRevisionId: string | null;
+  restoreTargetPosition: number | null;
+  status: 'active' | 'historical' | 'pending-save';
+};
+
+type PageRevisionBranchGraph = {
+  schema: 'backy.page-revision-branch-graph.v1';
+  totalNodes: number;
+  branchCount: number;
+  rootBranchId: string;
+  activeBranchId: string | null;
+  branches: PageRevisionBranchSummary[];
+  edges: PageRevisionGraphEdge[];
+  nodes: PageRevisionTimelineNode[];
+  inference: {
+    source: 'revision-notes';
+    rollbackNotePattern: string;
+    confidence: 'inferred';
+    limitation: string;
+  };
 };
 
 type PageEditorPermissionKey =
@@ -191,6 +240,154 @@ const PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS: Record<PageEditorPermissionKey, Arra
 };
 
 const PAGE_REVISION_COLLAPSED_COUNT = 6;
+const PAGE_REVISION_RESTORE_TARGET_PATTERN = /\b(?:rollback|restore)\s+to\s+([a-zA-Z0-9_-]+)/i;
+
+const getRevisionRestoreTargetId = (revision: Pick<ContentRevision, 'note'>): string | null => {
+  const note = revision.note || '';
+  const match = note.match(PAGE_REVISION_RESTORE_TARGET_PATTERN);
+  return match?.[1] || null;
+};
+
+const buildPageRevisionBranchGraph = (revisions: ContentRevision[]): PageRevisionBranchGraph => {
+  const revisionIds = new Set(revisions.map((revision) => revision.id));
+  const positionById = new Map(revisions.map((revision, index) => [revision.id, index + 1]));
+  const branchByRevisionId = new Map<string, string>();
+  const branches = new Map<string, Omit<PageRevisionBranchSummary, 'status'>>();
+  const edges: PageRevisionGraphEdge[] = [];
+  const rootBranchId = 'trunk';
+
+  branches.set(rootBranchId, {
+    id: rootBranchId,
+    label: 'Main timeline',
+    lane: 0,
+    nodeIds: [],
+    branchPointRevisionId: null,
+    restoreTargetRevisionId: null,
+    restoreTargetPosition: null,
+  });
+
+  const chronologicalRevisions = [...revisions].reverse();
+  let activeBranchId = rootBranchId;
+  let lane = 0;
+
+  chronologicalRevisions.forEach((revision, chronologicalIndex) => {
+    const activeBranch = branches.get(activeBranchId) || branches.get(rootBranchId);
+    activeBranch?.nodeIds.push(revision.id);
+    branchByRevisionId.set(revision.id, activeBranch?.id || rootBranchId);
+
+    const newerRevision = chronologicalRevisions[chronologicalIndex + 1];
+    if (newerRevision) {
+      edges.push({
+        id: `chronological-${revision.id}-${newerRevision.id}`,
+        fromId: revision.id,
+        toId: newerRevision.id,
+        kind: 'chronological',
+        label: `Chronological save #${positionById.get(revision.id) || '?'} to #${positionById.get(newerRevision.id) || '?'}`,
+        inferred: false,
+      });
+    }
+
+    const restoreTargetId = getRevisionRestoreTargetId(revision);
+    if (restoreTargetId && revisionIds.has(restoreTargetId)) {
+      const restoreTargetPosition = positionById.get(restoreTargetId) || null;
+      const restoreBranchId = `restore-${revision.id}`;
+      edges.push({
+        id: `rollback-${revision.id}-${restoreTargetId}`,
+        fromId: revision.id,
+        toId: restoreTargetId,
+        kind: 'rollback-target',
+        label: `Rollback checkpoint restores from #${restoreTargetPosition || '?'}`,
+        inferred: true,
+      });
+
+      lane += 1;
+      branches.set(restoreBranchId, {
+        id: restoreBranchId,
+        label: `Restore branch from #${restoreTargetPosition || '?'}`,
+        lane,
+        nodeIds: [],
+        branchPointRevisionId: revision.id,
+        restoreTargetRevisionId: restoreTargetId,
+        restoreTargetPosition,
+      });
+      activeBranchId = restoreBranchId;
+    }
+  });
+
+  const latestRevisionId = revisions[0]?.id || null;
+  const latestBranchId = latestRevisionId ? branchByRevisionId.get(latestRevisionId) || rootBranchId : null;
+  const branchSummaries: PageRevisionBranchSummary[] = Array.from(branches.values()).map((branch) => ({
+    ...branch,
+    status: branch.nodeIds.length === 0
+      ? 'pending-save'
+      : branch.id === latestBranchId
+        ? 'active'
+        : 'historical',
+  }));
+  const branchSummaryById = new Map(branchSummaries.map((branch) => [branch.id, branch]));
+  const rollbackEdgesByFromId = new Map(
+    edges
+      .filter((edge) => edge.kind === 'rollback-target')
+      .map((edge) => [edge.fromId, edge]),
+  );
+  const nodes = revisions.map((revision, index) => {
+    const branchId = branchByRevisionId.get(revision.id) || rootBranchId;
+    const branch = branchSummaryById.get(branchId) || branchSummaries[0];
+    const restoreTargetId = getRevisionRestoreTargetId(revision);
+    const restoreTargetPosition = restoreTargetId ? positionById.get(restoreTargetId) || null : null;
+    const restoreEdge = rollbackEdgesByFromId.get(revision.id) || null;
+
+    return {
+      id: revision.id,
+      position: index + 1,
+      total: revisions.length,
+      label: `Revision ${index + 1} of ${revisions.length}`,
+      summary: getContentRevisionGraphNodeLabel(revision, index + 1, revisions.length),
+      createdAt: revision.createdAt,
+      createdBy: revision.createdBy,
+      actor: getContentRevisionActorLabel(revision),
+      action: getContentRevisionActionLabel(revision),
+      status: revision.snapshotStatus,
+      snapshotUpdatedAt: revision.snapshotUpdatedAt,
+      snapshotUpdatedLabel: getContentRevisionSnapshotUpdatedLabel(revision),
+      newerId: revisions[index - 1]?.id || null,
+      olderId: revisions[index + 1]?.id || null,
+      isLatest: index === 0,
+      isOldest: index === revisions.length - 1,
+      branchId,
+      branchLabel: branch?.label || 'Main timeline',
+      branchLane: branch?.lane || 0,
+      branchRole: restoreTargetId && revisionIds.has(restoreTargetId)
+        ? 'restore-checkpoint'
+        : branchId === rootBranchId
+          ? 'trunk'
+          : 'restore-branch',
+      chronologicalParentId: revisions[index + 1]?.id || null,
+      chronologicalChildId: revisions[index - 1]?.id || null,
+      restoreTargetId: restoreTargetId && revisionIds.has(restoreTargetId) ? restoreTargetId : null,
+      restoreTargetPosition,
+      restoreTargetLabel: restoreTargetPosition ? `Revision #${restoreTargetPosition}` : null,
+      restoreEdgeId: restoreEdge?.id || null,
+    } satisfies PageRevisionTimelineNode;
+  });
+
+  return {
+    schema: 'backy.page-revision-branch-graph.v1',
+    totalNodes: nodes.length,
+    branchCount: branchSummaries.length,
+    rootBranchId,
+    activeBranchId: latestBranchId,
+    branches: branchSummaries,
+    edges,
+    nodes,
+    inference: {
+      source: 'revision-notes',
+      rollbackNotePattern: PAGE_REVISION_RESTORE_TARGET_PATTERN.source,
+      confidence: 'inferred',
+      limitation: 'Backy currently stores page revision order and rollback notes; explicit parent revision IDs can replace this inference when the revision schema grows branch metadata.',
+    },
+  };
+};
 
 const pageEditorPermissionRule = (
   permissionMatrix: AdminUserPermissionMatrix | null,
@@ -692,24 +889,12 @@ function PageEditorRoute() {
         pageRevisionDiff(page, revision, canvasTreeStats, initialCanvasSize, editorElements),
       ]))
     : new Map<string, PageRevisionDiff>(), [canvasTreeStats, editorElements, initialCanvasSize, page, revisions]);
-  const pageRevisionTimeline = useMemo<PageRevisionTimelineNode[]>(() => revisions.map((revision, index) => ({
-    id: revision.id,
-    position: index + 1,
-    total: revisions.length,
-    label: `Revision ${index + 1} of ${revisions.length}`,
-    summary: getContentRevisionGraphNodeLabel(revision, index + 1, revisions.length),
-    createdAt: revision.createdAt,
-    createdBy: revision.createdBy,
-    actor: getContentRevisionActorLabel(revision),
-    action: getContentRevisionActionLabel(revision),
-    status: revision.snapshotStatus,
-    snapshotUpdatedAt: revision.snapshotUpdatedAt,
-    snapshotUpdatedLabel: getContentRevisionSnapshotUpdatedLabel(revision),
-    newerId: revisions[index - 1]?.id || null,
-    olderId: revisions[index + 1]?.id || null,
-    isLatest: index === 0,
-    isOldest: index === revisions.length - 1,
-  })), [revisions]);
+  const pageRevisionBranchGraph = useMemo(() => buildPageRevisionBranchGraph(revisions), [revisions]);
+  const pageRevisionTimeline = pageRevisionBranchGraph.nodes;
+  const pageRevisionBranchGraphText = useMemo(
+    () => JSON.stringify(pageRevisionBranchGraph, null, 2),
+    [pageRevisionBranchGraph],
+  );
   const pageRevisionTimelineById = useMemo(
     () => new Map(pageRevisionTimeline.map((node) => [node.id, node])),
     [pageRevisionTimeline],
@@ -1057,6 +1242,7 @@ function PageEditorRoute() {
       order: 'newest-first',
       collapsedCount: PAGE_REVISION_COLLAPSED_COUNT,
       nodes: pageRevisionTimeline,
+      branchGraph: pageRevisionBranchGraph,
     },
     preview: previewUrl
       ? {
@@ -1972,20 +2158,32 @@ function PageEditorRoute() {
                   <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground" data-testid="page-editor-revision-graph">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <span className="font-medium text-foreground">Revision timeline</span>
-                        <span> · {revisions.length} saved node{revisions.length === 1 ? '' : 's'} newest to oldest</span>
+                        <span className="font-medium text-foreground">Revision branch graph</span>
+                        <span> · {revisions.length} saved node{revisions.length === 1 ? '' : 's'} across {pageRevisionBranchGraph.branchCount} branch{pageRevisionBranchGraph.branchCount === 1 ? '' : 'es'}</span>
                       </div>
-                      {revisions.length > PAGE_REVISION_COLLAPSED_COUNT ? (
+                      <div className="flex flex-wrap items-center gap-1">
                         <button
                           type="button"
-                          className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
-                          onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => void copyEditorHandoffText(pageRevisionBranchGraphText, 'Page revision branch graph')}
                           disabled={isPageEditorBusy}
-                          data-testid="page-editor-toggle-revision-graph"
+                          data-testid="page-editor-copy-revision-branch-graph"
                         >
-                          {isRevisionTimelineExpanded ? 'Show latest' : `Show all ${revisions.length}`}
+                          <Copy className="size-3.5" />
+                          Copy graph
                         </button>
-                      ) : null}
+                        {revisions.length > PAGE_REVISION_COLLAPSED_COUNT ? (
+                          <button
+                            type="button"
+                            className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
+                            disabled={isPageEditorBusy}
+                            data-testid="page-editor-toggle-revision-graph"
+                          >
+                            {isRevisionTimelineExpanded ? 'Show latest' : `Show all ${revisions.length}`}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {pageRevisionTimeline.map((node) => {
@@ -2026,6 +2224,92 @@ function PageEditorRoute() {
                         );
                       })}
                     </div>
+                    <div className="mt-3 grid gap-2" data-testid="page-editor-revision-branch-graph" data-branch-count={pageRevisionBranchGraph.branchCount}>
+                      {pageRevisionBranchGraph.branches.map((branch) => (
+                        <div
+                          key={branch.id}
+                          className="rounded-md border border-border bg-background px-2 py-2"
+                          data-testid={`page-editor-revision-branch-${branch.id}`}
+                          data-lane={branch.lane}
+                          data-node-count={branch.nodeIds.length}
+                          data-restore-target-id={branch.restoreTargetRevisionId || ''}
+                        >
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">lane {branch.lane}</span>
+                            <span className="font-medium text-foreground">{branch.label}</span>
+                            <span className={cn(
+                              'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                              branch.status === 'active'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : branch.status === 'pending-save'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-muted text-muted-foreground',
+                            )}
+                            >
+                              {branch.status}
+                            </span>
+                          </div>
+                          {branch.branchPointRevisionId && (
+                            <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                              Forked after rollback checkpoint #{pageRevisionTimelineById.get(branch.branchPointRevisionId)?.position || '?'} from revision #{branch.restoreTargetPosition || '?'}.
+                            </div>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {branch.nodeIds.length > 0 ? branch.nodeIds.map((nodeId) => {
+                              const node = pageRevisionTimelineById.get(nodeId);
+                              if (!node) return null;
+
+                              return visibleRevisionIds.has(nodeId) ? (
+                                <a
+                                  key={nodeId}
+                                  href={`#page-editor-revision-${nodeId}`}
+                                  className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary"
+                                  title={node.summary}
+                                  data-testid={`page-editor-revision-branch-node-${nodeId}`}
+                                  data-branch-id={node.branchId}
+                                  data-branch-role={node.branchRole}
+                                >
+                                  #{node.position}
+                                </a>
+                              ) : (
+                                <button
+                                  key={nodeId}
+                                  type="button"
+                                  className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground opacity-70 hover:border-primary/50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                                  onClick={() => expandRevisionTimelineTo(nodeId)}
+                                  disabled={isPageEditorBusy}
+                                  title={node.summary}
+                                  data-testid={`page-editor-revision-branch-node-${nodeId}`}
+                                  data-branch-id={node.branchId}
+                                  data-branch-role={node.branchRole}
+                                >
+                                  #{node.position}
+                                </button>
+                              );
+                            }) : (
+                              <span className="rounded-md border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                                Next save after restore will appear on this branch.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {pageRevisionBranchGraph.edges.some((edge) => edge.kind === 'rollback-target') ? (
+                      <div className="mt-2 grid gap-1" data-testid="page-editor-revision-branch-edges">
+                        {pageRevisionBranchGraph.edges
+                          .filter((edge) => edge.kind === 'rollback-target')
+                          .map((edge) => (
+                            <div key={edge.id} className="flex flex-wrap items-center gap-1 text-[11px]">
+                              <span className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">
+                                #{pageRevisionTimelineById.get(edge.fromId)?.position || '?'} restores #{pageRevisionTimelineById.get(edge.toId)?.position || '?'}
+                              </span>
+                              <span>{edge.label}</span>
+                              {edge.inferred && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">inferred</span>}
+                            </div>
+                          ))}
+                      </div>
+                    ) : null}
                     <div className="mt-2 grid gap-1" data-testid="page-editor-revision-graph-summary">
                       {pageRevisionTimeline.slice(0, 3).map((node) => (
                         <div key={node.id} className="flex flex-wrap items-center gap-1">
@@ -2033,6 +2317,8 @@ function PageEditorRoute() {
                           <span>{node.action}</span>
                           <span>by {node.actor}</span>
                           <span className="rounded bg-background px-1.5 py-0.5">{node.status}</span>
+                          <span className="rounded bg-background px-1.5 py-0.5">lane {node.branchLane}: {node.branchLabel}</span>
+                          {node.restoreTargetLabel && <span>restores {node.restoreTargetLabel}</span>}
                           <span>updated {node.snapshotUpdatedLabel}</span>
                         </div>
                       ))}
@@ -2060,6 +2346,16 @@ function PageEditorRoute() {
                               <span className="rounded bg-muted px-1.5 py-0.5">Action: {getContentRevisionActionLabel(revision)}</span>
                               <span className="rounded bg-muted px-1.5 py-0.5">Actor: {getContentRevisionActorLabel(revision)}</span>
                               <span className="rounded bg-muted px-1.5 py-0.5">Snapshot updated: {getContentRevisionSnapshotUpdatedLabel(revision)}</span>
+                              {revisionGraphNode && (
+                                <span className="rounded bg-muted px-1.5 py-0.5">
+                                  Branch: lane {revisionGraphNode.branchLane} · {revisionGraphNode.branchLabel}
+                                </span>
+                              )}
+                              {revisionGraphNode?.restoreTargetLabel && (
+                                <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                                  Restores {revisionGraphNode.restoreTargetLabel}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">

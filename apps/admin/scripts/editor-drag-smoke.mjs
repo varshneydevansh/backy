@@ -222,6 +222,20 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(visualDiffSource.includes('Rendered pixel comparison') && visualDiffSource.includes('data-testid={`${testId}-pixel-comparison`}') && visualDiffSource.includes('data-changed-pixels') && visualDiffSource.includes('changedPixelRatio'), 'Shared revision visual diff must expose sampled rendered-pixel comparison metrics');
   assert(source.includes("schema: 'backy.page-revision-graph.v1'") && source.includes('pageRevisionTimeline') && source.includes('data-testid="page-editor-revision-graph"') && source.includes('data-testid="page-editor-toggle-revision-graph"'), 'Page editor revisions must expose graph timeline navigation and handoff metadata');
   assert(source.includes('summary: getContentRevisionGraphNodeLabel(revision') && source.includes('data-testid="page-editor-revision-graph-summary"') && source.includes('data-action={node.action}') && source.includes('snapshotUpdatedLabel') && revisionMetadataSource.includes('getContentRevisionGraphNodeLabel'), 'Page editor revision graph nodes must expose action/actor/status metadata');
+  assert(
+    source.includes("schema: 'backy.page-revision-branch-graph.v1'") &&
+      source.includes('const buildPageRevisionBranchGraph = (revisions: ContentRevision[]): PageRevisionBranchGraph => {') &&
+      source.includes('PAGE_REVISION_RESTORE_TARGET_PATTERN') &&
+      source.includes('rollback-target') &&
+      source.includes('branchGraph: pageRevisionBranchGraph') &&
+      source.includes('pageRevisionBranchGraphText') &&
+      source.includes('data-testid="page-editor-revision-branch-graph"') &&
+      source.includes('data-testid="page-editor-copy-revision-branch-graph"') &&
+      source.includes('data-testid="page-editor-revision-branch-edges"') &&
+      source.includes('restoreTargetId') &&
+      source.includes('branchRole'),
+    'Page editor revision graph must expose branch-aware rollback graph lanes, inferred restore edges, copyable graph JSON, and handoff metadata.',
+  );
   assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
   assert(source.includes('data-testid={`page-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Page editor revisions must expose actor/action metadata in cards and handoff summaries');
 };
