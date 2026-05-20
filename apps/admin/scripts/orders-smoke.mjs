@@ -277,9 +277,24 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
     assert(source.includes(schemaVersion), `Orders API contract handoff must include ${schemaVersion}`);
   }
   const apiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
+  const analyticsApiSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/commerce/orders/analytics/route.ts', import.meta.url), 'utf8');
   assert(
     apiSource.includes("provider: 'http' | 'stripe' | 'taxjar' | 'avalara' | 'easypost' | 'shippo'"),
     'Admin order quote type must expose every first-class quote provider adjustment',
+  );
+  assert(
+    apiSource.includes('providerCertification?: OrderProviderCertificationHandoff') &&
+      apiSource.includes("schemaVersion: 'backy.order-provider-certification-evidence.v1'"),
+    'Admin order analytics API type must expose provider certification evidence for custom admin clients',
+  );
+  assert(
+    analyticsApiSource.includes('buildOrderProviderCertification') &&
+      analyticsApiSource.includes("source: 'admin-order-analytics-api'") &&
+      analyticsApiSource.includes("schemaVersion: 'backy.order-provider-certification-evidence.v1'") &&
+      analyticsApiSource.includes('ORDER_PROVIDER_CERTIFICATION_SCENARIOS') &&
+      analyticsApiSource.includes('providerCertification,') &&
+      analyticsApiSource.includes('Provider credentials stay in server environment/configuration; order analytics exposes only non-secret readiness'),
+    'Order analytics API must return non-secret provider certification handoff evidence',
   );
 };
 
@@ -3304,7 +3319,16 @@ const main = async () => {
 
     const initialAnalyticsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/analytics`);
     const initialAnalytics = initialAnalyticsPayload.data?.analytics;
+    const initialProviderCertification = initialAnalyticsPayload.data?.providerCertification;
     assert(initialAnalytics?.schemaVersion === 'backy.order-analytics.v1', `Order analytics returned wrong schema: ${JSON.stringify(initialAnalyticsPayload).slice(0, 500)}`);
+    assert(initialProviderCertification?.schemaVersion === 'backy.commerce-provider-certification-handoff.v1', `Order analytics missing provider certification handoff: ${JSON.stringify(initialAnalyticsPayload).slice(0, 700)}`);
+    assert(initialProviderCertification.source === 'admin-order-analytics-api', `Order analytics provider certification must identify the API source: ${JSON.stringify(initialProviderCertification).slice(0, 700)}`);
+    assert(initialProviderCertification.operatorGate === 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification', `Order analytics provider certification missing operator gate: ${JSON.stringify(initialProviderCertification).slice(0, 700)}`);
+    assert(initialProviderCertification.certificationEvidence?.schemaVersion === 'backy.order-provider-certification-evidence.v1', `Order analytics provider certification missing order scenario evidence: ${JSON.stringify(initialProviderCertification).slice(0, 700)}`);
+    assert(initialProviderCertification.certificationEvidence.coverage?.total === 7, `Order analytics provider certification must enumerate order scenarios: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
+    assert(initialProviderCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === 'checkout-settlement'), `Order analytics provider certification missing checkout scenario: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
+    assert(initialProviderCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === 'provider-refund'), `Order analytics provider certification missing refund scenario: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
+    assert(typeof initialProviderCertification.secretHandling === 'string' && initialProviderCertification.secretHandling.includes('Provider credentials stay in server environment/configuration'), `Order analytics provider certification must preserve non-secret boundary: ${JSON.stringify(initialProviderCertification).slice(0, 700)}`);
     assert(initialAnalytics.orderCount >= 1, `Order analytics did not count the created order: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
     assert(initialAnalytics.payment?.pending?.count >= 1, `Order analytics did not report pending payment state: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
     assert(initialAnalytics.operations?.manualOrderCount >= 1, `Order analytics did not report manual orders: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);

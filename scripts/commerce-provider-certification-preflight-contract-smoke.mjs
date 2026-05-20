@@ -47,6 +47,7 @@ const sdkRuntimeSmoke = read('../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../packages/sdk-js/scripts/generated-contract-types.ts');
 const productsRoute = read('../apps/admin/src/routes/products.tsx');
 const ordersRoute = read('../apps/admin/src/routes/orders.tsx');
+const orderAnalyticsRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/orders/analytics/route.ts');
 const subscriptionLifecycleRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/route.ts');
 const subscriptionActionRoute = read('../apps/public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/subscriptions/[orderId]/action/route.ts');
 const commerceSmoke = read('../apps/admin/scripts/commerce-smoke.mjs');
@@ -768,6 +769,24 @@ includesAll(
 );
 
 includesAll(
+  orderAnalyticsRoute,
+  [
+    'buildOrderProviderCertification',
+    "source: 'admin-order-analytics-api'",
+    "schemaVersion: 'backy.order-provider-certification-evidence.v1'",
+    "requiredGate: ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE",
+    'ORDER_PROVIDER_CERTIFICATION_SCENARIOS',
+    'checkout-settlement',
+    'provider-refund',
+    'subscription-lifecycle',
+    'buildCommerceStorefrontContract',
+    'providerCertification,',
+    'Provider credentials stay in server environment/configuration; order analytics exposes only non-secret readiness',
+  ],
+  'Order analytics provider certification API handoff',
+);
+
+includesAll(
   commerceSmoke,
   [
     'assertCommerceProviderCertificationResponse',
@@ -816,6 +835,9 @@ includesAll(
     'createPaddleRefundMockServer',
     'Razorpay refund',
     'providerReadiness',
+    'initialProviderCertification',
+    'admin-order-analytics-api',
+    'backy.order-provider-certification-evidence.v1',
   ],
   'Orders provider mock smoke coverage',
 );

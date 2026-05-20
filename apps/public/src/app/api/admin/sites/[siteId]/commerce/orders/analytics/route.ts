@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
-import { getCollectionByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
+import { getAdminSettings, getCollectionByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
+import { buildCommerceStorefrontContract, PRODUCT_COLLECTION_SLUG } from '@/lib/commerceCatalog';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -36,8 +37,54 @@ interface ProviderStatusBucket extends Bucket {
 
 const ORDERS_COLLECTION_SLUG = 'orders';
 const ORDER_ANALYTICS_SCHEMA_VERSION = 'backy.order-analytics.v1';
+const ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE = 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification';
 const ORDER_ANALYTICS_LIMIT = 1000;
 const TREND_DAYS = 14;
+
+const ORDER_PROVIDER_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'checkout-settlement',
+    label: 'Checkout settlement',
+    expectedEvidence: ['paid checkout order', 'payment provider reference', 'signed provider webhook'],
+    nextAction: 'Run a live checkout and verify the private order reaches paid state with provider reference evidence.',
+  },
+  {
+    key: 'quote-recalculation',
+    label: 'Quote recalculation',
+    expectedEvidence: ['tax quote', 'shipping quote', 'discount adjustment'],
+    nextAction: 'Refresh a live order quote through selected tax, shipping, and discount providers.',
+  },
+  {
+    key: 'carrier-label-tracking',
+    label: 'Carrier labels and tracking',
+    expectedEvidence: ['purchased label', 'void/refund result', 'tracking status'],
+    nextAction: 'Purchase or import a live carrier label, void/refund when needed, and refresh tracking.',
+  },
+  {
+    key: 'fulfillment-dispatch',
+    label: 'Fulfillment dispatch',
+    expectedEvidence: ['warehouse dispatch request', 'provider dispatch id', 'processing/fulfilled state'],
+    nextAction: 'Dispatch a paid order through the configured warehouse or 3PL adapter.',
+  },
+  {
+    key: 'provider-refund',
+    label: 'Provider refund',
+    expectedEvidence: ['provider refund id', 'refund status refresh', 'refund webhook outcome'],
+    nextAction: 'Execute and refresh a live provider refund for a settled payment.',
+  },
+  {
+    key: 'webhook-reconciliation',
+    label: 'Webhook and reconciliation',
+    expectedEvidence: ['commerce-webhook event', 'reconciliation run', 'idempotent repair result'],
+    nextAction: 'Replay signed provider webhooks and run reconciliation against the live target.',
+  },
+  {
+    key: 'subscription-lifecycle',
+    label: 'Subscription lifecycle',
+    expectedEvidence: ['renewal', 'dunning', 'pause/resume/cancel action'],
+    nextAction: 'Run subscription lifecycle scenarios through the product subscription certification gate.',
+  },
+] as const;
 
 const PAYMENT_STATUSES: PaymentStatus[] = ['pending', 'paid', 'failed', 'refunded'];
 const FULFILLMENT_STATUSES: FulfillmentStatus[] = ['unfulfilled', 'processing', 'fulfilled', 'cancelled'];
@@ -126,6 +173,18 @@ const providerBucketsToArray = (buckets: Map<string, ProviderStatusBucket>) => (
     .map(([provider, stats]) => ({ provider, ...stats }))
     .sort((left, right) => right.count - left.count || right.total - left.total || left.provider.localeCompare(right.provider))
 );
+
+const orderTextValue = (record: OrderAnalyticsRecord, key: string): string => textValue(record.values?.[key]);
+
+const orderNumberValue = (record: OrderAnalyticsRecord, key: string): number => numberValue(record.values?.[key]);
+
+const hasOrderValue = (record: OrderAnalyticsRecord, key: string): boolean => Boolean(orderTextValue(record, key));
+
+const providerStatusCount = (items?: Array<{ statuses: Record<string, number> }>) => (
+  items || []
+).reduce((sum, item) => (
+  sum + Object.values(item.statuses || {}).reduce((innerSum, value) => innerSum + value, 0)
+), 0);
 
 const timestampValue = (record: OrderAnalyticsRecord): number => {
   const timestamp = Date.parse(record.updatedAt || record.createdAt || '');
@@ -349,6 +408,136 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
   };
 };
 
+const buildOrderProviderCertificationEvidence = (
+  records: OrderAnalyticsRecord[],
+  analytics: ReturnType<typeof buildOrderAnalytics>,
+) => {
+  const checkoutSettlementCount = Math.max(
+    analytics.operations.checkoutOrderCount,
+    analytics.payment.paid.count,
+    records.filter((record) => (
+      normalizePaymentStatus(record.values.paymentstatus) === 'paid' &&
+      (orderTextValue(record, 'ordersource').toLowerCase() === 'web' || hasOrderValue(record, 'checkoutsessionid'))
+    )).length,
+  );
+  const quoteRecalculationCount = records.filter((record) => (
+    orderNumberValue(record, 'taxamount') > 0 ||
+    orderNumberValue(record, 'shippingamount') > 0 ||
+    orderNumberValue(record, 'discountamount') > 0
+  )).length;
+  const carrierEvidenceCount = records.filter((record) => {
+    const labelStatus = normalizeStatusKey(record.values.shippinglabelstatus);
+    return labelStatus !== 'none' || hasOrderValue(record, 'trackingnumber') || hasOrderValue(record, 'trackingstatus');
+  }).length + analytics.operations.shippingLabelIssueCount;
+  const fulfillmentEvidenceCount = records.filter((record) => {
+    const fulfillmentStatus = normalizeFulfillmentStatus(record.values.fulfillmentstatus);
+    const dispatchStatus = normalizeStatusKey(record.values.fulfillmentdispatchstatus);
+    return ['processing', 'fulfilled'].includes(fulfillmentStatus) || dispatchStatus !== 'none';
+  }).length + analytics.operations.fulfillmentDispatchPendingCount + analytics.operations.fulfillmentDispatchFailureCount;
+  const providerRefundEvidenceCount = records.filter((record) => (
+    normalizeStatusKey(record.values.providerrefundstatus) !== 'none' ||
+    normalizePaymentStatus(record.values.paymentstatus) === 'refunded' ||
+    orderNumberValue(record, 'refundamount') > 0
+  )).length + providerStatusCount(analytics.providerOperations.refundProviders);
+  const webhookReconciliationEvidenceCount = records.filter((record) => (
+    orderTextValue(record, 'providerrefundpayload').toLowerCase().includes('webhook') ||
+    orderTextValue(record, 'notes').toLowerCase().includes('webhook')
+  )).length;
+  const subscriptionEvidenceCount = (
+    analytics.operations.subscriptionRenewalCount +
+    analytics.operations.subscriptionDunningCount +
+    analytics.operations.subscriptionPausedCount +
+    analytics.operations.subscriptionResumedCount +
+    analytics.operations.subscriptionTrialEndingCount +
+    analytics.operations.subscriptionCancelledCount
+  );
+  const evidenceCounts: Record<string, number> = {
+    'checkout-settlement': checkoutSettlementCount,
+    'quote-recalculation': quoteRecalculationCount,
+    'carrier-label-tracking': carrierEvidenceCount,
+    'fulfillment-dispatch': fulfillmentEvidenceCount,
+    'provider-refund': providerRefundEvidenceCount,
+    'webhook-reconciliation': webhookReconciliationEvidenceCount,
+    'subscription-lifecycle': subscriptionEvidenceCount,
+  };
+  const scenarios = ORDER_PROVIDER_CERTIFICATION_SCENARIOS.map((scenario) => {
+    const evidenceCount = evidenceCounts[scenario.key] || 0;
+    return {
+      ...scenario,
+      evidenceCount,
+      status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+    };
+  });
+  const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+  return {
+    schemaVersion: 'backy.order-provider-certification-evidence.v1',
+    status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+    requiredGate: ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+    coverage: {
+      covered,
+      total: scenarios.length,
+      missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+    },
+    scenarios,
+    secretHandling: 'Order certification evidence reports scenario names, counts, gates, and non-secret provider families only; provider secrets, customer payloads, and raw order values stay private.',
+  };
+};
+
+const buildOrderProviderCertification = ({
+  site,
+  settings,
+  hasCatalog,
+  hasOrderIntake,
+  analytics,
+  records,
+}: {
+  site: { id: string; slug?: string; name?: string; status?: string };
+  settings: unknown;
+  hasCatalog: boolean;
+  hasOrderIntake: boolean;
+  analytics: ReturnType<typeof buildOrderAnalytics>;
+  records: OrderAnalyticsRecord[];
+}) => {
+  const commerce = buildCommerceStorefrontContract({
+    siteId: site.id,
+    settings,
+    hasCatalog,
+    hasOrderIntake,
+  });
+
+  return {
+    ...commerce.providerCertification,
+    generatedAt: analytics.generatedAt,
+    selectedSiteId: site.id,
+    site: {
+      id: site.id,
+      slug: site.slug,
+      name: site.name,
+      status: site.status,
+    },
+    source: 'admin-order-analytics-api',
+    operatorGate: ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+    analyticsSchemaVersion: ORDER_ANALYTICS_SCHEMA_VERSION,
+    endpointEvidence: {
+      analytics: `/api/admin/sites/${site.id}/commerce/orders/analytics`,
+      quote: `/api/admin/sites/${site.id}/commerce/orders/{orderId}/quote`,
+      shippingLabel: `/api/admin/sites/${site.id}/commerce/orders/{orderId}/shipping-label`,
+      fulfillment: `/api/admin/sites/${site.id}/commerce/orders/{orderId}/fulfillment`,
+      tracking: `/api/admin/sites/${site.id}/commerce/orders/{orderId}/tracking`,
+      providerRefund: `/api/admin/sites/${site.id}/commerce/orders/{orderId}/provider-refund`,
+      commerceWebhook: `/api/sites/${site.id}/commerce/webhook`,
+      siteReconciliation: `/api/admin/sites/${site.id}/commerce/reconcile`,
+      platformReconciliation: '/api/admin/commerce/reconcile',
+      reconciliationReadiness: '/api/admin/commerce/reconcile/readiness',
+      checkoutIntake: `/api/sites/${site.id}/commerce/orders`,
+    },
+    providerAnalytics: analytics.providerOperations,
+    certificationEvidence: buildOrderProviderCertificationEvidence(records, analytics),
+    secretHandling: 'Provider credentials stay in server environment/configuration; order analytics exposes only non-secret readiness, scenario counts, endpoint names, and provider-family metadata.',
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'commerce.view' });
@@ -364,7 +553,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const site = await resolveRepositorySite(repositories, siteId);
       if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
 
-      const ordersCollection = await repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG);
+      const [ordersCollection, productsCollection, settings] = await Promise.all([
+        repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG),
+        repositories.collections.getBySlug(site.id, PRODUCT_COLLECTION_SLUG),
+        repositories.settings.get(),
+      ]);
       if (!ordersCollection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
 
       const result = await repositories.collections.listRecords({
@@ -375,6 +568,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         offset: 0,
       });
       const analytics = buildOrderAnalytics(result.items);
+      const providerCertification = buildOrderProviderCertification({
+        site,
+        settings: settings.integrations?.commerce,
+        hasCatalog: productsCollection?.status === 'published',
+        hasOrderIntake: ordersCollection.status === 'published',
+        analytics,
+        records: result.items,
+      });
 
       return privateAnalyticsResponse({
         success: true,
@@ -383,6 +584,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           site: { id: site.id, slug: site.slug, name: site.name },
           collection: { id: ordersCollection.id, slug: ordersCollection.slug, name: ordersCollection.name },
           analytics,
+          providerCertification,
         },
       }, requestId, site.id);
     }
@@ -392,6 +594,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const ordersCollection = getCollectionByIdOrSlug(site.id, ORDERS_COLLECTION_SLUG, { includeUnpublished: true });
     if (!ordersCollection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
+    const productsCollection = getCollectionByIdOrSlug(site.id, PRODUCT_COLLECTION_SLUG, { includeUnpublished: true });
 
     const records = listCollectionRecords(site.id, ordersCollection.id, {
       includeUnpublished: true,
@@ -399,6 +602,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       offset: 0,
     }).records;
     const analytics = buildOrderAnalytics(records);
+    const providerCertification = buildOrderProviderCertification({
+      site,
+      settings: getAdminSettings().integrations?.commerce,
+      hasCatalog: productsCollection?.status === 'published',
+      hasOrderIntake: ordersCollection.status === 'published',
+      analytics,
+      records,
+    });
 
     return privateAnalyticsResponse({
       success: true,
@@ -407,6 +618,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         site: { id: site.id, slug: site.slug, name: site.name },
         collection: { id: ordersCollection.id, slug: ordersCollection.slug, name: ordersCollection.name },
         analytics,
+        providerCertification,
       },
     }, requestId, site.id);
   } catch (error) {
