@@ -108,12 +108,19 @@ const requestDiscount = requested('BACKY_COMMERCE_CERTIFY_DISCOUNT', false);
 const requestCatalog = requested('BACKY_COMMERCE_CERTIFY_CATALOG', false);
 const requestSubscriptions = requested('BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', false);
 const requestWebhooks = requested('BACKY_COMMERCE_CERTIFY_WEBHOOKS', false);
+const databaseUrlConfigured = hasAny(['BACKY_DATABASE_URL', 'DATABASE_URL']);
+const databaseUrl = value('BACKY_DATABASE_URL') || value('DATABASE_URL');
+const databaseUrlValid = databaseUrlConfigured && isPostgresUrl(databaseUrl);
+const databaseDisposableConfirmed = ['1', 'true', 'yes'].includes(value('BACKY_DATABASE_DISPOSABLE_CONFIRMED').toLowerCase());
 
 const database = {
   requested: requested('BACKY_RELEASE_CERTIFY_DATABASE', requested('BACKY_SDK_REQUIRE_DATABASE', false)),
-  ready: hasAny(['BACKY_DATABASE_URL', 'DATABASE_URL']),
-  urlValid: hasAny(['BACKY_DATABASE_URL', 'DATABASE_URL']) && isPostgresUrl(value('BACKY_DATABASE_URL') || value('DATABASE_URL')),
-  missingAnyOf: hasAny(['BACKY_DATABASE_URL', 'DATABASE_URL']) ? [] : ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+  ready: databaseUrlConfigured,
+  urlValid: databaseUrlValid,
+  disposableConfirmed: databaseDisposableConfirmed,
+  readyForCertification: databaseUrlValid && databaseDisposableConfirmed,
+  missingAnyOf: databaseUrlConfigured ? [] : ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+  missingConfirmation: databaseDisposableConfirmed ? [] : ['BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'],
   targetGuard: {
     expectedHostConfigured: has('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'),
     expectedDatabaseConfigured: has('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'),
@@ -286,6 +293,7 @@ const collectFailures = (group) => group.checks
 const failures = [
   ...(database.requested && !database.ready ? ['database URL'] : []),
   ...(database.requested && database.ready && !database.urlValid ? ['database URL format'] : []),
+  ...(database.requested && !database.disposableConfirmed ? ['database disposable confirmation'] : []),
   ...(settings.required && settings.target.externalBaseUrlConfigured && !isHttpUrl('BACKY_SETTINGS_CERTIFICATION_BASE_URL') ? ['Settings external base URL'] : []),
   ...(settings.required && ![
     settings.requested.storage,

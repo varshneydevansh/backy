@@ -137,10 +137,21 @@ assert(missingDatabase.code === 1, `Doctor required database mode should exit 1 
 const missingDatabaseJson = parseJson(missingDatabase, 'missing database doctor');
 assert(missingDatabaseJson.ok === false, 'Doctor required database mode should report ok=false.');
 assert(missingDatabaseJson.failures.includes('database URL'), 'Doctor required database mode should report database URL failure.');
+assert(
+  missingDatabaseJson.failures.includes('database disposable confirmation'),
+  'Doctor required database mode should report disposable confirmation failure.',
+);
+assert(
+  missingDatabaseJson.database.disposableConfirmed === false &&
+    missingDatabaseJson.database.readyForCertification === false &&
+    missingDatabaseJson.database.missingConfirmation.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'),
+  'Doctor required database mode should expose missing disposable confirmation evidence.',
+);
 
 const invalidDatabaseUrl = await runDoctor({
   BACKY_RELEASE_CERTIFY_DATABASE: '1',
   BACKY_DATABASE_URL: 'not-a-postgres-url',
+  BACKY_DATABASE_DISPOSABLE_CONFIRMED: 'true',
   BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
 });
 assert(invalidDatabaseUrl.code === 1, `Doctor required database mode should exit 1 with invalid DB URL, got ${invalidDatabaseUrl.code}.`);
@@ -153,6 +164,47 @@ assert(
 assert(
   invalidDatabaseUrlJson.database.urlValid === false,
   'Doctor required database mode should expose urlValid=false for malformed database URLs.',
+);
+
+const missingDatabaseConfirmation = await runDoctor({
+  BACKY_RELEASE_CERTIFY_DATABASE: '1',
+  BACKY_DATABASE_URL: 'postgresql://user:pass@example.test:5432/backy_release_doctor',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  missingDatabaseConfirmation.code === 1,
+  `Doctor required database mode should exit 1 without disposable confirmation, got ${missingDatabaseConfirmation.code}.`,
+);
+const missingDatabaseConfirmationJson = parseJson(missingDatabaseConfirmation, 'missing database confirmation doctor');
+assert(missingDatabaseConfirmationJson.ok === false, 'Doctor missing confirmation mode should report ok=false.');
+assert(
+  !missingDatabaseConfirmationJson.failures.includes('database URL') &&
+    !missingDatabaseConfirmationJson.failures.includes('database URL format') &&
+    missingDatabaseConfirmationJson.failures.includes('database disposable confirmation'),
+  `Doctor missing confirmation mode should report only the disposable confirmation database failure. Actual failures: ${JSON.stringify(missingDatabaseConfirmationJson.failures)}`,
+);
+assert(
+  missingDatabaseConfirmationJson.database.ready === true &&
+    missingDatabaseConfirmationJson.database.urlValid === true &&
+    missingDatabaseConfirmationJson.database.disposableConfirmed === false &&
+    missingDatabaseConfirmationJson.database.readyForCertification === false,
+  'Doctor missing confirmation mode should expose URL readiness while blocking certification readiness.',
+);
+
+const confirmedDatabase = await runDoctor({
+  BACKY_RELEASE_CERTIFY_DATABASE: '1',
+  BACKY_DATABASE_URL: 'postgresql://user:pass@example.test:5432/backy_release_doctor',
+  BACKY_DATABASE_DISPOSABLE_CONFIRMED: 'true',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(confirmedDatabase.code === 0, `Doctor required database mode should accept a valid confirmed disposable database target, got ${confirmedDatabase.code}.`);
+const confirmedDatabaseJson = parseJson(confirmedDatabase, 'confirmed database doctor');
+assert(confirmedDatabaseJson.ok === true, 'Doctor confirmed database mode should report ok=true.');
+assert(
+  confirmedDatabaseJson.database.disposableConfirmed === true &&
+    confirmedDatabaseJson.database.readyForCertification === true &&
+    confirmedDatabaseJson.database.missingConfirmation.length === 0,
+  'Doctor confirmed database mode should expose disposable confirmation readiness.',
 );
 
 const missingSettingsGroup = await runDoctor({
