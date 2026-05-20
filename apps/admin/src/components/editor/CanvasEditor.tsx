@@ -5345,6 +5345,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
                 title="Send to back (Shift+Cmd/Ctrl+[)"
                 aria-label="Send to back"
+                aria-keyshortcuts="Shift+Control+[ Shift+Meta+["
                 data-testid="editor-send-to-back"
               >
                 <SendToBack className="h-4 w-4" />
@@ -5356,6 +5357,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
                 title="Send backward (Cmd/Ctrl+[)"
                 aria-label="Send backward"
+                aria-keyshortcuts="Control+[ Meta+["
                 data-testid="editor-send-backward"
               >
                 <ArrowDownToLine className="h-4 w-4" />
@@ -5367,6 +5369,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
                 title="Bring forward (Cmd/Ctrl+])"
                 aria-label="Bring forward"
+                aria-keyshortcuts="Control+] Meta+]"
                 data-testid="editor-bring-forward"
               >
                 <ArrowUpToLine className="h-4 w-4" />
@@ -5378,6 +5381,7 @@ export function CanvasEditor({
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
                 title="Bring to front (Shift+Cmd/Ctrl+])"
                 aria-label="Bring to front"
+                aria-keyshortcuts="Shift+Control+] Shift+Meta+]"
                 data-testid="editor-bring-to-front"
               >
                 <BringToFront className="h-4 w-4" />
@@ -6201,6 +6205,56 @@ export function CanvasEditor({
                           {selectedLayersAreLocked ? 'Unlock' : 'Lock'}
                         </button>
                       </div>
+                      <div className="mt-2 grid grid-cols-4 gap-1.5" data-testid="editor-inspector-layer-order-controls">
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('back')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Send ${selectedLayerActionLabel} to back (Shift+Cmd/Ctrl+[)`}
+                          aria-label={`Send ${selectedLayerActionLabel} to back`}
+                          aria-keyshortcuts="Shift+Control+[ Shift+Meta+["
+                          data-testid="editor-inspector-send-to-back"
+                        >
+                          <SendToBack className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('backward')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Send ${selectedLayerActionLabel} backward (Cmd/Ctrl+[)`}
+                          aria-label={`Send ${selectedLayerActionLabel} backward`}
+                          aria-keyshortcuts="Control+[ Meta+["
+                          data-testid="editor-inspector-send-backward"
+                        >
+                          <ArrowDownToLine className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('forward')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Bring ${selectedLayerActionLabel} forward (Cmd/Ctrl+])`}
+                          aria-label={`Bring ${selectedLayerActionLabel} forward`}
+                          aria-keyshortcuts="Control+] Meta+]"
+                          data-testid="editor-inspector-bring-forward"
+                        >
+                          <ArrowUpToLine className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('front')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Bring ${selectedLayerActionLabel} to front (Shift+Cmd/Ctrl+])`}
+                          aria-label={`Bring ${selectedLayerActionLabel} to front`}
+                          aria-keyshortcuts="Shift+Control+] Shift+Meta+]"
+                          data-testid="editor-inspector-bring-to-front"
+                        >
+                          <BringToFront className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                       <div className="mt-3 grid grid-cols-6 gap-1.5" data-testid="editor-inspector-align-controls">
                         <button
                           type="button"
@@ -6423,6 +6477,56 @@ export function CanvasEditor({
                         >
                           {selectedLayersAreLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                           {selectedLayersAreLocked ? 'Unlock' : 'Lock'}
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-4 gap-1.5" data-testid="editor-inspector-single-layer-order-controls">
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('back')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Send ${selectedLayerActionLabel} to back (Shift+Cmd/Ctrl+[)`}
+                          aria-label={`Send ${selectedLayerActionLabel} to back`}
+                          aria-keyshortcuts="Shift+Control+[ Shift+Meta+["
+                          data-testid="editor-inspector-single-send-to-back"
+                        >
+                          <SendToBack className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('backward')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Send ${selectedLayerActionLabel} backward (Cmd/Ctrl+[)`}
+                          aria-label={`Send ${selectedLayerActionLabel} backward`}
+                          aria-keyshortcuts="Control+[ Meta+["
+                          data-testid="editor-inspector-single-send-backward"
+                        >
+                          <ArrowDownToLine className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('forward')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Bring ${selectedLayerActionLabel} forward (Cmd/Ctrl+])`}
+                          aria-label={`Bring ${selectedLayerActionLabel} forward`}
+                          aria-keyshortcuts="Control+] Meta+]"
+                          data-testid="editor-inspector-single-bring-forward"
+                        >
+                          <ArrowUpToLine className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleZOrderChange('front')}
+                          disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Bring ${selectedLayerActionLabel} to front (Shift+Cmd/Ctrl+])`}
+                          aria-label={`Bring ${selectedLayerActionLabel} to front`}
+                          aria-keyshortcuts="Shift+Control+] Shift+Meta+]"
+                          data-testid="editor-inspector-single-bring-to-front"
+                        >
+                          <BringToFront className="h-3.5 w-3.5" />
                         </button>
                       </div>
                       {canSelectParentLayer && (

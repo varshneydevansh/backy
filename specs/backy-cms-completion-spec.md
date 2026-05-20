@@ -448,6 +448,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Multi-selection clipboard actions now derive availability from the active sibling scope, label single versus multi-layer actions correctly, and expose copy/duplicate/cut/paste/delete controls directly in the inspector.
 - Single selected layers now expose copy, duplicate, cut, paste, and delete directly in the inspector with the same shortcut and paste-target metadata as the toolbar, so nested component editing does not require leaving the properties panel for common layer operations.
 - Single and multi-layer inspectors now expose local hide/show and lock/unlock controls backed by the same selected-layer handlers as the toolbar, keeping common layer state changes available while editing properties.
+- Layer-order controls now expose bracket shortcut metadata in the toolbar and are available from both single and multi-layer inspector cards for send-to-back, send-backward, bring-forward, and bring-to-front workflows.
 - Keep right-pane rich-text selection, media/link sub-actions, and nested block confidence covered whenever related controls are changed.
 
 ### 9.2 Media/asset UX gaps
