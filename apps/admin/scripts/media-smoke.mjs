@@ -114,6 +114,16 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('buildPublicMediaListUrl') && source.includes("params.set('folderId', 'root')"), 'Media API handoff must keep root-folder-aware public media list URL generation.');
   assert(source.includes('filteredPublicMediaListUrl') && source.includes('Copy filtered') && source.includes('Filtered media list'), 'Media API panel must expose a copyable filtered public media list URL.');
   assert(
+    source.includes("schemaVersion: 'backy.media-asset-placement.v1'") &&
+      source.includes('selectedAssetPlacementHandoff') &&
+      source.includes('data-testid="media-asset-placement-handoff"') &&
+      source.includes('copyMediaAssetPlacementHandoff') &&
+      source.includes('Copy placement') &&
+      source.includes('signedUrlEndpoint') &&
+      source.includes('responsiveManifest.srcSet'),
+    'Media details must expose a copyable selected-asset placement handoff for custom frontend/editor integrations.',
+  );
+  assert(
     source.includes('const mediaMatchesCurrentFilters = useCallback') &&
       source.includes('const handleLoadAndSelectMatchingMedia = async () =>') &&
       source.includes("await loadLibrary({ mode: 'all' })") &&

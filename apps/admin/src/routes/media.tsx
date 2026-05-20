@@ -223,6 +223,89 @@ interface MediaStorageProviderCertificationHandoff {
   nextSteps: string[];
   nonSecretBoundary: string;
 }
+type MediaAssetPlacementStatus = 'ready' | 'private' | 'quarantined';
+type MediaAssetPlacementKind = 'image' | 'video' | 'audio' | 'download' | 'font-face' | 'file';
+interface MediaAssetPlacementHandoff {
+  schemaVersion: 'backy.media-asset-placement.v1';
+  status: MediaAssetPlacementStatus;
+  ready: boolean;
+  siteId: string;
+  generatedAt: string;
+  asset: {
+    id: string;
+    name: string;
+    type: MediaAsset['type'];
+    mimeType?: string;
+    size: string;
+    sizeBytes?: number;
+    visibility: 'public' | 'private';
+    folderId: string | null;
+    folderPath: string;
+    tags: string[];
+    altText?: string | null;
+    caption?: string | null;
+  };
+  delivery: {
+    publicFileEndpoint: string;
+    publicFileReady: boolean;
+    detailEndpoint: string;
+    signedUrlEndpoint: string;
+    signedUrlRequired: boolean;
+    fontManifestEndpoint: string;
+    provider: string;
+    deliveryMode: 'backy-proxy' | 'provider-public-base' | 'local' | 'unknown';
+    storagePath?: string;
+    directProviderUrl?: string;
+    imageTransformEndpoint?: string;
+    imageTransformReady?: boolean;
+    blockedReason?: 'private' | 'quarantined';
+  };
+  placement: {
+    kind: MediaAssetPlacementKind;
+    recommendedUsage: string;
+    html?: string;
+    css?: string;
+    reactProps?: Record<string, string | number | boolean>;
+    notes: string[];
+  };
+  image?: {
+    src: string;
+    srcSet: string;
+    sizes: string;
+    focalPoint: {
+      x: number;
+      y: number;
+    };
+    objectFit: MediaImageObjectFit;
+    objectPosition: string;
+    aspectRatio: MediaImageAspectRatio;
+    variants: Array<{
+      width: number;
+      quality: number;
+      url: string;
+      bytes?: number;
+      format?: string;
+      mimeType?: string;
+    }>;
+  };
+  font?: {
+    family?: string;
+    weight?: string;
+    style?: string;
+    fallback?: string;
+    display?: string;
+  };
+  references: {
+    pages: string[];
+    posts: string[];
+    total: number;
+  };
+  safety: {
+    status: 'clear' | 'quarantined';
+    reason?: string;
+  };
+  nextSteps: string[];
+}
 
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
@@ -1850,6 +1933,29 @@ function MediaPage() {
   const selectedProviderInsight = useMemo(
     () => selectedAsset ? getMediaProviderInsight(selectedAsset, runtimeStorage, storageSettings) : undefined,
     [runtimeStorage, selectedAsset, storageSettings],
+  );
+  const selectedAssetFolderPath = selectedAsset?.folderId ? getFolderPath(selectedAsset.folderId) : 'Root';
+  const selectedAssetPlacementHandoff = useMemo(
+    () => selectedAsset ? buildMediaAssetPlacementHandoff({
+      asset: selectedAsset,
+      siteId,
+      publicBaseUrl,
+      folderPath: selectedAssetFolderPath,
+      responsiveManifest,
+      providerInsight: selectedProviderInsight,
+    }) : null,
+    [
+      publicBaseUrl,
+      responsiveManifest,
+      selectedAsset,
+      selectedAssetFolderPath,
+      selectedProviderInsight,
+      siteId,
+    ],
+  );
+  const selectedAssetPlacementHandoffText = useMemo(
+    () => selectedAssetPlacementHandoff ? JSON.stringify(selectedAssetPlacementHandoff, null, 2) : '',
+    [selectedAssetPlacementHandoff],
   );
 
   const loadLibrary = useCallback(async (options: MediaLibraryLoadOptions = {}) => {
@@ -3514,6 +3620,17 @@ function MediaPage() {
       return;
     }
     await copyMediaApiText(mediaStorageProviderCertificationHandoffText, 'Media storage provider certification handoff');
+  };
+  const copyMediaAssetPlacementHandoff = async () => {
+    if (!selectedAssetPlacementHandoffText) {
+      return;
+    }
+    if (!canExportMediaActivity) {
+      setBulkNotice(null);
+      setError(deniedExportMessage);
+      return;
+    }
+    await copyMediaApiText(selectedAssetPlacementHandoffText, 'Media asset placement handoff');
   };
   const downloadMediaHandoff = () => {
     if (!canExportMediaActivity) {
@@ -7330,6 +7447,68 @@ function MediaPage() {
                   </Notice>
                 )}
 
+                {selectedAssetPlacementHandoff && (
+                  <div
+                    className="mb-4 rounded-lg border border-border bg-background p-3"
+                    data-testid="media-asset-placement-handoff"
+                    data-placement-schema={selectedAssetPlacementHandoff.schemaVersion}
+                    data-placement-status={selectedAssetPlacementHandoff.status}
+                  >
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">Frontend placement handoff</div>
+                        <div className="text-xs text-muted-foreground">
+                          Copy the selected asset contract for custom frontends, editor plugins, and storefront renderers.
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn(
+                          'rounded px-2 py-1 text-xs font-semibold capitalize',
+                          selectedAssetPlacementHandoff.ready ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                        )}
+                        >
+                          {selectedAssetPlacementHandoff.status}
+                        </span>
+                        <span className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+                          {selectedAssetPlacementHandoff.schemaVersion}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isMediaLibraryBusy || !canExportMediaActivity}
+                          title={!canExportMediaActivity ? activityPermissionTitle : 'Copy selected asset placement handoff'}
+                          aria-label={`Copy placement handoff for ${selectedAsset.name}`}
+                          onClick={() => void copyMediaAssetPlacementHandoff()}
+                          iconStart={<Copy className="size-3.5" />}
+                        >
+                          Copy placement
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <MediaApiStat label="Kind" value={selectedAssetPlacementHandoff.placement.kind} />
+                      <MediaApiStat label="Folder" value={selectedAssetPlacementHandoff.asset.folderPath} />
+                      <MediaApiStat label="References" value={`${selectedAssetPlacementHandoff.references.total}`} />
+                      <MediaApiStat label="Delivery" value={selectedAssetPlacementHandoff.delivery.publicFileReady ? 'public' : selectedAssetPlacementHandoff.status} />
+                    </div>
+                    <textarea
+                      readOnly
+                      value={selectedAssetPlacementHandoffText}
+                      className="min-h-36 w-full resize-y rounded-lg border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground"
+                    />
+                    {selectedAssetPlacementHandoff.nextSteps.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        {selectedAssetPlacementHandoff.nextSteps.slice(0, 3).map((step) => (
+                          <span key={step} className="rounded bg-muted px-2 py-1">
+                            {step}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-lg border border-border bg-background p-3">
                     <div className="mb-2 flex items-center justify-between gap-3">
@@ -8994,6 +9173,243 @@ const getAdminResponsiveManifest = (asset: MediaAsset, siteId: string): NonNulla
     srcSet: variants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
     sizes: DEFAULT_RESPONSIVE_SIZES,
     variants,
+  };
+};
+
+const escapeHtmlAttribute = (value: string): string => (
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+);
+
+const escapeCssString = (value: string): string => (
+  value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+);
+
+const mediaPlacementKind = (asset: MediaAsset): MediaAssetPlacementKind => {
+  if (asset.type === 'image') return 'image';
+  if (asset.type === 'video') return 'video';
+  if (asset.type === 'audio') return 'audio';
+  if (asset.type === 'font') return 'font-face';
+  if (asset.type === 'file') return 'download';
+  return 'file';
+};
+
+const mediaPlacementUsage = (asset: MediaAsset): string => {
+  if (asset.type === 'image') return 'Responsive image, hero, card, gallery, background, or product media.';
+  if (asset.type === 'video') return 'Playable video media for public pages or protected signed embeds.';
+  if (asset.type === 'audio') return 'Playable audio media for public pages or protected signed embeds.';
+  if (asset.type === 'font') return 'Font face registration for editor typography and custom frontend CSS.';
+  if (asset.type === 'file') return 'Download, attachment, manual, document, or protected customer file.';
+  return 'Generic file placement with Backy delivery and metadata preserved.';
+};
+
+const buildPlacementHtml = ({
+  asset,
+  publicFileUrl,
+  responsiveManifest,
+  imagePresentation,
+}: {
+  asset: MediaAsset;
+  publicFileUrl: string;
+  responsiveManifest?: NonNullable<MediaAsset['responsive']>;
+  imagePresentation?: ReturnType<typeof getImagePresentationMetadata>;
+}): string | undefined => {
+  const safeUrl = escapeHtmlAttribute(publicFileUrl);
+  const safeName = escapeHtmlAttribute(asset.name);
+  const safeAlt = escapeHtmlAttribute(asset.altText || asset.name);
+
+  if (asset.type === 'image') {
+    const attributes = [
+      `src="${safeUrl}"`,
+      responsiveManifest?.srcSet ? `srcset="${escapeHtmlAttribute(responsiveManifest.srcSet)}"` : '',
+      responsiveManifest?.sizes ? `sizes="${escapeHtmlAttribute(responsiveManifest.sizes)}"` : '',
+      `alt="${safeAlt}"`,
+      'loading="lazy"',
+      'decoding="async"',
+      imagePresentation
+        ? `style="object-fit:${imagePresentation.objectFit};object-position:${imagePresentation.focalX}% ${imagePresentation.focalY}%;"` : '',
+    ].filter(Boolean);
+    return `<img ${attributes.join(' ')} />`;
+  }
+
+  if (asset.type === 'video') {
+    return `<video src="${safeUrl}" controls preload="metadata"></video>`;
+  }
+
+  if (asset.type === 'audio') {
+    return `<audio src="${safeUrl}" controls preload="metadata"></audio>`;
+  }
+
+  return `<a href="${safeUrl}" download>${safeName}</a>`;
+};
+
+const buildFontFaceCss = (asset: MediaAsset, publicFileUrl: string): string | undefined => {
+  if (asset.type !== 'font') {
+    return undefined;
+  }
+
+  const family = metadataText(asset.metadata?.fontFamily) || asset.name.replace(/\.[a-z0-9]+$/i, '');
+  const weight = metadataText(asset.metadata?.fontWeight) || '400';
+  const style = metadataText(asset.metadata?.fontStyle) || 'normal';
+  const display = metadataText(asset.metadata?.fontDisplay) || 'swap';
+  const safeFamily = escapeCssString(family);
+  const safeUrl = publicFileUrl.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+  return `@font-face { font-family: "${safeFamily}"; src: url("${safeUrl}"); font-weight: ${weight}; font-style: ${style}; font-display: ${display}; }`;
+};
+
+const buildMediaAssetPlacementHandoff = ({
+  asset,
+  siteId,
+  publicBaseUrl,
+  folderPath,
+  responsiveManifest,
+  providerInsight,
+}: {
+  asset: MediaAsset;
+  siteId: string;
+  publicBaseUrl: string;
+  folderPath: string;
+  responsiveManifest?: NonNullable<MediaAsset['responsive']>;
+  providerInsight?: MediaProviderInsight;
+}): MediaAssetPlacementHandoff => {
+  const security = getMediaSecurityPolicy(asset.metadata);
+  const visibility = asset.visibility || 'public';
+  const publicFileUrl = getPublicMediaFileUrl(asset.id, siteId);
+  const detailEndpoint = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/${encodeURIComponent(asset.id)}`;
+  const signedUrlEndpoint = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/${encodeURIComponent(asset.id)}/signed-url`;
+  const fontManifestEndpoint = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/fonts`;
+  const imagePresentation = asset.type === 'image' ? getImagePresentationMetadata(asset.metadata) : undefined;
+  const blockedReason = security.status === 'quarantined'
+    ? 'quarantined'
+    : visibility === 'private'
+      ? 'private'
+      : undefined;
+  const status: MediaAssetPlacementStatus = blockedReason || 'ready';
+  const ready = !blockedReason;
+  const imageTransformEndpoint = asset.type === 'image'
+    ? getPublicImageTransformUrl(asset.id, { width: 1200, quality: DEFAULT_RESPONSIVE_QUALITY }, siteId)
+    : undefined;
+  const placementNotes = [
+    ready ? 'Public endpoint can be embedded directly.' : 'Use the signed URL endpoint or change visibility before embedding publicly.',
+    asset.type === 'image' && responsiveManifest?.preparedAt ? 'Responsive variants have been prepared.' : '',
+    asset.type === 'image' && !responsiveManifest?.preparedAt ? 'Prepare variants when production frontends need cached image widths.' : '',
+  ].filter(Boolean);
+  const reactProps: Record<string, string | number | boolean> | undefined = ready
+    ? asset.type === 'image'
+      ? {
+          src: publicFileUrl,
+          alt: asset.altText || asset.name,
+          loading: 'lazy',
+          decoding: 'async',
+          ...(responsiveManifest?.srcSet ? { srcSet: responsiveManifest.srcSet } : {}),
+          ...(responsiveManifest?.sizes ? { sizes: responsiveManifest.sizes } : {}),
+          ...(imagePresentation ? {
+            objectFit: imagePresentation.objectFit,
+            objectPosition: `${imagePresentation.focalX}% ${imagePresentation.focalY}%`,
+          } : {}),
+        }
+      : {
+          href: publicFileUrl,
+          mediaId: asset.id,
+          type: asset.type,
+        }
+    : undefined;
+  const nextSteps = [
+    security.status === 'quarantined' ? 'Release quarantine before public placement.' : '',
+    visibility === 'private' && security.status !== 'quarantined' ? 'Generate a signed URL at runtime for protected delivery.' : '',
+    asset.type === 'image' && !asset.altText ? 'Add alt text before final image placement.' : '',
+    asset.type === 'image' && !responsiveManifest?.preparedAt ? 'Prepare responsive variants for production image delivery.' : '',
+    ((asset.targetPageIds || []).length + (asset.targetPostIds || []).length) === 0 ? 'Bind the asset after placement so usage tracking stays accurate.' : '',
+  ].filter(Boolean);
+
+  return {
+    schemaVersion: 'backy.media-asset-placement.v1',
+    status,
+    ready,
+    siteId,
+    generatedAt: new Date().toISOString(),
+    asset: {
+      id: asset.id,
+      name: asset.name,
+      type: asset.type,
+      ...(metadataText(asset.metadata?.mimeType) ? { mimeType: metadataText(asset.metadata?.mimeType) } : {}),
+      size: asset.size,
+      ...(typeof asset.sizeBytes === 'number' ? { sizeBytes: asset.sizeBytes } : {}),
+      visibility,
+      folderId: asset.folderId || null,
+      folderPath,
+      tags: asset.tags || [],
+      altText: asset.altText || null,
+      caption: asset.caption || null,
+    },
+    delivery: {
+      publicFileEndpoint: publicFileUrl,
+      publicFileReady: ready,
+      detailEndpoint,
+      signedUrlEndpoint,
+      signedUrlRequired: !ready,
+      fontManifestEndpoint,
+      provider: providerInsight?.provider || storageProviderForAsset(asset),
+      deliveryMode: providerInsight?.deliveryMode || 'unknown',
+      ...(providerInsight?.storagePath ? { storagePath: providerInsight.storagePath } : {}),
+      ...(providerInsight?.directProviderUrl && ready ? { directProviderUrl: providerInsight.directProviderUrl } : {}),
+      ...(imageTransformEndpoint ? { imageTransformEndpoint } : {}),
+      ...(asset.type === 'image' ? { imageTransformReady: ready } : {}),
+      ...(blockedReason ? { blockedReason } : {}),
+    },
+    placement: {
+      kind: mediaPlacementKind(asset),
+      recommendedUsage: mediaPlacementUsage(asset),
+      ...(ready ? { html: buildPlacementHtml({ asset, publicFileUrl, responsiveManifest, imagePresentation }) } : {}),
+      ...(ready ? { css: buildFontFaceCss(asset, publicFileUrl) } : {}),
+      ...(reactProps ? { reactProps } : {}),
+      notes: placementNotes,
+    },
+    ...(asset.type === 'image' && responsiveManifest && imagePresentation ? {
+      image: {
+        src: responsiveManifest.src || publicFileUrl,
+        srcSet: responsiveManifest.srcSet,
+        sizes: responsiveManifest.sizes,
+        focalPoint: {
+          x: imagePresentation.focalX,
+          y: imagePresentation.focalY,
+        },
+        objectFit: imagePresentation.objectFit,
+        objectPosition: `${imagePresentation.focalX}% ${imagePresentation.focalY}%`,
+        aspectRatio: imagePresentation.aspectRatio,
+        variants: responsiveManifest.variants.map((variant) => ({
+          width: variant.width,
+          quality: variant.quality,
+          url: variant.url,
+          ...(typeof variant.bytes === 'number' ? { bytes: variant.bytes } : {}),
+          ...(variant.format ? { format: variant.format } : {}),
+          ...(variant.mimeType ? { mimeType: variant.mimeType } : {}),
+        })),
+      },
+    } : {}),
+    ...(asset.type === 'font' ? {
+      font: {
+        family: metadataText(asset.metadata?.fontFamily) || asset.name.replace(/\.[a-z0-9]+$/i, ''),
+        weight: metadataText(asset.metadata?.fontWeight) || '400',
+        style: metadataText(asset.metadata?.fontStyle) || 'normal',
+        fallback: metadataText(asset.metadata?.fontFallback) || 'system-ui, sans-serif',
+        display: metadataText(asset.metadata?.fontDisplay) || 'swap',
+      },
+    } : {}),
+    references: {
+      pages: asset.targetPageIds || [],
+      posts: asset.targetPostIds || [],
+      total: (asset.targetPageIds || []).length + (asset.targetPostIds || []).length,
+    },
+    safety: {
+      status: security.status,
+      ...(security.reason ? { reason: security.reason } : {}),
+    },
+    nextSteps,
   };
 };
 
