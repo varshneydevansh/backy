@@ -428,6 +428,10 @@ function ContactsRoute() {
   const selectedContacts = useMemo(() => (
     allContacts.filter((contact) => selectedContactSet.has(contact.id))
   ), [allContacts, selectedContactSet]);
+  const selectedVisibleContacts = useMemo(() => (
+    filteredContacts.filter((contact) => selectedContactSet.has(contact.id))
+  ), [filteredContacts, selectedContactSet]);
+  const hiddenSelectedContactCount = Math.max(0, selectedContacts.length - selectedVisibleContacts.length);
   const selectedMergeEmail = useMemo(() => {
     const emails = Array.from(new Set(selectedContacts.map((contact) => normalizeContactEmail(contact.email)).filter(Boolean)));
     return emails.length === 1 && selectedContacts.length > 1 ? emails[0] : '';
@@ -2775,8 +2779,13 @@ function ContactsRoute() {
                   />
                   Select visible
                 </label>
-                <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                <span
+                  className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground"
+                  data-testid="contacts-bulk-selection-summary"
+                >
                   {selectedContacts.length} selected
+                  {selectedVisibleContacts.length !== selectedContacts.length ? ` · ${selectedVisibleContacts.length} visible` : ''}
+                  {hiddenSelectedContactCount > 0 ? ` · ${hiddenSelectedContactCount} outside this view` : ''}
                 </span>
                 <span className={cn(
                   'rounded-md px-2 py-1 text-xs font-semibold',

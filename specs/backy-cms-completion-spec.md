@@ -177,6 +177,10 @@ Legend:
 - ✅ Orders workspace bulk workflow applies paid/processing/fulfilled/cancelled actions to every selected loaded order, including selections outside the active filtered view.
 - ⚠️ Live payment, refund, shipping, fulfillment, tracking, and reconciliation provider certification remains required before production certification.
 
+#### `/contacts` (`contacts.tsx`)
+- ✅ Contacts workspace covers lead filtering, lifecycle, import/export, duplicate merge, promotion, sync, consent/retention, segmentation, analytics, and visible/outside-view bulk selection summaries.
+- ⚠️ Broader configured Supabase/Postgres service smoke remains required before production certification.
+
 ### 3.2 Public routes
 
 #### `/` (`apps/public/src/app/page.tsx`)

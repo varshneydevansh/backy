@@ -509,6 +509,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - The selection summary shows total selected orders plus the visible/outside-view split, so paid/processing/fulfilled/cancelled actions match the operator-visible selection.
 - Source coverage is guarded by `apps/admin/scripts/orders-smoke.mjs`.
 
+### ✅ Contacts bulk workflow selection
+- The contacts bulk toolbar now shows total selected contacts plus the visible/outside-view split when filters hide selected leads.
+- This keeps lifecycle, sync, retention, export, and duplicate-merge actions explicit before they operate on all selected loaded contacts.
+- Source coverage is guarded by `apps/admin/scripts/contacts-smoke.mjs`.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.

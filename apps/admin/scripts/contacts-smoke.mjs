@@ -34,6 +34,13 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
   assert(source.includes('Select one source form to expose its contact list and update endpoints. The all-forms view is an admin aggregate.'), 'Contacts API empty state must explain why one source form is required');
   assert(source.includes('title="No contacts match this view"'), 'Contacts inbox filter empty state must keep the shared title visible');
   assert(source.includes('Change the search, form, lifecycle, or lead quality filters to broaden the inbox.'), 'Contacts inbox filter empty state must explain how to recover from filters');
+  assert(
+    source.includes('const selectedVisibleContacts = useMemo') &&
+      source.includes('const hiddenSelectedContactCount = Math.max') &&
+      source.includes('data-testid="contacts-bulk-selection-summary"') &&
+      source.includes('outside this view'),
+    'Contacts bulk toolbar must summarize selected contacts outside the current filtered view',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -1259,6 +1266,11 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   assertContactsEmptyStatesUseSharedComponent();
+  if (process.env.BACKY_CONTACTS_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, guard: 'contacts-source' }));
+    return;
+  }
+
   const syncReceiver = await startContactSyncReceiver();
   await loginAdminApi();
   const form = await createLeadForm();
