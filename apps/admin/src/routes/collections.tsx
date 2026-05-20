@@ -34,6 +34,7 @@ import {
   getSiteFrontendDesign,
   importCollectionsBackup,
   importCollectionRecordsCsv,
+  listAllCollectionRecords,
   listAdminAuditLogs,
   listCollectionRecords,
   listCollections,
@@ -1512,6 +1513,7 @@ function CollectionsPage() {
   const [isImportingRecords, setIsImportingRecords] = useState(false);
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isImportingBackup, setIsImportingBackup] = useState(false);
+  const [isSelectingMatchingRecords, setIsSelectingMatchingRecords] = useState(false);
   const [isCreatingFrontendTemplateId, setIsCreatingFrontendTemplateId] = useState<string | null>(null);
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
@@ -1537,7 +1539,7 @@ function CollectionsPage() {
   const collectionInteractionVersionRef = useRef(0);
   const recordInteractionVersionRef = useRef(0);
   const isCollectionMutationPending = isSavingCollection || isImportingBackup || isExportingBackup || Boolean(isCreatingFrontendTemplateId);
-  const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
+  const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords || isSelectingMatchingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
 
   const setCollectionDraftMode = (nextDraftMode: boolean) => {
@@ -1618,7 +1620,12 @@ function CollectionsPage() {
   const recordPageCount = Math.max(1, Math.ceil(recordPagination.total / recordPagination.limit));
   const recordRangeStart = recordPagination.total === 0 ? 0 : recordPagination.offset + 1;
   const recordRangeEnd = Math.min(recordPagination.total, recordPagination.offset + records.length);
-  const selectedRecordsOnPage = records.filter((record) => selectedRecordIds.includes(record.id));
+  const selectedRecordIdSet = useMemo(() => new Set(selectedRecordIds), [selectedRecordIds]);
+  const selectedRecordsOnPage = useMemo(() => (
+    records.filter((record) => selectedRecordIdSet.has(record.id))
+  ), [records, selectedRecordIdSet]);
+  const selectedRecordsOnPageIds = useMemo(() => selectedRecordsOnPage.map((record) => record.id), [selectedRecordsOnPage]);
+  const hiddenSelectedRecordCount = Math.max(0, selectedRecordIds.length - selectedRecordsOnPageIds.length);
   const allRecordsOnPageSelected = records.length > 0 && selectedRecordsOnPage.length === records.length;
   const adminBaseUrl = getAdminBaseUrl();
   const apiCollectionSegment = activeCollection?.id ? encodeURIComponent(activeCollection.id) : '{collectionId}';
@@ -2076,6 +2083,8 @@ function CollectionsPage() {
       fields: collections.reduce((total, collection) => total + collection.fields.length, 0),
       recordsLoaded: recordPagination.total,
       selectedRecords: selectedRecordIds.length,
+      selectedVisibleRecords: selectedRecordsOnPageIds.length,
+      hiddenSelectedRecords: hiddenSelectedRecordCount,
     },
     activeCollection: activeCollection ? {
       id: activeCollection.id,
@@ -2146,6 +2155,8 @@ function CollectionsPage() {
     pagination: recordPagination,
     selection: {
       selectedRecordIds,
+      selectedRecordsOnPageIds,
+      hiddenSelectedRecordCount,
       allRecordsOnPageSelected,
     },
     privacy: {
@@ -2187,6 +2198,8 @@ function CollectionsPage() {
     records,
     renderItemPreviewUrl,
     renderListPreviewUrl,
+    selectedRecordsOnPageIds,
+    hiddenSelectedRecordCount,
     selectedRecordIds,
   ]);
   const collectionHandoffText = useMemo(() => JSON.stringify(collectionHandoff, null, 2), [collectionHandoff]);
@@ -2300,6 +2313,38 @@ function CollectionsPage() {
         ? [...new Set([...prev, ...pageIds])]
         : prev.filter((id) => !pageIds.includes(id))
     ));
+  };
+
+  const selectMatchingRecords = async () => {
+    if (!activeCollection || isCollectionsBusy) return;
+    if (!canViewCollections) {
+      showPermissionDenied('collections.view', 'select matching collection records');
+      return;
+    }
+
+    setIsSelectingMatchingRecords(true);
+    setError(null);
+    setValidationDetails([]);
+    setNotice(null);
+    try {
+      const result = await listAllCollectionRecords(activeSiteId, activeCollection.id, {
+        search: recordFilters.search.trim() || undefined,
+        status: recordFilters.status || undefined,
+        fieldKey: recordFilters.fieldKey || undefined,
+        fieldValue: recordFilters.fieldValue.trim() || undefined,
+        sortBy: recordFilters.sortBy || undefined,
+        sortDirection: recordFilters.sortDirection,
+        limit: 1000,
+        offset: 0,
+      });
+      const matchingIds = result.records.map((record) => record.id);
+      setSelectedRecordIds(matchingIds);
+      setNotice(`Selected ${matchingIds.length} ${activeCollection.name} record${matchingIds.length === 1 ? '' : 's'} matching the current filters.`);
+    } catch (selectionError) {
+      showApiError(selectionError, 'Unable to select matching collection records');
+    } finally {
+      setIsSelectingMatchingRecords(false);
+    }
   };
 
   const beginNewRecord = () => {
@@ -3085,7 +3130,6 @@ function CollectionsPage() {
         offset: recordPagination.offset,
       });
       setRecords(result.records);
-      setSelectedRecordIds((prev) => prev.filter((id) => result.records.some((record) => record.id === id)));
       if (routeSearch.recordId) {
         const shortcutRecord = result.records.find((record) => (
           record.id === routeSearch.recordId ||
@@ -6269,6 +6313,16 @@ function CollectionsPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => void selectMatchingRecords()}
+                    disabled={isCollectionsBusy || recordPagination.total === 0}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-record-select-matching"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    {isSelectingMatchingRecords ? 'Selecting...' : 'Select matching'}
+                  </button>
+                  <button
+                    type="button"
                     onClick={beginNewRecord}
                     disabled={recordMutationDisabled}
                     title={editPermissionTitle}
@@ -6371,8 +6425,10 @@ function CollectionsPage() {
 
               {selectedRecordIds.length > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 text-sm" data-testid="collections-record-bulk-toolbar">
-                  <span className="font-medium">
+                  <span className="font-medium" data-testid="collections-record-bulk-selection-summary">
                     {selectedRecordIds.length} selected
+                    {selectedRecordsOnPageIds.length !== selectedRecordIds.length ? ` · ${selectedRecordsOnPageIds.length} visible` : ''}
+                    {hiddenSelectedRecordCount > 0 ? ` · ${hiddenSelectedRecordCount} outside this view` : ''}
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -6409,6 +6465,7 @@ function CollectionsPage() {
                       type="button"
                       onClick={() => setSelectedRecordIds([])}
                       disabled={isCollectionsBusy}
+                      data-testid="collections-record-bulk-clear-selection"
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Clear
@@ -6465,7 +6522,7 @@ function CollectionsPage() {
                             <td className="px-4 py-3">
                               <input
                                 type="checkbox"
-                                checked={selectedRecordIds.includes(record.id)}
+                                checked={selectedRecordIdSet.has(record.id)}
                                 disabled={isCollectionsBusy}
                                 onChange={(event) => toggleRecordSelection(record.id, event.target.checked)}
                                 aria-label={`Select record ${record.slug}`}
@@ -6771,7 +6828,7 @@ function CollectionsPage() {
               <div>
                 <h2 className="text-lg font-semibold text-foreground">Delete {selectedRecordIds.length} selected records?</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  The selected {activeCollection.name} records will be removed from the API and public routes.
+                  {`The selected ${activeCollection.name} records will be removed from the API and public routes${hiddenSelectedRecordCount > 0 ? `, including ${hiddenSelectedRecordCount} outside this filtered view` : ''}.`}
                 </p>
               </div>
             </div>

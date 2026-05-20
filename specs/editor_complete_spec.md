@@ -504,6 +504,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Bulk status and delete actions stay scoped to non-current selected users, and delete confirmation calls out selected accounts hidden by the active table view.
 - Source coverage is guarded by `apps/admin/scripts/users-smoke.mjs`.
 
+### ✅ Collections record bulk selection
+- The collections record grid can now load and select every record matching the active search/status/field filters before bulk publish, draft, archive, or delete.
+- Selected record summaries show visible/outside-view counts, and destructive confirmation calls out hidden selected records before mutating the API-backed dataset.
+- Source coverage is guarded by `apps/admin/scripts/collections-smoke.mjs`.
+
 ### ✅ Product catalog bulk selection
 - The product catalog bulk selector now adds every loaded product matching the current catalog filters instead of reusing only the already-selected subset.
 - This keeps publish/draft/archive/delete/export actions reachable from an empty selection after filtering the catalog.

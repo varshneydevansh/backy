@@ -43,6 +43,16 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('Capture a list canvas to create rollback-ready versions for generated collection index pages.'), 'Collections list template history empty state must explain the capture workflow');
   assert(source.includes('title="No item template capture history"'), 'Collections item template history must use a shared empty-state title');
   assert(source.includes('Capture an item canvas to create rollback-ready versions for generated collection detail pages.'), 'Collections item template history empty state must explain the capture workflow');
+  assert(
+    source.includes('listAllCollectionRecords') &&
+      source.includes('const selectedRecordIdSet = useMemo') &&
+      source.includes('const hiddenSelectedRecordCount = Math.max') &&
+      source.includes('data-testid="collections-record-select-matching"') &&
+      source.includes('data-testid="collections-record-bulk-selection-summary"') &&
+      source.includes('data-testid="collections-record-bulk-clear-selection"') &&
+      source.includes('outside this view'),
+    'Collections record bulk toolbar must load/select every matching record and summarize hidden selected records before bulk mutations',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
