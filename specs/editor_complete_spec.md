@@ -489,6 +489,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - The preview action is gated by `pages.edit`, `pages.publish`, route availability, valid metadata, JSON-LD, dataset readiness, and navigation permissions while still forcing the created record to draft status.
 - Source coverage is guarded by `apps/admin/scripts/page-create-smoke.mjs`, alongside the existing page-create browser and backend template coverage.
 
+### ✅ Pages list filtered bulk selection
+- The pages library bulk toolbar can now select or clear every page matching the current search/status/readiness filters, not only the currently paginated table rows.
+- This keeps site-wide publish, unpublish, archive, and delete operations usable when a large site spans multiple page-library pages.
+- Source coverage is guarded by `apps/admin/scripts/pages-list-smoke.mjs`.
+
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
   - `backy-admin` on Vercel: admin UI + CMS APIs, auth, schema migrations, media catalog, form/comment endpoints.

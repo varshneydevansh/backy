@@ -1941,8 +1941,11 @@ function PagesListView() {
   const hasPages = activeSitePages.length > 0;
   const hasPageFilters = searchQuery.trim().length > 0 || statusFilter !== 'all' || healthFilter !== 'all';
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
+  const selectedFilteredPages = filteredPages.filter((page) => selectedPageIds.has(page.id));
   const visiblePageIdSet = useMemo(() => new Set(data.map((page) => page.id)), [data]);
   const hiddenSelectedCount = Math.max(0, selectedPages.length - selectedTablePages.length);
+  const filteredSelectionMode = filteredPages.length > data.length ? 'all-filtered' : 'visible-page';
+  const allFilteredPagesSelected = filteredPages.length > 0 && selectedFilteredPages.length === filteredPages.length;
   const selectedKnownPublishBlockers = useMemo(
     () => selectedPages
       .map((page) => {
@@ -2827,6 +2830,19 @@ function PagesListView() {
           >
             {selectedTablePages.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
           </button>
+          {filteredPages.length > data.length && (
+            <button
+              type="button"
+              onClick={() => setPageSelection(filteredPages, !allFilteredPagesSelected)}
+              disabled={filteredPages.length === 0 || isPageLibraryBusy || !canRunAnyBulkAction}
+              title={!canRunAnyBulkAction ? bulkPermissionTitle : 'Select every page matching the current search, status, and readiness filters'}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="pages-bulk-select-filtered"
+              data-selection-mode={filteredSelectionMode}
+            >
+              {allFilteredPagesSelected ? 'Clear filtered' : `Select all filtered (${filteredPages.length})`}
+            </button>
+          )}
           <select
             data-testid="pages-bulk-action-select"
 	            value={bulkAction}

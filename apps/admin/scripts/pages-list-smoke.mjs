@@ -39,6 +39,14 @@ const assertPagesListSourceContract = () => {
   assert(source.includes('hasPageFilters') && source.includes('Clear filters'), 'Pages list backend error state must expose filter recovery when filters are active');
   assert(source.includes('data-testid="pages-permission-state"') && source.includes('Page permissions could not be verified'), 'Pages list must expose a labelled permission error state');
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Pages permission error state must link to user access management');
+  assert(
+    source.includes('const selectedFilteredPages = filteredPages.filter') &&
+      source.includes('const allFilteredPagesSelected = filteredPages.length > 0 && selectedFilteredPages.length === filteredPages.length') &&
+      source.includes('data-testid="pages-bulk-select-filtered"') &&
+      source.includes('Select all filtered') &&
+      source.includes('setPageSelection(filteredPages, !allFilteredPagesSelected)'),
+    'Pages list bulk toolbar must support selecting every page matching the current filters, not just the current table page.',
+  );
   assert(source.includes('function PageTemplateCell') && source.includes('data-testid={`pages-template-${page.id}`}'), 'Pages list must render page template provenance per row');
   assert(source.includes("'template_source'") && source.includes("'frontend_design_template_id'") && source.includes("'collection_dataset_slug'"), 'Pages CSV export must include template provenance columns');
   assert(source.includes('const templateInfo = pageTemplateInfo(page)') && source.includes('template: templateInfo') && source.includes("pageMetaString(page, 'frontendDesignTemplateId')") && source.includes("pageMetaRecord(page, 'collectionDataset')"), 'Pages handoff must expose starter, frontend-design, and dataset page provenance');
