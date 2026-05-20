@@ -6085,6 +6085,10 @@ export function CanvasEditor({
                             onClick={handleGroupSelected}
                             disabled={isCanvasMutationDisabled || !canGroupSelected}
                             className="inline-flex items-center gap-1 rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                            title="Group selected layers (Cmd/Ctrl+G)"
+                            aria-label="Group selected layers"
+                            aria-keyshortcuts="Control+G Meta+G"
+                            data-testid="editor-inspector-group-selection"
                           >
                             <Group className="h-3.5 w-3.5" />
                             Group
@@ -6094,6 +6098,9 @@ export function CanvasEditor({
                             onClick={handleUngroupSelected}
                             disabled={isCanvasMutationDisabled || !canUngroupSelected}
                             className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Ungroup selected layers (Shift+Cmd/Ctrl+G)"
+                            aria-label="Ungroup selected layers"
+                            aria-keyshortcuts="Shift+Control+G Shift+Meta+G"
                             data-testid="editor-inspector-ungroup-selection"
                           >
                             <Ungroup className="h-3.5 w-3.5" />
@@ -6457,6 +6464,10 @@ export function CanvasEditor({
                           onClick={handleUngroupSelected}
                           disabled={isCanvasMutationDisabled}
                           className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          title="Ungroup selected layer (Shift+Cmd/Ctrl+G)"
+                          aria-label="Ungroup selected layer"
+                          aria-keyshortcuts="Shift+Control+G Shift+Meta+G"
+                          data-testid="editor-inspector-single-ungroup-selection"
                         >
                           <Ungroup className="h-3.5 w-3.5" />
                           Ungroup
