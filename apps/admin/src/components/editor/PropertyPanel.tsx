@@ -6858,6 +6858,76 @@ function RepeaterDataProperties({
     limit: selectedLimit,
     offset: selectedOffset,
   });
+  const repeaterDatasetActionPlanActions = [
+    {
+      key: 'choose-collection',
+      label: 'Choose collection',
+      ready: Boolean(selectedCollection),
+      mode: selectedCollection ? 'ready' : 'blocked',
+      reason: selectedCollection
+        ? `${selectedCollection.name} feeds this repeater.`
+        : 'Choose a collection before configuring dynamic records.',
+    },
+    {
+      key: 'map-card-fields',
+      label: 'Map card fields',
+      ready: Boolean(selectedCollection && fieldPathExists(selectedCollection, collections, selectedTitleField)),
+      mode: selectedCollection && fieldPathExists(selectedCollection, collections, selectedTitleField) ? 'ready' : 'operator-action',
+      reason: selectedCollection && fieldPathExists(selectedCollection, collections, selectedTitleField)
+        ? `Title field ${selectedTitleField} is mapped; optional image/meta fields can refine the card.`
+        : 'Map at least a valid title field for repeatable card output.',
+    },
+    {
+      key: 'query-preview',
+      label: 'Preview query',
+      ready: usesCurrentRecordFilter || Boolean(!previewError && !previewReferenceError && (previewLoading || visiblePreviewRecords.length > 0 || effectivePreviewPagination)),
+      mode: usesCurrentRecordFilter || (!previewError && !previewReferenceError) ? 'ready' : 'operator-action',
+      reason: usesCurrentRecordFilter
+        ? 'Current-record filters resolve on dynamic item pages and are documented in the handoff brief.'
+        : previewError || previewReferenceError
+          ? previewError || previewReferenceError || 'Preview query needs attention.'
+          : `${visiblePreviewRecords.length} record${visiblePreviewRecords.length === 1 ? '' : 's'} visible in the current preview.`,
+    },
+    {
+      key: 'records-url',
+      label: 'Records URL',
+      ready: Boolean(repeaterRecordsUrl),
+      mode: repeaterRecordsUrl ? 'ready' : 'operator-action',
+      reason: repeaterRecordsUrl
+        ? 'A public records URL can be copied for custom frontend integration.'
+        : 'Select a collection before copying the records URL.',
+    },
+    {
+      key: 'layout',
+      label: 'Layout',
+      ready: Boolean(Number.parseInt(selectedColumns || '0', 10) > 0 && (!selectedLimit || Number.parseInt(selectedLimit, 10) > 0)),
+      mode: Number.parseInt(selectedColumns || '0', 10) > 0 && (!selectedLimit || Number.parseInt(selectedLimit, 10) > 0) ? 'ready' : 'operator-action',
+      reason: Number.parseInt(selectedColumns || '0', 10) > 0 && (!selectedLimit || Number.parseInt(selectedLimit, 10) > 0)
+        ? `${selectedColumns} columns with limit ${selectedLimit || 'default'} are configured.`
+        : 'Set a positive item limit and column count for predictable responsive output.',
+    },
+    {
+      key: 'join-strategy',
+      label: 'Join strategy',
+      ready: !previewNeedsClientQuery || !previewReferenceError,
+      mode: previewNeedsClientQuery ? 'operator-action' : 'ready',
+      reason: previewNeedsClientQuery
+        ? 'Joined filter or sort fields are client-resolved in preview and noted for custom frontend handoff.'
+        : 'Query can be resolved directly by the collection records API.',
+    },
+  ] as const;
+  const repeaterDatasetActionPlanReadyCount = repeaterDatasetActionPlanActions.filter((action) => action.ready).length;
+  const repeaterDatasetActionPlan = {
+    schema: 'backy.editor.repeater-dataset-action-plan.v1',
+    attention: repeaterDatasetActionPlanReadyCount !== repeaterDatasetActionPlanActions.length,
+    recommendedAction: repeaterDatasetActionPlanActions.find((action) => !action.ready)?.key || 'none',
+    readyCount: repeaterDatasetActionPlanReadyCount,
+    totalCount: repeaterDatasetActionPlanActions.length,
+    summary: repeaterDatasetActionPlanReadyCount === repeaterDatasetActionPlanActions.length
+      ? 'This repeater dataset is ready for dynamic rendering and custom frontend handoff.'
+      : `${repeaterDatasetActionPlanActions.length - repeaterDatasetActionPlanReadyCount} repeater dataset step${repeaterDatasetActionPlanActions.length - repeaterDatasetActionPlanReadyCount === 1 ? '' : 's'} need attention before publish handoff.`,
+    actions: repeaterDatasetActionPlanActions,
+  };
   const repeaterDatasetBrief = {
     schema: 'backy.editor.repeater-dataset.v1',
     element: {
@@ -6912,6 +6982,7 @@ function RepeaterDataProperties({
         status: record.status,
       })),
     },
+    actionPlan: repeaterDatasetActionPlan,
   };
   const copyRepeaterDatasetBrief = async () => {
     try {
@@ -7305,6 +7376,48 @@ function RepeaterDataProperties({
                 'focus:outline-none focus:ring-2 focus:ring-ring'
               )}
             />
+          </div>
+
+          <div
+            className="rounded-md border border-border bg-muted/30 p-3"
+            data-testid="editor-repeater-dataset-action-plan"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-xs font-medium text-foreground">Repeater dataset action plan</div>
+                <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  {repeaterDatasetActionPlan.summary}
+                </div>
+              </div>
+              <span className={cn(
+                'shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px]',
+                repeaterDatasetActionPlan.attention ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+              )}
+              >
+                {repeaterDatasetActionPlan.readyCount}/{repeaterDatasetActionPlan.totalCount}
+              </span>
+            </div>
+            <div className="mt-2 font-mono text-[10px] text-muted-foreground">
+              {repeaterDatasetActionPlan.schema}
+            </div>
+            <div className="mt-2 grid gap-1.5">
+              {repeaterDatasetActionPlan.actions.map((action) => (
+                <div
+                  key={action.key}
+                  className={cn(
+                    'rounded-md border bg-background px-2 py-1.5 text-[11px]',
+                    action.ready ? 'border-emerald-200' : 'border-amber-200',
+                  )}
+                  data-testid={`editor-repeater-dataset-action-${action.key}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">{action.label}</span>
+                    <span className="font-mono text-muted-foreground">{action.mode}</span>
+                  </div>
+                  <div className="mt-1 leading-4 text-muted-foreground">{action.reason}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div
@@ -7707,6 +7820,82 @@ function DataBindingProperties({
     limit: selectedLimit,
     offset: selectedOffset,
   });
+  const slotCoverageSummary = bindingSlotCoverageForElement(element, activeSlotCollection, collections, targetPathOptions);
+  const selectedSourcePathValid = selectedSourcePath
+    ? fieldPathExists(selectedCollection, collections, selectedSourcePath)
+    : Boolean(selectedField);
+  const datasetBindingActionPlanActions = [
+    {
+      key: 'choose-collection',
+      label: 'Choose collection',
+      ready: Boolean(selectedCollection),
+      mode: selectedCollection ? 'ready' : 'blocked',
+      reason: selectedCollection
+        ? `${selectedCollection.name} is selected.`
+        : 'Choose a collection before mapping fields or copying a dataset handoff.',
+    },
+    {
+      key: 'map-field',
+      label: 'Map field',
+      ready: Boolean(selectedCollection && selectedFieldKey && selectedSourcePathValid),
+      mode: selectedCollection && selectedFieldKey && selectedSourcePathValid ? 'ready' : 'operator-action',
+      reason: selectedCollection && selectedFieldKey && selectedSourcePathValid
+        ? `${selectedSourcePath || selectedFieldKey} maps into ${selectedTargetPath}.`
+        : 'Select a valid field or joined field path for this element.',
+    },
+    {
+      key: 'target-property',
+      label: 'Target property',
+      ready: targetPathOptions.some((option) => option.value === selectedTargetPath),
+      mode: targetPathOptions.some((option) => option.value === selectedTargetPath) ? 'ready' : 'blocked',
+      reason: targetPathOptions.some((option) => option.value === selectedTargetPath)
+        ? `${selectedTargetPath} is editable for this element type.`
+        : 'Choose a supported target property for the selected element type.',
+    },
+    {
+      key: 'preview-record',
+      label: 'Preview record',
+      ready: !selectedRecordId || Boolean(selectedRecordPreview),
+      mode: !selectedRecordId || selectedRecordPreview ? 'ready' : 'operator-action',
+      reason: selectedRecordId
+        ? selectedRecordPreview
+          ? `Previewing ${collectionRecordLabel(selectedRecordPreview, selectedCollection)}.`
+          : 'The custom record id or slug is not in the recent preview list.'
+        : 'Binding will use the first matching record at render time.',
+    },
+    {
+      key: 'query-handoff',
+      label: 'Query handoff',
+      ready: Boolean(selectedBindingRecordsUrl && !recordsError && !referencePreviewError),
+      mode: selectedBindingRecordsUrl && !recordsError && !referencePreviewError ? 'ready' : 'operator-action',
+      reason: selectedBindingRecordsUrl && !recordsError && !referencePreviewError
+        ? 'A public collection records URL and query brief can be copied for custom frontends.'
+        : recordsError || referencePreviewError || 'Load collection records before handing this binding to a custom frontend.',
+    },
+    {
+      key: 'slot-coverage',
+      label: 'Slot coverage',
+      ready: slotCoverageSummary.total === 0 || slotCoverageSummary.missingRequired === 0,
+      mode: slotCoverageSummary.total === 0 || slotCoverageSummary.missingRequired === 0 ? 'ready' : 'operator-action',
+      reason: slotCoverageSummary.total === 0
+        ? 'This element has no preset binding slots.'
+        : slotCoverageSummary.missingRequired === 0
+          ? `${slotCoverageSummary.applied}/${slotCoverageSummary.total} slots are applied or optional.`
+          : `${slotCoverageSummary.missingRequired} required binding slot${slotCoverageSummary.missingRequired === 1 ? '' : 's'} still need mapping.`,
+    },
+  ] as const;
+  const datasetBindingActionPlanReadyCount = datasetBindingActionPlanActions.filter((action) => action.ready).length;
+  const datasetBindingActionPlan = {
+    schema: 'backy.editor.dataset-binding-action-plan.v1',
+    attention: datasetBindingActionPlanReadyCount !== datasetBindingActionPlanActions.length,
+    recommendedAction: datasetBindingActionPlanActions.find((action) => !action.ready)?.key || 'none',
+    readyCount: datasetBindingActionPlanReadyCount,
+    totalCount: datasetBindingActionPlanActions.length,
+    summary: datasetBindingActionPlanReadyCount === datasetBindingActionPlanActions.length
+      ? 'This element binding is ready for preview, publish, and custom frontend handoff.'
+      : `${datasetBindingActionPlanActions.length - datasetBindingActionPlanReadyCount} dataset binding step${datasetBindingActionPlanActions.length - datasetBindingActionPlanReadyCount === 1 ? '' : 's'} need attention before publish handoff.`,
+    actions: datasetBindingActionPlanActions,
+  };
   const datasetBindingBrief = {
     schema: 'backy.editor.dataset-binding.v1',
     element: {
@@ -7770,6 +7959,7 @@ function DataBindingProperties({
       limit: selectedLimit || null,
       offset: selectedOffset || null,
     },
+    actionPlan: datasetBindingActionPlan,
   };
   const copyDatasetBindingBrief = async () => {
     try {
@@ -8162,6 +8352,48 @@ function DataBindingProperties({
         onClearAllSlots={clearAllBindingSlots}
         onApplyChildSlots={applyChildSlots}
       />
+
+      <div
+        className="rounded-md border border-border bg-muted/30 p-3"
+        data-testid="editor-data-binding-action-plan"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="text-xs font-medium text-foreground">Dataset action plan</div>
+            <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
+              {datasetBindingActionPlan.summary}
+            </div>
+          </div>
+          <span className={cn(
+            'shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px]',
+            datasetBindingActionPlan.attention ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+          )}
+          >
+            {datasetBindingActionPlan.readyCount}/{datasetBindingActionPlan.totalCount}
+          </span>
+        </div>
+        <div className="mt-2 font-mono text-[10px] text-muted-foreground">
+          {datasetBindingActionPlan.schema}
+        </div>
+        <div className="mt-2 grid gap-1.5">
+          {datasetBindingActionPlan.actions.map((action) => (
+            <div
+              key={action.key}
+              className={cn(
+                'rounded-md border bg-background px-2 py-1.5 text-[11px]',
+                action.ready ? 'border-emerald-200' : 'border-amber-200',
+              )}
+              data-testid={`editor-data-binding-action-${action.key}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-foreground">{action.label}</span>
+                <span className="font-mono text-muted-foreground">{action.mode}</span>
+              </div>
+              <div className="mt-1 leading-4 text-muted-foreground">{action.reason}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {selectedCollection && (
         <>
