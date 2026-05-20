@@ -6638,6 +6638,7 @@ function RepeaterDataProperties({
   const [previewReferenceRecords, setPreviewReferenceRecords] = useState<Record<string, CollectionRecord[]>>({});
   const [previewReferenceLoading, setPreviewReferenceLoading] = useState(false);
   const [previewReferenceError, setPreviewReferenceError] = useState<string | null>(null);
+  const [repeaterBriefCopyState, setRepeaterBriefCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const usesCurrentRecordFilter = selectedFilterValue === CURRENT_RECORD_FILTER_VALUE || selectedFilterValue === LEGACY_CURRENT_RECORD_FILTER_VALUE;
   const previewLimit = Math.min(
     Math.max(Number.parseInt(selectedLimit || '6', 10) || 6, 1),
@@ -6830,6 +6831,70 @@ function RepeaterDataProperties({
       imageSrc,
     };
   });
+  const repeaterDatasetBrief = {
+    schema: 'backy.editor.repeater-dataset.v1',
+    element: {
+      id: element.id,
+      type: normalizeCanvasElementType(element.type),
+      name: element.name || null,
+    },
+    collection: selectedCollection
+      ? {
+          id: selectedCollection.id,
+          name: selectedCollection.name,
+          slug: selectedCollection.slug,
+          status: selectedCollection.status,
+        }
+      : null,
+    dataset: {
+      id: selectedDatasetId || null,
+      source: 'collection',
+    },
+    fields: {
+      title: selectedTitleField || null,
+      description: selectedDescriptionField || null,
+      image: selectedImageField || null,
+      meta: selectedMetaField || null,
+    },
+    query: {
+      search: selectedSearch || null,
+      filterField: selectedFilterField || null,
+      filterValue: selectedFilterValue || null,
+      usesCurrentRecordFilter,
+      sortBy: selectedSortBy || null,
+      sortDirection: selectedSortBy ? selectedSortDirection : null,
+      limit: selectedLimit || null,
+      offset: selectedOffset || null,
+      clientResolved: previewNeedsClientQuery,
+    },
+    layout: {
+      columns: selectedColumns || null,
+      gap: selectedGap || null,
+      emptyMessage: selectedEmptyMessage,
+    },
+    preview: {
+      total: effectivePreviewPagination?.total ?? null,
+      shown: repeaterPreviewRows.length,
+      hasMore: Boolean(effectivePreviewPagination?.hasMore),
+      rows: repeaterPreviewRows.slice(0, 5).map(({ record, title, meta }) => ({
+        id: record.id,
+        slug: record.slug,
+        title,
+        meta: meta || null,
+        status: record.status,
+      })),
+    },
+  };
+  const copyRepeaterDatasetBrief = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(repeaterDatasetBrief, null, 2));
+      setRepeaterBriefCopyState('copied');
+      window.setTimeout(() => setRepeaterBriefCopyState('idle'), 1600);
+    } catch {
+      setRepeaterBriefCopyState('failed');
+      window.setTimeout(() => setRepeaterBriefCopyState('idle'), 2200);
+    }
+  };
 
   const updateRepeater = (updates: {
     collectionId?: string;
@@ -7203,13 +7268,26 @@ function RepeaterDataProperties({
             />
           </div>
 
-          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            Dataset: {selectedDatasetId}
-            {selectedTitleField.includes('.') ? ` • title join ${selectedTitleField}` : ''}
-            {selectedDescriptionField.includes('.') ? ` • description join ${selectedDescriptionField}` : ''}
-            {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
-            {selectedLimit ? ` • limit ${selectedLimit}` : ''}
-            {selectedColumns ? ` • ${selectedColumns} columns` : ''}
+          <div
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+            data-testid="editor-repeater-dataset-brief"
+          >
+            <div>
+              Dataset: {selectedDatasetId}
+              {selectedTitleField.includes('.') ? ` • title join ${selectedTitleField}` : ''}
+              {selectedDescriptionField.includes('.') ? ` • description join ${selectedDescriptionField}` : ''}
+              {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
+              {selectedLimit ? ` • limit ${selectedLimit}` : ''}
+              {selectedColumns ? ` • ${selectedColumns} columns` : ''}
+            </div>
+            <button
+              type="button"
+              onClick={() => void copyRepeaterDatasetBrief()}
+              data-testid="editor-repeater-copy-dataset-brief"
+              className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
+            >
+              {repeaterBriefCopyState === 'copied' ? 'Copied repeater brief' : repeaterBriefCopyState === 'failed' ? 'Copy failed' : 'Copy repeater brief'}
+            </button>
           </div>
 
           <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-repeater-record-preview">
