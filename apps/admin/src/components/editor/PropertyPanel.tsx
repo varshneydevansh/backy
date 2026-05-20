@@ -6119,6 +6119,7 @@ interface PresetBindingSlotsPanelProps {
   selectedTargetPath: string;
   onCollectionChange: (collectionId: string) => void;
   onApplySlot: (slot: ComponentBindingSlot, fieldPath: string) => void;
+  onApplyAllSlots: () => void;
   onApplyChildSlots: () => void;
 }
 
@@ -6134,12 +6135,21 @@ function PresetBindingSlotsPanel({
   selectedTargetPath,
   onCollectionChange,
   onApplySlot,
+  onApplyAllSlots,
   onApplyChildSlots,
 }: PresetBindingSlotsPanelProps) {
   const slots = Array.isArray(element.bindingSlots) ? element.bindingSlots : [];
   if (slots.length === 0 && childSummary.total === 0) {
     return null;
   }
+
+  const rootApplicableCount = selectedCollection
+    ? slots.filter((slot) => {
+        const fieldPath = bindingSlotFieldPath(slot, selectedCollection, collections);
+        return bindingSlotTargetAllowed(element, slot) && (fieldPath || bindingSlotCanApplyWithoutFieldPath(element, slot));
+      }).length
+    : 0;
+  const allApplicableCount = rootApplicableCount + childSummary.applicable;
 
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-slots">
@@ -6166,6 +6176,16 @@ function PresetBindingSlotsPanel({
             </option>
           ))}
         </select>
+
+        <button
+          type="button"
+          onClick={onApplyAllSlots}
+          disabled={!selectedCollection || allApplicableCount === 0}
+          data-testid="editor-data-apply-all-binding-slots"
+          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Apply all matching slots
+        </button>
 
         {slots.map((slot) => {
           const fieldCandidates = bindingSlotFieldCandidates(slot);
@@ -7391,6 +7411,38 @@ function DataBindingProperties({
     }
   };
 
+  const applyAllBindingSlots = () => {
+    if (!activeSlotCollection) return;
+
+    let applied = 0;
+    let nextElement = element;
+
+    bindableSlotsForElement(nextElement, activeSlotCollection, collections).forEach(({ slot, fieldPath }) => {
+      const result = applyBindingSlotToElement(nextElement, slot, activeSlotCollection, collections, fieldPath);
+      if (result.applied) {
+        nextElement = result.element;
+        applied += 1;
+      }
+    });
+
+    const childResult = applyChildBindingSlots(nextElement, activeSlotCollection, collections);
+    if (childResult.applied > 0) {
+      nextElement = {
+        ...nextElement,
+        children: childResult.children,
+      };
+      applied += childResult.applied;
+    }
+
+    if (applied > 0) {
+      const updates: Partial<CanvasElement> = {};
+      if (nextElement.props !== element.props) updates.props = nextElement.props;
+      if (nextElement.dataBindings !== element.dataBindings) updates.dataBindings = nextElement.dataBindings;
+      if (nextElement.children !== element.children) updates.children = nextElement.children;
+      onChange(updates);
+    }
+  };
+
   const clearBinding = () => {
     onChange({
       dataBindings: (Array.isArray(element.dataBindings) ? element.dataBindings : [])
@@ -7533,6 +7585,7 @@ function DataBindingProperties({
           selectedTargetPath={selectedTargetPath}
           onCollectionChange={setSlotCollectionId}
           onApplySlot={applyBindingSlot}
+          onApplyAllSlots={applyAllBindingSlots}
           onApplyChildSlots={applyChildSlots}
         />
         <RepeaterDataProperties
@@ -7581,6 +7634,7 @@ function DataBindingProperties({
         selectedTargetPath={selectedTargetPath}
         onCollectionChange={setSlotCollectionId}
         onApplySlot={applyBindingSlot}
+        onApplyAllSlots={applyAllBindingSlots}
         onApplyChildSlots={applyChildSlots}
       />
 
