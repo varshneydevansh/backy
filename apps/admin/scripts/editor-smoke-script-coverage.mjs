@@ -248,6 +248,13 @@ const missingStressSmokeSnippets = collectMissingSnippets(smokeSource, [
   'assertElementState(reloadedState, finalState, \'long-session stress reload\');',
   'mode: \'stress\'',
 ]);
+const missingLayerUndoRedoSmokeSnippets = collectMissingSnippets(smokeSource, [
+  'const testUndoRedoAfterLayerVisibilityToggle = async (client, elementId) => {',
+  'const layerVisibilityUndoRedo = await testUndoRedoAfterLayerVisibilityToggle(client, \'smoke-form\');',
+  'layerVisibilityUndoRedo,',
+  'layer visibility Ctrl+Z mismatch',
+  'layer visibility Ctrl+Shift+Z mismatch',
+]);
 const stressScript = packageJson.scripts?.['test:editor-stress'] ?? '';
 const stressWorkflow = packageJson.scripts?.['test:editor-workflows'] ?? '';
 const missingStressScriptGuards = [
@@ -307,6 +314,7 @@ if (
   missingResponsiveGroupingSourceSnippets.length ||
   missingDistributionSourceSnippets.length ||
   missingStressSmokeSnippets.length ||
+  missingLayerUndoRedoSmokeSnippets.length ||
   missingStressScriptGuards.length ||
   missingEditorMfaLoginSnippets.length ||
   missingTableStyleSetterGuards.length ||
@@ -324,6 +332,7 @@ if (
     missingResponsiveGroupingSourceSnippets,
     missingDistributionSourceSnippets,
     missingStressSmokeSnippets,
+    missingLayerUndoRedoSmokeSnippets,
     missingStressScriptGuards,
     missingEditorMfaLoginSnippets,
     missingTableStyleSetterGuards,
@@ -344,6 +353,7 @@ console.log(JSON.stringify({
   responsiveGroupingSourceSnippets: 5,
   distributionSourceSnippets: 2,
   stressSmokeSnippets: 9,
+  layerUndoRedoSmokeSnippets: 5,
   stressScriptGuards: 2,
   editorMfaLoginSnippets: 9,
   listIndentNormalizationGuards: 9,

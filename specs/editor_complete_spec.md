@@ -336,7 +336,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Row actions support move up/down, outdent, nest selected layers into container-like parents, hide/show, lock/unlock, duplicate, and delete; duplicate/delete apply to the selected unlocked sibling set when invoked from a selected row in a multi-selection.
 - Duplicating a custom-named layer from the layer tree gives the copied root a unique `Copy`/`Copy 2` name in the sibling scope.
 - Hidden and locked layer state saves into the page canvas payload.
-- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, click/keyboard/bulk collapse-expand, nested layer search/filter behavior, inline rename persistence and inspector edit/display, Ctrl/Cmd multi-select, Shift range-select, roving-focus keyboard row selection/navigation tree semantics, selected-row action visibility, hidden row action interactivity guards, drag reorder, hide, lock, single and multi duplicate/delete, manual save, and persisted layer state.
+- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, click/keyboard/bulk collapse-expand, nested layer search/filter behavior, inline rename persistence and inspector edit/display, Ctrl/Cmd multi-select, Shift range-select, roving-focus keyboard row selection/navigation tree semantics, selected-row action visibility, hidden row action interactivity guards, drag reorder, hide with layer visibility undo/redo, lock, single and multi duplicate/delete, manual save, and persisted layer state.
 
 ### 20. Copy/Paste
 **Current State:** ✅ Working

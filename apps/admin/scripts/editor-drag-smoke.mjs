@@ -10533,6 +10533,7 @@ const testLayersPanelControls = async (client, pageId) => {
   );
 
   const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
+  const layerVisibilityUndoRedo = await testUndoRedoAfterLayerVisibilityToggle(client, 'smoke-form');
 
   await setLayerHiddenState(client, 'smoke-form', true);
   const hiddenState = await readLayerActionState(client, 'smoke-form');
@@ -10704,6 +10705,7 @@ const testLayersPanelControls = async (client, pageId) => {
     inspectorLayerName,
     inspectorRename,
     reorder,
+    layerVisibilityUndoRedo,
     hiddenState,
     toolbarVisibleState,
     toolbarHiddenState,
