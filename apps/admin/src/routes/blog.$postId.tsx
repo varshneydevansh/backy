@@ -1362,7 +1362,7 @@ function EditBlogPostPage() {
     };
 
     const setWorkspaceFocusRoute = (focused: boolean) => {
-        if (editorActionBusy) return;
+        if (isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending) return;
 
         setIsWorkspaceFocus(focused);
         navigate({
@@ -1497,7 +1497,8 @@ function EditBlogPostPage() {
         && canonicalValid
         && ((status !== 'published' && status !== 'scheduled') || interactivePublishReady)
         && hasFutureSchedule;
-    const editorBusy = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;
+    const workspaceFocusDisabled = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;
+    const editorBusy = workspaceFocusDisabled;
     const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
     const editorFormDisabled = editorBusy || !canEditBlog || isUsingLocalPostCopy;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
@@ -1920,7 +1921,7 @@ function EditBlogPostPage() {
                     type="button"
                     variant="outline"
                     onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
-                    disabled={editorActionBusy}
+                    disabled={workspaceFocusDisabled}
                     iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 >
                     {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
@@ -2446,7 +2447,7 @@ function EditBlogPostPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => setWorkspaceFocusRoute(false)}
-                                            disabled={editorActionBusy}
+                                            disabled={workspaceFocusDisabled}
                                             iconStart={<Minimize2 className="size-4" />}
                                         >
                                             Show panels

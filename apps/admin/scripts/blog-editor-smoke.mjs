@@ -31,6 +31,12 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes('localPostCopyDisabledMessage'), 'Blog editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
   assert(source.includes('editorBusy || !canEditBlog || isUsingLocalPostCopy'), 'Blog editor canvas changes must ignore local fallback copies');
+  assert(
+    source.includes('const workspaceFocusDisabled = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;') &&
+      source.includes('if (isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending) return;') &&
+      source.includes('disabled={workspaceFocusDisabled}'),
+    'Blog editor focus mode must stay available during route/readiness checks while loading/save/workflow locks still apply',
+  );
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend post loaded into the editor.'), 'Blog editor reload must clear fallback state after loading backend content');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog editor must use the shared EmptyState component for sidebar empty states');
   assert(source.includes('Public comments for this post will appear here for quick review'), 'Blog editor comments empty state must explain how post comments populate');
