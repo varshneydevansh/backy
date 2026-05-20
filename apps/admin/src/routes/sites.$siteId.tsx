@@ -32,6 +32,7 @@ import { useStore } from "@/stores/mockStore";
 import { PageShell } from "@/components/layout/PageShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Notice } from "@/components/ui/Notice";
 import { cn } from "@/lib/utils";
 import {
   deleteSite as deleteSiteFromApi,
@@ -1432,6 +1433,83 @@ function readPayloadData(payload: unknown): Record<string, unknown> {
   return record.data && typeof record.data === "object"
     ? (record.data as Record<string, unknown>)
     : record;
+}
+
+function readPayloadErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const error = record.error;
+  if (!error || typeof error !== "object") return null;
+  const message = (error as Record<string, unknown>).message;
+  return typeof message === "string" && message.trim() ? message : null;
+}
+
+function workflowApiSetupMessage(path?: string): string {
+  const baseLabel = apiBase || "the current admin origin";
+  const pathLabel = path ? ` (${path})` : "";
+  return `Workflow automation needs the Backy public API server at ${baseLabel}${pathLabel}. Start the public API app or configure VITE_BACKY_PUBLIC_API_BASE_URL, then refresh this panel.`;
+}
+
+function isWorkflowApiSetupMessage(message?: string | null): boolean {
+  return Boolean(
+    message?.includes("Workflow automation needs the Backy public API server"),
+  );
+}
+
+function workflowResponsePath(response: Response): string | undefined {
+  try {
+    return response.url ? new URL(response.url).pathname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeWorkflowError(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message || fallback;
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("load failed") ||
+    lower.includes("unexpected token") ||
+    lower.includes("is not valid json") ||
+    lower.includes("<!doctype")
+  ) {
+    return workflowApiSetupMessage();
+  }
+  return message;
+}
+
+async function readWorkflowApiPayload(
+  response: Response,
+  fallback: string,
+): Promise<Record<string, unknown>> {
+  if (response.status === 204) return {};
+  const contentType = response.headers.get("content-type") || "";
+  const isJson =
+    contentType.includes("application/json") || contentType.includes("+json");
+
+  if (!isJson) {
+    await response.text().catch(() => "");
+    throw new Error(workflowApiSetupMessage(workflowResponsePath(response)));
+  }
+
+  const payload = await response
+    .json()
+    .catch(() => {
+      throw new Error(workflowApiSetupMessage(workflowResponsePath(response)));
+    });
+  const payloadRecord =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+
+  if (!response.ok || payloadRecord.success === false) {
+    throw new Error(readPayloadErrorMessage(payload) || fallback);
+  }
+
+  return readPayloadData(payload);
 }
 
 function formatTime(value?: string): string {
@@ -3087,8 +3165,7 @@ function EditSitePage() {
           : firstFormId,
       }));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to load forms.";
+      const message = normalizeWorkflowError(error, "Unable to load forms.");
       setWorkflowError(message);
       setState((prev) => ({ ...prev, forms: [], selectedFormId: "" }));
     } finally {
@@ -3128,10 +3205,10 @@ function EditSitePage() {
         submissionCount,
       }));
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to load form submissions.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to load form submissions.",
+      );
       setState((prev) => ({ ...prev, submissions: [], submissionCount: 0 }));
       setWorkflowError(message);
     } finally {
@@ -3171,8 +3248,10 @@ function EditSitePage() {
         ),
       );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to load contacts.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to load contacts.",
+      );
       setState((prev) => ({ ...prev, contacts: [], contactCount: 0 }));
       setWorkflowError(message);
     } finally {
@@ -3198,12 +3277,10 @@ function EditSitePage() {
       const response = await adminFetch(
         buildApiUrl(`/api/sites/${siteApiId}/comments?${query}`),
       );
-      if (!response.ok) {
-        throw new Error("Unable to load comments.");
-      }
-
-      const payload = await response.json();
-      const data = readPayloadData(payload);
+      const data = await readWorkflowApiPayload(
+        response,
+        "Unable to load comments.",
+      );
       const comments = Array.isArray(data.comments)
         ? (data.comments as Comment[])
         : [];
@@ -3217,8 +3294,10 @@ function EditSitePage() {
         selectedCommentIds: [],
       }));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to load comments.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to load comments.",
+      );
       setState((prev) => ({
         ...prev,
         comments: [],
@@ -3259,12 +3338,10 @@ function EditSitePage() {
       const response = await fetch(
         buildApiUrl(`/api/sites/${siteApiId}/comments/report-reasons`),
       );
-      if (!response.ok) {
-        return;
-      }
-
-      const payload = await response.json().catch(() => null);
-      const data = readPayloadData(payload);
+      const data: Record<string, unknown> = await readWorkflowApiPayload(
+        response,
+        "Unable to load comment report reasons.",
+      ).catch(() => ({} as Record<string, unknown>));
       const reasons: unknown[] = Array.isArray(data.reasons)
         ? data.reasons
         : [];
@@ -3571,10 +3648,10 @@ function EditSitePage() {
         loadContacts(state.selectedFormId),
       ]);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to update submission status.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to update submission status.",
+      );
       setWorkflowError(message);
     } finally {
       setActionBusyId(null);
@@ -3597,10 +3674,10 @@ function EditSitePage() {
       });
       await loadContacts(state.selectedFormId);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to update contact status.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to update contact status.",
+      );
       setWorkflowError(message);
     } finally {
       setActionBusyId(null);
@@ -3621,10 +3698,10 @@ function EditSitePage() {
       });
       await loadContacts(state.selectedFormId);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to save contact notes.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to save contact notes.",
+      );
       setWorkflowError(message);
     } finally {
       setActionBusyId(null);
@@ -3674,15 +3751,13 @@ function EditSitePage() {
           }),
         },
       );
-      if (!response.ok) {
-        throw new Error("Unable to update comment status.");
-      }
+      await readWorkflowApiPayload(response, "Unable to update comment status.");
       await loadComments();
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to update comment status.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to update comment status.",
+      );
       setWorkflowError(message);
     } finally {
       setActionBusyId(null);
@@ -3763,10 +3838,10 @@ function EditSitePage() {
       const blob = makeCsvBlob(rows);
       downloadBlob(`${fileLabel}.csv`, blob);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to export form submissions.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to export form submissions.",
+      );
       setWorkflowError(message);
     }
   };
@@ -3839,8 +3914,10 @@ function EditSitePage() {
       const blob = makeCsvBlob(rows);
       downloadBlob(`${fileLabel}.csv`, blob);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to export contacts.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to export contacts.",
+      );
       setWorkflowError(message);
     }
   };
@@ -3870,12 +3947,10 @@ function EditSitePage() {
         const response = await adminFetch(
           buildApiUrl(`/api/sites/${siteApiId}/comments?${query.toString()}`),
         );
-        if (!response.ok) {
-          throw new Error("Unable to load comments for export.");
-        }
-
-        const payload = await response.json();
-        const data = readPayloadData(payload);
+        const data = await readWorkflowApiPayload(
+          response,
+          "Unable to load comments for export.",
+        );
         const comments = Array.isArray(data.comments)
           ? (data.comments as Comment[])
           : [];
@@ -3939,8 +4014,10 @@ function EditSitePage() {
           : `${commentStatus}-${commentRequestId || "all"}`;
       downloadBlob(`${fileLabel}.csv`, blob);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to export comments.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to export comments.",
+      );
       setWorkflowError(message);
     }
   };
@@ -3969,17 +4046,18 @@ function EditSitePage() {
         },
       );
 
-      if (!response.ok) {
-        throw new Error("Unable to apply bulk comment moderation.");
-      }
+      await readWorkflowApiPayload(
+        response,
+        "Unable to apply bulk comment moderation.",
+      );
 
       await loadComments();
       clearCommentSelection();
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to apply bulk comment moderation.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to apply bulk comment moderation.",
+      );
       setWorkflowError(message);
     } finally {
       setActionBusyId(null);
@@ -4027,12 +4105,10 @@ function EditSitePage() {
             }).toString()}`,
           ),
         );
-        if (!response.ok) {
-          throw new Error("Unable to load audit events.");
-        }
-
-        const payload = await response.json();
-        const data = readPayloadData(payload);
+        const data = await readWorkflowApiPayload(
+          response,
+          "Unable to load audit events.",
+        );
         const events = Array.isArray(data.events) ? data.events : [];
         const count =
           typeof data.count === "number" ? data.count : events.length;
@@ -4084,8 +4160,10 @@ function EditSitePage() {
       const blob = makeCsvBlob(rows);
       downloadBlob(`events-${commentRequestId}.csv`, blob);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to export events.";
+      const message = normalizeWorkflowError(
+        error,
+        "Unable to export events.",
+      );
       setWorkflowError(message);
     }
   };
@@ -4599,6 +4677,10 @@ function EditSitePage() {
     () => JSON.stringify(siteWorkspaceHandoff, null, 2),
     [siteWorkspaceHandoff],
   );
+  const workflowErrorIsSetup = isWorkflowApiSetupMessage(state.errorMessage);
+  const workflowApiOrigin =
+    apiBase ||
+    (typeof window !== "undefined" ? window.location.origin : "admin origin");
 
   const copySiteHandoffText = async (value: string, label: string) => {
     if (isSiteSettingsBusy) return;
@@ -7887,9 +7969,23 @@ function EditSitePage() {
           ) : (
             <>
               {state.errorMessage && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-4 py-3">
-                  {state.errorMessage}
-                </div>
+                <Notice
+                  tone="warning"
+                  title={
+                    workflowErrorIsSetup
+                      ? "Workflow API unavailable"
+                      : "Workflow refresh failed"
+                  }
+                  data-testid="site-workflow-error"
+                >
+                  <p>{state.errorMessage}</p>
+                  {workflowErrorIsSetup && (
+                    <p className="mt-2">
+                      Expected API origin:{" "}
+                      <code>{workflowApiOrigin}</code>.
+                    </p>
+                  )}
+                </Notice>
               )}
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

@@ -48,6 +48,12 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('Lead-share contacts that match the active form and status filter will appear here.'), 'Site detail contacts empty state must explain filtered contacts');
   assert(source.includes('title="No comments in the selected state"'), 'Site detail comments panel must keep the filtered empty comments title visible');
   assert(source.includes('Comments that match the active moderation status will appear here for review and bulk actions.'), 'Site detail comments empty state must explain filtered moderation results');
+  assert(source.includes('import { Notice } from "@/components/ui/Notice";'), 'Site detail workflow errors must use the shared Notice component');
+  assert(source.includes('Workflow automation needs the Backy public API server'), 'Site detail workflow errors must explain public API setup/offline state');
+  assert(source.includes('VITE_BACKY_PUBLIC_API_BASE_URL'), 'Site detail workflow setup message must name the public API base URL env var');
+  assert((source.match(/readWorkflowApiPayload\(/g) || []).length >= 6, 'Site detail workflow public API calls must use the guarded JSON reader');
+  assert(source.includes('data-testid="site-workflow-error"'), 'Site detail workflow error notice must expose a stable test id');
+  assert(!source.includes('const payload = await response.json();'), 'Site detail workflow public API calls must not leak raw JSON parser errors');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

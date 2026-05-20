@@ -555,7 +555,7 @@ The next implementation should not start by adding more UI screens. The product 
   - Validation added: `npm run test:editor-drag --workspace @backy-cms/admin` covers text/image/container/nested-child/form drag, image/form resize, Shift+Arrow keyboard nudging, Ctrl+Z/Ctrl+Shift+Z drag undo/redo, backend save persistence, and fresh editor reload rehydration. Remaining validation: broader manual browser QA across zoom/breakpoints and additional undo/redo coverage for property edits, deletes, paste, layer changes, and responsive mode changes.
 - **High**: Right-side text controls and canvas text editing still need selection preservation tests after focus moves between canvas and property panel.
 - **High**: Breakpoint controls currently change canvas dimensions, but true per-breakpoint element overrides are not complete.
-- **Medium**: Site workflow panel depends on public API server and should show a clear setup/offline state instead of raw JSON parse errors.
+- **Medium / patched, source-guarded**: Site workflow panel depends on the public API server for comments/events, but now routes public API HTML/offline/parser failures through a setup-specific Notice that names `VITE_BACKY_PUBLIC_API_BASE_URL` instead of leaking raw JSON parse text.
 
 ### Task 7.1: Move editor state to canonical document
 
