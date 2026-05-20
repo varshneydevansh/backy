@@ -640,6 +640,67 @@ const quoteShellValue = (value: string): string => `'${value.replace(/'/g, "'\\'
 
 const boolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 
+const missingInputsFromRuntime = (summary: unknown): string[] => {
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+    return [];
+  }
+
+  const missing = (summary as { missing?: unknown }).missing;
+  return Array.isArray(missing)
+    ? missing.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+};
+
+const buildSettingsProviderRuntimeEvidence = ({
+  database,
+  storage,
+  supabase,
+  vercel,
+  mediaScanner,
+  notifications,
+  commerce,
+  interactiveComponents,
+  publicApi,
+}: {
+  database: unknown;
+  storage: unknown;
+  supabase: unknown;
+  vercel: unknown;
+  mediaScanner: unknown;
+  notifications: unknown;
+  commerce: unknown;
+  interactiveComponents: unknown;
+  publicApi: unknown;
+}) => {
+  const missingInputAliases = uniqueTextValues([
+    ...missingInputsFromRuntime(database),
+    ...missingInputsFromRuntime(storage),
+    ...missingInputsFromRuntime(supabase),
+    ...missingInputsFromRuntime(vercel),
+    ...missingInputsFromRuntime(mediaScanner),
+    ...missingInputsFromRuntime(notifications),
+    ...missingInputsFromRuntime(commerce),
+    ...missingInputsFromRuntime(interactiveComponents),
+    ...missingInputsFromRuntime(publicApi),
+  ]);
+
+  return {
+    database,
+    storage,
+    supabase,
+    vercel,
+    mediaScanner,
+    notifications,
+    commerce,
+    interactiveComponents,
+    publicApi,
+    missingInputAliases,
+    localRuntimeInputsConfigured: missingInputAliases.length === 0,
+    liveProviderGateRequired: true,
+    secretHandling: 'Provider secret values are never returned; runtime evidence reports booleans, aliases, provider families, and non-secret URLs only.',
+  };
+};
+
 type FrontendDatabaseCertificationEnvAlias = 'BACKY_DATABASE_URL' | 'DATABASE_URL';
 
 type FrontendDatabaseCertificationCommandOptions = {
@@ -1894,6 +1955,27 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
   ]);
+  const providerCertificationRuntimeEvidence = useMemo(() => buildSettingsProviderRuntimeEvidence({
+    database: runtimeDatabase || null,
+    storage: runtimeStorage || null,
+    supabase: runtimeSupabase || null,
+    vercel: runtimeVercel || null,
+    mediaScanner: runtimeMediaScanner || null,
+    notifications: runtimeNotifications || null,
+    commerce: runtimeCommerce || null,
+    interactiveComponents: runtimeInteractiveComponents || null,
+    publicApi: runtimePublicApi || null,
+  }), [
+    runtimeCommerce,
+    runtimeDatabase,
+    runtimeInteractiveComponents,
+    runtimeMediaScanner,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+  ]);
   const providerCertificationHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.settings-provider-certification-handoff.v1',
@@ -1903,17 +1985,7 @@ function SettingsPage() {
     localPreflight: 'npm run test:settings-provider-certification-preflight-contract',
     releasePreflight: 'npm run test:release-certification-preflight-contract',
     secretHandling: 'Provider credentials stay in deployment or CI environment variables; Settings handoff manifests only expose non-secret provider families, gate names, and readiness evidence.',
-    runtimeEvidence: {
-      database: runtimeDatabase || null,
-      storage: runtimeStorage || null,
-      supabase: runtimeSupabase || null,
-      vercel: runtimeVercel || null,
-      mediaScanner: runtimeMediaScanner || null,
-      notifications: runtimeNotifications || null,
-      commerce: runtimeCommerce || null,
-      interactiveComponents: runtimeInteractiveComponents || null,
-      publicApi: runtimePublicApi || null,
-    },
+    runtimeEvidence: providerCertificationRuntimeEvidence,
     metadataEvidence: {
       storage: integrations.storage || null,
       supabase: integrations.supabase || null,
@@ -1935,15 +2007,7 @@ function SettingsPage() {
     integrations.storage,
     integrations.supabase,
     integrations.vercel,
-    runtimeCommerce,
-    runtimeDatabase,
-    runtimeInteractiveComponents,
-    runtimePublicApi,
-    runtimeMediaScanner,
-    runtimeNotifications,
-    runtimeStorage,
-    runtimeSupabase,
-    runtimeVercel,
+    providerCertificationRuntimeEvidence,
   ]);
   const frontendDatabaseCertificationHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
