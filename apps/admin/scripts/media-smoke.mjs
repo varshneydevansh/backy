@@ -73,6 +73,16 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('data-testid="media-operation-action-plan"') && source.includes('operationActionPlan: mediaOperationActionPlan'), 'Media command center must render and export the operation action plan');
   assert(source.includes("schemaVersion: 'backy.media-attribution-handoff.v1'") && source.includes('attributionHandoff: mediaAttributionHandoff'), 'Media handoff manifest must export the attribution handoff schema');
   assert(source.includes('data-testid="media-attribution-handoff"') && source.includes('copyMediaAttributionHandoff') && source.includes('Copy attribution'), 'Media command center must render and copy a dedicated attribution handoff');
+  assert(source.includes("schemaVersion: 'backy.media-storage-provider-certification.v1'") && source.includes('storageProviderCertification: mediaStorageProviderCertificationHandoff'), 'Media handoff manifest must export the storage-provider certification schema');
+  assert(
+    source.includes('data-testid="media-storage-provider-certification"') &&
+      source.includes('data-certification-schema={mediaStorageProviderCertificationHandoff.schemaVersion}') &&
+      source.includes('copyMediaStorageProviderCertification') &&
+      source.includes('Copy certification') &&
+      source.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER=${provider} npm run ci:settings-provider-certification') &&
+      source.includes('nonSecretBoundary'),
+    'Media storage health must render a copyable non-secret storage-provider certification handoff',
+  );
   assert(source.includes('providerAttributionRows') && source.includes('data-testid="media-attribution-sources"'), 'Media analytics must expose cross-channel attribution source rows');
   assert(source.includes('title="No media quota data yet"'), 'Media runtime quota panel must keep the shared empty-state title visible');
   assert(source.includes('Quota data will appear after the media API responds with workspace storage usage and limits.'), 'Media runtime quota empty state must explain API-backed usage data');
@@ -1131,6 +1141,11 @@ const assertMediaLayout = async (client, expectedText) => {
     hasStorageSecretManager: document.body?.innerText?.includes('Secret plan') &&
       document.body?.innerText?.includes('Promote secrets') &&
       document.body?.innerText?.includes('Revoke NEXT vars'),
+    hasStorageProviderCertification: Boolean(document.querySelector('[data-testid="media-storage-provider-certification"]')) &&
+      document.body?.innerText?.includes('Storage provider certification') &&
+      document.body?.innerText?.includes('backy.media-storage-provider-certification.v1') &&
+      document.body?.innerText?.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') &&
+      Boolean(document.querySelector('[aria-label="Copy media storage provider certification handoff"]')),
     hasOperationActionPlan: Boolean(document.querySelector('[data-testid="media-operation-action-plan"]')) &&
       document.body?.innerText?.includes('Media operation action plan') &&
       document.body?.innerText?.includes('backy.media-operation-action-plan.v1'),
@@ -1157,7 +1172,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasStorageProviderCertification && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;

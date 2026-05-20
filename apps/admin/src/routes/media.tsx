@@ -170,6 +170,59 @@ interface MediaAttributionHandoff {
   missingEvidence: string[];
   nextSteps: string[];
 }
+type MediaStorageProviderCertificationStatus = 'ready' | 'partial' | 'blocked';
+interface MediaStorageProviderCertificationHandoff {
+  schemaVersion: 'backy.media-storage-provider-certification.v1';
+  status: MediaStorageProviderCertificationStatus;
+  ready: boolean;
+  provider: MediaStorageProvider;
+  summary: string;
+  runtime: {
+    provider?: string;
+    configured: boolean;
+    bucket?: string;
+    basePath?: string;
+    publicUrl?: string;
+    missing: string[];
+  };
+  savedMetadata: {
+    provider?: string;
+    bucket?: string;
+    publicBaseUrl?: string;
+    pathPrefix?: string;
+    privateFilesEnabled: boolean;
+    imageTransformsEnabled: boolean;
+    lifecyclePolicyEnabled: boolean;
+    lifecycleTempRetentionDays?: number;
+    lifecycleNoncurrentVersionDays?: number;
+    secretReferenceCount: number;
+    supabaseStorageEnabled: boolean;
+    supabaseProjectRef?: string;
+    supabaseProjectUrlConfigured: boolean;
+  };
+  requiredInputs: Array<{
+    name: string;
+    env: string[];
+    required: boolean;
+    secret: boolean;
+    status: 'detected' | 'missing' | 'optional';
+    detail: string;
+  }>;
+  probes: {
+    storageCheck: 'ready' | 'missing';
+    provisioning: 'ready' | 'not-run';
+    credentialRotation: 'ready' | 'not-run' | 'not-required';
+    secretManager: 'ready' | 'not-run' | 'not-required';
+  };
+  operatorCommands: {
+    doctor: string;
+    providerGate: string;
+    releaseGate: string;
+  };
+  missingEvidence: string[];
+  nextSteps: string[];
+  nonSecretBoundary: string;
+}
 
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
@@ -1514,12 +1567,37 @@ function MediaPage() {
     mediaAnalytics,
     publicMediaListUrl,
   ]);
+  const mediaStorageProviderCertificationHandoff = useMemo(() => buildMediaStorageProviderCertificationHandoff({
+    provider: selectedStorageProvider,
+    runtimeStorage,
+    runtimeSupabase,
+    storageSettings,
+    supabaseSettings,
+    storageEnvContract: MEDIA_STORAGE_ENV_CONTRACT[selectedStorageProvider],
+    storageSecretReferenceCount,
+    storageDiagnostics,
+    storageProvisioningResult,
+    storageCredentialRotationResult,
+    storageSecretManagerResult,
+  }), [
+    runtimeStorage,
+    runtimeSupabase,
+    selectedStorageProvider,
+    storageCredentialRotationResult,
+    storageDiagnostics,
+    storageProvisioningResult,
+    storageSecretManagerResult,
+    storageSecretReferenceCount,
+    storageSettings,
+    supabaseSettings,
+  ]);
   const mediaHandoff = useMemo(() => ({
     schemaVersion: 'backy.media-handoff.v1',
     siteId,
     generatedAt: new Date().toISOString(),
     operationActionPlan: mediaOperationActionPlan,
     attributionHandoff: mediaAttributionHandoff,
+    storageProviderCertification: mediaStorageProviderCertificationHandoff,
     readiness: {
       schemaVersion: 'backy.media-readiness.v1',
       score: mediaLibraryReadiness.score,
@@ -1740,6 +1818,7 @@ function MediaPage() {
     mediaQuota,
     mediaLibraryReadiness,
     mediaAttributionHandoff,
+    mediaStorageProviderCertificationHandoff,
     mediaOperationActionPlan,
     publicMediaDetailUrl,
     publicMediaFontsUrl,
@@ -1761,6 +1840,10 @@ function MediaPage() {
   ]);
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
   const mediaAttributionHandoffText = useMemo(() => JSON.stringify(mediaAttributionHandoff, null, 2), [mediaAttributionHandoff]);
+  const mediaStorageProviderCertificationHandoffText = useMemo(
+    () => JSON.stringify(mediaStorageProviderCertificationHandoff, null, 2),
+    [mediaStorageProviderCertificationHandoff],
+  );
   const storageSettingsControlsDisabled = isSavingStorageSettings || !settingsIntegrations || !canConfigureMediaStorage;
   const storageEnvContract = useMemo(() => MEDIA_STORAGE_ENV_CONTRACT[selectedStorageProvider], [selectedStorageProvider]);
   const missingStorageEnv = new Set(runtimeStorage?.provider === selectedStorageProvider ? runtimeStorage.missing || [] : []);
@@ -3424,6 +3507,14 @@ function MediaPage() {
     }
     await copyMediaApiText(mediaAttributionHandoffText, 'Media attribution handoff');
   };
+  const copyMediaStorageProviderCertification = async () => {
+    if (!canExportMediaActivity) {
+      setBulkNotice(null);
+      setError(deniedExportMessage);
+      return;
+    }
+    await copyMediaApiText(mediaStorageProviderCertificationHandoffText, 'Media storage provider certification handoff');
+  };
   const downloadMediaHandoff = () => {
     if (!canExportMediaActivity) {
       setBulkNotice(null);
@@ -4884,6 +4975,114 @@ function MediaPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div
+            className="mt-4 rounded-lg border border-border bg-background p-4"
+            data-testid="media-storage-provider-certification"
+            data-certification-schema={mediaStorageProviderCertificationHandoff.schemaVersion}
+            data-certification-status={mediaStorageProviderCertificationHandoff.status}
+            data-certification-provider={mediaStorageProviderCertificationHandoff.provider}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Storage provider certification</h3>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Non-secret evidence for proving the active Media storage provider before production uploads, private files, transforms, and font delivery are certified.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={cn(
+                  'rounded-md px-2.5 py-1 text-xs font-semibold capitalize',
+                  mediaStorageProviderCertificationHandoff.status === 'ready'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : mediaStorageProviderCertificationHandoff.status === 'partial'
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'bg-red-50 text-red-700',
+                )}
+                >
+                  {mediaStorageProviderCertificationHandoff.status}
+                </span>
+                <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+                  {mediaStorageProviderCertificationHandoff.schemaVersion}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void copyMediaStorageProviderCertification()}
+                  disabled={isMediaLibraryBusy || !canExportMediaActivity}
+                  title={!canExportMediaActivity ? activityPermissionTitle : 'Copy media storage provider certification handoff'}
+                  aria-label="Copy media storage provider certification handoff"
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Copy className="size-3.5" />
+                  Copy certification
+                </button>
+              </div>
+            </div>
+            <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              {mediaStorageProviderCertificationHandoff.summary}
+            </p>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              <MediaApiStat label="Provider" value={mediaStorageProviderCertificationHandoff.provider} />
+              <MediaApiStat label="Runtime" value={mediaStorageProviderCertificationHandoff.runtime.configured ? 'configured' : 'blocked'} />
+              <MediaApiStat
+                label="Required env"
+                value={`${mediaStorageProviderCertificationHandoff.requiredInputs.filter((input) => input.status !== 'missing').length}/${mediaStorageProviderCertificationHandoff.requiredInputs.length}`}
+              />
+              <MediaApiStat
+                label="Probes"
+                value={`${Object.values(mediaStorageProviderCertificationHandoff.probes).filter((status) => status === 'ready' || status === 'not-required').length}/4`}
+              />
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="rounded-md border border-border bg-muted/20 p-3">
+                <div className="text-xs font-semibold text-foreground">Required inputs</div>
+                <div className="mt-2 grid gap-2">
+                  {mediaStorageProviderCertificationHandoff.requiredInputs.slice(0, 4).map((input) => (
+                    <div key={`${input.name}:${input.env.join('|')}`} className="rounded-md border border-border bg-background px-2.5 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">{input.name}</span>
+                        <span className={cn(
+                          'rounded px-1.5 py-0.5 text-[10px] font-semibold',
+                          input.status === 'missing'
+                            ? 'bg-warning/10 text-warning'
+                            : input.status === 'detected'
+                              ? 'bg-success/10 text-success'
+                              : 'bg-muted text-muted-foreground',
+                        )}
+                        >
+                          {input.status}
+                        </span>
+                      </div>
+                      <code className="mt-1 block break-all text-[11px] text-muted-foreground">
+                        {input.env.join(' or ')}
+                      </code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-muted/20 p-3">
+                <div className="text-xs font-semibold text-foreground">Operator gate</div>
+                <code className="mt-2 block break-all rounded bg-background px-2.5 py-2 text-[11px] text-muted-foreground">
+                  {mediaStorageProviderCertificationHandoff.operatorCommands.providerGate}
+                </code>
+                <code className="mt-2 block break-all rounded bg-background px-2.5 py-2 text-[11px] text-muted-foreground">
+                  {mediaStorageProviderCertificationHandoff.operatorCommands.doctor}
+                </code>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {mediaStorageProviderCertificationHandoff.nonSecretBoundary}
+                </p>
+              </div>
+            </div>
+            {mediaStorageProviderCertificationHandoff.missingEvidence.length > 0 && (
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {mediaStorageProviderCertificationHandoff.missingEvidence.slice(0, 3).map((item) => (
+                  <div key={item} className="rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {storageCheckError && (
@@ -9162,6 +9361,141 @@ const buildMediaOperationActionPlan = ({
     readyCount,
     totalCount: actions.length,
     actions,
+  };
+};
+
+const buildMediaStorageProviderCertificationHandoff = ({
+  provider,
+  runtimeStorage,
+  runtimeSupabase,
+  storageSettings,
+  supabaseSettings,
+  storageEnvContract,
+  storageSecretReferenceCount,
+  storageDiagnostics,
+  storageProvisioningResult,
+  storageCredentialRotationResult,
+  storageSecretManagerResult,
+}: {
+  provider: MediaStorageProvider;
+  runtimeStorage: SiteSettingsInput['runtimeStorage'] | undefined;
+  runtimeSupabase: SiteSettingsInput['runtimeSupabase'] | undefined;
+  storageSettings: MediaStorageSettings;
+  supabaseSettings: MediaSupabaseSettings;
+  storageEnvContract: MediaStorageEnvField[];
+  storageSecretReferenceCount: number;
+  storageDiagnostics: SettingsInfrastructureDiagnostic[] | null;
+  storageProvisioningResult: SettingsStorageProvisioningResult | null;
+  storageCredentialRotationResult: SettingsStorageCredentialRotationProbeResult | null;
+  storageSecretManagerResult: SettingsStorageSecretManagerResult | null;
+}): MediaStorageProviderCertificationHandoff => {
+  const runtimeMissing = runtimeStorage?.provider === provider ? runtimeStorage.missing || [] : [];
+  const runtimeConfigured = runtimeStorage?.configured === true && (
+    runtimeStorage.provider === provider ||
+    (provider === 'local' && !runtimeStorage.provider)
+  );
+  const storageCheckReady = (storageDiagnostics?.length || 0) > 0 &&
+    (storageDiagnostics || []).every((diagnostic) => diagnostic.status !== 'blocked');
+  const requiredInputs = storageEnvContract.map((field) => {
+    const missing = provider !== 'local' && field.required && (
+      runtimeStorage?.provider !== provider || runtimeMissing.includes(field.name)
+    );
+    return {
+      name: field.name,
+      env: field.env,
+      required: field.required,
+      secret: field.secret === true,
+      status: missing ? 'missing' : field.required ? 'detected' : 'optional',
+      detail: field.detail,
+    } satisfies MediaStorageProviderCertificationHandoff['requiredInputs'][number];
+  });
+  const missingRequiredInputs = requiredInputs.filter((input) => input.status === 'missing');
+  const hasProviderMetadata = provider === 'local' || Boolean(storageSettings.bucket || runtimeStorage?.bucket);
+  const hasSecretReferences = provider === 'local' || (
+    provider === 'supabase'
+      ? Boolean(storageSettings.supabaseKeySecretRef || runtimeSupabase?.serviceRoleConfigured || runtimeSupabase?.anonKeyConfigured)
+      : Boolean(storageSettings.accessKeyIdSecretRef && storageSettings.secretAccessKeySecretRef)
+  );
+  const supabaseReady = provider !== 'supabase' || runtimeSupabase?.configured === true;
+  const provisioningReady = Boolean(storageProvisioningResult);
+  const credentialRotationReady = provider === 'local' || Boolean(storageCredentialRotationResult);
+  const secretManagerReady = provider === 'local' || Boolean(storageSecretManagerResult);
+  const missingEvidence = [
+    ...(!runtimeConfigured ? [`Run Storage health until runtime storage reports ${provider} configured for uploads and delivery.`] : []),
+    ...(runtimeStorage?.provider && runtimeStorage.provider !== provider ? [`Selected Media provider is ${provider}, but runtime currently reports ${runtimeStorage.provider}.`] : []),
+    ...(missingRequiredInputs.length > 0 ? [`Set required server env aliases for ${missingRequiredInputs.map((input) => input.name).join(', ')}.`] : []),
+    ...(!hasProviderMetadata ? ['Save non-secret storage provider metadata such as bucket/path/public URL from Media or Settings.'] : []),
+    ...(!hasSecretReferences ? ['Save secret reference names instead of raw storage credentials before certification.'] : []),
+    ...(!supabaseReady ? ['Complete Supabase project, bucket, and key runtime evidence before certifying Supabase storage.'] : []),
+    ...(!storageCheckReady ? ['Run check from Storage health so storage/Supabase diagnostics are attached to the handoff.'] : []),
+    ...(!provisioningReady ? ['Run the provisioning probe to verify bucket/path and lifecycle preparation evidence.'] : []),
+    ...(!credentialRotationReady ? ['Run the credential rotation probe so replacement credential readiness is documented.'] : []),
+    ...(!secretManagerReady ? ['Run the secret manager plan so promote/revoke actions are documented without exposing secrets.'] : []),
+  ];
+  const ready = missingEvidence.length === 0;
+  const status: MediaStorageProviderCertificationStatus = ready
+    ? 'ready'
+    : runtimeConfigured && hasProviderMetadata && hasSecretReferences
+      ? 'partial'
+      : 'blocked';
+
+  return {
+    schemaVersion: 'backy.media-storage-provider-certification.v1',
+    status,
+    ready,
+    provider,
+    summary: ready
+      ? `${provider} media storage has runtime, metadata, probe, rotation, and secret-manager evidence for production certification.`
+      : status === 'partial'
+        ? `${provider} media storage is configured, but ${missingEvidence.length} certification evidence item${missingEvidence.length === 1 ? '' : 's'} still need${missingEvidence.length === 1 ? 's' : ''} review.`
+        : `${provider} media storage is not ready for production certification yet.`,
+    runtime: {
+      provider: runtimeStorage?.provider,
+      configured: runtimeConfigured,
+      bucket: runtimeStorage?.bucket,
+      basePath: runtimeStorage?.basePath,
+      publicUrl: runtimeStorage?.publicUrl,
+      missing: runtimeStorage?.missing || [],
+    },
+    savedMetadata: {
+      provider: storageSettings.provider || provider,
+      bucket: storageSettings.bucket,
+      publicBaseUrl: storageSettings.publicBaseUrl,
+      pathPrefix: storageSettings.pathPrefix,
+      privateFilesEnabled: Boolean(storageSettings.privateFilesEnabled),
+      imageTransformsEnabled: storageSettings.imageTransformsEnabled !== false,
+      lifecyclePolicyEnabled: Boolean(storageSettings.lifecyclePolicyEnabled),
+      lifecycleTempRetentionDays: storageSettings.lifecycleTempRetentionDays,
+      lifecycleNoncurrentVersionDays: storageSettings.lifecycleNoncurrentVersionDays,
+      secretReferenceCount: storageSecretReferenceCount,
+      supabaseStorageEnabled: Boolean(supabaseSettings.storageEnabled),
+      supabaseProjectRef: supabaseSettings.projectRef,
+      supabaseProjectUrlConfigured: Boolean(supabaseSettings.projectUrl),
+    },
+    requiredInputs,
+    probes: {
+      storageCheck: storageCheckReady ? 'ready' : 'missing',
+      provisioning: provisioningReady ? 'ready' : 'not-run',
+      credentialRotation: provider === 'local' ? 'not-required' : credentialRotationReady ? 'ready' : 'not-run',
+      secretManager: provider === 'local' ? 'not-required' : secretManagerReady ? 'ready' : 'not-run',
+    },
+    operatorCommands: {
+      doctor: `BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER=${provider} npm run doctor:release-certification`,
+      providerGate: `BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER=${provider} npm run ci:settings-provider-certification`,
+      releaseGate: 'Use .github/workflows/backy-release-certification.yml with certify_settings_providers=true and the selected storage provider.',
+    },
+    missingEvidence,
+    nextSteps: missingEvidence.length > 0
+      ? [
+          'Save provider metadata and secret references in Media or Settings.',
+          'Run check, Provision probe, Rotation probe, and Secret plan from Storage health.',
+          `Run ${`BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER=${provider} npm run ci:settings-provider-certification`} with real provider credentials when ready.`,
+        ]
+      : [
+          'Attach this JSON to release evidence for the Media Partial row.',
+          'Keep replacement credentials in secret references and rotate through the guarded secret-manager flow.',
+        ],
+    nonSecretBoundary: 'This handoff intentionally exposes provider names, env alias names, booleans, bucket/path metadata, and probe status only. Raw storage credentials and database URLs must stay in server, CI, or secret-manager environments.',
   };
 };
 
