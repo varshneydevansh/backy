@@ -283,6 +283,56 @@ const PRODUCT_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS = [
   'credentialed provider readiness check output',
   'non-secret workflow summary without provider secrets',
 ] as const;
+const PRODUCT_PROVIDER_CERTIFICATION_SCENARIOS = [
+  {
+    key: 'catalog-publication',
+    label: 'Catalog publication',
+    expectedEvidence: ['published product', 'public catalog response', 'storefront API handoff'],
+    nextAction: 'Publish a product and verify the public catalog/detail APIs expose the storefront-safe product contract.',
+  },
+  {
+    key: 'checkout-settlement',
+    label: 'Checkout settlement',
+    expectedEvidence: ['checkout-ready product', 'payment provider reference', 'private order record'],
+    nextAction: 'Run a live checkout and verify Backy records the private paid order with provider reference evidence.',
+  },
+  {
+    key: 'quote-adjustments',
+    label: 'Quote adjustments',
+    expectedEvidence: ['tax quote', 'shipping rate', 'discount adjustment'],
+    nextAction: 'Refresh a checkout/order quote through the selected tax, shipping, and discount providers.',
+  },
+  {
+    key: 'provider-catalog-sync',
+    label: 'Provider catalog sync',
+    expectedEvidence: ['provider product id', 'provider price id', 'sync status'],
+    nextAction: 'Run provider catalog sync for a selected product and attach the non-secret sync result.',
+  },
+  {
+    key: 'webhook-settlement',
+    label: 'Webhook settlement',
+    expectedEvidence: ['signed commerce webhook', 'idempotent order update', 'commerce-webhook event'],
+    nextAction: 'Replay signed settlement webhooks against the configured provider and verify idempotent updates.',
+  },
+  {
+    key: 'subscription-lifecycle',
+    label: 'Subscription lifecycle',
+    expectedEvidence: ['settled subscription checkout', 'renewal/dunning', 'pause/resume/cancel action'],
+    nextAction: 'Run the product subscription lifecycle certification scenarios for the selected provider family.',
+  },
+  {
+    key: 'inventory-automation',
+    label: 'Inventory automation',
+    expectedEvidence: ['inventory reservation', 'low-stock event', 'commerce-product event'],
+    nextAction: 'Trigger checkout inventory reservation and low-stock automation for a physical product.',
+  },
+  {
+    key: 'customer-signal',
+    label: 'Customer and performance signal',
+    expectedEvidence: ['private customer profile', 'paid order line', 'product performance row'],
+    nextAction: 'Run checkout/customer profile intake and verify the catalog page shows product performance signal.',
+  },
+] as const;
 
 const PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS = [
   { value: 'auto', label: 'Auto', description: 'Use the first configured live payment provider credential.' },
@@ -1975,6 +2025,127 @@ function ProductsRoute() {
       secretHandling: 'Provider secret values are never returned; this product handoff exposes provider-family readiness booleans only.',
     };
   }, [commerceSettings, runtimeCommerce]);
+  const productProviderCertificationEvidence = useMemo(() => {
+    const countEvidence = (...values: boolean[]) => values.filter(Boolean).length;
+    const providerSyncs = products
+      .map((product) => productProviderSync(product))
+      .filter((sync): sync is CommerceProductProviderSyncResult => Boolean(sync));
+    const syncedProviderSyncCount = providerSyncs.filter((sync) => (
+      sync.status === 'synced' ||
+      Boolean(sync.product?.id || sync.price?.id || sync.providerResponse?.id || sync.providerResponse?.reference)
+    )).length;
+    const subscriptionScenarioCount = selectedProductLifecycle?.certification?.coverage.covered ?? 0;
+    const subscriptionLifecycleCount = (
+      (selectedProductLifecycle?.summary.active ?? 0) +
+      (selectedProductLifecycle?.summary.renewals ?? 0) +
+      (selectedProductLifecycle?.summary.dunning ?? 0) +
+      (selectedProductLifecycle?.summary.paused ?? 0) +
+      (selectedProductLifecycle?.summary.trialEnding ?? 0) +
+      (selectedProductLifecycle?.summary.cancelled ?? 0)
+    );
+    const productAutomationEventCount = productNotificationEvents.length;
+    const hasWebhookLikeProductEvent = productNotificationEvents.some((event) => (
+      String(event.metadata?.event || event.target || '').toLowerCase().includes('webhook') ||
+      String(event.metadata?.channel || '').toLowerCase().includes('webhook')
+    ));
+    const evidenceCounts: Record<string, number> = {
+      'catalog-publication': countEvidence(
+        productApiReady,
+        metrics.published > 0,
+        loadedProductCount > 0,
+        Boolean(commerceCatalogUrl),
+      ),
+      'checkout-settlement': countEvidence(
+        orderIntakeReady,
+        commerceAnalytics.paidOrderCount > 0,
+        (orderAnalytics?.operations.checkoutOrderCount ?? 0) > 0,
+        Boolean(commerceOrderCreateUrl),
+      ),
+      'quote-adjustments': countEvidence(
+        providerRuntimeEvidence.taxConfigured,
+        providerRuntimeEvidence.shippingConfigured,
+        providerRuntimeEvidence.discountConfigured,
+        (orderAnalytics?.revenue.taxTotal ?? 0) > 0,
+        (orderAnalytics?.revenue.shippingTotal ?? 0) > 0,
+        (orderAnalytics?.revenue.discountTotal ?? 0) > 0,
+      ),
+      'provider-catalog-sync': countEvidence(
+        providerRuntimeEvidence.catalogSyncConfigured,
+        providerSyncs.length > 0,
+        syncedProviderSyncCount > 0,
+      ),
+      'webhook-settlement': countEvidence(
+        providerRuntimeEvidence.webhookSecretConfigured,
+        hasWebhookLikeProductEvent,
+        productAutomationEventCount > 0,
+      ),
+      'subscription-lifecycle': countEvidence(
+        providerRuntimeEvidence.subscriptionConfigured,
+        subscriptionScenarioCount > 0,
+        subscriptionLifecycleCount > 0,
+      ),
+      'inventory-automation': countEvidence(
+        metrics.inventory > 0,
+        metrics.lowStock > 0,
+        productAutomationEventCount > 0,
+      ),
+      'customer-signal': countEvidence(
+        customerProfiles.length > 0,
+        commerceAnalytics.customerCount > 0,
+        commerceAnalytics.topProducts.length > 0,
+        (orderAnalytics?.orderCount ?? 0) > 0,
+      ),
+    };
+    const scenarios = PRODUCT_PROVIDER_CERTIFICATION_SCENARIOS.map((scenario) => {
+      const evidenceCount = evidenceCounts[scenario.key] || 0;
+      return {
+        ...scenario,
+        evidenceCount,
+        status: evidenceCount > 0 ? 'covered' as const : 'missing' as const,
+      };
+    });
+    const covered = scenarios.filter((scenario) => scenario.status === 'covered').length;
+
+    return {
+      schemaVersion: 'backy.product-provider-certification-evidence.v1',
+      status: covered === scenarios.length ? 'ready' as const : 'attention' as const,
+      requiredGate: PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_GATE,
+      coverage: {
+        covered,
+        total: scenarios.length,
+        missing: scenarios.filter((scenario) => scenario.status === 'missing').map((scenario) => scenario.key),
+      },
+      scenarios,
+      secretHandling: 'Product provider certification evidence reports scenario names, counts, gates, and non-secret provider families only; product payloads, customer payloads, private orders, and provider secrets stay private.',
+    };
+  }, [
+    commerceAnalytics.customerCount,
+    commerceAnalytics.paidOrderCount,
+    commerceAnalytics.topProducts.length,
+    commerceCatalogUrl,
+    commerceOrderCreateUrl,
+    customerProfiles.length,
+    loadedProductCount,
+    metrics.inventory,
+    metrics.lowStock,
+    metrics.published,
+    orderAnalytics?.operations.checkoutOrderCount,
+    orderAnalytics?.orderCount,
+    orderAnalytics?.revenue.discountTotal,
+    orderAnalytics?.revenue.shippingTotal,
+    orderAnalytics?.revenue.taxTotal,
+    orderIntakeReady,
+    productApiReady,
+    productNotificationEvents,
+    products,
+    providerRuntimeEvidence.catalogSyncConfigured,
+    providerRuntimeEvidence.discountConfigured,
+    providerRuntimeEvidence.shippingConfigured,
+    providerRuntimeEvidence.subscriptionConfigured,
+    providerRuntimeEvidence.taxConfigured,
+    providerRuntimeEvidence.webhookSecretConfigured,
+    selectedProductLifecycle,
+  ]);
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -2015,6 +2186,7 @@ function ProductsRoute() {
       productSubscriptions: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions`,
       productSubscriptionAction: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions/{orderId}/action`,
     },
+    certificationEvidence: productProviderCertificationEvidence,
     providerRuntimeEvidence,
     groups: PRODUCT_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
       family: group.family,
@@ -2036,6 +2208,7 @@ function ProductsRoute() {
     missingProductFields,
     orderIntakeReady,
     productApiReady,
+    productProviderCertificationEvidence,
     providerCertificationCommand,
     providerCertificationRequiredInputs,
     providerRuntimeEvidence,
@@ -4674,6 +4847,57 @@ function ProductsRoute() {
                     </div>
                     <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
                       {providerRuntimeEvidence.secretHandling}
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-provider-certification-evidence">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-foreground">Product provider certification evidence</div>
+                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                          Tracks the non-secret product launch and provider scenarios operators must attach before treating live product commerce as certified.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                          {productProviderCertificationEvidence.schemaVersion}
+                        </span>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                          productProviderCertificationEvidence.status === 'ready' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                        )}>
+                          {productProviderCertificationEvidence.coverage.covered}/{productProviderCertificationEvidence.coverage.total} scenarios
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+                      {productProviderCertificationEvidence.requiredGate}
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {productProviderCertificationEvidence.scenarios.map((scenario) => (
+                        <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="font-medium text-foreground">{scenario.label}</div>
+                            <span className={cn(
+                              'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                              scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                            )}>
+                              {scenario.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
+                          </div>
+                          {scenario.status === 'missing' ? (
+                            <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                          ) : null}
+                          <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                            Expected: {scenario.expectedEvidence.join(' | ')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                      {productProviderCertificationEvidence.secretHandling}
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">

@@ -968,6 +968,23 @@ const assertProductsApiContractsSource = () => {
     "Products page must render the subscription lifecycle action plan, certification evidence, and per-subscription recommendations",
   );
   assert(
+    source.includes('data-testid="products-provider-certification-evidence"') &&
+      source.includes("productProviderCertificationEvidence") &&
+      source.includes("certificationEvidence: productProviderCertificationEvidence") &&
+      source.includes("backy.product-provider-certification-evidence.v1") &&
+      source.includes("Product provider certification evidence") &&
+      source.includes("Catalog publication") &&
+      source.includes("Checkout settlement") &&
+      source.includes("Quote adjustments") &&
+      source.includes("Provider catalog sync") &&
+      source.includes("Webhook settlement") &&
+      source.includes("Subscription lifecycle") &&
+      source.includes("Inventory automation") &&
+      source.includes("Customer and performance signal") &&
+      source.includes("Product provider certification evidence reports scenario names, counts, gates, and non-secret provider families only"),
+    "Products page must render non-secret provider certification scenario evidence",
+  );
+  assert(
     source.includes("bulkUpdateCollectionRecords") &&
       source.includes("const filteredProductIds = useMemo") &&
       source.includes("const visibleIds = new Set(filteredProductIds)") &&
@@ -1030,6 +1047,7 @@ const assertProductsApiContractsSource = () => {
       source.includes("BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification") &&
       source.includes('data-testid="products-provider-runtime-evidence"') &&
       source.includes('data-testid="products-provider-certification-runbook"') &&
+      source.includes('data-testid="products-provider-certification-evidence"') &&
       source.includes("Provider secret values are never returned") &&
       source.includes("requiredInputs"),
     "Products handoff manifest must expose mock and live provider certification gates",
@@ -7202,8 +7220,15 @@ const assertProductsLayout = async (client) => {
           Boolean(document.querySelector('[data-testid="products-provider-certification-payment-toggle"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-tax-provider-select"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-evidence"]')) &&
           providerCertificationText.includes('Live provider certification') &&
           providerCertificationText.includes('Provider certification command builder') &&
+          providerCertificationText.includes('Product provider certification evidence') &&
+          providerCertificationText.includes('backy.product-provider-certification-evidence.v1') &&
+          providerCertificationText.includes('Catalog publication') &&
+          providerCertificationText.includes('Checkout settlement') &&
+          providerCertificationText.includes('Provider catalog sync') &&
+          providerCertificationText.includes('Webhook settlement') &&
           providerCertificationText.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
           providerCertificationText.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
           providerCertificationText.includes('Download provider JSON'),
