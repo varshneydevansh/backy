@@ -529,6 +529,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Element locking
 - ⚠️ Page templates
   - Static composed library presets now exist for hero, feature-grid, lead-capture form, blog post card, latest posts, category list, and related content sections.
+  - Component-library presets can now carry root and child tablet/mobile responsive overrides, and the blog/content presets seed narrower-canvas geometry instead of relying on desktop-only placement after insertion.
   - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
   - Site frontend design contracts now persist page/blog template registries, and admin page/blog create APIs can seed editable content plus design provenance from `frontendDesignTemplateId`.
   - Blog-create smoke now exercises `frontendDesignTemplateId` handoff for captured frontend blog templates and verifies the selected template wrapper, autosave/recovery state, mobile override authoring, and persisted post metadata.

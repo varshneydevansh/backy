@@ -72,6 +72,9 @@ const cloneDefaultProps = (value: Record<string, unknown>): Record<string, unkno
 const cloneDefaultStyles = (value?: CSSProperties): CSSProperties | undefined =>
   value ? JSON.parse(JSON.stringify(value)) as CSSProperties : undefined;
 
+const cloneDefaultResponsive = (value?: CanvasElement['responsive']): CanvasElement['responsive'] | undefined =>
+  value ? JSON.parse(JSON.stringify(value)) as CanvasElement['responsive'] : undefined;
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
@@ -771,6 +774,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       contentRole: 'blog-post-card',
     },
     defaultSize: { width: 360, height: 430 },
+    defaultResponsive: {
+      tablet: { width: 340, height: 430 },
+      mobile: { width: 335, height: 452 },
+    },
     description: 'Reusable article card with media, taxonomy, excerpt, and read-more link',
     defaultChildren: [
       {
@@ -785,6 +792,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           objectFit: 'cover',
           borderRadius: 6,
         },
+        responsive: {
+          tablet: { x: 16, y: 16, width: 308, height: 166 },
+          mobile: { x: 16, y: 16, width: 303, height: 162 },
+        },
       },
       {
         type: 'text',
@@ -798,6 +809,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '700',
           color: '#2563eb',
           textTransform: 'uppercase',
+        },
+        responsive: {
+          tablet: { x: 18, y: 202, width: 296, height: 24 },
+          mobile: { x: 18, y: 198, width: 292, height: 24 },
         },
       },
       {
@@ -814,6 +829,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '800',
           color: '#111827',
         },
+        responsive: {
+          tablet: { x: 18, y: 236, width: 292, height: 68, props: { fontSize: 22 } },
+          mobile: { x: 18, y: 232, width: 292, height: 76, props: { fontSize: 22, lineHeight: 1.18 } },
+        },
       },
       {
         type: 'paragraph',
@@ -826,6 +845,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontSize: 14,
           lineHeight: 1.45,
           color: '#475569',
+        },
+        responsive: {
+          tablet: { x: 18, y: 316, width: 292, height: 54 },
+          mobile: { x: 18, y: 320, width: 292, height: 62 },
         },
       },
       {
@@ -841,6 +864,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontSize: 14,
           fontWeight: '700',
           underline: false,
+        },
+        responsive: {
+          tablet: { x: 18, y: 386, width: 132, height: 24 },
+          mobile: { x: 18, y: 404, width: 132, height: 24 },
         },
       },
     ],
@@ -858,6 +885,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       contentRole: 'latest-posts',
     },
     defaultSize: { width: 1200, height: 610 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 690 },
+      mobile: { width: 375, height: 870 },
+    },
     description: 'Blog archive section with editable intro copy and a collection-ready repeater',
     defaultChildren: [
       {
@@ -873,6 +904,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '800',
           color: '#0f172a',
         },
+        responsive: {
+          tablet: { x: 40, y: 48, width: 520, height: 54 },
+          mobile: { x: 20, y: 36, width: 335, height: 48, props: { fontSize: 31 } },
+        },
       },
       {
         type: 'paragraph',
@@ -885,6 +920,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontSize: 16,
           lineHeight: 1.5,
           color: '#475569',
+        },
+        responsive: {
+          tablet: { x: 42, y: 112, width: 600, height: 52 },
+          mobile: { x: 20, y: 96, width: 335, height: 72, props: { fontSize: 15 } },
         },
       },
       {
@@ -910,6 +949,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           borderRadius: 8,
           padding: 0,
         },
+        responsive: {
+          tablet: { x: 40, y: 205, width: 688, height: 340, props: { columns: 2, limit: 4, gap: 16 } },
+          mobile: { x: 20, y: 205, width: 335, height: 520, props: { columns: 1, limit: 3, gap: 14 } },
+        },
       },
       {
         type: 'link',
@@ -924,6 +967,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontSize: 15,
           fontWeight: '700',
           underline: false,
+        },
+        responsive: {
+          tablet: { x: 42, y: 580, width: 138, height: 26 },
+          mobile: { x: 20, y: 770, width: 138, height: 26 },
         },
       },
     ],
@@ -941,6 +988,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       contentRole: 'category-list',
     },
     defaultSize: { width: 1200, height: 370 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 500 },
+      mobile: { width: 375, height: 665 },
+    },
     description: 'Editable taxonomy navigation block for blog, help, product, or resource hubs',
     defaultChildren: [
       {
@@ -956,6 +1007,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '800',
           color: '#111827',
         },
+        responsive: {
+          tablet: { x: 40, y: 46, width: 430, height: 50 },
+          mobile: { x: 20, y: 36, width: 335, height: 46, props: { fontSize: 30 } },
+        },
       },
       {
         type: 'paragraph',
@@ -969,6 +1024,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           lineHeight: 1.5,
           color: '#4b5563',
         },
+        responsive: {
+          tablet: { x: 42, y: 106, width: 560, height: 48 },
+          mobile: { x: 20, y: 94, width: 335, height: 68, props: { fontSize: 15 } },
+        },
       },
       ...[
         ['Guides', 'Step-by-step launch and setup notes', '#dbeafe', '#1d4ed8'],
@@ -980,6 +1039,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
         y: 205,
         width: 315,
         height: 112,
+        responsive: {
+          tablet: { x: 40 + (index % 2) * 344, y: 205 + Math.floor(index / 2) * 130, width: 304, height: 112 },
+          mobile: { x: 20, y: 198 + index * 136, width: 335, height: 116 },
+        },
         props: {
           backgroundColor,
           borderRadius: 8,
@@ -1002,6 +1065,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontWeight: '800',
               color,
             },
+            responsive: {
+              tablet: { width: 245, height: 30 },
+              mobile: { x: 18, y: 18, width: 285, height: 30 },
+            },
           },
           {
             type: 'paragraph' as ElementType,
@@ -1014,6 +1081,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontSize: 13,
               lineHeight: 1.4,
               color: '#334155',
+            },
+            responsive: {
+              tablet: { width: 245, height: 38 },
+              mobile: { x: 18, y: 58, width: 285, height: 40 },
             },
           },
         ],
@@ -1033,6 +1104,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       contentRole: 'related-content',
     },
     defaultSize: { width: 1200, height: 510 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 680 },
+      mobile: { width: 375, height: 950 },
+    },
     description: 'Post-detail section for related articles, next reads, or product education',
     defaultChildren: [
       {
@@ -1048,6 +1123,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '800',
           color: '#ffffff',
         },
+        responsive: {
+          tablet: { x: 40, y: 50, width: 510, height: 54 },
+          mobile: { x: 20, y: 38, width: 335, height: 48, props: { fontSize: 31 } },
+        },
       },
       {
         type: 'paragraph',
@@ -1061,6 +1140,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           lineHeight: 1.5,
           color: '#cbd5e1',
         },
+        responsive: {
+          tablet: { x: 42, y: 114, width: 600, height: 50 },
+          mobile: { x: 20, y: 98, width: 335, height: 72, props: { fontSize: 15 } },
+        },
       },
       ...['Designing backend-owned frontends', 'Using media across sites', 'Publishing with confidence'].map((title, index) => ({
         type: 'box' as ElementType,
@@ -1068,6 +1151,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
         y: 220,
         width: 315,
         height: 216,
+        responsive: {
+          tablet: { x: 40 + (index % 2) * 344, y: 220 + Math.floor(index / 2) * 235, width: 304, height: 216 },
+          mobile: { x: 20, y: 212 + index * 228, width: 335, height: 212 },
+        },
         props: {
           backgroundColor: '#ffffff',
           borderRadius: 8,
@@ -1090,6 +1177,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               color: '#2563eb',
               textTransform: 'uppercase',
             },
+            responsive: {
+              tablet: { width: 220, height: 22 },
+              mobile: { x: 18, y: 18, width: 280, height: 22 },
+            },
           },
           {
             type: 'heading' as ElementType,
@@ -1105,6 +1196,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontWeight: '800',
               color: '#111827',
             },
+            responsive: {
+              tablet: { width: 250, height: 60, props: { fontSize: 20 } },
+              mobile: { x: 18, y: 52, width: 292, height: 58, props: { fontSize: 20 } },
+            },
           },
           {
             type: 'paragraph' as ElementType,
@@ -1117,6 +1212,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontSize: 13,
               lineHeight: 1.45,
               color: '#475569',
+            },
+            responsive: {
+              tablet: { width: 250, height: 48 },
+              mobile: { x: 18, y: 124, width: 292, height: 48 },
             },
           },
           {
@@ -1132,6 +1231,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontSize: 13,
               fontWeight: '800',
               underline: false,
+            },
+            responsive: {
+              tablet: { x: 18, y: 184, width: 120, height: 22 },
+              mobile: { x: 18, y: 178, width: 120, height: 22 },
             },
           },
         ],
@@ -1664,6 +1767,7 @@ const createPresetChild = (child: ComponentLibraryChild, zIndex: number): Canvas
   zIndex,
   props: cloneDefaultProps(child.props || {}),
   styles: cloneDefaultStyles(child.styles),
+  responsive: cloneDefaultResponsive(child.responsive),
   children: child.children?.map((nestedChild, index) => createPresetChild(nestedChild, index + 1)),
 });
 
@@ -1784,6 +1888,7 @@ export function createCanvasElementFromLibraryItem(
     height: item.defaultSize?.height,
     props: cloneDefaultProps(item.defaultProps || {}),
     styles: cloneDefaultStyles(item.defaultStyles),
+    responsive: cloneDefaultResponsive(item.defaultResponsive),
   });
 
   return {

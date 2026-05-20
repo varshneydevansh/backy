@@ -206,6 +206,7 @@ This plan is part of the full set under:
   - Add page with each block type and verify style + content parity.
 - **Current progress**:
   - `ComponentLibraryItem` now supports stable IDs, root styles, and nested `defaultChildren`.
+  - `ComponentLibraryItem` and nested preset children now support responsive override defaults, so composed presets can seed tablet/mobile geometry when inserted.
   - The editor catalog includes composed hero, feature-grid, lead-capture form, blog post card, latest posts, category-list, and related-content presets, and canvas drop paths instantiate those presets as normal nested editable elements.
   - Admin reusable-section APIs now persist saved canvas section patterns with category/tag/status filtering, the editor library can save selected element trees plus reload/insert/rename/delete active saved sections as cloned editable canvas elements, and active saved sections are discoverable through public APIs, manifest/OpenAPI, and the SDK.
 

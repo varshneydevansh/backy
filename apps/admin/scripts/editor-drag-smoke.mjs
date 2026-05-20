@@ -336,14 +336,19 @@ const assertInteractiveRegistryVersionPinningSource = () => {
 const assertComponentLibraryEmptyStateSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
   const catalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
+  const typeSource = fs.readFileSync(new URL('../src/types/editor.ts', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor component library must use the shared EmptyState component');
   assert(source.includes('title="No components match this view"'), 'Editor component library empty search state must keep the shared title visible');
   assert(source.includes('Clear the search or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
   assert(source.includes("{ id: 'content', name: 'Content'") && source.includes("case 'BookmarkPlus':"), 'Editor component library must expose a content category and icon mapping for blog/content presets');
+  assert(typeSource.includes("defaultResponsive?: CanvasElement['responsive']") && typeSource.includes("responsive?: CanvasElement['responsive']"), 'Editor component presets must type root and child responsive override defaults');
+  assert(catalogSource.includes('const cloneDefaultResponsive =') && catalogSource.includes('responsive: cloneDefaultResponsive(child.responsive)') && catalogSource.includes('responsive: cloneDefaultResponsive(item.defaultResponsive)'), 'Editor catalog must clone responsive defaults for composed presets');
   for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
     assert(catalogSource.includes(`id: '${contentPreset}'`), `Editor catalog must include ${contentPreset}`);
   }
   assert(catalogSource.includes("contentRole: 'latest-posts'") && catalogSource.includes("datasetId: 'dataset_latest_posts'"), 'Latest posts preset must carry content role and collection-ready repeater metadata');
+  assert(catalogSource.includes('defaultResponsive:') && catalogSource.includes('mobile: { width: 375, height: 870 }') && catalogSource.includes("mobile: { x: 20, y: 205, width: 335, height: 520, props: { columns: 1, limit: 3, gap: 14 } }"), 'Latest posts preset must include mobile responsive section and repeater geometry');
+  assert(catalogSource.includes("contentRole: 'related-content'") && catalogSource.includes('mobile: { width: 375, height: 950 }'), 'Related content preset must include mobile responsive geometry');
 };
 
 const assertMediaLibraryModalEmptyStateSource = () => {

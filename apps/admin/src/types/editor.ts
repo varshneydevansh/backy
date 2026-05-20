@@ -136,6 +136,7 @@ export interface ComponentLibraryItem {
   defaultProps?: Record<string, unknown>; // Default props when adding element
   defaultSize?: { width: number; height: number }; // Default size
   defaultStyles?: CSSProperties; // Default root styles
+  defaultResponsive?: CanvasElement['responsive']; // Breakpoint defaults for composed presets
   defaultChildren?: ComponentLibraryChild[]; // Nested preset elements
   reusableContent?: ReusableSectionContent; // Saved section/template content from the backend
 }
@@ -164,6 +165,7 @@ export interface ComponentLibraryChild {
   height: number;
   props?: Record<string, unknown>;
   styles?: CSSProperties;
+  responsive?: CanvasElement['responsive'];
   children?: ComponentLibraryChild[];
 }
 

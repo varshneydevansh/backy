@@ -103,8 +103,8 @@ It explicitly excludes:
 ### 3.5 Blog + creator templates
 
 1. blog pages currently reuse the same canvas editor component as regular page/blog flows, which is useful for parity but not yet a dedicated blog page template system.
-2. reusable blog/content component presets now exist in the editor catalog for post cards, latest-post/archive sections, category-list navigation, and related-content sections.
-3. remaining blog-page template depth is broader dynamic binding polish for those presets across authored blog/taxonomy data, not absence of draggable blog section blocks.
+2. reusable blog/content component presets now exist in the editor catalog for post cards, latest-post/archive sections, category-list navigation, and related-content sections, with tablet/mobile preset geometry carried into inserted canvas elements.
+3. remaining blog-page template depth is broader dynamic binding polish for those presets across authored blog/taxonomy data, not absence of draggable or responsive blog section blocks.
 
 ## 4) Current launch maturity risks
 
