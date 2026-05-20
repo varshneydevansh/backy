@@ -157,6 +157,11 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('data-testid="orders-bulk-selection-summary"') && source.includes('data-testid="orders-bulk-clear-selection"'), 'Orders bulk toolbar must expose selection summary and clear-selection controls');
   assert(source.includes('providerAnalytics: orderAnalytics?.providerOperations || null'), 'Orders handoff manifest must expose provider analytics for custom admin frontends');
   assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
+  assert(source.includes('data-testid="orders-action-plan"'), 'Orders page must render the provider operation action-plan summary');
+  assert(source.includes("schemaVersion: 'backy.order-operation-action-plan-summary.v1'"), 'Orders handoff manifest must expose the order operation action-plan summary schema');
+  assert(source.includes("schemaVersion: 'backy.order-operation-action-plan.v1'"), 'Orders handoff manifest must expose per-order operation action plans');
+  assert(source.includes('buildOrderOperationActionPlan') && source.includes('actionPlan={orderOperationPlans.get(order.id)}'), 'Orders list must build and pass per-order operation action plans');
+  assert(source.includes('actionPlan.recommendation') && source.includes('disabledByPlan'), 'Orders action buttons must surface action-plan recommendations and disabled reasons');
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
       source.includes('data-testid="orders-provider-certification-download-button"') &&
@@ -2033,6 +2038,12 @@ const assertOrdersLayout = async (client) => {
         document.body?.innerText?.includes('Carrier labels/tracking') &&
         document.body?.innerText?.includes('Fulfillment dispatch') &&
         document.body?.innerText?.includes('Webhook settlement'),
+      operationActionPlan: Boolean(document.querySelector('[data-testid="orders-action-plan"]')) &&
+        document.body?.innerText?.includes('Order action plan') &&
+        document.body?.innerText?.includes('backy.order-operation-action-plan-summary.v1') &&
+        document.body?.innerText?.includes('Attention') &&
+        document.body?.innerText?.includes('Executable') &&
+        document.body?.innerText?.includes('Blocked actions'),
       providerCertificationExport: Boolean(document.querySelector('[data-testid="orders-provider-certification"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')) &&
@@ -2068,7 +2079,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.operationActionPlan && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
