@@ -82,6 +82,7 @@ export interface CanvasElement {
   controls?: Array<Record<string, unknown>>;
   fallback?: string | InteractiveFallback;
   renderCapabilities?: Record<string, unknown>;
+  dataBindings?: Array<Record<string, unknown>>;
   styles?: React.CSSProperties;
   responsive?: Partial<Record<RenderBreakpoint, ResponsiveElementOverride>>;
   children?: CanvasElement[];
@@ -680,6 +681,7 @@ interface ElementRendererContext {
   siteId?: string;
   pageId?: string;
   postId?: string;
+  repeaterRecord?: Record<string, unknown>;
 }
 
 interface ElementRendererProps extends ElementRendererContext {
@@ -1990,7 +1992,7 @@ function ButtonElement({ element }: ElementRendererProps) {
 /**
  * Render a container/section element
  */
-function ContainerElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+function ContainerElement({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const { props, styles, children } = element;
 
   return (
@@ -2029,6 +2031,7 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId }: Elemen
           siteId={siteId}
           pageId={pageId}
           postId={postId}
+          repeaterRecord={repeaterRecord}
         />
       ))}
     </div>
@@ -2038,7 +2041,7 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId }: Elemen
 /**
  * Render a navigation element
  */
-function NavElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+function NavElement({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const { props, styles, children } = element;
   const items = parseNavigationItems(props.navItems);
   const isVertical = props.navDirection === 'vertical';
@@ -2068,6 +2071,7 @@ function NavElement({ element, isPreview, siteId, pageId, postId }: ElementRende
           siteId={siteId}
           pageId={pageId}
           postId={postId}
+          repeaterRecord={repeaterRecord}
         />
       )) : items.map((item) => (
         <a
@@ -2092,7 +2096,7 @@ function NavElement({ element, isPreview, siteId, pageId, postId }: ElementRende
 /**
  * Render a column layout element
  */
-function ColumnsElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+function ColumnsElement({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const { props, styles, children } = element;
   const columnCount = Math.max(1, Math.min(6, Number(props.columns) || 2));
   const columns = Array.from({ length: columnCount }, () => [] as CanvasElement[]);
@@ -2146,6 +2150,7 @@ function ColumnsElement({ element, isPreview, siteId, pageId, postId }: ElementR
               siteId={siteId}
               pageId={pageId}
               postId={postId}
+              repeaterRecord={repeaterRecord}
             />
           ))}
         </div>
@@ -2813,11 +2818,205 @@ const repeaterRecordImageValue = (
   return '';
 };
 
+const repeaterRecordPathValue = (
+  record: Record<string, unknown>,
+  path: string,
+): unknown => {
+  const normalizedPath = path.trim();
+  if (!normalizedPath) {
+    return undefined;
+  }
+
+  const values = isRecord(record.values) ? record.values : {};
+  if (Object.prototype.hasOwnProperty.call(values, normalizedPath)) {
+    return values[normalizedPath];
+  }
+  if (Object.prototype.hasOwnProperty.call(record, normalizedPath)) {
+    return record[normalizedPath];
+  }
+
+  const parts = normalizedPath.split('.').filter(Boolean);
+  const readPath = (root: unknown): unknown => {
+    let current = root;
+    for (const part of parts) {
+      if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, part)) {
+        return undefined;
+      }
+      current = current[part];
+    }
+    return current;
+  };
+
+  const nestedValue = readPath(values);
+  return nestedValue === undefined ? readPath(record) : nestedValue;
+};
+
+const repeaterRecordVirtualValue = (
+  record: Record<string, unknown>,
+  field: string,
+  targetPath: string,
+): unknown => {
+  const urlTarget = /(?:^|\.)href$|url$/i.test(targetPath);
+  if (field === 'id') return record.id;
+  if (field === 'slug') {
+    if (urlTarget) {
+      return getNameClass(record.href) || getNameClass(record.url) || getNameClass(record.slug);
+    }
+    return record.slug;
+  }
+  if (field === 'href' || field === 'url') {
+    return getNameClass(record.href) || getNameClass(record.url) || getNameClass(record.slug);
+  }
+  if (field === 'status') return record.status;
+  if (field === 'createdAt') return record.createdAt;
+  if (field === 'updatedAt') return record.updatedAt;
+  return undefined;
+};
+
+const repeaterRecordBindingRawValue = (
+  record: Record<string, unknown>,
+  binding: Record<string, unknown>,
+  targetPath: string,
+): unknown => {
+  const source = isRecord(binding.source) ? binding.source : binding;
+  const sourceKind = getNameClass(source.kind);
+  if (sourceKind && sourceKind !== 'collection') {
+    return undefined;
+  }
+
+  const field = getNameClass(source.field || binding.field);
+  const path = getNameClass(source.path || binding.path);
+  const virtualValue = field ? repeaterRecordVirtualValue(record, field, targetPath) : undefined;
+  if (virtualValue !== undefined) {
+    return virtualValue;
+  }
+
+  if (path) {
+    const pathValue = repeaterRecordPathValue(record, path);
+    if (pathValue !== undefined) {
+      return pathValue;
+    }
+  }
+
+  return field ? repeaterRecordPathValue(record, field) : undefined;
+};
+
+const repeaterRecordDisplayValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(repeaterRecordDisplayValue).filter(Boolean).join(', ');
+  if (isRecord(value)) {
+    return (
+      getNameClass(value.label)
+      || getNameClass(value.title)
+      || getNameClass(value.name)
+      || getNameClass(value.value)
+      || getNameClass(value.text)
+      || getNameClass(value.slug)
+      || parseAttributeString(value.url)
+      || parseAttributeString(value.href)
+      || parseAttributeString(value.src)
+      || ''
+    );
+  }
+
+  return '';
+};
+
+const repeaterRecordPropValue = (targetPath: string, rawValue: unknown): unknown => {
+  const propName = targetPath.slice('props.'.length);
+  const normalizedProp = propName.toLowerCase();
+
+  if (normalizedProp === 'src' || normalizedProp.endsWith('url') || normalizedProp === 'href') {
+    return parseAttributeString(rawValue) || repeaterRecordDisplayValue(rawValue);
+  }
+
+  if (normalizedProp === 'assetid' || normalizedProp === 'mediaid') {
+    return isRecord(rawValue)
+      ? getNameClass(rawValue.id) || parseAttributeString(rawValue)
+      : rawValue;
+  }
+
+  if (
+    normalizedProp === 'content'
+    || normalizedProp === 'text'
+    || normalizedProp === 'label'
+    || normalizedProp === 'title'
+    || normalizedProp === 'alt'
+    || normalizedProp === 'placeholder'
+    || normalizedProp === 'arialabel'
+    || normalizedProp === 'description'
+    || normalizedProp === 'summary'
+  ) {
+    return repeaterRecordDisplayValue(rawValue);
+  }
+
+  return isRecord(rawValue) || Array.isArray(rawValue)
+    ? repeaterRecordDisplayValue(rawValue)
+    : rawValue;
+};
+
+const applyRepeaterRecordBindings = (
+  element: CanvasElement,
+  record: Record<string, unknown>,
+): CanvasElement => {
+  const bindings = Array.isArray(element.dataBindings)
+    ? element.dataBindings.filter(isRecord)
+    : [];
+
+  if (bindings.length === 0) {
+    return element;
+  }
+
+  let nextProps = element.props;
+  let changed = false;
+  for (const binding of bindings) {
+    const targetPath = getNameClass(binding.targetPath) || 'props.content';
+    if (!targetPath.startsWith('props.')) {
+      continue;
+    }
+
+    const propName = targetPath.slice('props.'.length);
+    if (!propName) {
+      continue;
+    }
+
+    const rawValue = repeaterRecordBindingRawValue(record, binding, targetPath);
+    if (rawValue === null || rawValue === undefined) {
+      continue;
+    }
+
+    nextProps = {
+      ...nextProps,
+      [propName]: repeaterRecordPropValue(targetPath, rawValue),
+    };
+    changed = true;
+  }
+
+  return changed ? { ...element, props: nextProps } : element;
+};
+
+const repeaterTemplateHeight = (element: CanvasElement): string => {
+  const explicitHeight = getLength(element.props.itemHeight);
+  if (explicitHeight) {
+    return explicitHeight;
+  }
+
+  const childExtent = (element.children || []).reduce((height, child) => {
+    const childTop = typeof child.y === 'number' && Number.isFinite(child.y) ? child.y : 0;
+    const childHeight = typeof child.height === 'number' && Number.isFinite(child.height) ? child.height : 0;
+    return Math.max(height, childTop + childHeight);
+  }, 0);
+
+  return `${Math.max(160, childExtent)}px`;
+};
+
 /**
  * Render a collection-backed repeater/list element.
  */
-function RepeaterElement({ element }: ElementRendererProps) {
-  const { props, styles } = element;
+function RepeaterElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+  const { props, styles, children } = element;
   const records = Array.isArray(props.records)
     ? props.records.filter(isRecord)
     : [];
@@ -2828,6 +3027,8 @@ function RepeaterElement({ element }: ElementRendererProps) {
   const imageField = typeof props.imageField === 'string' ? props.imageField : '';
   const metaField = typeof props.metaField === 'string' ? props.metaField : '';
   const emptyMessage = getNameClass(props.emptyMessage) || 'No records yet.';
+  const templateChildren = children || [];
+  const templateHeight = repeaterTemplateHeight(element);
 
   return (
     <div
@@ -2844,8 +3045,37 @@ function RepeaterElement({ element }: ElementRendererProps) {
     >
       {records.length === 0 ? (
         <div style={{ color: '#64748b', fontSize: 16 }}>{emptyMessage}</div>
-      ) : records.map((record) => {
-        const recordId = typeof record.id === 'string' ? record.id : `${element.id}-record`;
+      ) : records.map((record, recordIndex) => {
+        const recordId = typeof record.id === 'string' ? record.id : `${element.id}-record-${recordIndex}`;
+        if (templateChildren.length > 0) {
+          return (
+            <div
+              key={`${element.id}-${recordId}`}
+              data-backy-repeater-record={recordId}
+              style={{
+                position: 'relative',
+                minWidth: 0,
+                width: '100%',
+                minHeight: templateHeight,
+                height: templateHeight,
+                overflow: 'visible',
+              }}
+            >
+              {templateChildren.map((child) => (
+                <ElementRenderer
+                  key={`${recordId}-${child.id}`}
+                  element={child}
+                  isPreview={isPreview}
+                  siteId={siteId}
+                  pageId={pageId}
+                  postId={postId}
+                  repeaterRecord={record}
+                />
+              ))}
+            </div>
+          );
+        }
+
         const title = repeaterRecordValue(record, titleField, ['title', 'name', 'label', 'slug']);
         const description = repeaterRecordValue(record, descriptionField, ['summary', 'description', 'excerpt', 'body']);
         const imageSrc = repeaterRecordImageValue(record, imageField, ['image', 'thumbnail', 'photo', 'avatar', 'cover_image']);
@@ -3131,7 +3361,7 @@ function FormSchemaFieldElement({
 /**
  * Render a form element
  */
-function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+function FormElement({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const { props, styles, children } = element;
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitMessage, setSubmitMessage] = useState('');
@@ -3561,6 +3791,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
             siteId={siteId}
             pageId={pageId}
             postId={postId}
+            repeaterRecord={repeaterRecord}
           />
         ))}
       </form>
@@ -4320,7 +4551,7 @@ function SelectElement({ element }: ElementRendererProps) {
 /**
  * Render checkbox list and single checkbox/radio inputs
  */
-function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const { props, styles, children } = element;
   const inputType = normalizeRendererType(element.type) === 'checkbox' ? 'checkbox' : 'radio';
   const name = getNameClass(props.name) || `field-${element.id}`;
@@ -4404,6 +4635,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
             siteId={siteId}
             pageId={pageId}
             postId={postId}
+            repeaterRecord={repeaterRecord}
           />
         ))}
       </div>
@@ -4459,6 +4691,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
             siteId={siteId}
             pageId={pageId}
             postId={postId}
+            repeaterRecord={repeaterRecord}
           />
         ))}
       </div>
@@ -4545,63 +4778,65 @@ const ELEMENT_RENDERERS: Record<
 /**
  * Main element renderer - routes to specific element renderers
  */
-export function ElementRenderer({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
-  const normalizedType = normalizeRendererType(element.type);
+export function ElementRenderer({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
+  const boundElement = repeaterRecord ? applyRepeaterRecordBindings(element, repeaterRecord) : element;
+  const normalizedType = normalizeRendererType(boundElement.type);
   const Renderer = ELEMENT_RENDERERS[normalizedType];
 
   if (!Renderer) {
-    console.warn(`Unknown element type: ${element.type}`);
+    console.warn(`Unknown element type: ${boundElement.type}`);
     return null;
   }
 
-  if ((element.props.hidden as boolean) === true) {
+  if ((boundElement.props.hidden as boolean) === true) {
     return null;
   }
 
-  if (element.visible === false) {
+  if (boundElement.visible === false) {
     return null;
   }
 
   // Build position styles for absolute positioning
   const positionStyles: React.CSSProperties = {
     position: 'absolute',
-    left: element.x,
-    top: element.y,
-    width: element.width,
-    height: element.height,
-    transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
-    zIndex: element.zIndex,
+    left: boundElement.x,
+    top: boundElement.y,
+    width: boundElement.width,
+    height: boundElement.height,
+    transform: boundElement.rotation ? `rotate(${boundElement.rotation}deg)` : undefined,
+    zIndex: boundElement.zIndex,
     opacity:
-      typeof element.props.opacity === 'number'
-        ? element.props.opacity
-        : typeof element.props.opacity === 'string'
-          ? parseFloat(element.props.opacity as string)
+      typeof boundElement.props.opacity === 'number'
+        ? boundElement.props.opacity
+        : typeof boundElement.props.opacity === 'string'
+          ? parseFloat(boundElement.props.opacity as string)
           : 1,
   };
 
   // Add animation data attributes for GSAP hydration
-  const animationAttrs = element.animation
+  const animationAttrs = boundElement.animation
     ? {
-        'data-animation': JSON.stringify(element.animation),
-        'data-animation-type': element.animation.type,
+        'data-animation': JSON.stringify(boundElement.animation),
+        'data-animation-type': boundElement.animation.type,
       }
     : {};
 
   return (
     <div
       style={positionStyles}
-      data-backy-element-id={element.id}
-      data-backy-element-type={element.type}
-      data-element-id={element.id}
-      data-element-type={element.type}
+      data-backy-element-id={boundElement.id}
+      data-backy-element-type={boundElement.type}
+      data-element-id={boundElement.id}
+      data-element-type={boundElement.type}
       {...animationAttrs}
     >
       <Renderer
-        element={element}
+        element={boundElement}
         isPreview={isPreview}
         siteId={siteId}
         pageId={pageId}
         postId={postId}
+        repeaterRecord={repeaterRecord}
       />
     </div>
   );

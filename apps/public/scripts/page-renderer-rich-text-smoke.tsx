@@ -646,6 +646,133 @@ const content: PageContent = {
       },
     },
     {
+      id: 'authored-repeater',
+      type: 'repeater',
+      x: 604,
+      y: 840,
+      width: 420,
+      height: 190,
+      props: {
+        datasetId: 'renderer_smoke_authored_repeater',
+        columns: 1,
+        gap: 12,
+        itemHeight: 156,
+        records: [
+          {
+            id: 'authored-record-1',
+            slug: 'authored-record',
+            href: '/records/authored-record',
+            values: {
+              title: 'Authored repeater title',
+              summary: 'Authored repeater summary',
+              featuredImage: {
+                url: 'https://cdn.backy.test/authored-record.jpg',
+              },
+              author: {
+                company: {
+                  name: 'Nested Author Studio',
+                },
+              },
+            },
+          },
+        ],
+      },
+      children: [
+        {
+          id: 'authored-repeater-image',
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 80,
+          props: {
+            src: 'https://cdn.backy.test/fallback-authored.jpg',
+            alt: 'Authored image',
+          },
+          dataBindings: [
+            {
+              id: 'bind-authored-repeater-image',
+              targetPath: 'props.src',
+              source: {
+                kind: 'collection',
+                field: 'featuredImage',
+              },
+              mode: 'image',
+            },
+          ],
+        },
+        {
+          id: 'authored-repeater-title',
+          type: 'heading',
+          x: 136,
+          y: 0,
+          width: 240,
+          height: 40,
+          props: {
+            level: 'h3',
+            content: 'Fallback authored title',
+          },
+          dataBindings: [
+            {
+              id: 'bind-authored-repeater-title',
+              targetPath: 'props.content',
+              source: {
+                kind: 'collection',
+                field: 'title',
+              },
+              mode: 'text',
+            },
+          ],
+        },
+        {
+          id: 'authored-repeater-author',
+          type: 'text',
+          x: 136,
+          y: 52,
+          width: 240,
+          height: 28,
+          props: {
+            content: 'Fallback author',
+          },
+          dataBindings: [
+            {
+              id: 'bind-authored-repeater-author',
+              targetPath: 'props.content',
+              source: {
+                kind: 'collection',
+                field: 'author',
+                path: 'author.company.name',
+              },
+              mode: 'text',
+            },
+          ],
+        },
+        {
+          id: 'authored-repeater-link',
+          type: 'link',
+          x: 136,
+          y: 96,
+          width: 140,
+          height: 28,
+          props: {
+            content: 'Read authored',
+            href: '#',
+          },
+          dataBindings: [
+            {
+              id: 'bind-authored-repeater-link',
+              targetPath: 'props.href',
+              source: {
+                kind: 'collection',
+                field: 'slug',
+              },
+              mode: 'url',
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: 'custom-action-form',
       type: 'form',
       x: 24,
@@ -940,6 +1067,13 @@ assert(html.includes('src="https://cdn.backy.test/repeater-record.jpg"'), `Repea
 assert(html.includes('alt="Repeater record title"'), `Repeater image alt was not rendered: ${html}`);
 assert(html.includes('Repeater record title'), `Repeater title was not rendered: ${html}`);
 assert(html.includes('Repeater record summary'), `Repeater summary was not rendered: ${html}`);
+assert(html.includes('data-backy-repeater="renderer_smoke_authored_repeater"'), `Authored repeater dataset id was not rendered: ${html}`);
+assert(html.includes('data-backy-repeater-record="authored-record-1"'), `Authored repeater record marker was not rendered: ${html}`);
+assert(html.includes('Authored repeater title'), `Authored repeater child title binding was not rendered: ${html}`);
+assert(html.includes('Nested Author Studio'), `Authored repeater nested child binding was not rendered: ${html}`);
+assert(html.includes('href="/records/authored-record"'), `Authored repeater virtual slug URL binding was not rendered: ${html}`);
+assert(html.includes('src="https://cdn.backy.test/authored-record.jpg"'), `Authored repeater image binding was not rendered: ${html}`);
+assert(!html.includes('Fallback authored title'), `Authored repeater title fallback was rendered instead of the record binding: ${html}`);
 assert(html.includes('data-backy-render-breakpoint="desktop"'), `Initial renderer breakpoint marker was not rendered: ${html}`);
 assert(html.includes('data-backy-render-scale="1.000"'), `Initial renderer scale marker was not rendered: ${html}`);
 
@@ -1251,6 +1385,7 @@ console.log(JSON.stringify({
     styledCheckbox: true,
     styledForm: true,
     styledRepeater: true,
+    authoredRepeaterTemplate: true,
     responsiveBreakpoints: true,
     responsiveBreakpointCanvasSize: true,
     authoredDynamicTemplate: true,

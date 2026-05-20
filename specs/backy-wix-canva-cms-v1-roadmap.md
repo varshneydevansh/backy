@@ -106,8 +106,9 @@ It explicitly excludes:
 2. reusable blog/content component presets now exist in the editor catalog for post cards, latest-post/archive sections, category-list navigation, and related-content sections, with tablet/mobile preset geometry carried into inserted canvas elements; latest-posts, category-list, and related-content sections now seed collection-ready repeaters instead of static-only card grids.
 3. those blog/content presets now seed binding-slot metadata for title, excerpt, media, meta/category, link, taxonomy, and collection-record targets, and the editor Data panel surfaces those slots with apply actions that turn matching fields on the selected collection into real `dataBindings` or repeater field props.
 4. selecting a composed card/section can now apply matching child binding slots across descendant elements in one editor history step, including named root slots that target child repeaters, repeater collection/field props, and virtual record URL/slug targets for link slots.
-5. binding-slot metadata is preserved through the shared Backy content contract and public render payload schema, so custom frontend handoff can inspect intended fields before or alongside a real collection binding.
-6. remaining blog-page template depth is broadening hosted visual QA and dedicated blog-template UX, not absence of draggable, responsive, or binding-aware blog section blocks.
+5. public repeaters now support authored child templates: when a repeater contains designed children, those children render once per hydrated collection record and resolve their collection `dataBindings` from that active record, while the generic card fallback remains available for simple list blocks.
+6. binding-slot metadata is preserved through the shared Backy content contract and public render payload schema, so custom frontend handoff can inspect intended fields before or alongside a real collection binding.
+7. remaining blog-page template depth is broadening hosted visual QA and dedicated blog-template UX, not absence of draggable, responsive, or binding-aware blog section blocks.
 
 ## 4) Current launch maturity risks
 
