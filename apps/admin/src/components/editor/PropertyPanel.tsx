@@ -6365,6 +6365,7 @@ function PresetBindingSlotsPanel({
       window.setTimeout(() => setCoverageCopyState('idle'), 1600);
     } catch {
       setCoverageCopyState('failed');
+      window.setTimeout(() => setCoverageCopyState('idle'), 2200);
     }
   };
 
@@ -7361,6 +7362,7 @@ function DataBindingProperties({
   const [savedPresetName, setSavedPresetName] = useState('');
   const [selectedSavedPresetId, setSelectedSavedPresetId] = useState('');
   const [slotCollectionId, setSlotCollectionId] = useState('');
+  const [datasetBriefCopyState, setDatasetBriefCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   useEffect(() => {
     let cancelled = false;
@@ -7565,6 +7567,80 @@ function DataBindingProperties({
       setSelectedSavedPresetId(savedPresetsForCollection[0]?.id || '');
     }
   }, [savedPresetsForCollection, selectedSavedPresetId]);
+
+  const datasetBindingBrief = {
+    schema: 'backy.editor.dataset-binding.v1',
+    element: {
+      id: element.id,
+      type: normalizeCanvasElementType(element.type),
+      name: element.name || null,
+    },
+    binding: {
+      id: typeof currentBinding?.id === 'string' ? currentBinding.id : null,
+      datasetId: selectedCollection ? `dataset_${selectedCollection.id}` : null,
+      targetPath: selectedTargetPath,
+      targetLabel: targetPathOptions.find((option) => option.value === selectedTargetPath)?.label || selectedTargetPath,
+      mode: typeof currentBinding?.mode === 'string' ? currentBinding.mode : null,
+    },
+    collection: selectedCollection
+      ? {
+          id: selectedCollection.id,
+          name: selectedCollection.name,
+          slug: selectedCollection.slug,
+          status: selectedCollection.status,
+        }
+      : null,
+    field: selectedField
+      ? {
+          key: selectedField.key,
+          label: selectedField.label,
+          type: selectedField.type,
+        }
+      : selectedFieldKey
+        ? { key: selectedFieldKey, label: selectedFieldKey, type: null }
+        : null,
+    join: selectedSourcePath
+      ? {
+          sourcePath: selectedSourcePath,
+          referenceField: selectedReferenceField
+            ? {
+                key: selectedReferenceFieldKey,
+                label: selectedReferenceFieldLabel,
+                type: selectedReferenceField.type,
+              }
+            : null,
+        }
+      : null,
+    recordPreview: selectedRecordPreview
+      ? {
+          id: selectedRecordPreview.id,
+          slug: selectedRecordPreview.slug,
+          label: collectionRecordLabel(selectedRecordPreview, selectedCollection),
+          joinedValue: selectedRecordJoinedPreviewValue || null,
+        }
+      : selectedRecordId
+        ? { id: selectedRecordId, slug: selectedRecordId, label: selectedRecordId, joinedValue: null }
+        : null,
+    query: {
+      search: selectedSearch || null,
+      filterField: selectedFilterField || null,
+      filterValue: selectedFilterValue || null,
+      sortBy: selectedSortBy || null,
+      sortDirection: selectedSortBy ? selectedSortDirection : null,
+      limit: selectedLimit || null,
+      offset: selectedOffset || null,
+    },
+  };
+  const copyDatasetBindingBrief = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(datasetBindingBrief, null, 2));
+      setDatasetBriefCopyState('copied');
+      window.setTimeout(() => setDatasetBriefCopyState('idle'), 1600);
+    } catch {
+      setDatasetBriefCopyState('failed');
+      window.setTimeout(() => setDatasetBriefCopyState('idle'), 2200);
+    }
+  };
 
   const updateBinding = (updates: {
     collectionId?: string;
@@ -8365,13 +8441,26 @@ function DataBindingProperties({
             </div>
           </div>
 
-          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            Dataset: dataset_{selectedCollection.id}
-            {selectedField ? ` • ${selectedField.key}` : ''}
-            {selectedSourcePath ? ` • join ${selectedSourcePath}` : ''}
-            {selectedRecordId ? ` • record ${selectedRecordId}` : ''}
-            {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
-            {selectedLimit ? ` • limit ${selectedLimit}` : ''}
+          <div
+            className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+            data-testid="editor-data-binding-brief"
+          >
+            <div>
+              Dataset: dataset_{selectedCollection.id}
+              {selectedField ? ` • ${selectedField.key}` : ''}
+              {selectedSourcePath ? ` • join ${selectedSourcePath}` : ''}
+              {selectedRecordId ? ` • record ${selectedRecordId}` : ''}
+              {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
+              {selectedLimit ? ` • limit ${selectedLimit}` : ''}
+            </div>
+            <button
+              type="button"
+              onClick={() => void copyDatasetBindingBrief()}
+              data-testid="editor-data-copy-binding-brief"
+              className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
+            >
+              {datasetBriefCopyState === 'copied' ? 'Copied binding brief' : datasetBriefCopyState === 'failed' ? 'Copy failed' : 'Copy binding brief'}
+            </button>
           </div>
 
           <button
