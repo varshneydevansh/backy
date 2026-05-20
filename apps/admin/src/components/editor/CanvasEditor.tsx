@@ -6079,6 +6079,9 @@ export function CanvasEditor({
                             onClick={handleSelectParentLayer}
                             disabled={!canSelectParentLayer}
                             className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Select parent layer (Shift+Enter)"
+                            aria-label="Select parent layer"
+                            aria-keyshortcuts="Shift+Enter"
                             data-testid="editor-inspector-select-parent-layer"
                           >
                             <ArrowLeft className="h-3.5 w-3.5" />
@@ -6534,6 +6537,9 @@ export function CanvasEditor({
                           type="button"
                           onClick={handleSelectParentLayer}
                           className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Select parent layer (Shift+Enter)"
+                          aria-label="Select parent layer"
+                          aria-keyshortcuts="Shift+Enter"
                           data-testid="editor-select-parent-layer"
                         >
                           <ArrowLeft className="h-3.5 w-3.5" />
@@ -6545,6 +6551,9 @@ export function CanvasEditor({
                           type="button"
                           onClick={handleSelectFirstChildLayer}
                           className="mt-2 ml-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Select child layer (Enter)"
+                          aria-label="Select child layer"
+                          aria-keyshortcuts="Enter"
                           data-testid="editor-select-child-layer"
                         >
                           <ArrowRight className="h-3.5 w-3.5" />
@@ -6556,6 +6565,9 @@ export function CanvasEditor({
                           type="button"
                           onClick={handleSelectChildLayerScope}
                           className="mt-2 ml-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Select child layers (Shift+Cmd/Ctrl+A)"
+                          aria-label="Select child layers"
+                          aria-keyshortcuts="Shift+Control+A Shift+Meta+A"
                           data-testid="editor-select-child-layer-scope"
                         >
                           <Layers className="h-3.5 w-3.5" />
