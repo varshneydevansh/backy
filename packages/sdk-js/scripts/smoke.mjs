@@ -54,6 +54,7 @@ function assertCommerceProviderCertification(commerce, label) {
     `${label} missing non-secret credential handling guidance`,
   );
   const operatorTemplate = certification.operatorCommandTemplate;
+  const operatorEnvTemplate = certification.operatorEnvTemplate;
   assert(
     typeof operatorTemplate?.command === 'string' &&
       operatorTemplate.command.includes('npm run ci:commerce-provider-certification'),
@@ -63,6 +64,35 @@ function assertCommerceProviderCertification(commerce, label) {
     operatorTemplate.command.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') &&
       operatorTemplate.command.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED'),
     `${label} missing guarded commerce certification command env`,
+  );
+  assert(
+    operatorTemplate.envTemplateSchemaVersion === 'backy.commerce-provider-certification-env-template.v1',
+    `${label} missing commerce operator env-template schema`,
+  );
+  assert(
+    typeof operatorTemplate.envTemplate === 'string' &&
+      operatorTemplate.envTemplate.includes('# Backy commerce provider certification environment') &&
+      operatorTemplate.envTemplate.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+      operatorTemplate.envTemplate.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER=auto') &&
+      operatorTemplate.envTemplate.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1'),
+    `${label} missing commerce operator env-template body`,
+  );
+  assert(
+    operatorEnvTemplate?.schemaVersion === 'backy.commerce-provider-certification-env-template.v1' &&
+      operatorEnvTemplate.format === 'shell-env' &&
+      operatorEnvTemplate.fileName === '.env.backy-commerce-provider-certification',
+    `${label} missing commerce operator env-template handoff`,
+  );
+  assert(
+    typeof operatorEnvTemplate.body === 'string' &&
+      operatorEnvTemplate.body === operatorTemplate.envTemplate &&
+      operatorEnvTemplate.body.includes('BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER=auto'),
+    `${label} commerce operator env-template body drifted`,
+  );
+  assert(
+    typeof operatorEnvTemplate.secretHandling === 'string' &&
+      operatorEnvTemplate.secretHandling.includes('keep real commerce provider credentials in CI secrets'),
+    `${label} missing commerce operator env-template secret boundary`,
   );
   assert(
     Array.isArray(operatorTemplate.providerChoices?.payment) &&

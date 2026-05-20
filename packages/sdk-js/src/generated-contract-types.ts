@@ -1729,6 +1729,8 @@ export type GeneratedBackyOpenApiCommerceProviderCertification = {
   secretHandling: string;
   operatorCommandTemplate: {
     command: string;
+    envTemplate: string;
+    envTemplateSchemaVersion: "backy.commerce-provider-certification-env-template.v1";
     providerChoices: {
       payment?: Array<string>;
       tax?: Array<string>;
@@ -1741,6 +1743,14 @@ export type GeneratedBackyOpenApiCommerceProviderCertification = {
     };
     requiredInputs: Array<string>;
     targetInputs: Array<string>;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  operatorEnvTemplate: {
+    schemaVersion: "backy.commerce-provider-certification-env-template.v1";
+    format: "shell-env";
+    fileName: ".env.backy-commerce-provider-certification";
+    body: string;
     secretHandling: string;
     [key: string]: unknown;
   };

@@ -6324,6 +6324,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "requiredFor",
                 "secretHandling",
                 "operatorCommandTemplate",
+                "operatorEnvTemplate",
                 "runtime",
                 "groups",
               ],
@@ -6353,6 +6354,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "object",
                   required: [
                     "command",
+                    "envTemplate",
+                    "envTemplateSchemaVersion",
                     "providerChoices",
                     "requiredInputs",
                     "targetInputs",
@@ -6360,6 +6363,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   ],
                   properties: {
                     command: { type: "string" },
+                    envTemplate: { type: "string" },
+                    envTemplateSchemaVersion: {
+                      type: "string",
+                      const: "backy.commerce-provider-certification-env-template.v1",
+                    },
                     providerChoices: {
                       type: "object",
                       properties: {
@@ -6381,6 +6389,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       type: "array",
                       items: { type: "string" },
                     },
+                    secretHandling: { type: "string" },
+                  },
+                  additionalProperties: true,
+                },
+                operatorEnvTemplate: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "format",
+                    "fileName",
+                    "body",
+                    "secretHandling",
+                  ],
+                  properties: {
+                    schemaVersion: {
+                      type: "string",
+                      const: "backy.commerce-provider-certification-env-template.v1",
+                    },
+                    format: { type: "string", const: "shell-env" },
+                    fileName: {
+                      type: "string",
+                      const: ".env.backy-commerce-provider-certification",
+                    },
+                    body: { type: "string" },
                     secretHandling: { type: "string" },
                   },
                   additionalProperties: true,

@@ -1068,6 +1068,8 @@ export interface BackyCommerceStorefrontContract {
     secretHandling: string;
     operatorCommandTemplate: {
       command: string;
+      envTemplate: string;
+      envTemplateSchemaVersion: "backy.commerce-provider-certification-env-template.v1";
       providerChoices: {
         payment: string[];
         tax: string[];
@@ -1080,6 +1082,14 @@ export interface BackyCommerceStorefrontContract {
       };
       requiredInputs: string[];
       targetInputs: string[];
+      secretHandling: string;
+      [key: string]: unknown;
+    };
+    operatorEnvTemplate: {
+      schemaVersion: "backy.commerce-provider-certification-env-template.v1";
+      format: "shell-env";
+      fileName: ".env.backy-commerce-provider-certification";
+      body: string;
       secretHandling: string;
       [key: string]: unknown;
     };

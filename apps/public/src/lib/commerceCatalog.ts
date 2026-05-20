@@ -172,6 +172,8 @@ export interface CommerceStorefrontContract {
     secretHandling: string;
     operatorCommandTemplate: {
       command: string;
+      envTemplate: string;
+      envTemplateSchemaVersion: 'backy.commerce-provider-certification-env-template.v1';
       providerChoices: {
         payment: string[];
         tax: string[];
@@ -183,6 +185,13 @@ export interface CommerceStorefrontContract {
       };
       requiredInputs: string[];
       targetInputs: string[];
+      secretHandling: string;
+    };
+    operatorEnvTemplate: {
+      schemaVersion: 'backy.commerce-provider-certification-env-template.v1';
+      format: 'shell-env';
+      fileName: '.env.backy-commerce-provider-certification';
+      body: string;
       secretHandling: string;
     };
     runtime: {
@@ -267,26 +276,31 @@ const envValue = (keys: string[]): string | null => {
 const hasEnv = (keys: string[]): boolean => Boolean(envValue(keys));
 
 const quoteCommerceShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteCommerceEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteCommerceShellValue(value)
+);
+
+const buildCommerceProviderCertificationEnvEntries = (): Array<[string, string]> => [
+  ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
+  ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', '1'],
+  ['BACKY_COMMERCE_CERTIFY_PAYMENT', '1'],
+  ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', 'auto'],
+  ['BACKY_COMMERCE_CERTIFY_TAX', '1'],
+  ['BACKY_COMMERCE_CERTIFY_TAX_PROVIDER', 'auto'],
+  ['BACKY_COMMERCE_CERTIFY_SHIPPING', '1'],
+  ['BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER', 'auto'],
+  ['BACKY_COMMERCE_CERTIFY_DISCOUNT', '1'],
+  ['BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER', 'auto'],
+  ['BACKY_COMMERCE_CERTIFY_CATALOG', '1'],
+  ['BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER', 'auto'],
+  ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', '1'],
+  ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER', 'auto'],
+  ['BACKY_COMMERCE_CERTIFY_WEBHOOKS', '1'],
+  ['BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER', 'auto'],
+];
 
 const buildCommerceProviderCertificationCommand = (): string => {
-  const envEntries: Array<[string, string]> = [
-    ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
-    ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', '1'],
-    ['BACKY_COMMERCE_CERTIFY_PAYMENT', '1'],
-    ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', 'auto'],
-    ['BACKY_COMMERCE_CERTIFY_TAX', '1'],
-    ['BACKY_COMMERCE_CERTIFY_TAX_PROVIDER', 'auto'],
-    ['BACKY_COMMERCE_CERTIFY_SHIPPING', '1'],
-    ['BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER', 'auto'],
-    ['BACKY_COMMERCE_CERTIFY_DISCOUNT', '1'],
-    ['BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER', 'auto'],
-    ['BACKY_COMMERCE_CERTIFY_CATALOG', '1'],
-    ['BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER', 'auto'],
-    ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS', '1'],
-    ['BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER', 'auto'],
-    ['BACKY_COMMERCE_CERTIFY_WEBHOOKS', '1'],
-    ['BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER', 'auto'],
-  ];
+  const envEntries = buildCommerceProviderCertificationEnvEntries();
 
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteCommerceShellValue(value)}`),
@@ -296,8 +310,20 @@ const buildCommerceProviderCertificationCommand = (): string => {
   ].join('\n');
 };
 
+const buildCommerceProviderCertificationEnvTemplate = (): string => {
+  const envEntries = buildCommerceProviderCertificationEnvEntries();
+
+  return [
+    '# Backy commerce provider certification environment',
+    '# Keep real provider credential values in CI secrets or local shell variables.',
+    ...envEntries.map(([key, value]) => `${key}=${quoteCommerceEnvTemplateValue(value)}`),
+  ].join('\n');
+};
+
 const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefrontContract['providerCertification']['operatorCommandTemplate'] = {
   command: buildCommerceProviderCertificationCommand(),
+  envTemplate: buildCommerceProviderCertificationEnvTemplate(),
+  envTemplateSchemaVersion: 'backy.commerce-provider-certification-env-template.v1',
   providerChoices: {
     payment: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay'],
     tax: ['auto', 'stripe', 'taxjar', 'avalara', 'http'],
@@ -479,6 +505,13 @@ const commerceProviderCertification = (): CommerceStorefrontContract['providerCe
   requiredFor: 'live-commerce-provider-launch',
   secretHandling: 'Provider credentials stay in server environment/configuration; storefront contracts expose only non-secret readiness gates and provider-family requirements.',
   operatorCommandTemplate: COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+  operatorEnvTemplate: {
+    schemaVersion: 'backy.commerce-provider-certification-env-template.v1',
+    format: 'shell-env',
+    fileName: '.env.backy-commerce-provider-certification',
+    body: COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    secretHandling: 'Generated template values are non-secret aliases and placeholders; keep real commerce provider credentials in CI secrets or local shell variables before execution.',
+  },
   runtime: commerceProviderCertificationRuntime(),
   groups: [
     {

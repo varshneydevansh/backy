@@ -777,6 +777,27 @@ const manifestNavigationItem = {
   ],
 } satisfies GeneratedBackyFrontendManifestNavigationItem;
 
+const commerceProviderCertificationEnvTemplate = [
+  "# Backy commerce provider certification environment",
+  "# Keep real provider credential values in CI secrets or local shell variables.",
+  "BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1",
+  "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1",
+  "BACKY_COMMERCE_CERTIFY_PAYMENT=1",
+  "BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER=auto",
+  "BACKY_COMMERCE_CERTIFY_TAX=1",
+  "BACKY_COMMERCE_CERTIFY_TAX_PROVIDER=auto",
+  "BACKY_COMMERCE_CERTIFY_SHIPPING=1",
+  "BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER=auto",
+  "BACKY_COMMERCE_CERTIFY_DISCOUNT=1",
+  "BACKY_COMMERCE_CERTIFY_DISCOUNT_PROVIDER=auto",
+  "BACKY_COMMERCE_CERTIFY_CATALOG=1",
+  "BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER=auto",
+  "BACKY_COMMERCE_CERTIFY_SUBSCRIPTIONS=1",
+  "BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER=auto",
+  "BACKY_COMMERCE_CERTIFY_WEBHOOKS=1",
+  "BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER=auto",
+].join("\n");
+
 const commerceProviderCertification = {
   schemaVersion: "backy.commerce-provider-certification-handoff.v1",
   status: "external-live-provider-gate",
@@ -793,6 +814,8 @@ const commerceProviderCertification = {
       "npm run doctor:release-certification",
       "npm run ci:commerce-provider-certification",
     ].join("\n"),
+    envTemplate: commerceProviderCertificationEnvTemplate,
+    envTemplateSchemaVersion: "backy.commerce-provider-certification-env-template.v1",
     providerChoices: {
       payment: ["auto", "stripe", "paypal", "paddle", "square", "adyen", "mollie", "razorpay"],
       tax: ["auto", "stripe", "taxjar", "avalara", "http"],
@@ -822,6 +845,14 @@ const commerceProviderCertification = {
       "BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY",
     ],
     secretHandling: "Provider credential values stay in CI secrets or local shell environment variables.",
+  },
+  operatorEnvTemplate: {
+    schemaVersion: "backy.commerce-provider-certification-env-template.v1",
+    format: "shell-env",
+    fileName: ".env.backy-commerce-provider-certification",
+    body: commerceProviderCertificationEnvTemplate,
+    secretHandling:
+      "Generated template values are non-secret aliases and placeholders; keep real commerce provider credentials in CI secrets or local shell variables before execution.",
   },
   runtime: {
     paymentConfigured: false,
