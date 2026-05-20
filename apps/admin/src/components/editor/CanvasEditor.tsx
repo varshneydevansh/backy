@@ -3386,10 +3386,10 @@ export function CanvasEditor({
       !entry.element.locked &&
       entry.element.visible !== false
     ));
-  const canDeleteSelected = selectedEntries.some((entry) => (
-    entry.parentId === selectedParentId &&
-    !entry.element.locked
-  ));
+  const canCopySelected = selectedEntries.length > 0 && selectedEntriesShareParent;
+  const canCutSelected = selectedEntriesShareParent && selectedEntries.some((entry) => !entry.element.locked);
+  const canDuplicateSelected = canCutSelected;
+  const canDeleteSelected = canCutSelected;
   const canToggleSelectedVisibility = selectedActiveElements.length > 0
     && selectedActiveElements.every((element) => !element.locked);
   const selectedLayersAreHidden = selectedActiveElements.length > 0
@@ -5205,20 +5205,22 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleCopy}
-              disabled={isCanvasMutationDisabled || !selectedId}
+              disabled={isCanvasMutationDisabled || !canCopySelected}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Copy selected layer (Cmd/Ctrl+C)"
-              aria-label="Copy"
+              title={`Copy ${selectedLayerActionLabel} (Cmd/Ctrl+C)`}
+              aria-label={`Copy ${selectedLayerActionLabel}`}
+              data-testid="editor-copy-selection"
             >
               <Copy className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handleCut}
-              disabled={isCanvasMutationDisabled || !selectedId}
+              disabled={isCanvasMutationDisabled || !canCutSelected}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Cut selected layer (Cmd/Ctrl+X)"
-              aria-label="Cut"
+              title={`Cut ${selectedLayerActionLabel} (Cmd/Ctrl+X)`}
+              aria-label={`Cut ${selectedLayerActionLabel}`}
+              data-testid="editor-cut-selection"
             >
               <Scissors className="h-4 w-4" />
             </button>
@@ -5227,18 +5229,20 @@ export function CanvasEditor({
               onClick={handlePaste}
               disabled={isCanvasMutationDisabled || clipboardElements.length === 0}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Paste layer (Cmd/Ctrl+V)"
-              aria-label="Paste"
+              title={`Paste ${clipboardElements.length === 1 ? 'layer' : 'layers'} (Cmd/Ctrl+V)`}
+              aria-label={`Paste ${clipboardElements.length === 1 ? 'layer' : 'layers'}`}
+              data-testid="editor-paste-selection"
             >
               <ClipboardPaste className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handleDuplicate}
-              disabled={isCanvasMutationDisabled || !selectedId}
+              disabled={isCanvasMutationDisabled || !canDuplicateSelected}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Duplicate selected layer (Cmd/Ctrl+D)"
-              aria-label="Duplicate"
+              title={`Duplicate ${selectedLayerActionLabel} (Cmd/Ctrl+D)`}
+              aria-label={`Duplicate ${selectedLayerActionLabel}`}
+              data-testid="editor-duplicate-selection"
             >
               <Copy className="h-4 w-4" />
             </button>
@@ -6080,6 +6084,52 @@ export function CanvasEditor({
                             Ungroup
                           </button>
                         </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-4 gap-1.5" data-testid="editor-inspector-selection-actions">
+                        <button
+                          type="button"
+                          onClick={handleCopy}
+                          disabled={isCanvasMutationDisabled || !canCopySelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Copy ${selectedLayerActionLabel}`}
+                          aria-label={`Copy ${selectedLayerActionLabel}`}
+                          data-testid="editor-inspector-copy-selection"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDuplicate}
+                          disabled={isCanvasMutationDisabled || !canDuplicateSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Duplicate ${selectedLayerActionLabel}`}
+                          aria-label={`Duplicate ${selectedLayerActionLabel}`}
+                          data-testid="editor-inspector-duplicate-selection"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCut}
+                          disabled={isCanvasMutationDisabled || !canCutSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Cut ${selectedLayerActionLabel}`}
+                          aria-label={`Cut ${selectedLayerActionLabel}`}
+                          data-testid="editor-inspector-cut-selection"
+                        >
+                          <Scissors className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={deleteElement}
+                          disabled={isCanvasMutationDisabled || !canDeleteSelected}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={`Delete ${selectedLayerActionLabel}`}
+                          aria-label={`Delete ${selectedLayerActionLabel}`}
+                          data-testid="editor-inspector-delete-selection"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                       <div className="mt-3 grid grid-cols-6 gap-1.5" data-testid="editor-inspector-align-controls">
                         <button
