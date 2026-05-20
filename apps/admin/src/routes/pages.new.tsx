@@ -649,6 +649,16 @@ type PageCollectionDatasetContract = {
     imageField: string | null;
 };
 
+type PageCreateDatasetReadinessStatus = 'ready' | 'attention' | 'blocked';
+
+type PageCreateDatasetReadinessCheck = {
+    id: string;
+    label: string;
+    status: PageCreateDatasetReadinessStatus;
+    evidence: string;
+    action: string;
+};
+
 const findCollectionRouteConflictForPageCreate = (
     path: string,
     collections: Collection[],
@@ -715,6 +725,14 @@ const buildPageCollectionDatasetContract = (
         descriptionField: fields.descriptionField?.key || null,
         imageField: fields.imageField?.key || null,
     };
+};
+
+const getPageCreateDatasetReadinessStatus = (
+    checks: PageCreateDatasetReadinessCheck[],
+): PageCreateDatasetReadinessStatus => {
+    if (checks.some((check) => check.status === 'blocked')) return 'blocked';
+    if (checks.some((check) => check.status === 'attention')) return 'attention';
+    return 'ready';
 };
 
 const normalizeCanonicalPath = (value: string) => {
@@ -2086,6 +2104,218 @@ function NewPageRoute() {
         selectedTemplate.sections.length,
         frontendDesign?.chrome,
     ]);
+    const datasetCreationReadiness = useMemo(() => {
+        if (!formData.collectionId.trim() && !selectedDatasetCollection) return null;
+
+        const hasTitleField = Boolean(selectedDatasetFields?.titleField);
+        const hasSummaryField = Boolean(selectedDatasetFields?.descriptionField);
+        const hasImageField = Boolean(selectedDatasetFields?.imageField);
+        const collectionStatus: PageCreateDatasetReadinessStatus = selectedDatasetCollection
+            ? 'ready'
+            : collectionsLoading
+                ? 'attention'
+                : 'blocked';
+        const modeStatus: PageCreateDatasetReadinessStatus = selectedDatasetMode === 'list' || selectedDatasetMode === 'item'
+            ? 'ready'
+            : 'blocked';
+        const fieldStatus: PageCreateDatasetReadinessStatus = hasTitleField
+            ? hasSummaryField && hasImageField ? 'ready' : 'attention'
+            : 'blocked';
+        const routeStatus: PageCreateDatasetReadinessStatus = routeConflict || routeCheckError || collectionRouteCheckError
+            ? 'blocked'
+            : isCollectionRouteCheckPending
+                ? 'attention'
+                : 'ready';
+        const apiStatus: PageCreateDatasetReadinessStatus = selectedDatasetCollection && selectedSite
+            ? 'ready'
+            : 'blocked';
+        const permissionStatus: PageCreateDatasetReadinessStatus = canEditPages && canViewCollections
+            ? 'ready'
+            : 'blocked';
+        const generatedCanvasStatus: PageCreateDatasetReadinessStatus = selectedDatasetContract && hasTitleField
+            ? 'ready'
+            : selectedDatasetContract
+                ? 'attention'
+                : 'blocked';
+        const publicRecordsUrl = selectedDatasetCollection
+            ? `/api/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/collections/${encodeURIComponent(selectedDatasetCollection.id)}/records`
+            : null;
+        const checks: PageCreateDatasetReadinessCheck[] = [
+            {
+                id: 'collection-selected',
+                label: 'Collection selected',
+                status: collectionStatus,
+                evidence: selectedDatasetCollection
+                    ? `${selectedDatasetCollection.name} /${selectedDatasetCollection.slug} with ${selectedDatasetCollection.fields.length} field${selectedDatasetCollection.fields.length === 1 ? '' : 's'}`
+                    : collectionsLoading
+                        ? 'Backy is still loading collections for this site.'
+                        : collectionsError || `No collection matched ${formData.collectionId}.`,
+                action: selectedDatasetCollection ? 'No action required.' : 'Choose an existing site collection or retry collection loading.',
+            },
+            {
+                id: 'dataset-mode',
+                label: 'Dataset mode',
+                status: modeStatus,
+                evidence: selectedDatasetMode === 'item'
+                    ? 'Detail page mode will bind one current record by slug.'
+                    : selectedDatasetMode === 'list'
+                        ? 'List page mode will seed a repeater backed by public collection records.'
+                        : 'No dataset mode has been selected.',
+                action: modeStatus === 'ready' ? 'No action required.' : 'Choose list or detail mode before creating the page.',
+            },
+            {
+                id: 'field-map',
+                label: 'Field mapping',
+                status: fieldStatus,
+                evidence: selectedDatasetCollection
+                    ? `title=${selectedDatasetFields?.titleField?.key || 'unmapped'}, summary=${selectedDatasetFields?.descriptionField?.key || 'unmapped'}, image=${selectedDatasetFields?.imageField?.key || 'unmapped'}`
+                    : 'No collection schema is available to map.',
+                action: hasTitleField
+                    ? hasSummaryField && hasImageField
+                        ? 'No action required.'
+                        : 'Add or rename summary/image fields if the generated page should expose richer cards and media.'
+                    : 'Add a title/name/headline text field before relying on generated bindings.',
+            },
+            {
+                id: 'route-availability',
+                label: 'Route availability',
+                status: routeStatus,
+                evidence: routeConflict
+                    ? routeConflict.message
+                    : routeCheckError || collectionRouteCheckError
+                        ? routeCheckError || collectionRouteCheckError || 'Route check failed.'
+                        : isCollectionRouteCheckPending
+                            ? 'Collection route reservations are still being checked.'
+                            : `${routePreview} is available; dataset contract route is ${selectedDatasetContract?.resolvedPath || 'unresolved'}.`,
+                action: routeStatus === 'ready' ? 'No action required.' : 'Resolve the route collision or retry route checks before creating the dataset page.',
+            },
+            {
+                id: 'generated-canvas-contract',
+                label: 'Generated canvas contract',
+                status: generatedCanvasStatus,
+                evidence: selectedDatasetMode === 'item'
+                    ? 'Detail pages seed bound title and summary elements for the current record.'
+                    : 'List pages seed a repeater with dataset id, title, summary, image, and link mapping metadata.',
+                action: generatedCanvasStatus === 'ready' ? 'No action required.' : 'Map a title field so generated elements can bind to real collection values.',
+            },
+            {
+                id: 'custom-frontend-api',
+                label: 'Custom frontend API',
+                status: apiStatus,
+                evidence: publicRecordsUrl
+                    ? `${publicRecordsUrl} plus manifest/openapi discovery expose this collection to custom frontends.`
+                    : 'Public records URL cannot be generated until a site and collection are selected.',
+                action: apiStatus === 'ready' ? 'No action required.' : 'Select a site and collection before copying this handoff into a custom frontend.',
+            },
+            {
+                id: 'permissions',
+                label: 'Operator permissions',
+                status: permissionStatus,
+                evidence: canEditPages && canViewCollections
+                    ? 'Current operator can read collections and create pages.'
+                    : [!canEditPages ? editPermissionTitle || 'pages.edit is required.' : '', !canViewCollections ? collectionsViewPermissionTitle || 'collections.view is required.' : ''].filter(Boolean).join(' '),
+                action: permissionStatus === 'ready' ? 'No action required.' : 'Ask an owner/admin to grant page edit and collection view access.',
+            },
+        ];
+        const readyCount = checks.filter((check) => check.status === 'ready').length;
+        const status = getPageCreateDatasetReadinessStatus(checks);
+
+        return {
+            readiness: {
+                schemaVersion: 'backy.page-create-dataset-readiness.v1',
+                status,
+                score: Math.round((readyCount / checks.length) * 100),
+                site: selectedSite
+                    ? { id: formData.siteId, name: selectedSite.name, slug: selectedSite.slug }
+                    : { id: formData.siteId || requestedSiteId, name: null, slug: null },
+                collection: selectedDatasetCollection
+                    ? {
+                        id: selectedDatasetCollection.id,
+                        slug: selectedDatasetCollection.slug,
+                        name: selectedDatasetCollection.name,
+                        fieldCount: selectedDatasetCollection.fields.length,
+                    }
+                    : { id: formData.collectionId, slug: null, name: null, fieldCount: 0 },
+                mode: selectedDatasetMode || null,
+                route: {
+                    pageSlug: resolvedSlug,
+                    pagePath: routePreview,
+                    datasetResolvedPath: selectedDatasetContract?.resolvedPath || null,
+                    listRoutePattern: selectedDatasetContract?.listRoutePattern || null,
+                    itemRoutePattern: selectedDatasetContract?.routePattern || null,
+                    recordParam: selectedDatasetContract?.recordParam || null,
+                    availability: routeStatus,
+                },
+                fields: {
+                    title: selectedDatasetFields?.titleField?.key || null,
+                    summary: selectedDatasetFields?.descriptionField?.key || null,
+                    image: selectedDatasetFields?.imageField?.key || null,
+                    slug: selectedDatasetContract?.slugField || null,
+                },
+                endpoints: {
+                    adminCreatePage: adminPagesUrl,
+                    publicRecords: publicRecordsUrl,
+                    publicManifest: `/api/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/manifest`,
+                    publicOpenApi: `/api/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/openapi`,
+                },
+                generatedCanvas: {
+                    datasetId: selectedDatasetContract?.datasetId || null,
+                    expectedRootElement: selectedDatasetMode === 'item' ? 'dataset-detail-section' : 'dataset-list-section',
+                    expectedBindings: selectedDatasetMode === 'item'
+                        ? ['currentRecord.title', 'currentRecord.summary']
+                        : ['repeater.records', 'record.title', 'record.summary', 'record.image', 'record.link'],
+                },
+                checks,
+            },
+            actionPlan: {
+                schemaVersion: 'backy.page-create-dataset-action-plan.v1',
+                status,
+                nextActions: checks.map((check) => ({
+                    id: check.id,
+                    label: check.label,
+                    ready: check.status === 'ready',
+                    action: check.status === 'ready' ? 'No action required.' : check.action,
+                })),
+                createBodyHints: {
+                    collectionId: selectedDatasetCollection?.id || formData.collectionId || null,
+                    datasetMode: selectedDatasetMode || 'list',
+                    titleField: selectedDatasetFields?.titleField?.key || null,
+                    descriptionField: selectedDatasetFields?.descriptionField?.key || null,
+                    imageField: selectedDatasetFields?.imageField?.key || null,
+                    collectionDataset: selectedDatasetContract,
+                },
+                handoffContracts: [
+                    'backy.collection-dataset-page.v1',
+                    'backy.page-create-dataset-readiness.v1',
+                    'backy.page-create-dataset-action-plan.v1',
+                    'backy.editor.dataset-binding.v1',
+                    'backy.editor.repeater-dataset.v1',
+                ],
+            },
+        };
+    }, [
+        adminPagesUrl,
+        canEditPages,
+        canViewCollections,
+        collectionRouteCheckError,
+        collectionsError,
+        collectionsLoading,
+        collectionsViewPermissionTitle,
+        editPermissionTitle,
+        formData.collectionId,
+        formData.siteId,
+        isCollectionRouteCheckPending,
+        requestedSiteId,
+        resolvedSlug,
+        routeCheckError,
+        routeConflict,
+        routePreview,
+        selectedDatasetCollection,
+        selectedDatasetContract,
+        selectedDatasetFields,
+        selectedDatasetMode,
+        selectedSite,
+    ]);
     const createPayloadPreview = useMemo(() => ({
         title: formData.title.trim() || 'Untitled page',
         slug: resolvedSlug,
@@ -2271,6 +2501,8 @@ function NewPageRoute() {
             parentTitle: selectedParentPage?.title || null,
         },
         datasetImport: selectedDatasetContract,
+        datasetReadiness: datasetCreationReadiness?.readiness || null,
+        datasetActionPlan: datasetCreationReadiness?.actionPlan || null,
         hierarchy: selectedParentPage
             ? {
                 parentPageId: selectedParentPage.id,
@@ -2325,6 +2557,7 @@ function NewPageRoute() {
     }), [
         adminPagesUrl,
         createPayloadPreview,
+        datasetCreationReadiness,
         formData.description,
         formData.isHomepage,
         formData.keywords,
@@ -2367,6 +2600,13 @@ function NewPageRoute() {
         effectiveCanvasSize.width,
     ]);
     const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
+    const datasetCreationHandoffText = useMemo(
+        () => JSON.stringify(datasetCreationReadiness || {
+            readiness: null,
+            actionPlan: null,
+        }, null, 2),
+        [datasetCreationReadiness],
+    );
     const hasAutosaveContent = useMemo(() => (
         formData.title.trim().length > 0
         || formData.slug.trim().length > 0
@@ -3025,7 +3265,23 @@ function NewPageRoute() {
                     <div className="xl:col-span-2 rounded-lg border border-cyan-200 bg-cyan-50/60 px-4 py-3 text-sm text-cyan-950" data-testid="page-create-dataset-import">
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                             <div>
-                                <div className="font-semibold">Collection dataset import</div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="font-semibold">Collection dataset import</div>
+                                    {datasetCreationReadiness && (
+                                        <span
+                                            className={cn(
+                                                'rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase',
+                                                datasetCreationReadiness.readiness.status === 'ready'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : datasetCreationReadiness.readiness.status === 'blocked'
+                                                        ? 'bg-red-100 text-red-800'
+                                                        : 'bg-amber-100 text-amber-800',
+                                            )}
+                                        >
+                                            {datasetCreationReadiness.readiness.score}% dataset ready
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="mt-1 text-cyan-900/80">
                                     {selectedDatasetCollection
                                         ? `${selectedDatasetCollection.name} will seed a ${selectedDatasetMode || 'list'} page with editable collection bindings.`
@@ -3041,6 +3297,57 @@ function NewPageRoute() {
                                 <div className="rounded-md bg-white/80 px-2 py-1">media {selectedDatasetFields?.imageField?.key || 'unmapped'}</div>
                             </div>
                         </div>
+                        {datasetCreationReadiness && (
+                            <div
+                                className="mt-3 rounded-md border border-cyan-200 bg-white/80 p-3"
+                                data-testid="page-create-dataset-readiness"
+                                data-schema-version={datasetCreationReadiness.readiness.schemaVersion}
+                                data-action-plan-version={datasetCreationReadiness.actionPlan.schemaVersion}
+                                data-status={datasetCreationReadiness.readiness.status}
+                            >
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <div className="text-xs font-semibold uppercase text-cyan-900">
+                                            {datasetCreationReadiness.actionPlan.schemaVersion}
+                                        </div>
+                                        <div className="mt-1 text-xs leading-5 text-cyan-900/80">
+                                            Copies collection, route, field-map, generated-canvas, and public API requirements for custom frontend and editor handoff.
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => void copyCreationText(datasetCreationHandoffText, 'Dataset page creation action plan')}
+                                        disabled={isPageCreateBusy}
+                                        data-testid="page-create-dataset-action-plan"
+                                        className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-cyan-300 bg-white px-3 py-2 text-xs font-semibold text-cyan-950 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Copy className="h-3.5 w-3.5" />
+                                        Copy dataset plan
+                                    </button>
+                                </div>
+                                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                                    {datasetCreationReadiness.readiness.checks.slice(0, 4).map((check) => (
+                                        <div key={check.id} className="rounded-md bg-cyan-50 px-2 py-1.5 text-xs">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="font-semibold text-cyan-950">{check.label}</span>
+                                                <span className={cn(
+                                                    'rounded px-1.5 py-0.5 font-semibold uppercase',
+                                                    check.status === 'ready'
+                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                        : check.status === 'blocked'
+                                                            ? 'bg-red-100 text-red-700'
+                                                            : 'bg-amber-100 text-amber-700',
+                                                )}
+                                                >
+                                                    {check.status}
+                                                </span>
+                                            </div>
+                                            <div className="mt-1 line-clamp-2 text-cyan-900/75">{check.evidence}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 

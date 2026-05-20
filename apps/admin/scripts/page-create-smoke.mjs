@@ -1344,6 +1344,17 @@ const assertPageCreateSourceContracts = () => {
     'Page create route must accept designTemplate, frontendDesignTemplateId, and frontendTemplate aliases for custom frontend template handoffs',
   );
   assert(
+    source.includes("schemaVersion: 'backy.page-create-dataset-readiness.v1'") &&
+      source.includes("schemaVersion: 'backy.page-create-dataset-action-plan.v1'") &&
+      source.includes("data-testid=\"page-create-dataset-readiness\"") &&
+      source.includes("data-testid=\"page-create-dataset-action-plan\"") &&
+      source.includes('datasetReadiness: datasetCreationReadiness?.readiness || null') &&
+      source.includes('datasetActionPlan: datasetCreationReadiness?.actionPlan || null') &&
+      source.includes('Copy dataset plan') &&
+      source.includes('publicRecords: publicRecordsUrl'),
+    'Page create dataset imports must expose copyable readiness/action-plan contracts for custom frontend and editor handoff',
+  );
+  assert(
     mediaApiSource.includes('MAX_MEDIA_LIST_LIMIT = 100') &&
       mediaApiSource.includes('Math.min(Math.max(requestedLimit, 1), MAX_MEDIA_LIST_LIMIT)') &&
       mediaApiSource.includes("query.set('limit', `${safeLimit}`)"),
@@ -3142,10 +3153,18 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
       const importPanel = document.querySelector('[data-testid="page-create-dataset-import"]');
+      const readinessPanel = document.querySelector('[data-testid="page-create-dataset-readiness"]');
+      const actionPlanButton = document.querySelector('[data-testid="page-create-dataset-action-plan"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
         importPanel: Boolean(importPanel),
         importText: importPanel?.textContent || '',
+        datasetReadinessPanel: Boolean(readinessPanel),
+        datasetReadinessSchema: readinessPanel?.getAttribute('data-schema-version') || '',
+        datasetActionPlanSchema: readinessPanel?.getAttribute('data-action-plan-version') || '',
+        datasetReadinessStatus: readinessPanel?.getAttribute('data-status') || '',
+        datasetActionPlanButton: Boolean(actionPlanButton),
+        datasetActionPlanDisabled: actionPlanButton instanceof HTMLButtonElement ? actionPlanButton.disabled : null,
         title: document.querySelector('#page-title')?.value || '',
         slug: document.querySelector('#page-slug')?.value || '',
         payloadDynamicData: payload.dynamicData || '',
@@ -3164,6 +3183,12 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
       && state.importPanel
       && state.importText.includes(collection.name)
       && state.importText.includes(collection.id)
+      && state.datasetReadinessPanel
+      && state.datasetReadinessSchema === 'backy.page-create-dataset-readiness.v1'
+      && state.datasetActionPlanSchema === 'backy.page-create-dataset-action-plan.v1'
+      && state.datasetReadinessStatus === 'ready'
+      && state.datasetActionPlanButton
+      && state.datasetActionPlanDisabled === false
       && state.title === title
       && state.slug === slug
       && state.payloadDynamicData.includes(collection.name)
