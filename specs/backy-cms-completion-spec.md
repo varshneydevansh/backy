@@ -485,6 +485,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/orders` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
   - `/settings` now has source-guarded permission error states with alert semantics and user-access handoff actions.
 - `/settings` now has a source-guarded provider-certification command builder that turns selected storage, rotation, Vercel secret, notification, and nested-commerce families into copyable non-secret CI commands plus required alias reminders. `GET /api/admin/settings` exposes the same `providerCertification.operatorCommandTemplate`; the status remains Partial until the generated Settings/Commerce commands pass against live providers.
+- `/settings` Delivery and the public manifest/OpenAPI/SDK database contract now expose a source-guarded SDK Postgres `operatorCommandTemplate` for custom frontend certification. It builds a guarded `npm run ci:sdk-postgres-smoke` command with `BACKY_SDK_REQUIRE_DATABASE=1`, disposable confirmation, optional expected host/database guards, and the release doctor while keeping database URLs in CI/server env.
 - Better validation copy + inline field errors.
 - Confirm-delete patterns and action recovery paths.
 - Role-based UI filtering (hide unavailable actions instead of disabled-only).

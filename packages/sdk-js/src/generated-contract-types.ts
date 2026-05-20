@@ -2468,6 +2468,13 @@ export type GeneratedBackyFrontendManifestDatabaseCertification = {
   };
   requires: Array<string>;
   coverage: Array<string>;
+  operatorCommandTemplate: {
+    command: string;
+    databaseUrlAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL">;
+    requiredInputs: Array<string>;
+    targetGuards: Array<"BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST" | "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE">;
+    [key: string]: unknown;
+  };
   runtime: {
     dataMode: string;
     databaseType: string;

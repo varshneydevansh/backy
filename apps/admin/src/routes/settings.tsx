@@ -638,6 +638,81 @@ const quoteShellValue = (value: string): string => `'${value.replace(/'/g, "'\\'
 
 const boolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 
+type FrontendDatabaseCertificationEnvAlias = 'BACKY_DATABASE_URL' | 'DATABASE_URL';
+
+type FrontendDatabaseCertificationCommandOptions = {
+  databaseEnvAlias: FrontendDatabaseCertificationEnvAlias;
+  disposableConfirmed: boolean;
+  expectedHost: string;
+  expectedDatabase: string;
+  includeReleaseDoctor: boolean;
+};
+
+const FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES: FrontendDatabaseCertificationEnvAlias[] = ['BACKY_DATABASE_URL', 'DATABASE_URL'];
+
+const DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS = {
+  databaseEnvAlias: 'BACKY_DATABASE_URL',
+  disposableConfirmed: true,
+  expectedHost: '',
+  expectedDatabase: '',
+  includeReleaseDoctor: true,
+} satisfies FrontendDatabaseCertificationCommandOptions;
+
+const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCertificationCommandOptions): string => {
+  const envEntries: Array<[string, string]> = [
+    ['BACKY_DATA_MODE', 'database'],
+    ['BACKY_SDK_REQUIRE_DATABASE', '1'],
+    ['BACKY_DATABASE_DISPOSABLE_CONFIRMED', options.disposableConfirmed ? 'true' : '<confirm-disposable-db-first>'],
+  ];
+
+  if (options.includeReleaseDoctor) {
+    envEntries.unshift(
+      ['BACKY_RELEASE_CERTIFY_DATABASE', '1'],
+      ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
+    );
+  }
+
+  const expectedHost = options.expectedHost.trim();
+  const expectedDatabase = options.expectedDatabase.trim();
+  if (expectedHost) {
+    envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST', expectedHost]);
+  }
+  if (expectedDatabase) {
+    envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE', expectedDatabase]);
+  }
+
+  return [
+    `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
+    `# export ${options.databaseEnvAlias}='<postgres-url>'`,
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteShellValue(value)}`),
+    '',
+    ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
+    'npm run ci:sdk-postgres-smoke',
+  ].join('\n');
+};
+
+const buildFrontendDatabaseCertificationRequiredInputs = (options: FrontendDatabaseCertificationCommandOptions): string[] => [
+  `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+  'BACKY_DATA_MODE=database',
+  'BACKY_SDK_REQUIRE_DATABASE=1',
+  'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
+  'disposable migrated Supabase/Postgres database',
+  'public manifest/OpenAPI/render/media/forms/interactive-component migrations with RLS policies',
+  ...(options.expectedHost.trim() ? ['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'] : []),
+  ...(options.expectedDatabase.trim() ? ['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'] : []),
+  ...(options.includeReleaseDoctor ? ['BACKY_RELEASE_CERTIFY_DATABASE=1', 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1'] : []),
+];
+
+const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
+  command: buildFrontendDatabaseCertificationCommand(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
+  databaseUrlAliases: FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES,
+  requiredInputs: buildFrontendDatabaseCertificationRequiredInputs(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
+  targetGuards: [
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
+    'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
+  ],
+};
+
 const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOptions) => (
   options.certifyStorage ||
   options.certifyRotation ||
@@ -1879,6 +1954,7 @@ function SettingsPage() {
       requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
       targetGuards: ['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST', 'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'],
     },
+    operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
     publicContracts: {
       manifest: '/api/sites/{siteId}/manifest#data.contract.databaseCertification',
       openApi: '/api/sites/{siteId}/openapi#x-backy-database-certification',
@@ -3696,10 +3772,22 @@ function DeliveryModeSettings({
   onChange: (next: DeliveryMode) => void;
 }) {
   const [copiedEndpoint, setCopiedEndpoint] = useState('');
+  const [frontendDatabaseCommandOptions, setFrontendDatabaseCommandOptions] = useState<FrontendDatabaseCertificationCommandOptions>(
+    DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS,
+  );
+  const [copiedFrontendDatabaseCommand, setCopiedFrontendDatabaseCommand] = useState(false);
   const publicApiBase = getApiBase('public');
   const adminApiBase = getApiBase('admin');
   const publicHostBase = publicApiBase.replace(/\/api$/, '');
   const publicSiteBase = `${publicHostBase}/sites`;
+  const frontendDatabaseCertificationCommand = useMemo(
+    () => buildFrontendDatabaseCertificationCommand(frontendDatabaseCommandOptions),
+    [frontendDatabaseCommandOptions],
+  );
+  const frontendDatabaseCertificationRequiredInputs = useMemo(
+    () => buildFrontendDatabaseCertificationRequiredInputs(frontendDatabaseCommandOptions),
+    [frontendDatabaseCommandOptions],
+  );
   const frontendDatabaseCertificationChecks = [
     {
       label: 'Database runtime',
@@ -3725,6 +3813,13 @@ function DeliveryModeSettings({
   ];
   const frontendDatabaseReadyCount = frontendDatabaseCertificationChecks.filter((check) => check.ready).length;
 
+  const updateFrontendDatabaseCommandOptions = (next: Partial<FrontendDatabaseCertificationCommandOptions>) => {
+    setFrontendDatabaseCommandOptions((current) => ({
+      ...current,
+      ...next,
+    }));
+  };
+
   const copyEndpoint = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
@@ -3734,6 +3829,20 @@ function DeliveryModeSettings({
       }, 1200);
     } catch {
       setCopiedEndpoint('');
+    }
+  };
+
+  const copyFrontendDatabaseCertificationCommand = async () => {
+    if (frontendDatabaseCertificationControlsDisabled) return;
+
+    try {
+      await navigator.clipboard.writeText(frontendDatabaseCertificationCommand);
+      setCopiedFrontendDatabaseCommand(true);
+      setTimeout(() => {
+        setCopiedFrontendDatabaseCommand(false);
+      }, 1400);
+    } catch {
+      setCopiedFrontendDatabaseCommand(false);
     }
   };
 
@@ -3923,6 +4032,121 @@ function DeliveryModeSettings({
                 <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
               </div>
             ))}
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="settings-frontend-database-certification-command-builder">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium text-foreground">SDK Postgres command builder</div>
+                <p className="mt-1 max-w-3xl text-muted-foreground">
+                  Build the exact command for the custom-frontend SDK database smoke. Database URLs stay in CI secrets or local shell env; this builder only writes aliases and target guards.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void copyFrontendDatabaseCertificationCommand()}
+                disabled={frontendDatabaseCertificationControlsDisabled}
+                title={frontendDatabaseCertificationControlsTitle}
+                iconStart={copiedFrontendDatabaseCommand ? <Check className="size-4" /> : <Copy className="size-4" />}
+                data-testid="settings-frontend-database-certification-command-builder-copy-button"
+              >
+                {copiedFrontendDatabaseCommand ? 'Copied command' : 'Copy guarded command'}
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="text-xs">
+                <span className="font-semibold text-foreground">Database URL alias</span>
+                <select
+                  value={frontendDatabaseCommandOptions.databaseEnvAlias}
+                  onChange={(event) => updateFrontendDatabaseCommandOptions({
+                    databaseEnvAlias: event.target.value as FrontendDatabaseCertificationEnvAlias,
+                  })}
+                  disabled={frontendDatabaseCertificationControlsDisabled}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  data-testid="settings-frontend-database-certification-database-alias-select"
+                >
+                  {FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES.map((alias) => (
+                    <option key={alias} value={alias}>{alias}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  Store the actual Postgres URL outside Backy.
+                </span>
+              </label>
+              <label className="text-xs">
+                <span className="font-semibold text-foreground">Expected host</span>
+                <input
+                  type="text"
+                  value={frontendDatabaseCommandOptions.expectedHost}
+                  onChange={(event) => updateFrontendDatabaseCommandOptions({ expectedHost: event.target.value })}
+                  disabled={frontendDatabaseCertificationControlsDisabled}
+                  placeholder="db.example.supabase.co"
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  data-testid="settings-frontend-database-certification-expected-host-input"
+                />
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  Optional guard for the target database host.
+                </span>
+              </label>
+              <label className="text-xs">
+                <span className="font-semibold text-foreground">Expected database</span>
+                <input
+                  type="text"
+                  value={frontendDatabaseCommandOptions.expectedDatabase}
+                  onChange={(event) => updateFrontendDatabaseCommandOptions({ expectedDatabase: event.target.value })}
+                  disabled={frontendDatabaseCertificationControlsDisabled}
+                  placeholder="postgres"
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  data-testid="settings-frontend-database-certification-expected-database-input"
+                />
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  Optional guard for the database name in the URL path.
+                </span>
+              </label>
+              <div className="grid gap-2">
+                <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={frontendDatabaseCommandOptions.disposableConfirmed}
+                    onChange={(event) => updateFrontendDatabaseCommandOptions({ disposableConfirmed: event.target.checked })}
+                    disabled={frontendDatabaseCertificationControlsDisabled}
+                    className="mt-1 size-4 rounded border-border"
+                    data-testid="settings-frontend-database-certification-disposable-toggle"
+                  />
+                  <span>
+                    <span className="block font-semibold text-foreground">Disposable confirmed</span>
+                    <span className="mt-1 block font-mono text-[10px] text-muted-foreground">BACKY_DATABASE_DISPOSABLE_CONFIRMED=true</span>
+                  </span>
+                </label>
+                <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={frontendDatabaseCommandOptions.includeReleaseDoctor}
+                    onChange={(event) => updateFrontendDatabaseCommandOptions({ includeReleaseDoctor: event.target.checked })}
+                    disabled={frontendDatabaseCertificationControlsDisabled}
+                    className="mt-1 size-4 rounded border-border"
+                    data-testid="settings-frontend-database-certification-doctor-toggle"
+                  />
+                  <span>
+                    <span className="block font-semibold text-foreground">Run release doctor first</span>
+                    <span className="mt-1 block font-mono text-[10px] text-muted-foreground">npm run doctor:release-certification</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="settings-frontend-database-certification-command">
+              <code>{frontendDatabaseCertificationCommand}</code>
+            </pre>
+            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="settings-frontend-database-certification-required-inputs">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs for this command</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {frontendDatabaseCertificationRequiredInputs.map((input) => (
+                  <span key={input} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    {input}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
             The public manifest exposes <span className="font-mono">backy.frontend-database-certification.v1</span> as <span className="font-mono">contract.databaseCertification</span>, and the SDK exposes <span className="font-mono">BackyFrontendDatabaseCertification</span>. Database URLs and service credentials stay in server/CI environment variables.

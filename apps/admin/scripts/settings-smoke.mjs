@@ -95,14 +95,25 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-frontend-database-certification"',
     'data-testid="settings-frontend-database-certification-copy-button"',
     'data-testid="settings-frontend-database-certification-download-button"',
+    'data-testid="settings-frontend-database-certification-command-builder"',
+    'data-testid="settings-frontend-database-certification-command-builder-copy-button"',
+    'data-testid="settings-frontend-database-certification-database-alias-select"',
+    'data-testid="settings-frontend-database-certification-expected-host-input"',
+    'data-testid="settings-frontend-database-certification-expected-database-input"',
+    'data-testid="settings-frontend-database-certification-required-inputs"',
     'Frontend SDK database certification',
     'frontendDatabaseCertificationHandoff',
+    'operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE',
+    'buildFrontendDatabaseCertificationCommand',
     'backy-frontend-database-certification-handoff.json',
     'Frontend database certification handoff downloaded.',
     'backy.frontend-database-certification.v1',
     'BACKY_DATABASE_URL',
     'DATABASE_URL',
+    'BACKY_SDK_REQUIRE_DATABASE=1',
+    'BACKY_RELEASE_CERTIFY_DATABASE=1',
     'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true',
+    'npm run doctor:release-certification',
     'npm run test:sdk-postgres-preflight-contract',
     'npm run test:frontend-contract-types',
     'ci:sdk-postgres-smoke',
@@ -2050,8 +2061,12 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       hasSiteSettingsPatch: text.includes('PATCH') && text.includes('/sites/:siteId/settings'),
       hasScopedDescription: text.includes('site-scoped Settings envelope') || text.includes('site-owned Settings sections'),
       hasFrontendDatabaseCertification: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification"]')),
+      hasFrontendDatabaseCommandBuilder: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification-command-builder"]')),
+      hasFrontendDatabaseCommandInputs: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification-database-alias-select"]')) &&
+        Boolean(document.querySelector('[data-testid="settings-frontend-database-certification-expected-host-input"]')) &&
+        Boolean(document.querySelector('[data-testid="settings-frontend-database-certification-required-inputs"]')),
       hasFrontendDatabaseGate: text.includes('Frontend SDK database certification') && text.includes('npm run ci:sdk-postgres-smoke'),
-      hasFrontendDatabaseEnv: text.includes('BACKY_DATABASE_URL or DATABASE_URL') && text.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'),
+      hasFrontendDatabaseEnv: text.includes('BACKY_DATABASE_URL or DATABASE_URL') && text.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') && text.includes('BACKY_SDK_REQUIRE_DATABASE=1'),
       hasFrontendDatabaseContract: text.includes('backy.frontend-database-certification.v1') && text.includes('BackyFrontendDatabaseCertification'),
     };
   })()`);
@@ -2060,6 +2075,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       deliveryApiState.hasSiteSettingsPatch &&
       deliveryApiState.hasScopedDescription &&
       deliveryApiState.hasFrontendDatabaseCertification &&
+      deliveryApiState.hasFrontendDatabaseCommandBuilder &&
+      deliveryApiState.hasFrontendDatabaseCommandInputs &&
       deliveryApiState.hasFrontendDatabaseGate &&
       deliveryApiState.hasFrontendDatabaseEnv &&
       deliveryApiState.hasFrontendDatabaseContract,

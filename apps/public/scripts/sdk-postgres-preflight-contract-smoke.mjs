@@ -42,6 +42,11 @@ assert(
     manifestRoute.includes("requiredConfirmationEnv: 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'") &&
     manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'") &&
     manifestRoute.includes("'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'") &&
+    manifestRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
+    manifestRoute.includes('buildFrontendDatabaseCertificationCommand') &&
+    manifestRoute.includes("'BACKY_SDK_REQUIRE_DATABASE', '1'") &&
+    manifestRoute.includes("'BACKY_RELEASE_CERTIFY_DATABASE', '1'") &&
+    manifestRoute.includes('npm run doctor:release-certification') &&
     manifestRoute.includes('disposable_database_confirmed=true') &&
     manifestRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
     manifestRoute.includes('getFrontendDatabaseCertificationRuntime') &&
@@ -57,18 +62,29 @@ assert(
 );
 
 assert(
-  settingsRoute.includes('data-testid="settings-frontend-database-certification"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-copy-button"') &&
     settingsRoute.includes('data-testid="settings-frontend-database-certification-download-button"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-command-builder"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-command-builder-copy-button"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-database-alias-select"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-expected-host-input"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-expected-database-input"') &&
+    settingsRoute.includes('data-testid="settings-frontend-database-certification-required-inputs"') &&
     settingsRoute.includes('Frontend SDK database certification') &&
     settingsRoute.includes('frontendDatabaseCertificationHandoff') &&
+    settingsRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
+    settingsRoute.includes('buildFrontendDatabaseCertificationCommand') &&
     settingsRoute.includes('backy-frontend-database-certification-handoff.json') &&
     settingsRoute.includes('Frontend database certification handoff downloaded.') &&
     settingsRoute.includes('npm run ci:sdk-postgres-smoke') &&
+    settingsRoute.includes('npm run doctor:release-certification') &&
     settingsRoute.includes('npm run test:sdk-postgres-preflight-contract') &&
     settingsRoute.includes('npm run test:frontend-contract-types') &&
     settingsRoute.includes('.github/workflows/sdk-postgres-smoke.yml') &&
     settingsRoute.includes('BACKY_DATABASE_URL or DATABASE_URL') &&
+    settingsRoute.includes('BACKY_SDK_REQUIRE_DATABASE=1') &&
+    settingsRoute.includes('BACKY_RELEASE_CERTIFY_DATABASE=1') &&
     settingsRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
     settingsRoute.includes('backy.frontend-database-certification.v1') &&
     settingsRoute.includes('BackyFrontendDatabaseCertification') &&
@@ -86,6 +102,11 @@ assert(
     openApiRoute.includes('requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"') &&
     openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
     openApiRoute.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
+    openApiRoute.includes('operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE') &&
+    openApiRoute.includes('buildFrontendDatabaseCertificationCommand') &&
+    openApiRoute.includes('"BACKY_SDK_REQUIRE_DATABASE", "1"') &&
+    openApiRoute.includes('"BACKY_RELEASE_CERTIFY_DATABASE", "1"') &&
+    openApiRoute.includes('npm run doctor:release-certification') &&
     openApiRoute.includes('disposable_database_confirmed=true') &&
     openApiRoute.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
     openApiRoute.includes('getFrontendDatabaseCertificationRuntime') &&
@@ -108,6 +129,9 @@ assert(
     frontendManifestSchema.includes('"BACKY_DATABASE_URL"') &&
     frontendManifestSchema.includes('"DATABASE_URL"') &&
     frontendManifestSchema.includes('"requiredConfirmationEnv": { "const": "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true" }') &&
+    frontendManifestSchema.includes('"operatorCommandTemplate"') &&
+    frontendManifestSchema.includes('"command": { "type": "string", "minLength": 1 }') &&
+    frontendManifestSchema.includes('"required": ["command", "databaseUrlAliases", "requiredInputs", "targetGuards"]') &&
     frontendManifestSchema.includes('"runtime"') &&
     frontendManifestSchema.includes('"databaseUrlConfigured"') &&
     frontendManifestSchema.includes('"readyForCertification"') &&
@@ -121,6 +145,8 @@ assert(
     generatedSdkTypes.includes('databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification') &&
     generatedSdkTypes.includes('"npm run ci:sdk-postgres-smoke"') &&
     generatedSdkTypes.includes('requiredConfirmationEnv: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"') &&
+    generatedSdkTypes.includes('operatorCommandTemplate: {') &&
+    generatedSdkTypes.includes('databaseUrlAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL">') &&
     generatedSdkTypes.includes('databaseUrlConfigured: boolean') &&
     generatedSdkTypes.includes('readyForCertification: boolean') &&
     generatedSdkTypes.includes('"npm run test:frontend-contract-types"'),
@@ -131,10 +157,13 @@ assert(
   sdkIndex.includes('export interface BackyFrontendDatabaseCertification') &&
     sdkIndex.includes('schemaVersion: "backy.frontend-database-certification.v1"') &&
     sdkIndex.includes('readyForCertification: boolean') &&
+    sdkIndex.includes('operatorCommandTemplate: {') &&
     sdkIndex.includes('export interface BackyFrontendManifestContract') &&
     sdkIndex.includes('databaseCertification: BackyFrontendDatabaseCertification') &&
     sdkIndex.includes('contract: BackyFrontendManifestContract') &&
     generatedSdkTypeSmoke.includes('convenienceFrontendDatabaseCertification') &&
+    generatedSdkTypeSmoke.includes('operatorCommandTemplate') &&
+    generatedSdkTypeSmoke.includes('export BACKY_SDK_REQUIRE_DATABASE') &&
     generatedSdkTypeSmoke.includes('satisfies BackyFrontendDatabaseCertification'),
   'SDK convenience manifest types must expose the same database certification runtime handoff as generated types.',
 );
@@ -290,9 +319,10 @@ assert(
 );
 
 assert(
-  rootPackage.includes('"test:sdk-postgres-disposable-guard": "node scripts/sdk-postgres-disposable-guard-smoke.mjs"') &&
+    rootPackage.includes('"test:sdk-postgres-disposable-guard": "node scripts/sdk-postgres-disposable-guard-smoke.mjs"') &&
     rootPackage.includes('"ci:sdk-postgres-smoke": "npm run test:sdk-postgres-preflight-contract && npm run test:sdk-postgres-disposable-guard && BACKY_SDK_REQUIRE_DATABASE=1 node scripts/sdk-smoke-ci.mjs"') &&
-    rootPackage.includes('npm run test:sdk-postgres-disposable-guard && npm run test:admin-contract-source && npm run test:settings-provider-certification-preflight-contract') &&
+    rootPackage.includes('npm run test:sdk-postgres-disposable-guard && npm run test:admin-contract-source') &&
+    rootPackage.includes('npm run test:settings-provider-certification-preflight-contract') &&
     sdkPostgresWorkflow.includes('Run SDK Postgres preflight contract') &&
     sdkPostgresWorkflow.includes('npm run test:sdk-postgres-preflight-contract') &&
     sdkPostgresWorkflow.includes('DATABASE_URL') &&
@@ -347,6 +377,9 @@ assert(
 assert(
   sdkReadme.includes('BACKY_DATABASE_URL` or `DATABASE_URL` pointing at a disposable migrated Supabase/Postgres database') &&
     sdkReadme.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
+    sdkReadme.includes('operatorCommandTemplate') &&
+    sdkReadme.includes('BACKY_SDK_REQUIRE_DATABASE=1') &&
+    sdkReadme.includes('npm run doctor:release-certification') &&
     sdkReadme.includes('forwards `disposable_database_confirmed=true` to `BACKY_DATABASE_DISPOSABLE_CONFIRMED`') &&
     sdkReadme.includes('with the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias') &&
     sdkReadme.includes('coverage families for media, forms, and interactive components'),
@@ -356,6 +389,7 @@ assert(
 assert(
   apiContracts.includes('forms-postgres-contract.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database') &&
     apiContracts.includes('against `BACKY_DATABASE_URL`/`DATABASE_URL` only after `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true`') &&
+    apiContracts.includes('`operatorCommandTemplate` for a copyable guarded command with `BACKY_SDK_REQUIRE_DATABASE=1` and `npm run doctor:release-certification`') &&
     apiContracts.includes('sdk-postgres-smoke.yml` exposes the same gate as a manual GitHub Actions workflow using the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias for a disposable migrated Supabase/Postgres database'),
   'API contracts must document both database secret aliases and the SDK disposable confirmation env for Postgres manual gates.',
 );
@@ -371,6 +405,9 @@ assert(
     audit.includes('media/forms/interactive-component coverage families') &&
     audit.includes('non-secret database credential boundary') &&
     audit.includes('SDK certification gate wording update') &&
+    audit.includes('Settings Delivery SDK Postgres command builder') &&
+    audit.includes('databaseCertification.operatorCommandTemplate') &&
+    audit.includes('BACKY_SDK_REQUIRE_DATABASE=1 npm run ci:sdk-postgres-smoke') &&
     audit.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke') &&
     audit.includes('test:sdk-postgres-disposable-guard') &&
     audit.includes('public manifest, OpenAPI, render, media, CMS, forms, comments, events, commerce, and interactive-component service-data verification'),

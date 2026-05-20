@@ -2604,6 +2604,13 @@ export interface BackyFrontendDatabaseCertification {
   };
   requires: string[];
   coverage: string[];
+  operatorCommandTemplate: {
+    command: string;
+    databaseUrlAliases: Array<"BACKY_DATABASE_URL" | "DATABASE_URL" | string>;
+    requiredInputs: string[];
+    targetGuards: string[];
+    [key: string]: unknown;
+  };
   runtime: {
     dataMode: string;
     databaseType: string;

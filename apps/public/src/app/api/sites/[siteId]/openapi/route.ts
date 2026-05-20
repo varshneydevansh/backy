@@ -93,6 +93,75 @@ const booleanEnvEnabled = (key: string): boolean => {
   return value === "1" || value === "true" || value === "yes" || value === "on";
 };
 
+type FrontendDatabaseCertificationEnvAlias = "BACKY_DATABASE_URL" | "DATABASE_URL";
+
+type FrontendDatabaseCertificationCommandOptions = {
+  databaseEnvAlias: FrontendDatabaseCertificationEnvAlias;
+  disposableConfirmed: boolean;
+  expectedHost: string;
+  expectedDatabase: string;
+  includeReleaseDoctor: boolean;
+};
+
+const FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES: FrontendDatabaseCertificationEnvAlias[] = ["BACKY_DATABASE_URL", "DATABASE_URL"];
+
+const DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS = {
+  databaseEnvAlias: "BACKY_DATABASE_URL",
+  disposableConfirmed: true,
+  expectedHost: "",
+  expectedDatabase: "",
+  includeReleaseDoctor: true,
+} satisfies FrontendDatabaseCertificationCommandOptions;
+
+const quoteCertificationShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
+const buildFrontendDatabaseCertificationCommand = (options: FrontendDatabaseCertificationCommandOptions): string => {
+  const envEntries: Array<[string, string]> = [
+    ["BACKY_DATA_MODE", "database"],
+    ["BACKY_SDK_REQUIRE_DATABASE", "1"],
+    ["BACKY_DATABASE_DISPOSABLE_CONFIRMED", options.disposableConfirmed ? "true" : "<confirm-disposable-db-first>"],
+  ];
+
+  if (options.includeReleaseDoctor) {
+    envEntries.unshift(
+      ["BACKY_RELEASE_CERTIFY_DATABASE", "1"],
+      ["BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED", "1"],
+    );
+  }
+
+  const expectedHost = options.expectedHost.trim();
+  const expectedDatabase = options.expectedDatabase.trim();
+  if (expectedHost) envEntries.push(["BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST", expectedHost]);
+  if (expectedDatabase) envEntries.push(["BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE", expectedDatabase]);
+
+  return [
+    `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
+    `# export ${options.databaseEnvAlias}='<postgres-url>'`,
+    ...envEntries.map(([key, value]) => `export ${key}=${quoteCertificationShellValue(value)}`),
+    "",
+    ...(options.includeReleaseDoctor ? ["npm run doctor:release-certification"] : []),
+    "npm run ci:sdk-postgres-smoke",
+  ].join("\n");
+};
+
+const FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
+  command: buildFrontendDatabaseCertificationCommand(DEFAULT_FRONTEND_DATABASE_CERTIFICATION_COMMAND_OPTIONS),
+  databaseUrlAliases: FRONTEND_DATABASE_CERTIFICATION_ENV_ALIASES,
+  requiredInputs: [
+    "BACKY_DATABASE_URL or DATABASE_URL",
+    "BACKY_DATA_MODE=database",
+    "BACKY_SDK_REQUIRE_DATABASE=1",
+    "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true",
+    "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
+    "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",
+    "disposable migrated Supabase/Postgres database",
+  ],
+  targetGuards: [
+    "BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST",
+    "BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE",
+  ],
+} as const;
+
 const getFrontendDatabaseCertificationRuntime = () => {
   const databaseUrl = envValue(["BACKY_DATABASE_URL", "DATABASE_URL"]);
   const dataMode = process.env.BACKY_DATA_MODE?.trim() || "database";
@@ -159,6 +228,7 @@ const frontendDatabaseCertification = {
     "interactive-components",
   ],
   runtime: getFrontendDatabaseCertificationRuntime(),
+  operatorCommandTemplate: FRONTEND_DATABASE_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
   secretHandling:
     "Database URLs and service credentials stay in CI/runtime environment; OpenAPI exposes only non-secret gate names and requirements.",
 } as const;

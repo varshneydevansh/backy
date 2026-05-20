@@ -686,6 +686,12 @@ assert(manifest.data.contract?.databaseCertification?.requires?.includes('dispos
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('media'), 'manifest() missing media database certification coverage');
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('forms'), 'manifest() missing forms database certification coverage');
 assert(manifest.data.contract?.databaseCertification?.coverage?.includes('interactive-components'), 'manifest() missing interactive component database certification coverage');
+assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('npm run ci:sdk-postgres-smoke'), 'manifest() missing SDK Postgres operator command template');
+assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('BACKY_SDK_REQUIRE_DATABASE'), 'manifest() missing SDK database-mode operator env');
+assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.command?.includes('npm run doctor:release-certification'), 'manifest() missing SDK release doctor command');
+assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.databaseUrlAliases?.includes('BACKY_DATABASE_URL'), 'manifest() missing operator BACKY_DATABASE_URL alias');
+assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.requiredInputs?.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'), 'manifest() missing operator disposable confirmation input');
+assert(manifest.data.contract?.databaseCertification?.operatorCommandTemplate?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE'), 'manifest() missing operator database-name guard');
 assert(typeof manifest.data.contract?.databaseCertification?.runtime?.databaseUrlConfigured === 'boolean', 'manifest() missing non-secret database URL runtime state');
 assert(Object.prototype.hasOwnProperty.call(manifest.data.contract.databaseCertification.runtime, 'databaseUrlAlias'), 'manifest() missing non-secret database URL alias runtime field');
 assert(typeof manifest.data.contract.databaseCertification.runtime.disposableConfirmed === 'boolean', 'manifest() missing disposable confirmation runtime state');
@@ -740,6 +746,7 @@ assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get?.['x-backy-feed']?.
 assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'openapi() missing blog feed discovery schema');
 assert(openapi['x-backy-database-certification']?.schemaVersion === manifest.data.contract.databaseCertification.schemaVersion, 'openapi() missing database certification schema extension');
 assert(openapi['x-backy-database-certification']?.gate?.command === manifest.data.contract.databaseCertification.gate.command, 'openapi() database certification command drifted from manifest');
+assert(openapi['x-backy-database-certification']?.operatorCommandTemplate?.command === manifest.data.contract.databaseCertification.operatorCommandTemplate.command, 'openapi() database certification operator command drifted from manifest');
 assert(openapi['x-backy-database-certification']?.environment?.secretAliases?.includes('DATABASE_URL'), 'openapi() missing DATABASE_URL certification alias');
 assert(openapi['x-backy-database-certification']?.environment?.requiredConfirmationEnv === 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', 'openapi() missing SDK Postgres disposable confirmation env requirement');
 assert(openapi['x-backy-database-certification']?.environment?.targetGuards?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'), 'openapi() missing database expected-host guard');
