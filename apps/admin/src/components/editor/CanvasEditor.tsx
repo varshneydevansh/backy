@@ -6101,7 +6101,7 @@ export function CanvasEditor({
                           </button>
                         </div>
                       </div>
-                      <div className="mt-3 grid grid-cols-4 gap-1.5" data-testid="editor-inspector-selection-actions">
+                      <div className="mt-3 grid grid-cols-5 gap-1.5" data-testid="editor-inspector-selection-actions">
                         <button
                           type="button"
                           onClick={handleCopy}
@@ -6137,6 +6137,21 @@ export function CanvasEditor({
                           data-testid="editor-inspector-cut-selection"
                         >
                           <Scissors className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handlePaste}
+                          disabled={isCanvasMutationDisabled || clipboardElements.length === 0}
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={pasteTargetLabel}
+                          aria-label={pasteTargetLabel}
+                          aria-keyshortcuts="Control+V Meta+V"
+                          data-paste-target={pasteTargetMode}
+                          data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement?.id : undefined}
+                          data-clipboard-count={clipboardElements.length}
+                          data-testid="editor-inspector-paste-selection"
+                        >
+                          <ClipboardPaste className="h-3.5 w-3.5" />
                         </button>
                         <button
                           type="button"
