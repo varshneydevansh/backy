@@ -4638,6 +4638,36 @@ export function CanvasEditor({
         return;
       }
 
+      const isZoomInShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
+        key === '+' ||
+        key === '=' ||
+        e.code === 'Equal' ||
+        e.code === 'NumpadAdd'
+      );
+      const isZoomOutShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
+        key === '-' ||
+        e.code === 'Minus' ||
+        e.code === 'NumpadSubtract'
+      );
+      const isFitCanvasShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
+        key === '0' ||
+        e.code === 'Digit0' ||
+        e.code === 'Numpad0'
+      );
+      if (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut) {
+        e.preventDefault();
+        if (isZoomOutShortcut) {
+          handleZoomOut();
+          return;
+        }
+        if (isFitCanvasShortcut) {
+          handleFitCanvas();
+          return;
+        }
+        handleZoomIn();
+        return;
+      }
+
       const isLayerOrderShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
         e.code === 'BracketLeft' ||
         e.code === 'BracketRight' ||
@@ -4809,9 +4839,12 @@ export function CanvasEditor({
     handleCut,
     handlePaste,
     handleDuplicate,
+    handleFitCanvas,
     handleZOrderChange,
     handleGroupSelected,
     handleUngroupSelected,
+    handleZoomIn,
+    handleZoomOut,
     handleSelectFirstChildLayer,
     handleSelectChildLayerScope,
     handleSelectParentLayer,
@@ -5961,6 +5994,7 @@ export function CanvasEditor({
                 data-zoom-percent={zoomPercent}
                 data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
                 data-pan-active={isCanvasPanActive ? 'true' : 'false'}
+                data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"
               >
                 <button
                   type="button"
@@ -5983,8 +6017,9 @@ export function CanvasEditor({
                   type="button"
                   onClick={handleZoomOut}
                   className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-                  title="Zoom out"
+                  title="Zoom out (Cmd/Ctrl+-)"
                   aria-label="Zoom out"
+                  aria-keyshortcuts="Control+- Meta+-"
                   data-testid="editor-zoom-out"
                 >
                   <ZoomOut className="h-4 w-4" />
@@ -6002,8 +6037,9 @@ export function CanvasEditor({
                   type="button"
                   onClick={handleZoomIn}
                   className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-                  title="Zoom in"
+                  title="Zoom in (Cmd/Ctrl+=)"
                   aria-label="Zoom in"
+                  aria-keyshortcuts="Control+= Meta+="
                   data-testid="editor-zoom-in"
                 >
                   <ZoomIn className="h-4 w-4" />
@@ -6013,8 +6049,9 @@ export function CanvasEditor({
                   type="button"
                   onClick={handleFitCanvas}
                   className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-                  title="Fit canvas"
+                  title="Fit canvas (Cmd/Ctrl+0)"
                   aria-label="Fit canvas"
+                  aria-keyshortcuts="Control+0 Meta+0"
                   data-testid="editor-zoom-fit"
                 >
                   <Maximize2 className="h-4 w-4" />
