@@ -81,8 +81,13 @@ const DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS = {
 } satisfies FormsPostgresCertificationCommandOptions;
 
 const quoteFormsShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteFormsEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteFormsShellValue(value)
+);
 
-const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificationCommandOptions): string => {
+const buildFormsPostgresCertificationEnvEntries = (
+  options: FormsPostgresCertificationCommandOptions,
+): Array<[string, string]> => {
   const envEntries: Array<[string, string]> = [
     ['BACKY_DATA_MODE', 'database'],
     ['BACKY_DATABASE_DISPOSABLE_CONFIRMED', options.disposableConfirmed ? 'true' : '<confirm-disposable-db-first>'],
@@ -100,6 +105,12 @@ const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificat
   if (expectedHost) envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST', expectedHost]);
   if (expectedDatabase) envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE', expectedDatabase]);
 
+  return envEntries;
+};
+
+const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificationCommandOptions): string => {
+  const envEntries = buildFormsPostgresCertificationEnvEntries(options);
+
   return [
     `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
     `# export ${options.databaseEnvAlias}='<postgres-url>'`,
@@ -110,8 +121,21 @@ const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificat
   ].join('\n');
 };
 
+const buildFormsPostgresCertificationEnvTemplate = (options: FormsPostgresCertificationCommandOptions): string => {
+  const envEntries = buildFormsPostgresCertificationEnvEntries(options);
+
+  return [
+    '# Backy Forms Postgres certification environment',
+    '# Keep the disposable database URL in CI secrets or local shell variables.',
+    `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+    ...envEntries.map(([key, value]) => `${key}=${quoteFormsEnvTemplateValue(value)}`),
+  ].join('\n');
+};
+
 const FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE = {
   command: buildFormsPostgresCertificationCommand(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildFormsPostgresCertificationEnvTemplate(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.forms-postgres-certification-env-template.v1',
   databaseUrlAliases: FORMS_POSTGRES_DATABASE_ENV_ALIASES,
   requiredInputs: [
     'BACKY_DATABASE_URL or DATABASE_URL',
@@ -124,6 +148,7 @@ const FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE = {
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   ],
+  secretHandling: 'Disposable database URLs stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
 };
 
 const formPersistenceCertification = (siteId: string) => ({
@@ -169,6 +194,13 @@ const formPersistenceCertification = (siteId: string) => ({
     'non-secret workflow summary with disposable database confirmation',
   ],
   operatorCommandTemplate: FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE,
+  operatorEnvTemplate: {
+    schemaVersion: 'backy.forms-postgres-certification-env-template.v1',
+    format: 'shell-env',
+    fileName: '.env.backy-forms-postgres-certification',
+    body: FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    secretHandling: 'Generated template values are non-secret aliases and placeholders; replace the database URL placeholder with a disposable migrated Supabase/Postgres secret before execution.',
+  },
   runtime: getFormsPersistenceRuntimeSummary(),
   secretHandling: 'Database URLs stay in server/CI environment variables; Forms API responses expose only non-secret gate names and readiness evidence.',
 });

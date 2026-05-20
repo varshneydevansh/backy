@@ -692,8 +692,13 @@ const DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS = {
 } satisfies FormsPostgresCertificationCommandOptions;
 
 const quoteFormsShellValue = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+const quoteFormsEnvTemplateValue = (value: string): string => (
+  /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteFormsShellValue(value)
+);
 
-const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificationCommandOptions): string => {
+const buildFormsPostgresCertificationEnvEntries = (
+  options: FormsPostgresCertificationCommandOptions,
+): Array<[string, string]> => {
   const envEntries: Array<[string, string]> = [
     ['BACKY_DATA_MODE', 'database'],
     ['BACKY_DATABASE_DISPOSABLE_CONFIRMED', options.disposableConfirmed ? 'true' : '<confirm-disposable-db-first>'],
@@ -715,6 +720,12 @@ const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificat
     envEntries.push(['BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE', expectedDatabase]);
   }
 
+  return envEntries;
+};
+
+const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificationCommandOptions): string => {
+  const envEntries = buildFormsPostgresCertificationEnvEntries(options);
+
   return [
     `# Store the disposable database URL in ${options.databaseEnvAlias} as a CI secret or local shell env.`,
     `# export ${options.databaseEnvAlias}='<postgres-url>'`,
@@ -722,6 +733,17 @@ const buildFormsPostgresCertificationCommand = (options: FormsPostgresCertificat
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
     'npm run ci:forms-postgres',
+  ].join('\n');
+};
+
+const buildFormsPostgresCertificationEnvTemplate = (options: FormsPostgresCertificationCommandOptions): string => {
+  const envEntries = buildFormsPostgresCertificationEnvEntries(options);
+
+  return [
+    '# Backy Forms Postgres certification environment',
+    '# Keep the disposable database URL in CI secrets or local shell variables.',
+    `${options.databaseEnvAlias}=<disposable-postgres-url>`,
+    ...envEntries.map(([key, value]) => `${key}=${quoteFormsEnvTemplateValue(value)}`),
   ].join('\n');
 };
 
@@ -737,12 +759,15 @@ const buildFormsPostgresCertificationRequiredInputs = (options: FormsPostgresCer
 
 const FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE = {
   command: buildFormsPostgresCertificationCommand(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplate: buildFormsPostgresCertificationEnvTemplate(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
+  envTemplateSchemaVersion: 'backy.forms-postgres-certification-env-template.v1',
   databaseUrlAliases: FORMS_POSTGRES_DATABASE_ENV_ALIASES,
   requiredInputs: buildFormsPostgresCertificationRequiredInputs(DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS),
   targetGuards: [
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST',
     'BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE',
   ],
+  secretHandling: 'Disposable database URLs stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
 };
 
 const FORM_EXPORT_COLUMNS = [
@@ -1251,6 +1276,18 @@ function FormsRoute() {
     selectedFormSamplePayload,
     selectedFormSubmitUrl,
   ]);
+  const formsPostgresCertificationCommand = useMemo(
+    () => buildFormsPostgresCertificationCommand(formsPostgresCommandOptions),
+    [formsPostgresCommandOptions],
+  );
+  const formsPostgresCertificationEnvTemplate = useMemo(
+    () => buildFormsPostgresCertificationEnvTemplate(formsPostgresCommandOptions),
+    [formsPostgresCommandOptions],
+  );
+  const formsPostgresCertificationRequiredInputs = useMemo(
+    () => buildFormsPostgresCertificationRequiredInputs(formsPostgresCommandOptions),
+    [formsPostgresCommandOptions],
+  );
   const formPersistenceCertification = useMemo<FormPersistenceCertificationHandoff>(() => ({
     schemaVersion: 'backy.forms-persistence-certification.v1',
     status: 'external-database-gate',
@@ -1283,13 +1320,29 @@ function FormsRoute() {
     ],
     evidenceExpectations: formsPersistenceCertification?.evidenceExpectations || [...FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS],
     runtime: formsPersistenceCertification?.runtime || null,
-    operatorCommandTemplate: formsPersistenceCertification?.operatorCommandTemplate || FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE,
+    operatorCommandTemplate: {
+      ...(formsPersistenceCertification?.operatorCommandTemplate || FORMS_POSTGRES_OPERATOR_COMMAND_TEMPLATE),
+      command: formsPostgresCertificationCommand,
+      envTemplate: formsPostgresCertificationEnvTemplate,
+      envTemplateSchemaVersion: 'backy.forms-postgres-certification-env-template.v1',
+      requiredInputs: formsPostgresCertificationRequiredInputs,
+    },
+    operatorEnvTemplate: {
+      schemaVersion: 'backy.forms-postgres-certification-env-template.v1',
+      format: 'shell-env',
+      fileName: '.env.backy-forms-postgres-certification',
+      body: formsPostgresCertificationEnvTemplate,
+      secretHandling: 'Generated template values are non-secret aliases and placeholders; replace the database URL placeholder with a disposable migrated Supabase/Postgres secret before execution.',
+    },
     secretHandling: 'Database URLs stay in server/CI environment variables; forms handoff manifests only expose non-secret gate names and readiness evidence.',
     checks: FORM_PERSISTENCE_CERTIFICATION_CHECKS.map((check) => ({ ...check })),
     scenarioEvidence: formPersistenceScenarioEvidence,
   }), [
     activeSiteId,
     formPersistenceScenarioEvidence,
+    formsPostgresCertificationCommand,
+    formsPostgresCertificationEnvTemplate,
+    formsPostgresCertificationRequiredInputs,
     formsPersistenceCertification?.coverage,
     formsPersistenceCertification?.evidenceExpectations,
     formsPersistenceCertification?.operatorGate,
@@ -1516,14 +1569,6 @@ function FormsRoute() {
   const formsTemplatePackText = useMemo(() => JSON.stringify(formsTemplatePack, null, 2), [formsTemplatePack]);
   const selectedFormLaunchReadinessText = useMemo(() => JSON.stringify(selectedFormLaunchReadiness, null, 2), [selectedFormLaunchReadiness]);
   const formPersistenceOperatorGate = formPersistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE;
-  const formsPostgresCertificationCommand = useMemo(
-    () => buildFormsPostgresCertificationCommand(formsPostgresCommandOptions),
-    [formsPostgresCommandOptions],
-  );
-  const formsPostgresCertificationRequiredInputs = useMemo(
-    () => buildFormsPostgresCertificationRequiredInputs(formsPostgresCommandOptions),
-    [formsPostgresCommandOptions],
-  );
   const formPersistenceCertificationText = useMemo(() => JSON.stringify(formPersistenceCertification, null, 2), [formPersistenceCertification]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
   const formsRouteSearch = useMemo<FormsSearch>(() => ({
@@ -3366,17 +3411,30 @@ function FormsRoute() {
                   Build the exact command for the disposable Forms database smoke. Database URLs stay in CI secrets or local shell env; this builder only writes aliases and target guards.
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void copyFormApiText(formsPostgresCertificationCommand, 'Forms Postgres certification command')}
-                disabled={isFormsBusy || !canExportForms}
-                title={!canExportForms ? exportPermissionTitle : undefined}
-                iconStart={<Copy className="size-4" />}
-                data-testid="forms-postgres-certification-command-builder-copy-button"
-              >
-                Copy guarded command
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copyFormApiText(formsPostgresCertificationEnvTemplate, 'Forms Postgres certification env template')}
+                  disabled={isFormsBusy || !canExportForms}
+                  title={!canExportForms ? exportPermissionTitle : undefined}
+                  iconStart={<Copy className="size-4" />}
+                  data-testid="forms-postgres-certification-env-copy-button"
+                >
+                  Copy env template
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copyFormApiText(formsPostgresCertificationCommand, 'Forms Postgres certification command')}
+                  disabled={isFormsBusy || !canExportForms}
+                  title={!canExportForms ? exportPermissionTitle : undefined}
+                  iconStart={<Copy className="size-4" />}
+                  data-testid="forms-postgres-certification-command-builder-copy-button"
+                >
+                  Copy guarded command
+                </Button>
+              </div>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label className="text-xs">
@@ -3458,6 +3516,25 @@ function FormsRoute() {
                   </span>
                 </label>
               </div>
+            </div>
+            <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="forms-postgres-certification-env-template">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Env template</div>
+                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                    Copy this into CI secrets or a local shell env file, then replace the database URL placeholder with a disposable migrated Supabase/Postgres target before running the guarded command.
+                  </p>
+                </div>
+                <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  backy.forms-postgres-certification-env-template.v1
+                </span>
+              </div>
+              <pre
+                className="mt-2 max-h-64 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px] leading-5 text-foreground"
+                data-testid="forms-postgres-certification-env-template-body"
+              >
+                {formsPostgresCertificationEnvTemplate}
+              </pre>
             </div>
             <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="forms-postgres-certification-command">
               <code>{formsPostgresCertificationCommand}</code>

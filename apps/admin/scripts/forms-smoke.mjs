@@ -362,6 +362,9 @@ const assertFormsPersistenceCertificationSource = () => {
     'forms-persistence-certification-runbook',
     'forms-persistence-runtime-evidence',
     'forms-postgres-certification-command-builder',
+    'forms-postgres-certification-env-copy-button',
+    'forms-postgres-certification-env-template',
+    'forms-postgres-certification-env-template-body',
     'forms-postgres-certification-command-builder-copy-button',
     'forms-postgres-certification-database-alias-select',
     'forms-postgres-certification-expected-host-input',
@@ -369,11 +372,17 @@ const assertFormsPersistenceCertificationSource = () => {
     'forms-postgres-certification-disposable-toggle',
     'forms-postgres-certification-doctor-toggle',
     'forms-postgres-certification-required-inputs',
+    'formsPostgresCertificationEnvTemplate',
+    'buildFormsPostgresCertificationEnvTemplate',
     'operatorCommandTemplate',
+    'operatorEnvTemplate',
+    'backy.forms-postgres-certification-env-template.v1',
     'BACKY_RELEASE_CERTIFY_DATABASE',
     'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED',
     'Copy CI command',
+    'Copy env template',
     'Copy guarded command',
+    'Env template',
     'Runtime evidence',
     'preflight contract output',
     'DB-backed Forms smoke output',
@@ -405,8 +414,14 @@ const assertFormsPersistenceCertificationResponse = (payload) => {
   assert(Array.isArray(certification.evidenceExpectations) && certification.evidenceExpectations.includes('preflight contract output') && certification.evidenceExpectations.includes('DB-backed Forms smoke output'), `Forms persistence certification missing operator evidence expectations: ${JSON.stringify(certification)}`);
   assert(certification.operatorCommandTemplate, `Forms persistence certification missing operator command template: ${JSON.stringify(certification)}`);
   assert(typeof certification.operatorCommandTemplate.command === 'string' && certification.operatorCommandTemplate.command.includes('npm run ci:forms-postgres') && certification.operatorCommandTemplate.command.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED') && certification.operatorCommandTemplate.command.includes('BACKY_RELEASE_CERTIFY_DATABASE'), `Forms persistence certification missing operator command aliases: ${JSON.stringify(certification.operatorCommandTemplate)}`);
+  assert(certification.operatorCommandTemplate.envTemplateSchemaVersion === 'backy.forms-postgres-certification-env-template.v1', `Forms persistence certification missing env template schema: ${JSON.stringify(certification.operatorCommandTemplate)}`);
+  assert(typeof certification.operatorCommandTemplate.envTemplate === 'string' && certification.operatorCommandTemplate.envTemplate.includes('BACKY_DATABASE_URL=<disposable-postgres-url>') && certification.operatorCommandTemplate.envTemplate.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') && certification.operatorCommandTemplate.envTemplate.includes('BACKY_RELEASE_CERTIFY_DATABASE=1'), `Forms persistence certification missing operator env template aliases: ${JSON.stringify(certification.operatorCommandTemplate)}`);
   assert(Array.isArray(certification.operatorCommandTemplate.databaseUrlAliases) && certification.operatorCommandTemplate.databaseUrlAliases.includes('BACKY_DATABASE_URL') && certification.operatorCommandTemplate.databaseUrlAliases.includes('DATABASE_URL'), `Forms persistence certification missing database URL alias choices: ${JSON.stringify(certification.operatorCommandTemplate)}`);
   assert(Array.isArray(certification.operatorCommandTemplate.requiredInputs) && certification.operatorCommandTemplate.requiredInputs.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'), `Forms persistence certification missing operator required inputs: ${JSON.stringify(certification.operatorCommandTemplate)}`);
+  assert(certification.operatorEnvTemplate, `Forms persistence certification missing operator env template handoff: ${JSON.stringify(certification)}`);
+  assert(certification.operatorEnvTemplate.schemaVersion === 'backy.forms-postgres-certification-env-template.v1', `Unexpected Forms operator env template schema: ${JSON.stringify(certification.operatorEnvTemplate)}`);
+  assert(certification.operatorEnvTemplate.format === 'shell-env' && certification.operatorEnvTemplate.fileName === '.env.backy-forms-postgres-certification', `Forms operator env template must expose shell-env filename: ${JSON.stringify(certification.operatorEnvTemplate)}`);
+  assert(typeof certification.operatorEnvTemplate.body === 'string' && certification.operatorEnvTemplate.body.includes('# Backy Forms Postgres certification environment') && certification.operatorEnvTemplate.body.includes('BACKY_DATABASE_URL=<disposable-postgres-url>') && certification.operatorEnvTemplate.body.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1'), `Forms operator env template body missing guarded env entries: ${JSON.stringify(certification.operatorEnvTemplate)}`);
   assert(certification.runtime && typeof certification.runtime.databaseUrlConfigured === 'boolean' && Object.prototype.hasOwnProperty.call(certification.runtime, 'databaseUrlAlias'), `Forms persistence certification must expose non-secret database URL runtime state: ${JSON.stringify(certification)}`);
   assert(typeof certification.runtime.dataMode === 'string' && typeof certification.runtime.databaseType === 'string', `Forms persistence certification must expose non-secret runtime mode/type defaults: ${JSON.stringify(certification)}`);
   assert(typeof certification.runtime.disposableConfirmed === 'boolean' && typeof certification.runtime.readyForCertification === 'boolean', `Forms persistence certification must expose disposable confirmation readiness: ${JSON.stringify(certification)}`);
@@ -2435,15 +2450,23 @@ const assertLayout = async (client) => {
       Boolean(document.querySelector('[data-testid="forms-persistence-runtime-evidence"]')) &&
       Boolean(document.querySelector('[data-testid="forms-persistence-scenario-evidence"]')) &&
       Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-copy-button"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-template"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-template-body"]')) &&
       Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder-copy-button"]')) &&
       Boolean(document.querySelector('[data-testid="forms-postgres-certification-required-inputs"]')) &&
       document.body?.innerText?.includes('Persistence certification') &&
       document.body?.innerText?.includes('Runtime evidence') &&
       document.body?.innerText?.includes('Persistence scenario evidence') &&
       document.body?.innerText?.includes('backy.forms-persistence-scenario-evidence.v1') &&
+      document.body?.innerText?.includes('backy.forms-postgres-certification-env-template.v1') &&
       document.body?.innerText?.includes('Public submission intake') &&
       document.body?.innerText?.includes('Collection routing') &&
       document.body?.innerText?.includes('Postgres certification command builder') &&
+      document.body?.innerText?.includes('Env template') &&
+      document.body?.innerText?.includes('Copy env template') &&
+      document.body?.innerText?.includes('BACKY_DATABASE_URL=<disposable-postgres-url>') &&
+      document.body?.innerText?.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
       document.body?.innerText?.includes('BACKY_RELEASE_CERTIFY_DATABASE') &&
       document.body?.innerText?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
       document.body?.innerText?.includes('Database URLs and credentials are never returned') &&

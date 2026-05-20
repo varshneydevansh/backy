@@ -829,9 +829,19 @@ export interface FormsPersistenceCertification {
   coverage?: string[];
   operatorCommandTemplate?: {
     command: string;
+    envTemplate?: string;
+    envTemplateSchemaVersion?: string;
     databaseUrlAliases: string[];
     requiredInputs: string[];
     targetGuards: string[];
+    secretHandling?: string;
+  };
+  operatorEnvTemplate?: {
+    schemaVersion: string;
+    format: string;
+    fileName: string;
+    body: string;
+    secretHandling: string;
   };
   runtime?: {
     dataMode?: string;
