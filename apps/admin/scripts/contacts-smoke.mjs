@@ -41,6 +41,16 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
       source.includes('outside this view'),
     'Contacts bulk toolbar must summarize selected contacts outside the current filtered view',
   );
+  assert(
+    source.includes('const loadContactPermissions = useCallback(() => {') &&
+      source.includes('data-testid="contacts-permission-state"') &&
+      source.includes('Contact permissions could not be verified') &&
+      source.includes('aria-label="Retry loading contact permissions"') &&
+      source.includes('Retry permissions') &&
+      source.includes('to="/users"') &&
+      source.includes('Review users'),
+    'Contacts permission state must expose retryable permission recovery and user-access handoff',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

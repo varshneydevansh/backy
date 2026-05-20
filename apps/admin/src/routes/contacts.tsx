@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -841,7 +841,7 @@ function ContactsRoute() {
     setError(`Your account needs ${key} to ${action}. ${adminPermissionReason(permissionMatrix, currentAdmin, key, CONTACTS_PERMISSION_ROLE_DEFAULTS)}`);
   };
 
-  useEffect(() => {
+  const loadContactPermissions = useCallback(() => {
     let cancelled = false;
 
     if (!currentAdmin?.id) {
@@ -878,6 +878,8 @@ function ContactsRoute() {
       cancelled = true;
     };
   }, [currentAdmin?.id]);
+
+  useEffect(() => loadContactPermissions(), [loadContactPermissions]);
 
   const loadContacts = async () => {
     if (isContactsBusy) return;
@@ -2004,8 +2006,38 @@ function ContactsRoute() {
         </div>
       )}
       {permissionError && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {permissionError}
+        <div
+          role="alert"
+          data-testid="contacts-permission-state"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Contact permissions could not be verified</p>
+                <p className="mt-1 leading-6">{permissionError}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={loadContactPermissions}
+                disabled={isPermissionsLoading}
+                aria-label="Retry loading contact permissions"
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={cn('size-3.5', isPermissionsLoading && 'animate-spin')} />
+                Retry permissions
+              </button>
+              <Link
+                to="/users"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
+              >
+                Review users
+              </Link>
+            </div>
+          </div>
         </div>
       )}
       {notice && (

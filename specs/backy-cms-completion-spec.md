@@ -181,7 +181,7 @@ Legend:
 - ⚠️ Live payment, refund, shipping, fulfillment, tracking, and reconciliation provider certification remains required before production certification.
 
 #### `/contacts` (`contacts.tsx`)
-- ✅ Contacts workspace covers lead filtering, lifecycle, import/export, duplicate merge, promotion, sync, consent/retention, segmentation, analytics, and visible/outside-view bulk selection summaries.
+- ✅ Contacts workspace covers lead filtering, lifecycle, import/export, duplicate merge, promotion, sync, consent/retention, segmentation, analytics, retryable permission recovery, and visible/outside-view bulk selection summaries.
 - ⚠️ Broader configured Supabase/Postgres service smoke remains required before production certification.
 
 ### 3.2 Public routes
@@ -459,6 +459,7 @@ Use this file as the persistent baseline before any implementation pass.
   - `/blog` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, permission retry actions, and a user-access handoff link.
   - `/media` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/users/new` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
+  - `/contacts` now has source-guarded permission error states with alert semantics, permission retry actions, and a user-access handoff link.
   - `/collections` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, permission-contract retry actions, and filtered full-result record bulk selection summaries.
   - `/forms` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
   - `/products` now has source-guarded backend and permission error states with alert semantics, retry/filter recovery, user-access handoff, and permission retry actions.
