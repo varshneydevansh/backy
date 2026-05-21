@@ -7161,6 +7161,151 @@ export type BackyAdminSettingsResponse = BackyEnvelope<{
   settings: BackyAdminSettings;
 }>;
 
+export type BackyAdminSettingsActionResponse = BackyEnvelope<{
+  settings: BackyAdminSettings;
+  [key: string]: unknown;
+}>;
+
+export interface BackyAdminIssuedApiKey {
+  id: string;
+  label: string;
+  adminApiKey: string;
+  keyFingerprint?: string | null;
+  keyPrefix?: string | null;
+  [key: string]: unknown;
+}
+
+export type BackyAdminSettingsIssueApiKeyResponse = BackyEnvelope<{
+  settings: BackyAdminSettings;
+  issuedKey: BackyAdminIssuedApiKey;
+  [key: string]: unknown;
+}>;
+
+export interface BackyAdminSettingsRegenerateApiKeysInput {
+  scope?: "all" | "public" | "admin";
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSettingsIssueApiKeyInput {
+  label: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSettingsRevokeApiKeyInput {
+  keyId: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSettingsInfrastructureInput {
+  deliveryMode?: "managed-hosting" | "custom-frontend" | string;
+  integrations?: Record<string, unknown>;
+  recordHistory?: boolean;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSettingsInfrastructureDiagnostic {
+  area:
+    | "database"
+    | "storage"
+    | "supabase"
+    | "mediaScanner"
+    | "vercel"
+    | "notifications"
+    | "commerce"
+    | "interactiveComponents"
+    | string;
+  label: string;
+  status: "ready" | "warning" | "blocked" | string;
+  summary: string;
+  missing: string[];
+  checks?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export type BackyAdminSettingsInfrastructureResponse = BackyEnvelope<{
+  diagnostics: BackyAdminSettingsInfrastructureDiagnostic[];
+  generatedAt: string;
+  historyEntry?: Record<string, unknown>;
+  [key: string]: unknown;
+}>;
+
+export type BackyAdminSettingsStorageProvisioningResponse = BackyEnvelope<
+  Record<string, unknown> & {
+    provider: string;
+    status: "ready" | "blocked" | string;
+    summary: string;
+    checks?: Array<Record<string, unknown>>;
+    generatedAt?: string;
+  }
+>;
+
+export type BackyAdminSettingsStorageCredentialRotationResponse =
+  BackyEnvelope<
+    Record<string, unknown> & {
+      provider: string;
+      status: "ready" | "blocked" | string;
+      summary: string;
+      probePath: string;
+      fields?: Array<Record<string, unknown>>;
+      checks?: Array<Record<string, unknown>>;
+      nextSteps?: string[];
+      generatedAt: string;
+    }
+  >;
+
+export interface BackyAdminSettingsStorageSecretManagerInput {
+  mode?: "plan" | "promote" | "revoke-replacement";
+  dryRun?: boolean;
+  targetEnvironments?: string[];
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminSettingsStorageSecretManagerResponse = BackyEnvelope<
+  Record<string, unknown> & {
+    provider: string;
+    secretManager: "vercel-env" | string;
+    mode: "plan" | "promote" | "revoke-replacement" | string;
+    dryRun: boolean;
+    status: "ready" | "blocked" | string;
+    executed: boolean;
+    operations: Array<Record<string, unknown>>;
+    nextSteps?: string[];
+    generatedAt: string;
+  }
+>;
+
+export interface BackyAdminSettingsNotificationWebhookInput {
+  webhookUrl?: string;
+  retryOf?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSettingsNotificationWebhookDelivery {
+  attempted: boolean;
+  target: string;
+  targetSummary?: string;
+  status: "succeeded" | "failed" | string;
+  statusCode?: number;
+  error?: string;
+  requestId: string;
+  retry: boolean;
+  retryOf?: string | null;
+  generatedAt: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminSettingsNotificationWebhookResponse = BackyEnvelope<{
+  settings: BackyAdminSettings;
+  delivery: BackyAdminSettingsNotificationWebhookDelivery;
+  [key: string]: unknown;
+}>;
+
 export type BackySiteSettingsResponse = BackyEnvelope<{
   settings: BackySiteSettingsScope;
 }>;
@@ -8167,6 +8312,142 @@ export class BackyClient {
     return this.request("/api/admin/settings", {
       method: "PATCH",
       body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  regenerateAdminSettingsApiKeys(
+    input: BackyAdminSettingsRegenerateApiKeysInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsActionResponse> {
+    const { requestId, scope = "all", ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        scope,
+        ...body,
+        action: "regenerate-api-keys",
+      },
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  issueAdminSettingsApiKey(
+    input: BackyAdminSettingsIssueApiKeyInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsIssueApiKeyResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        ...body,
+        action: "issue-admin-api-key",
+      },
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  revokeAdminSettingsApiKey(
+    input: BackyAdminSettingsRevokeApiKeyInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsActionResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        ...body,
+        action: "revoke-admin-api-key",
+      },
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  validateAdminSettingsInfrastructure(
+    input: BackyAdminSettingsInfrastructureInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsInfrastructureResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        ...body,
+        action: "validate-infrastructure",
+      },
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  runAdminSettingsStorageProvisioningProbe(
+    input: { siteId?: string; requestId?: string } = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsStorageProvisioningResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        ...body,
+        action: "media-storage-provisioning-probe",
+      },
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  runAdminSettingsStorageCredentialRotationProbe(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsStorageCredentialRotationResponse> {
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        action: "media-storage-credential-rotation-probe",
+      },
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  runAdminSettingsStorageSecretManager(
+    input: BackyAdminSettingsStorageSecretManagerInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsStorageSecretManagerResponse> {
+    const { requestId, mode = "plan", dryRun = true, ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        mode,
+        dryRun,
+        ...body,
+        action: "media-storage-secret-manager",
+      },
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  testAdminSettingsNotificationWebhook(
+    input: BackyAdminSettingsNotificationWebhookInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsNotificationWebhookResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "POST",
+      body: {
+        ...body,
+        action: "test-notification-webhook",
+      },
       requestId: options.requestId ?? requestId,
       headers: liveManagementHeaders(options),
       credentials: options.credentials,

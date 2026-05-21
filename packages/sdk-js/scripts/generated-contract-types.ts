@@ -24,7 +24,14 @@ import type {
   BackyManifestCollectionSchema,
   BackyManifestCollectionsRuntimeModule,
   BackyAdminSettings,
+  BackyAdminSettingsActionResponse,
+  BackyAdminSettingsInfrastructureResponse,
+  BackyAdminSettingsIssueApiKeyResponse,
+  BackyAdminSettingsNotificationWebhookResponse,
   BackyAdminSettingsResponse,
+  BackyAdminSettingsStorageCredentialRotationResponse,
+  BackyAdminSettingsStorageProvisioningResponse,
+  BackyAdminSettingsStorageSecretManagerResponse,
   BackyAdminNavigationResponse,
   BackyAdminAuthSessionRevokeResponse,
   BackyAdminAuthSessionsResponse,
@@ -441,6 +448,57 @@ type AdminSettingsUpdateMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateAdminSettings"]>,
     BackyAdminSettingsResponse
+  >
+>;
+type RegenerateAdminSettingsApiKeysMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["regenerateAdminSettingsApiKeys"]>,
+    BackyAdminSettingsActionResponse
+  >
+>;
+type IssueAdminSettingsApiKeyMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["issueAdminSettingsApiKey"]>,
+    BackyAdminSettingsIssueApiKeyResponse
+  >
+>;
+type RevokeAdminSettingsApiKeyMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["revokeAdminSettingsApiKey"]>,
+    BackyAdminSettingsActionResponse
+  >
+>;
+type ValidateAdminSettingsInfrastructureMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["validateAdminSettingsInfrastructure"]>,
+    BackyAdminSettingsInfrastructureResponse
+  >
+>;
+type RunAdminSettingsStorageProvisioningProbeMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["runAdminSettingsStorageProvisioningProbe"]>,
+    BackyAdminSettingsStorageProvisioningResponse
+  >
+>;
+type RunAdminSettingsStorageCredentialRotationProbeMethodReturnsContract =
+  Assert<
+    Equal<
+      AwaitedReturn<
+        BackyClient["runAdminSettingsStorageCredentialRotationProbe"]
+      >,
+      BackyAdminSettingsStorageCredentialRotationResponse
+    >
+  >;
+type RunAdminSettingsStorageSecretManagerMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["runAdminSettingsStorageSecretManager"]>,
+    BackyAdminSettingsStorageSecretManagerResponse
+  >
+>;
+type TestAdminSettingsNotificationWebhookMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["testAdminSettingsNotificationWebhook"]>,
+    BackyAdminSettingsNotificationWebhookResponse
   >
 >;
 type AdminSiteSettingsMethodReturnsContract = Assert<

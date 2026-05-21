@@ -1293,6 +1293,14 @@ const adminSettings = await privateClient.adminSettings();
 assert(adminSettings.data.settings?.schemaVersion === 'backy.admin-settings.v1', 'adminSettings() missing settings schema version');
 assert(adminSettings.data.settings?.providerCertification?.schemaVersion === 'backy.settings-provider-certification-handoff.v1', 'adminSettings() missing provider certification handoff');
 assert(adminSettings.data.settings?.frontendDatabaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', 'adminSettings() missing frontend database certification handoff');
+assert(typeof privateClient.regenerateAdminSettingsApiKeys === 'function', 'regenerateAdminSettingsApiKeys() missing SDK method');
+assert(typeof privateClient.issueAdminSettingsApiKey === 'function', 'issueAdminSettingsApiKey() missing SDK method');
+assert(typeof privateClient.revokeAdminSettingsApiKey === 'function', 'revokeAdminSettingsApiKey() missing SDK method');
+assert(typeof privateClient.validateAdminSettingsInfrastructure === 'function', 'validateAdminSettingsInfrastructure() missing SDK method');
+assert(typeof privateClient.runAdminSettingsStorageProvisioningProbe === 'function', 'runAdminSettingsStorageProvisioningProbe() missing SDK method');
+assert(typeof privateClient.runAdminSettingsStorageCredentialRotationProbe === 'function', 'runAdminSettingsStorageCredentialRotationProbe() missing SDK method');
+assert(typeof privateClient.runAdminSettingsStorageSecretManager === 'function', 'runAdminSettingsStorageSecretManager() missing SDK method');
+assert(typeof privateClient.testAdminSettingsNotificationWebhook === 'function', 'testAdminSettingsNotificationWebhook() missing SDK method');
 
 const adminSiteSettings = await privateClient.adminSiteSettings();
 assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-scope.v1', 'adminSiteSettings() missing site settings schema version');
