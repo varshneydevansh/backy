@@ -3378,8 +3378,20 @@ export interface BackyEventListOptions extends BackyListOptions {
   kind?: string;
 }
 
+export type BackyInteractiveRuntimeEventType =
+  | "ready"
+  | "init"
+  | "resize"
+  | "error"
+  | "fallback"
+  | "blocked";
+
+export type BackyInteractiveRuntimeEventWireType =
+  | BackyInteractiveRuntimeEventType
+  | `backy.interactive-component.${BackyInteractiveRuntimeEventType}`;
+
 export interface BackyInteractiveRuntimeEventInput {
-  type?: "ready" | "init" | "resize" | "error" | "fallback" | "blocked";
+  type?: BackyInteractiveRuntimeEventWireType;
   componentKey: string;
   version?: string;
   elementId?: string;
@@ -3387,6 +3399,151 @@ export interface BackyInteractiveRuntimeEventInput {
   postId?: string;
   message: string;
   requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyInteractiveRuntimeEventInputSource = Partial<
+  BackyInteractiveRuntimeEventInput
+> &
+  Record<string, unknown>;
+
+export interface BackyInteractiveRuntimeEventInputBuildOptions {
+  type?: BackyInteractiveRuntimeEventWireType;
+  componentKey?: string;
+  version?: string;
+  elementId?: string;
+  pageId?: string;
+  postId?: string;
+  message?: string;
+  requestId?: string;
+}
+
+const BACKY_INTERACTIVE_RUNTIME_EVENT_TYPES = new Set<BackyInteractiveRuntimeEventType>([
+  "ready",
+  "init",
+  "resize",
+  "error",
+  "fallback",
+  "blocked",
+]);
+
+const BACKY_INTERACTIVE_RUNTIME_EVENT_PREFIX =
+  "backy.interactive-component.";
+
+const backyInteractiveRuntimeRecord = (
+  value: unknown,
+): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const backyInteractiveRuntimeText = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) return text;
+    }
+  }
+  return "";
+};
+
+const normalizeBackyInteractiveRuntimeEventType = (
+  value: unknown,
+): BackyInteractiveRuntimeEventType | undefined => {
+  const text = backyInteractiveRuntimeText(value);
+  const raw = text.startsWith(BACKY_INTERACTIVE_RUNTIME_EVENT_PREFIX)
+    ? text.slice(BACKY_INTERACTIVE_RUNTIME_EVENT_PREFIX.length)
+    : text;
+  return BACKY_INTERACTIVE_RUNTIME_EVENT_TYPES.has(
+    raw as BackyInteractiveRuntimeEventType,
+  )
+    ? (raw as BackyInteractiveRuntimeEventType)
+    : undefined;
+};
+
+export function buildBackyInteractiveRuntimeEventInput(
+  source: BackyInteractiveRuntimeEventInputSource | undefined | null,
+  options: BackyInteractiveRuntimeEventInputBuildOptions = {},
+): BackyInteractiveRuntimeEventInput {
+  const body = backyInteractiveRuntimeRecord(source);
+  const data = backyInteractiveRuntimeRecord(body.data);
+  const component = backyInteractiveRuntimeRecord(body.component);
+  const dataComponent = backyInteractiveRuntimeRecord(data.component);
+  const error = backyInteractiveRuntimeRecord(body.error);
+  const dataError = backyInteractiveRuntimeRecord(data.error);
+  const type =
+    normalizeBackyInteractiveRuntimeEventType(options.type) ??
+    normalizeBackyInteractiveRuntimeEventType(body.type) ??
+    normalizeBackyInteractiveRuntimeEventType(data.type);
+  const componentKey = backyInteractiveRuntimeText(
+    options.componentKey,
+    body.componentKey,
+    body.key,
+    component.componentKey,
+    component.key,
+    data.componentKey,
+    data.key,
+    dataComponent.componentKey,
+    dataComponent.key,
+  );
+  const version = backyInteractiveRuntimeText(
+    options.version,
+    body.version,
+    body.componentVersion,
+    component.version,
+    data.version,
+    data.componentVersion,
+    dataComponent.version,
+  );
+  const elementId = backyInteractiveRuntimeText(
+    options.elementId,
+    body.elementId,
+    body.elementID,
+    data.elementId,
+    data.elementID,
+  );
+  const pageId = backyInteractiveRuntimeText(
+    options.pageId,
+    body.pageId,
+    data.pageId,
+  );
+  const postId = backyInteractiveRuntimeText(
+    options.postId,
+    body.postId,
+    body.blogPostId,
+    data.postId,
+    data.blogPostId,
+  );
+  const requestId = backyInteractiveRuntimeText(
+    options.requestId,
+    body.requestId,
+    data.requestId,
+  );
+  const message = backyInteractiveRuntimeText(
+    options.message,
+    body.message,
+    data.message,
+    body.reason,
+    data.reason,
+    body.detail,
+    data.detail,
+    body.error,
+    data.error,
+    error.message,
+    dataError.message,
+  );
+
+  const input: BackyInteractiveRuntimeEventInput = {
+    componentKey,
+    message,
+  };
+  if (type) input.type = type;
+  if (version) input.version = version;
+  if (elementId) input.elementId = elementId;
+  if (pageId) input.pageId = pageId;
+  if (postId) input.postId = postId;
+  if (requestId) input.requestId = requestId;
+  return input;
 }
 
 export type BackyResolvedRouteType =
@@ -4532,7 +4689,7 @@ export class BackyClient {
   }
 
   recordInteractiveRuntimeEvent(
-    input: BackyInteractiveRuntimeEventInput,
+    input: BackyInteractiveRuntimeEventInputSource,
     siteId = this.requireSiteId(),
   ): Promise<
     BackyEnvelope<{
@@ -4542,12 +4699,13 @@ export class BackyClient {
       version?: string | null;
     }>
   > {
+    const body = buildBackyInteractiveRuntimeEventInput(input);
     return this.request(
       `/api/sites/${encodeURIComponent(siteId)}/interactive-components/runtime-events`,
       {
         method: "POST",
-        body: input,
-        requestId: input.requestId,
+        body,
+        requestId: body.requestId,
       },
     );
   }

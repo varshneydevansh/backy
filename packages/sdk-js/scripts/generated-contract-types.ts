@@ -32,6 +32,7 @@ import type {
   BackyCommerceOrderInput,
   BackyCollectionRecordWriteInput,
   BackyFormSubmissionInput,
+  BackyInteractiveRuntimeEventInput,
   BackyContentElementDescriptor,
   BackyContentEditableFieldPatch,
   BackyContentEditableMapPatch,
@@ -219,6 +220,7 @@ import {
   buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
+  buildBackyInteractiveRuntimeEventInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyLiveManagedPageEditableMapUpdate,
   findBackyContentElement,
@@ -282,6 +284,12 @@ type FormSubmissionInputBuilderReturnsContract = Assert<
 >;
 type CommentInputBuilderReturnsContract = Assert<
   Equal<ReturnType<typeof buildBackyCommentInput>, BackyCommentInput>
+>;
+type InteractiveRuntimeEventInputBuilderReturnsContract = Assert<
+  Equal<
+    ReturnType<typeof buildBackyInteractiveRuntimeEventInput>,
+    BackyInteractiveRuntimeEventInput
+  >
 >;
 type LiveManagedBlogPostMethodReturnsContract = Assert<
   Equal<
@@ -4249,6 +4257,25 @@ const runtimeEventRecordEnvelope = {
   },
 } satisfies GeneratedBackyOpenApiRuntimeEventRecordEnvelope;
 
+const sdkInteractiveRuntimeEventInput =
+  buildBackyInteractiveRuntimeEventInput({
+    type: "backy.interactive-component.error",
+    component: {
+      key: "backy.custom.sandboxed",
+      version: "1.0.0",
+    },
+    data: {
+      elementId: "hero-code-component",
+      pageId: "page_home",
+    },
+    error: {
+      message: "Sandbox runtime failed to initialize.",
+    },
+    requestId: "sdk-runtime-event",
+  });
+const sdkInteractiveRuntimeEventInputContract =
+  sdkInteractiveRuntimeEventInput satisfies BackyInteractiveRuntimeEventInput;
+
 const commerceProductDesign = {
   templateId: "template_product_detail",
   templateName: "Product detail",
@@ -5733,6 +5760,8 @@ void commentReportReasonsEnvelope;
 void commentReportEnvelope;
 void eventsEnvelope;
 void runtimeEventRecordEnvelope;
+void sdkInteractiveRuntimeEventInput;
+void sdkInteractiveRuntimeEventInputContract;
 void commerceProductDesign;
 void commerceProduct;
 void commerceCatalogEnvelope;

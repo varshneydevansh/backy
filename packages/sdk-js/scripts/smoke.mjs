@@ -5,6 +5,7 @@ import {
   buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
+  buildBackyInteractiveRuntimeEventInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   createBackyClient,
   findBackyContentElement,
@@ -685,14 +686,25 @@ assert(sandboxedComponent?.renderMode === 'sandbox-iframe', 'interactiveComponen
 assert(sandboxedComponent?.runtime?.sandboxUrl?.includes('/interactive-components/backy.custom.sandboxed/1.0.0/sandbox'), 'interactiveComponents() missing sandbox runtime URL');
 assert(sandboxedComponent?.runtime?.postMessageProtocol === 'backy.interactive-component.v1', 'interactiveComponents() missing sandbox postMessage protocol');
 assert(interactiveComponents.data.components?.every?.((component) => component.security?.adminApiAccess === false), 'interactiveComponents() should not expose admin API-enabled components');
-const interactiveRuntimeEvent = await client.recordInteractiveRuntimeEvent({
-  componentKey: 'backy.custom.sandboxed',
-  version: '1.0.0',
-  elementId: 'sdk-smoke-code-component',
+const interactiveRuntimeEventInput = buildBackyInteractiveRuntimeEventInput({
   type: 'backy.interactive-component.error',
-  message: 'SDK smoke sandbox runtime error',
+  component: {
+    key: 'backy.custom.sandboxed',
+    version: '1.0.0',
+  },
+  data: {
+    elementId: 'sdk-smoke-code-component',
+  },
+  error: {
+    message: 'SDK smoke sandbox runtime error',
+  },
   requestId: `sdk-interactive-runtime-${Date.now()}`,
 });
+assert(interactiveRuntimeEventInput.type === 'error', 'buildBackyInteractiveRuntimeEventInput() did not normalize prefixed event type');
+assert(interactiveRuntimeEventInput.componentKey === 'backy.custom.sandboxed', 'buildBackyInteractiveRuntimeEventInput() did not normalize component key');
+assert(interactiveRuntimeEventInput.version === '1.0.0', 'buildBackyInteractiveRuntimeEventInput() did not normalize component version');
+assert(interactiveRuntimeEventInput.message === 'SDK smoke sandbox runtime error', 'buildBackyInteractiveRuntimeEventInput() did not normalize error message');
+const interactiveRuntimeEvent = await client.recordInteractiveRuntimeEvent(interactiveRuntimeEventInput);
 assert(interactiveRuntimeEvent.data.recorded === true, 'recordInteractiveRuntimeEvent() did not record runtime telemetry');
 const cachedInteractiveComponents = await client.interactiveComponentsCached();
 assert(cachedInteractiveComponents.notModified === false, 'interactiveComponentsCached() first request should return a body');
