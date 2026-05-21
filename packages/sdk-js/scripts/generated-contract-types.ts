@@ -142,6 +142,8 @@ import type {
   BackyCommerceProductProviderSyncResponse,
   BackyCommerceProductSubscriptionActionResponse,
   BackyCommerceProductSubscriptionsResponse,
+  BackyCommerceReconciliationBatchResponse,
+  BackyCommerceReconciliationReadinessResponse,
   BackyCommerceReconciliationResponse,
   BackyCollectionRecordWriteInput,
   BackyAdminFormCloneResponse,
@@ -1300,6 +1302,18 @@ type ScheduledCommerceReconciliationMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["scheduledCommerceReconciliation"]>,
     BackyCommerceReconciliationResponse
+  >
+>;
+type CommerceReconciliationReadinessMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceReconciliationReadiness"]>,
+    BackyCommerceReconciliationReadinessResponse
+  >
+>;
+type ScheduledPlatformCommerceReconciliationMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["scheduledPlatformCommerceReconciliation"]>,
+    BackyCommerceReconciliationBatchResponse
   >
 >;
 type LiveManagedPageUpdateMethodReturnsContract = Assert<

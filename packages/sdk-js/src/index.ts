@@ -2236,6 +2236,13 @@ export interface BackyCommerceScheduledReconciliationOptions
   limit?: number;
 }
 
+export interface BackyCommercePlatformReconciliationOptions
+  extends BackyLiveManagementRequestOptions {
+  dryRun?: boolean;
+  limit?: number;
+  siteId?: string;
+}
+
 export type BackyCommerceReconciliationResponse = BackyEnvelope<
   {
     schemaVersion: "backy.commerce-reconciliation.v1";
@@ -2249,6 +2256,51 @@ export type BackyCommerceReconciliationResponse = BackyEnvelope<
     unmatchedCount: number;
     updates: Array<Record<string, unknown>>;
     unmatchedEvents: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyCommerceCronReadiness {
+  schemaVersion: "backy.commerce-cron-readiness.v1";
+  ready: boolean;
+  entrypoint: string;
+  schedule: string;
+  authorizationMode: "vercel-cron-bearer-admin-key" | string;
+  vercelCronConfigured: boolean;
+  cronSecretConfigured: boolean;
+  environmentAdminKeyConfigured: boolean;
+  cronSecretMatchesAdminKey: boolean;
+  missing: string[];
+  checkedAt: string;
+  [key: string]: unknown;
+}
+
+export type BackyCommerceReconciliationReadinessResponse = BackyEnvelope<
+  {
+    cronReadiness: BackyCommerceCronReadiness;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyCommerceReconciliationBatchResponse = BackyEnvelope<
+  {
+    schemaVersion: "backy.commerce-reconciliation-batch.v1";
+    runMode: "scheduled" | string;
+    dryRun: boolean;
+    limit: number;
+    processedAt: string;
+    siteCount: number;
+    reconciledSiteCount: number;
+    skippedSiteCount: number;
+    errorCount: number;
+    eventCount: number;
+    eligibleUpdateCount: number;
+    updatedCount: number;
+    unmatchedCount: number;
+    cronReadiness: BackyCommerceCronReadiness;
+    results: Array<Record<string, unknown>>;
+    skipped: Array<Record<string, unknown>>;
+    errors: Array<Record<string, unknown>>;
     [key: string]: unknown;
   }
 >;
@@ -11396,6 +11448,31 @@ export class BackyClient {
         credentials: options.credentials,
       },
     );
+  }
+
+  commerceReconciliationReadiness(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceReconciliationReadinessResponse> {
+    return this.request("/api/admin/commerce/reconcile/readiness", {
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  scheduledPlatformCommerceReconciliation(
+    options: BackyCommercePlatformReconciliationOptions = {},
+  ): Promise<BackyCommerceReconciliationBatchResponse> {
+    return this.request("/api/admin/commerce/reconcile", {
+      query: {
+        dryRun: options.dryRun,
+        limit: options.limit,
+        siteId: options.siteId,
+      },
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
   }
 
   createCommerceOrder(

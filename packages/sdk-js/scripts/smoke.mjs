@@ -1611,6 +1611,17 @@ try {
         throw reconciliationError;
       }
     }
+    const reconciliationReadiness = await privateClient.commerceReconciliationReadiness();
+    assert(
+      reconciliationReadiness.data.cronReadiness?.schemaVersion === 'backy.commerce-cron-readiness.v1',
+      'commerceReconciliationReadiness() missing cron readiness payload',
+    );
+    const platformReconciliation = await privateClient.scheduledPlatformCommerceReconciliation({ dryRun: true, limit: 10 });
+    assert(
+      platformReconciliation.data.schemaVersion === 'backy.commerce-reconciliation-batch.v1',
+      'scheduledPlatformCommerceReconciliation() missing batch schema version',
+    );
+    assert(platformReconciliation.data.dryRun === true, 'scheduledPlatformCommerceReconciliation() dry run drifted');
   } catch (analyticsError) {
     if (analyticsError?.status !== 404 || !['ORDER_QUEUE_NOT_FOUND', 'SITE_NOT_FOUND'].includes(analyticsError?.code)) {
       throw analyticsError;
