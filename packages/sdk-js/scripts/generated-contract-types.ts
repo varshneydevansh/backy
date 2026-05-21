@@ -155,6 +155,7 @@ import type {
   BackyCommentReportInput,
   BackyCommerceOrderInput,
   BackyCommerceOrderAnalyticsResponse,
+  BackyCommerceOrderStatusHandoffResponse,
   BackyCommerceOrderFulfillmentResponse,
   BackyCommerceOrderProviderRefundResponse,
   BackyCommerceOrderQuoteResponse,
@@ -1399,6 +1400,12 @@ type CommerceOrderAnalyticsMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["commerceOrderAnalytics"]>,
     BackyCommerceOrderAnalyticsResponse
+  >
+>;
+type CommerceOrderStatusHandoffMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderStatusHandoff"]>,
+    BackyCommerceOrderStatusHandoffResponse
   >
 >;
 type CommerceProductProviderSyncMethodReturnsContract = Assert<

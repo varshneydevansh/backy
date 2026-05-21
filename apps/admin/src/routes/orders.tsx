@@ -206,6 +206,7 @@ interface OrderStatusHandoff {
   } | null;
   endpoints: {
     checkoutIntake: string;
+    adminStatusHandoff: string;
     adminOrderDetail: string;
     adminTracking: string;
     adminProviderRefund: string;
@@ -655,6 +656,15 @@ const ORDER_API_CONTRACTS = [
     schemaVersion: 'backy.order-analytics.v1',
     cacheScope: 'private',
     detail: 'Revenue, payment, fulfillment, provider execution, and operations analytics.',
+  },
+  {
+    key: 'status-handoff',
+    title: 'Customer status handoff',
+    methods: ['GET'],
+    endpointKey: 'adminStatusHandoff',
+    schemaVersion: 'backy.order-status-handoff.v1',
+    cacheScope: 'private',
+    detail: 'Returns a masked customer-safe order status projection without raw contact, payment, address, notes, or provider execution IDs.',
   },
   {
     key: 'quote',
@@ -1363,6 +1373,7 @@ function OrdersRoute() {
   const adminOrderDetailApiUrl = ordersCollection
     ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records/{orderId}`
     : '';
+  const adminOrderStatusHandoffApiUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/orders/{orderId}/status-handoff`;
   const publicOrdersApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${ORDERS_COLLECTION_SLUG}/records`;
   const publicOrderIntakeUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
   const orderAnalyticsApiUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/orders/analytics`;
@@ -1883,6 +1894,7 @@ function OrdersRoute() {
     },
     endpointEvidence: {
       adminOrders: adminOrdersApiUrl,
+      statusHandoff: adminOrderStatusHandoffApiUrl,
       quote: `${adminOrdersApiUrl}/{orderId}/quote`,
       shippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
       fulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
@@ -1916,6 +1928,7 @@ function OrdersRoute() {
     activeSite?.slug,
     activeSite?.status,
     activeSiteId,
+    adminOrderStatusHandoffApiUrl,
     adminOrdersApiUrl,
     filteredOrders.length,
     loadedOrderCount,
@@ -1940,6 +1953,7 @@ function OrdersRoute() {
   const selectedOrderStatusHandoff = useMemo<OrderStatusHandoff>(() => buildOrderStatusHandoff({
     activeSiteId,
     adminOrderDetailApiUrl,
+    adminOrderStatusHandoffApiUrl,
     publicOrderIntakeUrl,
     order: selectedOrder,
     customerProfile: linkedCustomerProfile,
@@ -1948,6 +1962,7 @@ function OrdersRoute() {
   }), [
     activeSiteId,
     adminOrderDetailApiUrl,
+    adminOrderStatusHandoffApiUrl,
     linkedCustomerProfile,
     orderOperationPlans,
     ordersApiReady,
@@ -1991,6 +2006,7 @@ function OrdersRoute() {
       adminFulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
       adminTracking: `${adminOrdersApiUrl}/{orderId}/tracking`,
       adminProviderRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
+      adminStatusHandoff: adminOrderStatusHandoffApiUrl,
       orderAnalytics: orderAnalyticsApiUrl,
       orderDeliveryEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-order`,
       commerceWebhook: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/webhook`,
@@ -2006,6 +2022,7 @@ function OrdersRoute() {
         key: contract.endpointKey,
         url: {
           analytics: orderAnalyticsApiUrl,
+          statusHandoff: adminOrderStatusHandoffApiUrl,
           quote: `${adminOrdersApiUrl}/{orderId}/quote`,
           shippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
           fulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
@@ -2017,23 +2034,25 @@ function OrdersRoute() {
           reconciliationReadiness: `${publicBaseUrl}/api/admin/commerce/reconcile/readiness`,
         }[contract.key === 'analytics'
           ? 'analytics'
-          : contract.key === 'quote'
-            ? 'quote'
-            : contract.key === 'shipping-label'
-              ? 'shippingLabel'
-              : contract.key === 'fulfillment'
-                ? 'fulfillment'
-                : contract.key === 'tracking'
-                  ? 'tracking'
-                  : contract.key === 'provider-refund'
-                    ? 'providerRefund'
-                    : contract.key === 'commerce-webhook'
-                      ? 'commerceWebhook'
-                      : contract.key === 'site-reconciliation'
-                        ? 'siteReconciliation'
-                        : contract.key === 'platform-reconciliation'
-                          ? 'platformReconciliation'
-                          : 'reconciliationReadiness'],
+          : contract.key === 'status-handoff'
+            ? 'statusHandoff'
+            : contract.key === 'quote'
+              ? 'quote'
+              : contract.key === 'shipping-label'
+                ? 'shippingLabel'
+                : contract.key === 'fulfillment'
+                  ? 'fulfillment'
+                  : contract.key === 'tracking'
+                    ? 'tracking'
+                    : contract.key === 'provider-refund'
+                      ? 'providerRefund'
+                      : contract.key === 'commerce-webhook'
+                        ? 'commerceWebhook'
+                        : contract.key === 'site-reconciliation'
+                          ? 'siteReconciliation'
+                          : contract.key === 'platform-reconciliation'
+                            ? 'platformReconciliation'
+                            : 'reconciliationReadiness'],
       },
       responseHeaders: {
         schemaVersion: 'x-backy-schema-version',
@@ -2177,6 +2196,7 @@ function OrdersRoute() {
     activeSite?.status,
     activeSiteId,
     adminOrderDetailApiUrl,
+    adminOrderStatusHandoffApiUrl,
     adminOrdersApiUrl,
     commerceSettings,
     filter,
@@ -6924,6 +6944,7 @@ const summarizeOrderStatus = (checks: OrderStatusHandoffCheck[]): OrderStatusHan
 const buildOrderStatusHandoff = ({
   activeSiteId,
   adminOrderDetailApiUrl,
+  adminOrderStatusHandoffApiUrl,
   publicOrderIntakeUrl,
   order,
   customerProfile,
@@ -6932,6 +6953,7 @@ const buildOrderStatusHandoff = ({
 }: {
   activeSiteId: string;
   adminOrderDetailApiUrl: string;
+  adminOrderStatusHandoffApiUrl: string;
   publicOrderIntakeUrl: string;
   order: CollectionRecord | null;
   customerProfile: CollectionRecord | null;
@@ -6940,8 +6962,10 @@ const buildOrderStatusHandoff = ({
 }): OrderStatusHandoff => {
   const generatedAt = new Date().toISOString();
   const adminDetailUrl = order ? orderStatusEndpoint(adminOrderDetailApiUrl, order.id) : adminOrderDetailApiUrl;
+  const adminStatusHandoffUrl = order ? orderStatusEndpoint(adminOrderStatusHandoffApiUrl, order.id) : adminOrderStatusHandoffApiUrl;
   const endpoints = {
     checkoutIntake: publicOrderIntakeUrl,
+    adminStatusHandoff: adminStatusHandoffUrl,
     adminOrderDetail: adminDetailUrl,
     adminTracking: `${adminDetailUrl}/tracking`,
     adminProviderRefund: `${adminDetailUrl}/provider-refund`,

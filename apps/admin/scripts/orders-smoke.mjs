@@ -180,6 +180,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('customerProfileLinked') &&
       source.includes('shippingLabelReferencePresent') &&
       source.includes('providerRefundReferencePresent') &&
+      source.includes('adminStatusHandoff') &&
+      source.includes('/status-handoff') &&
       source.includes("'providerrefundid'") &&
       source.includes("'shippinglabelid'") &&
       source.includes("'checkoutsessionid'") &&
@@ -275,6 +277,7 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   }
   for (const schemaVersion of [
     'backy.order-analytics.v1',
+    'backy.order-status-handoff.v1',
     'backy.order-quote.v1',
     'backy.shipping-label.v1',
     'backy.fulfillment-dispatch.v1',
@@ -289,6 +292,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   }
   const apiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   const analyticsApiSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/commerce/orders/analytics/route.ts', import.meta.url), 'utf8');
+  const statusHandoffApiSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/commerce/orders/[orderId]/status-handoff/route.ts', import.meta.url), 'utf8');
+  const sdkSource = fs.readFileSync(new URL('../../../packages/sdk-js/src/index.ts', import.meta.url), 'utf8');
   assert(
     apiSource.includes("provider: 'http' | 'stripe' | 'taxjar' | 'avalara' | 'easypost' | 'shippo'"),
     'Admin order quote type must expose every first-class quote provider adjustment',
@@ -306,6 +311,30 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       analyticsApiSource.includes('providerCertification,') &&
       analyticsApiSource.includes('Provider credentials stay in server environment/configuration; order analytics exposes only non-secret readiness'),
     'Order analytics API must return non-secret provider certification handoff evidence',
+  );
+  assert(
+    statusHandoffApiSource.includes('requireCommerceCollectionAccess') &&
+      statusHandoffApiSource.includes('permission: "commerce.view"') &&
+      statusHandoffApiSource.includes('source: "admin-order-status-handoff-api"') &&
+      statusHandoffApiSource.includes('customerSafeFieldsOnly: true') &&
+      statusHandoffApiSource.includes('includesRawCustomerContact: false') &&
+      statusHandoffApiSource.includes('includesProviderExecutionIds: false') &&
+      statusHandoffApiSource.includes('includesPaymentReferences: false') &&
+      statusHandoffApiSource.includes('includesAddresses: false') &&
+      statusHandoffApiSource.includes('includesInternalNotes: false') &&
+      statusHandoffApiSource.includes('"providerrefundid"') &&
+      statusHandoffApiSource.includes('"shippinglabelid"') &&
+      statusHandoffApiSource.includes('statusHandoff,') &&
+      !statusHandoffApiSource.includes('record: order'),
+    'Order status-handoff API must require admin commerce view access and return only the masked customer-safe projection',
+  );
+  assert(
+    sdkSource.includes('commerceOrderStatusHandoff(') &&
+      sdkSource.includes('/status-handoff') &&
+      sdkSource.includes('BackyCommerceOrderStatusHandoffResponse') &&
+      sdkSource.includes('includesProviderExecutionIds?: boolean') &&
+      sdkSource.includes('includesPaymentReferences?: boolean'),
+    'SDK must expose the authenticated order status-handoff helper and typed privacy flags',
   );
 };
 
@@ -3327,6 +3356,30 @@ const main = async () => {
       'Created order did not persist expected initial values',
     );
     orderRecordId = createdOrder.id;
+
+    const statusHandoffPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${createdOrder.id}/status-handoff`);
+    const statusHandoff = statusHandoffPayload.data?.statusHandoff;
+    const statusHandoffText = JSON.stringify(statusHandoff || {});
+    const rawEmail = String(createdOrder.values?.email || '');
+    const rawPhone = String(createdOrder.values?.phone || '');
+    const rawCustomerId = String(createdOrder.values?.customerid || '');
+    const rawCheckoutSession = String(createdOrder.values?.checkoutsessionid || '');
+    const rawPaymentReference = String(createdOrder.values?.paymentreference || '');
+    assert(statusHandoff?.schemaVersion === 'backy.order-status-handoff.v1', `Status handoff endpoint returned wrong schema: ${JSON.stringify(statusHandoffPayload).slice(0, 700)}`);
+    assert(statusHandoff.source === 'admin-order-status-handoff-api', `Status handoff endpoint returned wrong source: ${JSON.stringify(statusHandoff).slice(0, 700)}`);
+    assert(statusHandoff.order?.orderNumber === orderNumber, `Status handoff endpoint returned the wrong order: ${JSON.stringify(statusHandoff).slice(0, 700)}`);
+    assert(statusHandoff.customer?.customerProfileLinked === true, `Status handoff endpoint did not link the customer profile safely: ${JSON.stringify(statusHandoff.customer).slice(0, 700)}`);
+    assert(statusHandoff.customer?.maskedEmail && statusHandoff.customer.maskedEmail !== rawEmail, `Status handoff endpoint exposed or omitted masked email: ${JSON.stringify(statusHandoff.customer).slice(0, 700)}`);
+    assert(rawEmail && !statusHandoffText.includes(rawEmail), 'Status handoff endpoint must not include the raw customer email');
+    assert(!rawPhone || !statusHandoffText.includes(rawPhone), 'Status handoff endpoint must not include the raw customer phone');
+    assert(!rawCustomerId || !statusHandoffText.includes(rawCustomerId), 'Status handoff endpoint must not include the raw internal customer id');
+    assert(!rawCheckoutSession || !statusHandoffText.includes(rawCheckoutSession), 'Status handoff endpoint must not include the raw checkout session id');
+    assert(!rawPaymentReference || !statusHandoffText.includes(rawPaymentReference), 'Status handoff endpoint must not include the raw payment reference');
+    assert(statusHandoff.privacy?.customerSafeFieldsOnly === true, `Status handoff endpoint did not report customer-safe privacy: ${JSON.stringify(statusHandoff.privacy)}`);
+    assert(statusHandoff.privacy?.includesProviderExecutionIds === false && statusHandoff.privacy?.includesPaymentReferences === false, `Status handoff endpoint privacy flags regressed: ${JSON.stringify(statusHandoff.privacy)}`);
+    assert(statusHandoff.privacy?.excludedFields?.includes('providerrefundid') && statusHandoff.privacy?.excludedFields?.includes('shippinglabelid'), `Status handoff endpoint did not exclude provider/shipping references: ${JSON.stringify(statusHandoff.privacy)}`);
+    assert(statusHandoff.endpoints?.adminStatusHandoff?.includes('/status-handoff'), `Status handoff endpoint did not expose its admin handoff URL: ${JSON.stringify(statusHandoff.endpoints)}`);
+    assert(!('record' in (statusHandoffPayload.data || {})), `Status handoff endpoint must not return the raw order record: ${JSON.stringify(statusHandoffPayload).slice(0, 700)}`);
 
     const initialAnalyticsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/analytics`);
     const initialAnalytics = initialAnalyticsPayload.data?.analytics;

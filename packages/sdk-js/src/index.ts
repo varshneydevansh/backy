@@ -2058,6 +2058,47 @@ export type BackyCommerceOrderAnalyticsResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export interface BackyCommerceOrderStatusHandoff {
+  schemaVersion: "backy.order-status-handoff.v1" | string;
+  generatedAt: string;
+  source?: "admin-order-status-handoff-api" | string;
+  status?: "ready" | "attention" | "blocked" | string;
+  score?: number;
+  selectedSiteId?: string;
+  order?: Record<string, unknown> | null;
+  customer?: Record<string, unknown> | null;
+  tracking?: Record<string, unknown> | null;
+  refund?: Record<string, unknown> | null;
+  endpoints?: Record<string, unknown>;
+  privacy?: {
+    customerSafeFieldsOnly?: boolean;
+    includesRawCustomerContact?: boolean;
+    includesProviderExecutionIds?: boolean;
+    includesPaymentReferences?: boolean;
+    includesAddresses?: boolean;
+    includesInternalNotes?: boolean;
+    excludedFields?: string[];
+    [key: string]: unknown;
+  };
+  actionPlan?: Record<string, unknown> | null;
+  checks?: Array<Record<string, unknown>>;
+  nextSteps?: string[];
+  [key: string]: unknown;
+}
+
+export type BackyCommerceOrderStatusHandoffResponse = BackyEnvelope<
+  {
+    site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
+    collection?: {
+      id: string;
+      slug?: string;
+      name?: string;
+      [key: string]: unknown;
+    };
+    statusHandoff: BackyCommerceOrderStatusHandoff;
+  } & Record<string, unknown>
+>;
+
 export interface BackyCommerceProductProviderSyncInput {
   provider?:
     | "auto"
@@ -12109,6 +12150,20 @@ export class BackyClient {
   ): Promise<BackyCommerceOrderAnalyticsResponse> {
     return this.request(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/analytics`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceOrderStatusHandoff(
+    orderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderStatusHandoffResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/status-handoff`,
       {
         requestId: options.requestId,
         headers: liveManagementHeaders(options),
