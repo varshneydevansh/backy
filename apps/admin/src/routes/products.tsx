@@ -933,6 +933,91 @@ interface ProductLaunchReadiness {
   };
 }
 
+interface ProductStorefrontHandoff {
+  schemaVersion: 'backy.product-storefront-handoff.v1';
+  generatedAt: string;
+  selectedSiteId: string;
+  product: {
+    id: string;
+    slug: string;
+    status: ContentStatus;
+    title: string;
+    sku: string;
+    productType: ProductFormState['productType'];
+  } | null;
+  endpoints: {
+    catalog: string;
+    product: string;
+    orderIntake: string;
+    events: string;
+  };
+  pricing: {
+    price: number;
+    compareAtPrice: number | null;
+    currency: string;
+  } | null;
+  inventory: {
+    inventory: number;
+    lowStockThreshold: number;
+    inventoryPolicy: ProductFormState['inventoryPolicy'];
+    inStock: boolean;
+    lowStock: boolean;
+    outOfStock: boolean;
+  } | null;
+  media: {
+    imageUrl: string;
+    galleryImages: string[];
+  } | null;
+  merchandising: {
+    category: string;
+    tags: string[];
+    vendor: string;
+    featured: boolean;
+    seoTitle: string;
+    descriptionChars: number;
+  } | null;
+  delivery: {
+    shippingRequired: boolean;
+    shippingProfile: string;
+    weight: number | null;
+    downloadUrlConfigured: boolean;
+    returnPolicyConfigured: boolean;
+  } | null;
+  subscription: {
+    enabled: boolean;
+    interval: ProductFormState['subscriptionInterval'];
+    trialDays: number;
+  } | null;
+  checkout: {
+    orderIntakeReady: boolean;
+    directCheckoutUrlConfigured: boolean;
+    mode: 'backy-order-intake' | 'direct-checkout-url' | 'missing';
+  };
+  providerSync: {
+    provider: string;
+    status: string;
+    executionMode: string;
+    syncedAt: string | null;
+    hasProviderProductReference: boolean;
+    hasProviderPriceReference: boolean;
+  };
+  launchReadiness: {
+    schemaVersion: ProductLaunchReadiness['schemaVersion'];
+    status: ProductLaunchReadinessStatus;
+    score: number;
+    blockerCount: number;
+    attentionCount: number;
+    nextSteps: ProductLaunchReadiness['actionPlan']['nextSteps'];
+  };
+  privacy: {
+    customerSafeFieldsOnly: boolean;
+    includesProviderSecrets: boolean;
+    includesPrivateOrders: boolean;
+    includesDigitalDeliveryUrl: boolean;
+    excludedFields: string[];
+  };
+}
+
 interface FrontendProductTemplateBlueprint {
   title: string;
   slug: string;
@@ -1435,6 +1520,7 @@ function ProductsRoute() {
   const commerceProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?slug={productSlug}`;
   const commerceOrderContractUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
   const commerceOrderCreateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
+  const productNotificationEventsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-product`;
   const storefrontApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?limit=24&sortBy=title`;
   const storefrontProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?slug={productSlug}`;
   const productPageTemplateBriefs = useMemo(() => {
@@ -1626,6 +1712,32 @@ function ProductsRoute() {
       orderIntakeReady,
       productApiReady,
       selectedProduct,
+      selectedProductProviderSync,
+    ],
+  );
+  const selectedProductStorefrontHandoff = useMemo(
+    () => buildProductStorefrontHandoff({
+      activeSiteId,
+      product: selectedProduct,
+      providerSync: selectedProductProviderSync,
+      launchReadiness: selectedProductLaunchReadiness,
+      catalogApi: commerceCatalogUrl,
+      productApi: selectedProduct
+        ? commerceProductDetailUrl.replace('{productSlug}', encodeURIComponent(selectedProduct.slug))
+        : commerceProductDetailUrl,
+      orderIntakeApi: commerceOrderContractUrl,
+      productEventsApi: productNotificationEventsUrl,
+      orderIntakeReady,
+    }),
+    [
+      activeSiteId,
+      commerceCatalogUrl,
+      commerceOrderContractUrl,
+      commerceProductDetailUrl,
+      orderIntakeReady,
+      productNotificationEventsUrl,
+      selectedProduct,
+      selectedProductLaunchReadiness,
       selectedProductProviderSync,
     ],
   );
@@ -2287,7 +2399,7 @@ function ProductsRoute() {
       commerceProductBySlug: commerceProductDetailUrl,
       commerceOrderContract: commerceOrderContractUrl,
       commerceOrderCreate: commerceOrderCreateUrl,
-      productNotificationEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-product`,
+      productNotificationEvents: productNotificationEventsUrl,
       list: storefrontApiUrl,
       bySlug: storefrontProductDetailUrl,
     },
@@ -2301,7 +2413,7 @@ function ProductsRoute() {
           providerSync: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/provider-sync`,
           productSubscriptions: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions`,
           productSubscriptionAction: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/subscriptions/{orderId}/action`,
-          productNotificationEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-product`,
+          productNotificationEvents: productNotificationEventsUrl,
         }[contract.endpointKey],
       },
       responseHeaders: {
@@ -2330,6 +2442,7 @@ function ProductsRoute() {
       catalogSync: 'Product records can be synchronized to Stripe, PayPal, Paddle, Square, Shopify, BigCommerce, WooCommerce, Etsy, Magento, or a configured HTTP catalog-sync provider from the Products workspace.',
       providerCertification: providerCertificationSummary,
       selectedProductLaunchReadiness,
+      selectedProductStorefrontHandoff,
       reconciliation: {
         readiness: reconciliationReadiness,
         lastPreview: reconciliationResult
@@ -2543,7 +2656,9 @@ function ProductsRoute() {
     productTypeFilter,
     productCollection,
     productNotificationEvents,
+    productNotificationEventsUrl,
     products,
+    selectedProductStorefrontHandoff,
     selectedProductLaunchReadiness,
     providerCertificationSummary,
     publicBaseUrl,
@@ -2561,6 +2676,10 @@ function ProductsRoute() {
   const selectedProductLaunchReadinessText = useMemo(
     () => JSON.stringify(selectedProductLaunchReadiness, null, 2),
     [selectedProductLaunchReadiness],
+  );
+  const selectedProductStorefrontHandoffText = useMemo(
+    () => JSON.stringify(selectedProductStorefrontHandoff, null, 2),
+    [selectedProductStorefrontHandoff],
   );
   const productsRouteSearch = useMemo<ProductsSearch>(() => ({
     siteId: activeSiteId,
@@ -6565,17 +6684,33 @@ function ProductsRoute() {
                         Selected-product sellability checklist for custom storefront, hosted page, and provider handoff.
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void copyText(selectedProductLaunchReadinessText, 'Product launch readiness')}
-                      disabled={isProductsAccessBusy || !canExportProducts}
-                      title={!canExportProducts ? exportPermissionTitle : undefined}
-                      iconStart={<Copy className="size-4" />}
-                      data-testid="products-launch-readiness-copy-button"
-                    >
-                      Copy launch JSON
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-background px-2.5 py-1 font-mono text-[11px] font-semibold text-muted-foreground">
+                        backy.product-storefront-handoff.v1
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copyText(selectedProductStorefrontHandoffText, 'Product storefront handoff')}
+                        disabled={isProductsAccessBusy || !canExportProducts}
+                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="products-storefront-handoff-copy-button"
+                      >
+                        Copy storefront JSON
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copyText(selectedProductLaunchReadinessText, 'Product launch readiness')}
+                        disabled={isProductsAccessBusy || !canExportProducts}
+                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="products-launch-readiness-copy-button"
+                      >
+                        Copy launch JSON
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid gap-3 md:grid-cols-4">
                     <div className="rounded-md border border-border bg-background px-3 py-2 text-xs">
@@ -8202,6 +8337,159 @@ const buildProductLaunchReadiness = ({
     productApiReady,
     orderIntakeReady,
   });
+};
+
+const buildProductStorefrontHandoff = ({
+  activeSiteId,
+  product,
+  providerSync,
+  launchReadiness,
+  catalogApi,
+  productApi,
+  orderIntakeApi,
+  productEventsApi,
+  orderIntakeReady,
+}: {
+  activeSiteId: string;
+  product: CollectionRecord | null;
+  providerSync: CommerceProductProviderSyncResult | null;
+  launchReadiness: ProductLaunchReadiness;
+  catalogApi: string;
+  productApi: string;
+  orderIntakeApi: string;
+  productEventsApi: string;
+  orderIntakeReady: boolean;
+}): ProductStorefrontHandoff => {
+  const base = {
+    schemaVersion: 'backy.product-storefront-handoff.v1' as const,
+    generatedAt: new Date().toISOString(),
+    selectedSiteId: activeSiteId,
+    endpoints: {
+      catalog: catalogApi,
+      product: productApi,
+      orderIntake: orderIntakeApi,
+      events: productEventsApi,
+    },
+    checkout: {
+      orderIntakeReady,
+      directCheckoutUrlConfigured: false,
+      mode: orderIntakeReady ? 'backy-order-intake' as const : 'missing' as const,
+    },
+    providerSync: {
+      provider: providerSync?.provider || 'not-run',
+      status: providerSync?.status || 'not-run',
+      executionMode: providerSync?.executionMode || 'none',
+      syncedAt: providerSync?.syncedAt || null,
+      hasProviderProductReference: Boolean(providerSync?.product?.id),
+      hasProviderPriceReference: Boolean(providerSync?.price?.id),
+    },
+    launchReadiness: {
+      schemaVersion: launchReadiness.schemaVersion,
+      status: launchReadiness.summary.status,
+      score: launchReadiness.summary.score,
+      blockerCount: launchReadiness.summary.blockerCount,
+      attentionCount: launchReadiness.summary.attentionCount,
+      nextSteps: launchReadiness.actionPlan.nextSteps,
+    },
+    privacy: {
+      customerSafeFieldsOnly: true,
+      includesProviderSecrets: false,
+      includesPrivateOrders: false,
+      includesDigitalDeliveryUrl: false,
+      excludedFields: [
+        'provider credentials',
+        'providerResponse',
+        'provider product and price ids',
+        'private orders',
+        'customer payloads',
+        'digital delivery URL',
+        'raw checkout sessions',
+      ],
+    },
+  };
+
+  if (!product) {
+    return {
+      ...base,
+      product: null,
+      pricing: null,
+      inventory: null,
+      media: null,
+      merchandising: null,
+      delivery: null,
+      subscription: null,
+    };
+  }
+
+  const values = product.values || {};
+  const title = String(readProductValue(values, 'title', product.slug) || product.slug).trim();
+  const sku = String(readProductValue(values, 'sku', '') || '').trim();
+  const productType = asProductType(readProductValue(values, 'productType'));
+  const price = toNumber(readProductValue(values, 'price'));
+  const compareAtPriceValue = readProductValue(values, 'compareAtPrice');
+  const checkoutUrl = String(readProductValue(values, 'checkoutUrl', '') || '').trim();
+  const stockState = getProductStockState(values);
+  const description = String(readProductValue(values, 'description', '') || '').trim();
+
+  return {
+    ...base,
+    product: {
+      id: product.id,
+      slug: product.slug,
+      status: product.status,
+      title,
+      sku,
+      productType,
+    },
+    pricing: {
+      price,
+      compareAtPrice: compareAtPriceValue === null || compareAtPriceValue === undefined || compareAtPriceValue === ''
+        ? null
+        : toNumber(compareAtPriceValue),
+      currency: normalizeCurrency(String(readProductValue(values, 'currency', 'USD') || 'USD')),
+    },
+    inventory: {
+      inventory: stockState.inventory,
+      lowStockThreshold: stockState.lowStockThreshold,
+      inventoryPolicy: stockState.inventoryPolicy,
+      inStock: stockState.inStock,
+      lowStock: stockState.lowStock,
+      outOfStock: stockState.outOfStock,
+    },
+    media: {
+      imageUrl: String(readProductValue(values, 'imageUrl', '') || '').trim(),
+      galleryImages: formatGalleryImages(readProductValue(values, 'galleryImages')),
+    },
+    merchandising: {
+      category: String(readProductValue(values, 'category', '') || '').trim(),
+      tags: formatTags(readProductValue(values, 'tags')),
+      vendor: String(readProductValue(values, 'vendor', '') || '').trim(),
+      featured: Boolean(readProductValue(values, 'featured')),
+      seoTitle: String(readProductValue(values, 'seoTitle', '') || title).trim(),
+      descriptionChars: description.length,
+    },
+    delivery: {
+      shippingRequired: readProductValue(values, 'shippingRequired') !== false,
+      shippingProfile: String(readProductValue(values, 'shippingProfile', '') || '').trim(),
+      weight: maybeFiniteNumber(readProductValue(values, 'weight')),
+      downloadUrlConfigured: Boolean(String(readProductValue(values, 'downloadUrl', '') || '').trim()),
+      returnPolicyConfigured: Boolean(String(readProductValue(values, 'returnPolicy', '') || '').trim()),
+    },
+    subscription: {
+      enabled: Boolean(readProductValue(values, 'subscriptionEnabled')),
+      interval: asSubscriptionInterval(readProductValue(values, 'subscriptionInterval')),
+      trialDays: Math.max(0, toNumber(readProductValue(values, 'subscriptionTrialDays'))),
+    },
+    checkout: {
+      orderIntakeReady,
+      directCheckoutUrlConfigured: Boolean(checkoutUrl),
+      mode: orderIntakeReady
+        ? 'backy-order-intake'
+        : checkoutUrl
+          ? 'direct-checkout-url'
+          : 'missing',
+    },
+  };
 };
 
 const formatProductLaunchReadinessStatus = (status: ProductLaunchReadinessStatus): string => {

@@ -952,12 +952,21 @@ const assertProductsApiContractsSource = () => {
   assert(
     source.includes('data-testid="products-launch-readiness"') &&
       source.includes('data-testid="products-launch-readiness-copy-button"') &&
+      source.includes('data-testid="products-storefront-handoff-copy-button"') &&
       source.includes('data-testid="products-launch-readiness-action-plan"') &&
       source.includes("schemaVersion: 'backy.product-launch-readiness.v1'") &&
+      source.includes("schemaVersion: 'backy.product-storefront-handoff.v1'") &&
       source.includes("selectedProductLaunchReadinessText") &&
+      source.includes("selectedProductStorefrontHandoffText") &&
+      source.includes("buildProductStorefrontHandoff") &&
       source.includes("productHandoff.providerExecution.selectedProductLaunchReadiness") &&
+      source.includes("selectedProductStorefrontHandoff") &&
+      source.includes("Product storefront handoff") &&
+      source.includes("includesProviderSecrets: false") &&
+      source.includes("includesPrivateOrders: false") &&
+      source.includes("includesDigitalDeliveryUrl: false") &&
       source.includes("Selected-product sellability checklist for custom storefront, hosted page, and provider handoff."),
-    "Products page must render a copyable selected-product launch readiness handoff",
+    "Products page must render copyable selected-product launch readiness and storefront handoff manifests",
   );
   assert(
     source.includes('data-testid="products-subscription-action-plan"') &&
@@ -7246,7 +7255,10 @@ const assertProductsLayout = async (client) => {
           productLaunchReadinessText.includes('Product launch readiness') &&
           productLaunchReadinessText.includes('Launch action plan') &&
           productLaunchReadinessText.includes('backy.product-launch-readiness.v1') &&
+          productLaunchReadinessText.includes('backy.product-storefront-handoff.v1') &&
+          productLaunchReadinessText.includes('Copy storefront JSON') &&
           productLaunchReadinessText.includes('Copy launch JSON') &&
+          Boolean(document.querySelector('[data-testid="products-storefront-handoff-copy-button"]')) &&
           (
             productLaunchReadinessText.includes('Selected product') ||
             (
