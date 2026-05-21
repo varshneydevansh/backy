@@ -1299,6 +1299,20 @@ assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-s
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
 assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
 
+const adminForms = await privateClient.adminForms({ limit: 5 });
+assert(Array.isArray(adminForms.data.forms), 'adminForms() missing forms array');
+assert(adminForms.data.persistenceCertification?.schemaVersion === 'backy.forms-persistence-certification.v1', 'adminForms() missing forms persistence certification handoff');
+if (adminForms.data.forms.length > 0) {
+  const adminForm = await privateClient.adminForm(adminForms.data.forms[0].id);
+  assert(adminForm.data.form?.id === adminForms.data.forms[0].id, 'adminForm() returned wrong form');
+}
+const formsAnalytics = await privateClient.formsAnalytics({ days: 30 });
+assert(formsAnalytics.data.analytics, 'formsAnalytics() missing analytics payload');
+const formContactSegments = await privateClient.formContactSegments();
+assert(formContactSegments.data.analytics, 'formContactSegments() missing analytics payload');
+const formContactLists = await privateClient.formContactLists();
+assert(Array.isArray(formContactLists.data.lists), 'formContactLists() missing saved lists array');
+
 let commerceCatalogChecked = false;
 try {
   const canonicalOrderInput = buildBackyCommerceOrderInput({

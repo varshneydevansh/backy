@@ -2762,6 +2762,40 @@ function liveManagementHeaders(
   return hasHeaders ? headers : undefined;
 }
 
+function splitLiveManagementRequestOptions<
+  TOptions extends BackyLiveManagementRequestOptions,
+>(options: TOptions) {
+  const {
+    requestId,
+    siteId,
+    adminKey,
+    apiKey,
+    adminSession,
+    authorization,
+    bearerToken,
+    actor,
+    headers,
+    credentials,
+    ...rest
+  } = options;
+
+  void adminKey;
+  void apiKey;
+  void adminSession;
+  void authorization;
+  void bearerToken;
+  void actor;
+  void headers;
+
+  return {
+    requestId,
+    siteId,
+    headers: liveManagementHeaders(options),
+    credentials,
+    rest,
+  };
+}
+
 export type BackyBlogCategoriesResponse = BackyEnvelope<
   {
     categories: BackyBlogCategory[];
@@ -2877,6 +2911,134 @@ export interface BackyContact {
   notes?: string;
   [key: string]: unknown;
 }
+
+export interface BackyAdminFormListOptions
+  extends BackyListOptions,
+    BackyLiveManagementRequestOptions {
+  pageId?: string;
+  postId?: string;
+}
+
+export interface BackyAdminFormSubmissionListOptions
+  extends BackyListOptions,
+    BackyLiveManagementRequestOptions {
+  status?: "pending" | "approved" | "rejected" | "spam" | "all" | string;
+  submissionRequestId?: string;
+}
+
+export interface BackyAdminFormContactListOptions
+  extends BackyListOptions,
+    BackyLiveManagementRequestOptions {
+  status?: "new" | "contacted" | "qualified" | "archived" | "all" | string;
+  contactRequestId?: string;
+}
+
+export interface BackyAdminFormsAnalyticsOptions
+  extends BackyLiveManagementRequestOptions {
+  days?: number | string;
+}
+
+export interface BackyAdminFormContactSegmentsOptions
+  extends BackyLiveManagementRequestOptions {
+  formId?: string;
+}
+
+export interface BackyAdminFormContactListInput {
+  id?: string;
+  listId?: string;
+  name?: string;
+  description?: string | null;
+  filters?: Record<string, unknown>;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormMutationInput = Partial<BackyFormDefinition> & {
+  requestId?: string;
+  [key: string]: unknown;
+};
+
+export type BackyAdminFormsResponse = BackyEnvelope<
+  {
+    forms: BackyFormDefinition[];
+    total?: number;
+    pagination?: BackyPagination;
+    persistenceCertification?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminFormResponse = BackyEnvelope<
+  { form: BackyFormDefinition } & Record<string, unknown>
+>;
+
+export type BackyAdminFormDeleteResponse = BackyEnvelope<
+  { deleted: boolean } & Record<string, unknown>
+>;
+
+export type BackyAdminFormSubmissionsResponse = BackyEnvelope<
+  {
+    form?: BackyFormDefinition;
+    submissions: { data?: BackyFormSubmission[]; [key: string]: unknown };
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminFormSubmissionResponse = BackyEnvelope<
+  { submission: BackyFormSubmission } & Record<string, unknown>
+>;
+
+export type BackyAdminFormContactsResponse = BackyEnvelope<
+  {
+    form?: BackyFormDefinition;
+    formId?: string;
+    contacts: BackyContact[];
+    count?: number;
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminFormContactResponse = BackyEnvelope<
+  { contact: BackyContact } & Record<string, unknown>
+>;
+
+export type BackyAdminFormContactDeleteResponse = BackyEnvelope<
+  { deleted: boolean; contact?: BackyContact } & Record<string, unknown>
+>;
+
+export type BackyAdminFormsAnalyticsResponse = BackyEnvelope<
+  {
+    site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
+    analytics: Record<string, unknown>;
+    generatedAt?: string;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminFormContactSegmentsResponse = BackyEnvelope<
+  {
+    site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
+    formId?: string | null;
+    analytics: Record<string, unknown>;
+    generatedAt?: string;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminFormContactListsResponse = BackyEnvelope<
+  {
+    lists: Array<Record<string, unknown>>;
+    count?: number;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminFormContactListMutationResponse = BackyEnvelope<
+  {
+    list?: Record<string, unknown>;
+    lists?: Array<Record<string, unknown>>;
+    created?: boolean;
+    updated?: boolean;
+    deleted?: boolean;
+    listId?: string;
+  } & Record<string, unknown>
+>;
 
 export interface BackyComment {
   id: string;
@@ -6312,22 +6474,184 @@ export class BackyClient {
     );
   }
 
-  formSubmissions(
-    formId: string,
-    options: BackyListOptions & { status?: string } = {},
-  ): Promise<
-    BackyEnvelope<{
-      form: BackyFormDefinition;
-      submissions: { data?: BackyFormSubmission[]; [key: string]: unknown };
-      pagination?: BackyPagination;
-    }>
-  > {
-    const { requestId, ...query } = options;
+  adminForms(
+    options: BackyAdminFormListOptions = {},
+  ): Promise<BackyAdminFormsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = normalizeListQuery(rest as BackyAdminFormListOptions);
     return this.request(
-      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`,
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms`,
       {
         query,
         requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  createAdminForm(
+    input: BackyAdminFormMutationInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminForm(
+    formId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminForm(
+    formId: string,
+    input: BackyAdminFormMutationInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminForm(
+    formId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  formsAnalytics(
+    options: BackyAdminFormsAnalyticsOptions = {},
+  ): Promise<BackyAdminFormsAnalyticsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms/analytics`,
+      {
+        query: rest as Record<string, string | number | boolean | undefined>,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  formContactSegments(
+    options: BackyAdminFormContactSegmentsOptions = {},
+  ): Promise<BackyAdminFormContactSegmentsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms/contact-segments`,
+      {
+        query: rest as Record<string, string | number | boolean | undefined>,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  formContactLists(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactListsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/contact-lists`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  saveFormContactList(
+    input: BackyAdminFormContactListInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactListMutationResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/contact-lists`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteFormContactList(
+    input: Pick<BackyAdminFormContactListInput, "id" | "listId" | "requestId">,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactListMutationResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/contact-lists`,
+      {
+        method: "DELETE",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  formSubmissions(
+    formId: string,
+    options: BackyAdminFormSubmissionListOptions = {},
+  ): Promise<BackyAdminFormSubmissionsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const { submissionRequestId, ...queryOptions } = rest;
+    const query = normalizeListQuery({
+      ...queryOptions,
+      requestId: submissionRequestId,
+    } as BackyListOptions & { status?: string; requestId?: string });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
       },
     );
   }
@@ -6356,9 +6680,15 @@ export class BackyClient {
   formSubmission(
     formId: string,
     submissionId: string,
-  ): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormSubmissionResponse> {
     return this.request(
-      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
     );
   }
 
@@ -6366,32 +6696,39 @@ export class BackyClient {
     formId: string,
     submissionId: string,
     updates: Record<string, unknown>,
-  ): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormSubmissionResponse> {
+    const { requestId, ...body } = updates;
     return this.request(
-      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`,
       {
         method: "PATCH",
-        body: updates,
+        body,
+        requestId: options.requestId ?? (requestId as string | undefined),
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
 
   formContacts(
     formId: string,
-    options: BackyListOptions & { status?: string } = {},
-  ): Promise<
-    BackyEnvelope<{
-      form: BackyFormDefinition;
-      contacts: BackyContact[];
-      pagination?: BackyPagination;
-    }>
-  > {
-    const { requestId, ...query } = options;
+    options: BackyAdminFormContactListOptions = {},
+  ): Promise<BackyAdminFormContactsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const { contactRequestId, ...queryOptions } = rest;
+    const query = normalizeListQuery({
+      ...queryOptions,
+      requestId: contactRequestId,
+    } as BackyListOptions & { status?: string; requestId?: string });
     return this.request(
-      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`,
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`,
       {
         query,
         requestId,
+        headers,
+        credentials,
       },
     );
   }
@@ -6400,12 +6737,17 @@ export class BackyClient {
     formId: string,
     contactId: string,
     updates: Record<string, unknown>,
-  ): Promise<BackyEnvelope<{ contact: BackyContact }>> {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactResponse> {
+    const { requestId, ...body } = updates;
     return this.request(
-      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`,
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`,
       {
         method: "PATCH",
-        body: updates,
+        body,
+        requestId: options.requestId ?? (requestId as string | undefined),
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
@@ -6413,11 +6755,15 @@ export class BackyClient {
   deleteFormContact(
     formId: string,
     contactId: string,
-  ): Promise<BackyEnvelope<{ deleted: true; contact: BackyContact }>> {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactDeleteResponse> {
     return this.request(
-      `/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`,
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`,
       {
         method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }

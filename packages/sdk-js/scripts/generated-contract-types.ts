@@ -43,6 +43,18 @@ import type {
   BackyCommerceProviderCertification,
   BackyCommerceProductProviderSyncResponse,
   BackyCollectionRecordWriteInput,
+  BackyAdminFormContactDeleteResponse,
+  BackyAdminFormContactListMutationResponse,
+  BackyAdminFormContactListsResponse,
+  BackyAdminFormContactResponse,
+  BackyAdminFormContactsResponse,
+  BackyAdminFormDeleteResponse,
+  BackyAdminFormResponse,
+  BackyAdminFormsAnalyticsResponse,
+  BackyAdminFormsResponse,
+  BackyAdminFormContactSegmentsResponse,
+  BackyAdminFormSubmissionResponse,
+  BackyAdminFormSubmissionsResponse,
   BackyFormSubmissionInput,
   BackyInteractiveRuntimeEventInput,
   BackyContentElementDescriptor,
@@ -298,6 +310,87 @@ type AdminSiteSettingsUpdateMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateAdminSiteSettings"]>,
     BackySiteSettingsResponse
+  >
+>;
+type AdminFormsMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminForms"]>, BackyAdminFormsResponse>
+>;
+type CreateAdminFormMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["createAdminForm"]>, BackyAdminFormResponse>
+>;
+type AdminFormMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminForm"]>, BackyAdminFormResponse>
+>;
+type UpdateAdminFormMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateAdminForm"]>, BackyAdminFormResponse>
+>;
+type DeleteAdminFormMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminForm"]>,
+    BackyAdminFormDeleteResponse
+  >
+>;
+type FormsAnalyticsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["formsAnalytics"]>,
+    BackyAdminFormsAnalyticsResponse
+  >
+>;
+type FormContactSegmentsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["formContactSegments"]>,
+    BackyAdminFormContactSegmentsResponse
+  >
+>;
+type FormContactListsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["formContactLists"]>,
+    BackyAdminFormContactListsResponse
+  >
+>;
+type SaveFormContactListMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["saveFormContactList"]>,
+    BackyAdminFormContactListMutationResponse
+  >
+>;
+type DeleteFormContactListMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteFormContactList"]>,
+    BackyAdminFormContactListMutationResponse
+  >
+>;
+type FormSubmissionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["formSubmissions"]>,
+    BackyAdminFormSubmissionsResponse
+  >
+>;
+type FormSubmissionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["formSubmission"]>,
+    BackyAdminFormSubmissionResponse
+  >
+>;
+type UpdateFormSubmissionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateFormSubmission"]>,
+    BackyAdminFormSubmissionResponse
+  >
+>;
+type FormContactsMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["formContacts"]>, BackyAdminFormContactsResponse>
+>;
+type UpdateFormContactMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateFormContact"]>,
+    BackyAdminFormContactResponse
+  >
+>;
+type DeleteFormContactMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteFormContact"]>,
+    BackyAdminFormContactDeleteResponse
   >
 >;
 type CommerceOrderAnalyticsMethodReturnsContract = Assert<
@@ -4129,6 +4222,180 @@ const formContactsEnvelope = {
   },
 } satisfies GeneratedBackyOpenApiFormContactsEnvelope;
 
+const sdkAdminFormsEnvelope = {
+  success: true,
+  requestId: "req_admin_forms",
+  data: {
+    forms: [formDefinition],
+    total: 1,
+    pagination: {
+      total: 1,
+      limit: 100,
+      offset: 0,
+      hasMore: false,
+    },
+    persistenceCertification: {
+      schemaVersion: "backy.forms-persistence-certification.v1",
+      status: "external-database-gate",
+    },
+  },
+} satisfies BackyAdminFormsResponse;
+
+const sdkAdminFormEnvelope = {
+  success: true,
+  requestId: "req_admin_form",
+  data: {
+    form: formDefinition,
+  },
+} satisfies BackyAdminFormResponse;
+
+const sdkAdminFormDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_form_delete",
+  data: {
+    deleted: true,
+  },
+} satisfies BackyAdminFormDeleteResponse;
+
+const sdkAdminFormsAnalyticsEnvelope = {
+  success: true,
+  requestId: "req_forms_analytics",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo",
+    },
+    analytics: {
+      schemaVersion: "backy.forms-analytics.v1",
+      totals: {
+        forms: 1,
+        submissions: 1,
+        contacts: 1,
+      },
+    },
+    generatedAt: "2026-05-21T00:00:00.000Z",
+  },
+} satisfies BackyAdminFormsAnalyticsResponse;
+
+const sdkAdminFormContactSegmentsEnvelope = {
+  success: true,
+  requestId: "req_form_contact_segments",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo",
+    },
+    formId: "form_contact",
+    analytics: {
+      schemaVersion: "backy.form-contact-segments.v1",
+      summary: {
+        contacts: 1,
+      },
+      segments: [],
+    },
+    generatedAt: "2026-05-21T00:00:00.000Z",
+  },
+} satisfies BackyAdminFormContactSegmentsResponse;
+
+const sdkAdminFormContactListsEnvelope = {
+  success: true,
+  requestId: "req_form_contact_lists",
+  data: {
+    lists: [
+      {
+        id: "newsletter",
+        name: "Newsletter",
+        count: 1,
+        filters: {
+          status: "qualified",
+        },
+      },
+    ],
+    count: 1,
+  },
+} satisfies BackyAdminFormContactListsResponse;
+
+const sdkAdminFormContactListMutationEnvelope = {
+  success: true,
+  requestId: "req_form_contact_list_save",
+  data: {
+    list: {
+      id: "newsletter",
+      name: "Newsletter",
+      filters: {
+        status: "qualified",
+      },
+    },
+    lists: [
+      {
+        id: "newsletter",
+        name: "Newsletter",
+      },
+    ],
+    created: true,
+  },
+} satisfies BackyAdminFormContactListMutationResponse;
+
+const sdkAdminFormSubmissionsEnvelope = {
+  success: true,
+  requestId: "req_admin_submissions",
+  data: {
+    form: formDefinition,
+    submissions: {
+      data: [formSubmission],
+      pagination: {
+        total: 1,
+        limit: 20,
+        offset: 0,
+        hasMore: false,
+      },
+    },
+  },
+} satisfies BackyAdminFormSubmissionsResponse;
+
+const sdkAdminFormSubmissionEnvelope = {
+  success: true,
+  requestId: "req_admin_submission",
+  data: {
+    submission: formSubmission,
+  },
+} satisfies BackyAdminFormSubmissionResponse;
+
+const sdkAdminFormContactsEnvelope = {
+  success: true,
+  requestId: "req_admin_contacts",
+  data: {
+    formId: "form_contact",
+    contacts: [formContact],
+    count: 1,
+    pagination: {
+      total: 1,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminFormContactsResponse;
+
+const sdkAdminFormContactEnvelope = {
+  success: true,
+  requestId: "req_admin_contact",
+  data: {
+    contact: formContact,
+  },
+} satisfies BackyAdminFormContactResponse;
+
+const sdkAdminFormContactDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_contact_delete",
+  data: {
+    deleted: true,
+    contact: formContact,
+  },
+} satisfies BackyAdminFormContactDeleteResponse;
+
 const mediaReferenceTarget = {
   id: "page_home",
   usageTypes: ["hero-image"],
@@ -6057,6 +6324,18 @@ void formSubmissionsEnvelope;
 void formContact;
 void formContactEnvelope;
 void formContactsEnvelope;
+void sdkAdminFormsEnvelope;
+void sdkAdminFormEnvelope;
+void sdkAdminFormDeleteEnvelope;
+void sdkAdminFormsAnalyticsEnvelope;
+void sdkAdminFormContactSegmentsEnvelope;
+void sdkAdminFormContactListsEnvelope;
+void sdkAdminFormContactListMutationEnvelope;
+void sdkAdminFormSubmissionsEnvelope;
+void sdkAdminFormSubmissionEnvelope;
+void sdkAdminFormContactsEnvelope;
+void sdkAdminFormContactEnvelope;
+void sdkAdminFormContactDeleteEnvelope;
 void mediaReferenceTarget;
 void mediaReferences;
 void mediaEditableMetadata;
