@@ -1634,9 +1634,16 @@
                     "contactShare": { "type": "boolean" },
                     "conditionalRequests": { "type": "boolean" },
                     "cacheableDefinitions": { "type": "boolean" },
-                    "privateSubmissionData": { "type": "boolean" }
+                    "privateSubmissionData": { "type": "boolean" },
+                    "authenticatedManagement": { "type": "boolean" },
+                    "formBuilderManagement": { "type": "boolean" },
+                    "submissionModeration": { "type": "boolean" },
+                    "contactCrm": { "type": "boolean" },
+                    "deliveryRetries": { "type": "boolean" },
+                    "consentRetention": { "type": "boolean" },
+                    "persistenceCertification": { "type": "boolean" }
                   },
-                  "required": ["publicDefinitions", "publicSubmissions", "fieldValidation", "collectionWriteTargets", "moderation", "contactShare", "conditionalRequests", "cacheableDefinitions", "privateSubmissionData"]
+                  "required": ["publicDefinitions", "publicSubmissions", "fieldValidation", "collectionWriteTargets", "moderation", "contactShare", "conditionalRequests", "cacheableDefinitions", "privateSubmissionData", "authenticatedManagement", "formBuilderManagement", "submissionModeration", "contactCrm", "deliveryRetries", "consentRetention", "persistenceCertification"]
                 },
                 "cache": {
                   "type": "object",
@@ -1660,6 +1667,151 @@
                   },
                   "required": ["submissionPayloadsContainVisitorData", "publicDefinitionExcludesSubmissions", "contactPayloadsArePrivate"]
                 },
+                "managementPolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.forms-management.v1" },
+                    "endpoints": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "adminList": { "type": "string", "minLength": 1 },
+                        "create": { "type": "string", "minLength": 1 },
+                        "detail": { "type": "string", "minLength": 1 },
+                        "clone": { "type": "string", "minLength": 1 },
+                        "embedBlock": { "type": "string", "minLength": 1 },
+                        "analytics": { "type": "string", "minLength": 1 },
+                        "contactSegments": { "type": "string", "minLength": 1 },
+                        "contactLists": { "type": "string", "minLength": 1 },
+                        "consentRetention": { "type": "string", "minLength": 1 },
+                        "submissions": { "type": "string", "minLength": 1 },
+                        "submission": { "type": "string", "minLength": 1 },
+                        "reviewSubmission": { "type": "string", "minLength": 1 },
+                        "retryWebhook": { "type": "string", "minLength": 1 },
+                        "retryEmail": { "type": "string", "minLength": 1 },
+                        "formConsentRetention": { "type": "string", "minLength": 1 },
+                        "contacts": { "type": "string", "minLength": 1 },
+                        "contact": { "type": "string", "minLength": 1 },
+                        "importContacts": { "type": "string", "minLength": 1 },
+                        "syncContacts": { "type": "string", "minLength": 1 },
+                        "promoteContactUser": { "type": "string", "minLength": 1 },
+                        "promoteContactCustomer": { "type": "string", "minLength": 1 },
+                        "contactConsentRetention": { "type": "string", "minLength": 1 }
+                      },
+                      "required": ["adminList", "create", "detail", "clone", "embedBlock", "analytics", "contactSegments", "contactLists", "consentRetention", "submissions", "submission", "reviewSubmission", "retryWebhook", "retryEmail", "formConsentRetention", "contacts", "contact", "importContacts", "syncContacts", "promoteContactUser", "promoteContactCustomer", "contactConsentRetention"]
+                    },
+                    "methods": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "list": { "const": "GET" },
+                        "create": { "const": "POST" },
+                        "update": { "const": "PATCH" },
+                        "delete": { "const": "DELETE" },
+                        "clone": { "const": "POST" },
+                        "embedBlock": { "const": "POST" },
+                        "analytics": { "const": "GET" },
+                        "contactSegments": { "const": "GET" },
+                        "contactLists": { "const": "GET" },
+                        "saveContactList": { "const": "POST" },
+                        "deleteContactList": { "const": "DELETE" },
+                        "consentRetention": { "const": "POST" },
+                        "submissions": { "const": "GET" },
+                        "submission": { "const": "GET" },
+                        "updateSubmission": { "const": "PATCH" },
+                        "reviewSubmission": { "const": "POST" },
+                        "retryWebhook": { "const": "POST" },
+                        "retryEmail": { "const": "POST" },
+                        "formConsentRetention": { "const": "POST" },
+                        "contacts": { "const": "GET" },
+                        "createContact": { "const": "POST" },
+                        "updateContact": { "const": "PATCH" },
+                        "deleteContact": { "const": "DELETE" },
+                        "importContacts": { "const": "POST" },
+                        "syncContacts": { "const": "POST" },
+                        "promoteContactUser": { "const": "POST" },
+                        "promoteContactCustomer": { "const": "POST" },
+                        "contactConsentRetention": { "const": "POST" }
+                      },
+                      "required": ["list", "create", "update", "delete", "clone", "embedBlock", "analytics", "contactSegments", "contactLists", "saveContactList", "deleteContactList", "consentRetention", "submissions", "submission", "updateSubmission", "reviewSubmission", "retryWebhook", "retryEmail", "formConsentRetention", "contacts", "createContact", "updateContact", "deleteContact", "importContacts", "syncContacts", "promoteContactUser", "promoteContactCustomer", "contactConsentRetention"]
+                    },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "modes": { "type": "array", "items": { "enum": ["session", "api-key"] } },
+                        "headers": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                        "requiredPermissions": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "read": { "const": "forms.view" },
+                            "create": { "const": "forms.create" },
+                            "update": { "const": "forms.edit" },
+                            "manage": { "const": "forms.manage" },
+                            "export": { "const": "forms.export" },
+                            "delete": { "const": "forms.delete" },
+                            "activity": { "const": "activity.export" }
+                          },
+                          "required": ["read", "create", "update", "manage", "export", "delete", "activity"]
+                        },
+                        "siteScope": { "const": true }
+                      },
+                      "required": ["modes", "headers", "requiredPermissions", "siteScope"]
+                    },
+                    "sdkHelpers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "list": { "const": "adminForms" },
+                        "create": { "const": "createAdminForm" },
+                        "detail": { "const": "adminForm" },
+                        "update": { "const": "updateAdminForm" },
+                        "delete": { "const": "deleteAdminForm" },
+                        "clone": { "const": "cloneAdminForm" },
+                        "embedBlock": { "const": "createAdminFormEmbedBlock" },
+                        "analytics": { "const": "formsAnalytics" },
+                        "contactSegments": { "const": "formContactSegments" },
+                        "contactLists": { "const": "formContactLists" },
+                        "saveContactList": { "const": "saveFormContactList" },
+                        "deleteContactList": { "const": "deleteFormContactList" },
+                        "submissions": { "const": "formSubmissions" },
+                        "submission": { "const": "formSubmission" },
+                        "updateSubmission": { "const": "updateFormSubmission" },
+                        "reviewSubmission": { "const": "reviewFormSubmission" },
+                        "retryWebhook": { "const": "retryFormSubmissionWebhook" },
+                        "retryEmail": { "const": "retryFormSubmissionEmail" },
+                        "formConsentRetention": { "const": "applyAdminFormConsentRetention" },
+                        "formsConsentRetention": { "const": "applyAdminFormsConsentRetention" },
+                        "contacts": { "const": "formContacts" },
+                        "createContact": { "const": "createFormContact" },
+                        "updateContact": { "const": "updateFormContact" },
+                        "importContacts": { "const": "importFormContactsCsv" },
+                        "syncContacts": { "const": "syncFormContacts" },
+                        "promoteContactUser": { "const": "promoteFormContactToUser" },
+                        "promoteContactCustomer": { "const": "promoteFormContactToCustomer" },
+                        "contactConsentRetention": { "const": "applyFormContactConsentRetention" }
+                      },
+                      "required": ["list", "create", "detail", "update", "delete", "clone", "embedBlock", "analytics", "contactSegments", "contactLists", "saveContactList", "deleteContactList", "submissions", "submission", "updateSubmission", "reviewSubmission", "retryWebhook", "retryEmail", "formConsentRetention", "formsConsentRetention", "contacts", "createContact", "updateContact", "importContacts", "syncContacts", "promoteContactUser", "promoteContactCustomer", "contactConsentRetention"]
+                    },
+                    "responseContracts": { "type": "object", "additionalProperties": true },
+                    "privacy": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "publicDefinitionsExcludeSubmissions": { "const": true },
+                        "submissionsArePrivate": { "const": true },
+                        "contactsArePrivate": { "const": true },
+                        "deliveryRetriesMayContainVisitorPayloads": { "const": true },
+                        "databaseCredentialsNeverReturned": { "const": true }
+                      },
+                      "required": ["publicDefinitionsExcludeSubmissions", "submissionsArePrivate", "contactsArePrivate", "deliveryRetriesMayContainVisitorPayloads", "databaseCredentialsNeverReturned"]
+                    },
+                    "secretHandling": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["schemaVersion", "endpoints", "methods", "auth", "sdkHelpers", "responseContracts", "privacy", "secretHandling"]
+                },
                 "schemas": {
                   "type": "object",
                   "additionalProperties": { "type": "string" },
@@ -1671,7 +1823,7 @@
                   "required": ["definition", "validationError", "collectionRecordLink"]
                 }
               },
-              "required": ["schemaVersion", "count", "activeCount", "collectionTargetCount", "moderationModes", "endpoints", "methods", "capabilities", "cache", "privacy", "schemas"]
+              "required": ["schemaVersion", "count", "activeCount", "collectionTargetCount", "moderationModes", "endpoints", "methods", "capabilities", "cache", "privacy", "managementPolicy", "schemas"]
             },
             "comments": {
               "type": "object",

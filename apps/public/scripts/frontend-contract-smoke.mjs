@@ -246,17 +246,32 @@ assert(
 assert(
   manifestRoute.includes('buildManifestFormsDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.forms-discovery.v1'") &&
+    manifestRoute.includes("schemaVersion: 'backy.forms-management.v1'") &&
     manifestRoute.includes("cacheableDefinitions: true") &&
     manifestRoute.includes("privateSubmissionData: true") &&
+    manifestRoute.includes("authenticatedManagement: true") &&
+    manifestRoute.includes("retryWebhook: 'retryFormSubmissionWebhook'") &&
+    manifestRoute.includes("promoteContactCustomer: 'promoteFormContactToCustomer'") &&
+    manifestRoute.includes("databaseCredentialsNeverReturned: true") &&
     manifestRoute.includes("publicDefinitionExcludesSubmissions: true") &&
     manifestRoute.includes('formsRuntime: buildManifestFormsDiscovery(input.site.id, input.forms)') &&
     manifestRoute.includes('formsRuntime: buildManifestFormsDiscovery(site.id, forms)') &&
+    openApiRoute.includes('formsManagementDiscovery') &&
+    openApiRoute.includes('"x-backy-forms-management"') &&
+    openApiRoute.includes('FormsManagementPolicy') &&
+    openApiRoute.includes('"backy.forms-management.v1"') &&
     frontendManifestSchema.includes('"backy.forms-discovery.v1"') &&
+    frontendManifestSchema.includes('"backy.forms-management.v1"') &&
     frontendManifestSchema.includes('"cacheableDefinitions"') &&
+    frontendManifestSchema.includes('"authenticatedManagement"') &&
     frontendManifestSchema.includes('"FORM_VALIDATION_ERROR"') &&
+    sdkSource.includes('BackyManifestFormsManagementPolicy') &&
     sdkSource.includes('BackyManifestFormsRuntimeModule') &&
     sdkSmoke.includes('manifest() missing forms runtime discovery module') &&
-    generatedSdkSmoke.includes('invalidGeneratedManifestFormsRuntimeDiscovery'),
+    sdkSmoke.includes('manifest() forms management missing webhook retry helper') &&
+    generatedSdkTypes.includes('"x-backy-forms-management"?: GeneratedBackyOpenApiFormsManagementPolicy') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestFormsRuntimeDiscovery') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestFormsManagement'),
   'Frontend manifest and SDK must expose structured forms runtime discovery for custom frontend form UIs.',
 );
 

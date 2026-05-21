@@ -116,6 +116,7 @@ export type {
   GeneratedBackyOpenApiFormSubmissionValidationErrorEnvelope,
   GeneratedBackyOpenApiFormSubmissionsEnvelope,
   GeneratedBackyOpenApiFormValidationRule,
+  GeneratedBackyOpenApiFormsManagementPolicy,
   GeneratedBackyOpenApiFrontendDesignContract,
   GeneratedBackyOpenApiFrontendDesignEnvelope,
   GeneratedBackyOpenApiFrontendDesignTemplate,
@@ -7859,6 +7860,139 @@ export interface BackyManifestFormDefinition extends BackyFormDefinition {
   frontendDesign?: BackyManifestRouteFrontendDesign;
 }
 
+export interface BackyManifestFormsManagementPolicy {
+  schemaVersion: "backy.forms-management.v1";
+  endpoints: {
+    adminList: string;
+    create: string;
+    detail: string;
+    clone: string;
+    embedBlock: string;
+    analytics: string;
+    contactSegments: string;
+    contactLists: string;
+    consentRetention: string;
+    submissions: string;
+    submission: string;
+    reviewSubmission: string;
+    retryWebhook: string;
+    retryEmail: string;
+    formConsentRetention: string;
+    contacts: string;
+    contact: string;
+    importContacts: string;
+    syncContacts: string;
+    promoteContactUser: string;
+    promoteContactCustomer: string;
+    contactConsentRetention: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    create: "POST";
+    update: "PATCH";
+    delete: "DELETE";
+    clone: "POST";
+    embedBlock: "POST";
+    analytics: "GET";
+    contactSegments: "GET";
+    contactLists: "GET";
+    saveContactList: "POST";
+    deleteContactList: "DELETE";
+    consentRetention: "POST";
+    submissions: "GET";
+    submission: "GET";
+    updateSubmission: "PATCH";
+    reviewSubmission: "POST";
+    retryWebhook: "POST";
+    retryEmail: "POST";
+    formConsentRetention: "POST";
+    contacts: "GET";
+    createContact: "POST";
+    updateContact: "PATCH";
+    deleteContact: "DELETE";
+    importContacts: "POST";
+    syncContacts: "POST";
+    promoteContactUser: "POST";
+    promoteContactCustomer: "POST";
+    contactConsentRetention: "POST";
+    [key: string]: unknown;
+  };
+  auth: {
+    modes: Array<"session" | "api-key">;
+    headers: string[];
+    requiredPermissions: {
+      read: "forms.view";
+      create: "forms.create";
+      update: "forms.edit";
+      manage: "forms.manage";
+      export: "forms.export";
+      delete: "forms.delete";
+      activity: "activity.export";
+      [key: string]: unknown;
+    };
+    siteScope: true;
+    [key: string]: unknown;
+  };
+  sdkHelpers: {
+    list: "adminForms";
+    create: "createAdminForm";
+    detail: "adminForm";
+    update: "updateAdminForm";
+    delete: "deleteAdminForm";
+    clone: "cloneAdminForm";
+    embedBlock: "createAdminFormEmbedBlock";
+    analytics: "formsAnalytics";
+    contactSegments: "formContactSegments";
+    contactLists: "formContactLists";
+    saveContactList: "saveFormContactList";
+    deleteContactList: "deleteFormContactList";
+    submissions: "formSubmissions";
+    submission: "formSubmission";
+    updateSubmission: "updateFormSubmission";
+    reviewSubmission: "reviewFormSubmission";
+    retryWebhook: "retryFormSubmissionWebhook";
+    retryEmail: "retryFormSubmissionEmail";
+    formConsentRetention: "applyAdminFormConsentRetention";
+    formsConsentRetention: "applyAdminFormsConsentRetention";
+    contacts: "formContacts";
+    createContact: "createFormContact";
+    updateContact: "updateFormContact";
+    importContacts: "importFormContactsCsv";
+    syncContacts: "syncFormContacts";
+    promoteContactUser: "promoteFormContactToUser";
+    promoteContactCustomer: "promoteFormContactToCustomer";
+    contactConsentRetention: "applyFormContactConsentRetention";
+    [key: string]: unknown;
+  };
+  responseContracts: {
+    list: "backy.admin-forms.v1";
+    item: "backy.admin-form.v1";
+    persistenceCertification: "backy.forms-persistence-certification.v1";
+    scenarioEvidence: "backy.forms-persistence-scenario-evidence.v1";
+    embedBlock: "backy.form-embed-block.v1";
+    submissions: "backy.form-submissions.v1";
+    submission: "backy.form-submission.v1";
+    deliveryRetry: "backy.form-delivery-retry.v1";
+    contacts: "backy.form-contacts.v1";
+    contact: "backy.form-contact.v1";
+    contactSegments: "backy.form-contact-segments.v1";
+    contactLists: "backy.form-contact-lists.v1";
+    consentRetention: "backy.form-consent-retention.v1";
+    [key: string]: unknown;
+  };
+  privacy: {
+    publicDefinitionsExcludeSubmissions: true;
+    submissionsArePrivate: true;
+    contactsArePrivate: true;
+    deliveryRetriesMayContainVisitorPayloads: true;
+    databaseCredentialsNeverReturned: true;
+    [key: string]: unknown;
+  };
+  secretHandling: string;
+  [key: string]: unknown;
+}
+
 export interface BackyManifestFormsRuntimeModule {
   schemaVersion: "backy.forms-discovery.v1";
   count: number;
@@ -7893,6 +8027,13 @@ export interface BackyManifestFormsRuntimeModule {
     conditionalRequests: boolean;
     cacheableDefinitions: boolean;
     privateSubmissionData: boolean;
+    authenticatedManagement: boolean;
+    formBuilderManagement: boolean;
+    submissionModeration: boolean;
+    contactCrm: boolean;
+    deliveryRetries: boolean;
+    consentRetention: boolean;
+    persistenceCertification: boolean;
     [key: string]: unknown;
   };
   cache: {
@@ -7909,6 +8050,7 @@ export interface BackyManifestFormsRuntimeModule {
     contactPayloadsArePrivate: boolean;
     [key: string]: unknown;
   };
+  managementPolicy: BackyManifestFormsManagementPolicy;
   schemas: {
     definition: "backy.form-definition.v1";
     validationError: "FORM_VALIDATION_ERROR";

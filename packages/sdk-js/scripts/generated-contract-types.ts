@@ -325,6 +325,7 @@ import type {
   GeneratedBackyOpenApiFormSubmissionValidationErrorEnvelope,
   GeneratedBackyOpenApiFormSubmissionsEnvelope,
   GeneratedBackyOpenApiFormValidationRule,
+  GeneratedBackyOpenApiFormsManagementPolicy,
   GeneratedBackyOpenApiFrontendDesignContract,
   GeneratedBackyOpenApiFrontendDesignEnvelope,
   GeneratedBackyOpenApiFrontendDesignTemplate,
@@ -5149,6 +5150,132 @@ const commerceProviderCertification = {
   ],
 } satisfies GeneratedBackyFrontendManifestCommerceProviderCertification & GeneratedBackyOpenApiCommerceProviderCertification;
 
+const sdkManifestFormsManagementPolicy = {
+  schemaVersion: "backy.forms-management.v1",
+  endpoints: {
+    adminList: "/api/admin/sites/site_demo/forms",
+    create: "/api/admin/sites/site_demo/forms",
+    detail: "/api/admin/sites/site_demo/forms/{formId}",
+    clone: "/api/admin/sites/site_demo/forms/{formId}/clone",
+    embedBlock: "/api/admin/sites/site_demo/forms/{formId}/embed-block",
+    analytics: "/api/admin/sites/site_demo/forms/analytics",
+    contactSegments: "/api/admin/sites/site_demo/forms/contact-segments",
+    contactLists: "/api/admin/sites/site_demo/forms/contact-lists",
+    consentRetention: "/api/admin/sites/site_demo/forms/consent-retention",
+    submissions: "/api/admin/sites/site_demo/forms/{formId}/submissions",
+    submission: "/api/admin/sites/site_demo/forms/{formId}/submissions/{submissionId}",
+    reviewSubmission: "/api/admin/sites/site_demo/forms/{formId}/submissions/{submissionId}/review",
+    retryWebhook: "/api/admin/sites/site_demo/forms/{formId}/submissions/{submissionId}/webhook-retry",
+    retryEmail: "/api/admin/sites/site_demo/forms/{formId}/submissions/{submissionId}/email-retry",
+    formConsentRetention: "/api/admin/sites/site_demo/forms/{formId}/consent-retention",
+    contacts: "/api/admin/sites/site_demo/forms/{formId}/contacts",
+    contact: "/api/admin/sites/site_demo/forms/{formId}/contacts/{contactId}",
+    importContacts: "/api/admin/sites/site_demo/forms/{formId}/contacts/import",
+    syncContacts: "/api/admin/sites/site_demo/forms/{formId}/contacts/sync",
+    promoteContactUser: "/api/admin/sites/site_demo/forms/{formId}/contacts/{contactId}/promote",
+    promoteContactCustomer: "/api/admin/sites/site_demo/forms/{formId}/contacts/{contactId}/promote-customer",
+    contactConsentRetention: "/api/admin/sites/site_demo/forms/{formId}/contacts/consent-retention",
+  },
+  methods: {
+    list: "GET",
+    create: "POST",
+    update: "PATCH",
+    delete: "DELETE",
+    clone: "POST",
+    embedBlock: "POST",
+    analytics: "GET",
+    contactSegments: "GET",
+    contactLists: "GET",
+    saveContactList: "POST",
+    deleteContactList: "DELETE",
+    consentRetention: "POST",
+    submissions: "GET",
+    submission: "GET",
+    updateSubmission: "PATCH",
+    reviewSubmission: "POST",
+    retryWebhook: "POST",
+    retryEmail: "POST",
+    formConsentRetention: "POST",
+    contacts: "GET",
+    createContact: "POST",
+    updateContact: "PATCH",
+    deleteContact: "DELETE",
+    importContacts: "POST",
+    syncContacts: "POST",
+    promoteContactUser: "POST",
+    promoteContactCustomer: "POST",
+    contactConsentRetention: "POST",
+  },
+  auth: {
+    modes: ["session", "api-key"],
+    headers: ["Authorization", "x-backy-admin-session", "x-backy-admin-key", "x-api-key"],
+    requiredPermissions: {
+      read: "forms.view",
+      create: "forms.create",
+      update: "forms.edit",
+      manage: "forms.manage",
+      export: "forms.export",
+      delete: "forms.delete",
+      activity: "activity.export",
+    },
+    siteScope: true,
+  },
+  sdkHelpers: {
+    list: "adminForms",
+    create: "createAdminForm",
+    detail: "adminForm",
+    update: "updateAdminForm",
+    delete: "deleteAdminForm",
+    clone: "cloneAdminForm",
+    embedBlock: "createAdminFormEmbedBlock",
+    analytics: "formsAnalytics",
+    contactSegments: "formContactSegments",
+    contactLists: "formContactLists",
+    saveContactList: "saveFormContactList",
+    deleteContactList: "deleteFormContactList",
+    submissions: "formSubmissions",
+    submission: "formSubmission",
+    updateSubmission: "updateFormSubmission",
+    reviewSubmission: "reviewFormSubmission",
+    retryWebhook: "retryFormSubmissionWebhook",
+    retryEmail: "retryFormSubmissionEmail",
+    formConsentRetention: "applyAdminFormConsentRetention",
+    formsConsentRetention: "applyAdminFormsConsentRetention",
+    contacts: "formContacts",
+    createContact: "createFormContact",
+    updateContact: "updateFormContact",
+    importContacts: "importFormContactsCsv",
+    syncContacts: "syncFormContacts",
+    promoteContactUser: "promoteFormContactToUser",
+    promoteContactCustomer: "promoteFormContactToCustomer",
+    contactConsentRetention: "applyFormContactConsentRetention",
+  },
+  responseContracts: {
+    list: "backy.admin-forms.v1",
+    item: "backy.admin-form.v1",
+    persistenceCertification: "backy.forms-persistence-certification.v1",
+    scenarioEvidence: "backy.forms-persistence-scenario-evidence.v1",
+    embedBlock: "backy.form-embed-block.v1",
+    submissions: "backy.form-submissions.v1",
+    submission: "backy.form-submission.v1",
+    deliveryRetry: "backy.form-delivery-retry.v1",
+    contacts: "backy.form-contacts.v1",
+    contact: "backy.form-contact.v1",
+    contactSegments: "backy.form-contact-segments.v1",
+    contactLists: "backy.form-contact-lists.v1",
+    consentRetention: "backy.form-consent-retention.v1",
+  },
+  privacy: {
+    publicDefinitionsExcludeSubmissions: true,
+    submissionsArePrivate: true,
+    contactsArePrivate: true,
+    deliveryRetriesMayContainVisitorPayloads: true,
+    databaseCredentialsNeverReturned: true,
+  },
+  secretHandling:
+    "Forms management routes require authenticated admin requests; discovery exposes only route templates, permission names, SDK helper names, and non-secret persistence certification gates.",
+} satisfies BackyManifestFormsRuntimeModule["managementPolicy"] & GeneratedBackyOpenApiFormsManagementPolicy;
+
 const sdkManifestMediaManagementPolicy = {
   schemaVersion: "backy.media-management.v1",
   endpoints: {
@@ -5848,6 +5975,13 @@ const manifest = {
         conditionalRequests: true,
         cacheableDefinitions: true,
         privateSubmissionData: true,
+        authenticatedManagement: true,
+        formBuilderManagement: true,
+        submissionModeration: true,
+        contactCrm: true,
+        deliveryRetries: true,
+        consentRetention: true,
+        persistenceCertification: true,
       },
       cache: {
         list: "public-discovery",
@@ -5861,6 +5995,7 @@ const manifest = {
         publicDefinitionExcludesSubmissions: true,
         contactPayloadsArePrivate: true,
       },
+      managementPolicy: sdkManifestFormsManagementPolicy,
       schemas: {
         definition: "backy.form-definition.v1",
         validationError: "FORM_VALIDATION_ERROR",
@@ -6808,6 +6943,13 @@ const sdkManifestFormsRuntime = {
     conditionalRequests: true,
     cacheableDefinitions: true,
     privateSubmissionData: true,
+    authenticatedManagement: true,
+    formBuilderManagement: true,
+    submissionModeration: true,
+    contactCrm: true,
+    deliveryRetries: true,
+    consentRetention: true,
+    persistenceCertification: true,
   },
   cache: {
     list: "public-discovery",
@@ -6821,6 +6963,7 @@ const sdkManifestFormsRuntime = {
     publicDefinitionExcludesSubmissions: true,
     contactPayloadsArePrivate: true,
   },
+  managementPolicy: sdkManifestFormsManagementPolicy,
   schemas: {
     definition: "backy.form-definition.v1",
     validationError: "FORM_VALIDATION_ERROR",
@@ -7381,6 +7524,7 @@ const openApi = {
   openapi: "3.1.0",
   "x-backy-database-certification": frontendDatabaseCertification,
   "x-backy-media-file-categories": openApiMediaFileCategories,
+  "x-backy-forms-management": sdkManifestFormsManagementPolicy,
   "x-backy-live-management": openApiLiveManagement,
   info: {
     title: "Demo Backy Public API",
@@ -7412,6 +7556,7 @@ const openApi = {
       },
       SiteSummary: siteSummary,
       MediaFileCategoryDiscovery: openApiMediaFileCategories,
+      FormsManagementPolicy: sdkManifestFormsManagementPolicy,
       LiveManagementDiscovery: openApiLiveManagement,
       SiteEnvelope: siteEnvelope,
       SiteListEnvelope: siteListEnvelope,
@@ -7447,6 +7592,7 @@ const openApiComponentName =
   "ErrorEnvelope" satisfies GeneratedBackyOpenApiComponentName;
 const openApiComponents = {
   MediaFileCategoryDiscovery: openApiMediaFileCategories,
+  FormsManagementPolicy: sdkManifestFormsManagementPolicy,
   LiveManagementDiscovery: openApiLiveManagement,
   ErrorEnvelope: {
     success: false,
@@ -10278,6 +10424,12 @@ const invalidGeneratedManifestLiveManagementDiscovery = { ...manifest.modules.li
 // @ts-expect-error generated manifest forms discovery uses a versioned schema marker.
 const invalidGeneratedManifestFormsRuntimeDiscovery = { ...manifest.modules.formsRuntime, schemaVersion: "backy.forms-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["formsRuntime"];
 
+const invalidGeneratedManifestFormsManagement = {
+  ...manifest.modules.formsRuntime.managementPolicy,
+  // @ts-expect-error generated manifest forms management policy uses a versioned schema marker.
+  schemaVersion: "backy.forms-management.v0",
+} satisfies GeneratedBackyFrontendManifest["modules"]["formsRuntime"]["managementPolicy"];
+
 // @ts-expect-error generated manifest commerce modes are limited to documented storefront modes.
 const invalidGeneratedManifestCommerceMode = { ...manifest.modules.commerce, mode: "marketplace", } satisfies NonNullable<GeneratedBackyFrontendManifest["modules"]["commerce"]>;
 
@@ -10856,6 +11008,7 @@ void invalidGeneratedManifestMediaManagement;
 void invalidGeneratedManifestThemeDiscovery;
 void invalidGeneratedManifestLiveManagementDiscovery;
 void invalidGeneratedManifestFormsRuntimeDiscovery;
+void invalidGeneratedManifestFormsManagement;
 void invalidGeneratedManifestCommerceMode;
 void invalidGeneratedManifestCommerceCapabilities;
 void invalidGeneratedManifestCommerceProviderCertification;

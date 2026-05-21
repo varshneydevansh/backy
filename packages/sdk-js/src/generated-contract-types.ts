@@ -4,7 +4,7 @@
 
 export type GeneratedBackyOpenApiOperationId = "bulkUpdateBackySiteComments" | "createBackyCollectionRecord" | "createBackyCommerceOrder" | "deleteBackyCollectionRecord" | "deleteBackyCommentBlocklistEntries" | "discoverBackySite" | "getBackyBlogComment" | "getBackyBlogRssFeed" | "getBackyCollection" | "getBackyCommentAnalytics" | "getBackyCommentReportReasons" | "getBackyCommerceCatalog" | "getBackyCommerceOrderContract" | "getBackyFontManifest" | "getBackyForm" | "getBackyFormContact" | "getBackyFormDefinition" | "getBackyFormSubmission" | "getBackyFrontendDesignContract" | "getBackyFrontendManifest" | "getBackyInteractiveComponentRegistry" | "getBackyInteractiveComponentSandbox" | "getBackyLiveManagedBlogPost" | "getBackyLiveManagedPage" | "getBackyMedia" | "getBackyMediaFile" | "getBackyNavigation" | "getBackyOpenApiDocument" | "getBackyPageComment" | "getBackyRenderPayload" | "getBackyReusableSection" | "getBackySeoDiscovery" | "getBackySiteComment" | "listBackyBlogAuthors" | "listBackyBlogCategories" | "listBackyBlogComments" | "listBackyBlogPosts" | "listBackyBlogTags" | "listBackyCollectionRecords" | "listBackyCollections" | "listBackyCommentBlocklist" | "listBackyCommentReportReasons" | "listBackyFormContacts" | "listBackyFormSubmissions" | "listBackyForms" | "listBackyInteractionEvents" | "listBackyMedia" | "listBackyMediaFolders" | "listBackyPageComments" | "listBackyPages" | "listBackyReusableSections" | "listBackySiteComments" | "receiveBackyCommerceWebhook" | "recordBackyInteractiveRuntimeEvent" | "reportBackyComment" | "resolveBackyRoute" | "retryBackyCommentDelivery" | "reviewBackyFormSubmission" | "submitBackyBlogComment" | "submitBackyForm" | "submitBackyPageComment" | "transformBackyMediaImage" | "updateBackyBlogComment" | "updateBackyCollectionRecord" | "updateBackyFormContact" | "updateBackyLiveManagedBlogPost" | "updateBackyLiveManagedPage" | "updateBackyPageComment" | "updateBackySiteComment";
 
-export type GeneratedBackyOpenApiComponentName = "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProviderCertification" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaManagementPolicy" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
+export type GeneratedBackyOpenApiComponentName = "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProviderCertification" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FormsManagementPolicy" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaManagementPolicy" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
 
 export interface GeneratedBackyOpenApiOperation {
   operationId?: GeneratedBackyOpenApiOperationId;
@@ -21,6 +21,7 @@ export interface GeneratedBackyOpenApiDocument {
   "x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification;
   "x-backy-frontend-launch-readiness"?: GeneratedBackyFrontendManifestLaunchReadiness;
   "x-backy-media-file-categories"?: GeneratedBackyOpenApiMediaFileCategoryDiscovery;
+  "x-backy-forms-management"?: GeneratedBackyOpenApiFormsManagementPolicy;
   "x-backy-live-management"?: GeneratedBackyOpenApiLiveManagementDiscovery;
   info: { title: string; version: string; description?: string; [key: string]: unknown };
   servers?: Array<{ url: string; [key: string]: unknown }>;
@@ -1471,6 +1472,124 @@ export type GeneratedBackyOpenApiReusableSection = {
   [key: string]: unknown;
 };
 
+export type GeneratedBackyOpenApiFormsManagementPolicy = {
+  schemaVersion: "backy.forms-management.v1";
+  endpoints: {
+    adminList: string;
+    create: string;
+    detail: string;
+    clone: string;
+    embedBlock: string;
+    analytics: string;
+    contactSegments: string;
+    contactLists: string;
+    consentRetention: string;
+    submissions: string;
+    submission: string;
+    reviewSubmission: string;
+    retryWebhook: string;
+    retryEmail: string;
+    formConsentRetention: string;
+    contacts: string;
+    contact: string;
+    importContacts: string;
+    syncContacts: string;
+    promoteContactUser: string;
+    promoteContactCustomer: string;
+    contactConsentRetention: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    create: "POST";
+    update: "PATCH";
+    delete: "DELETE";
+    clone: "POST";
+    embedBlock: "POST";
+    analytics: "GET";
+    contactSegments: "GET";
+    contactLists: "GET";
+    saveContactList: "POST";
+    deleteContactList: "DELETE";
+    consentRetention: "POST";
+    submissions: "GET";
+    submission: "GET";
+    updateSubmission: "PATCH";
+    reviewSubmission: "POST";
+    retryWebhook: "POST";
+    retryEmail: "POST";
+    formConsentRetention: "POST";
+    contacts: "GET";
+    createContact: "POST";
+    updateContact: "PATCH";
+    deleteContact: "DELETE";
+    importContacts: "POST";
+    syncContacts: "POST";
+    promoteContactUser: "POST";
+    promoteContactCustomer: "POST";
+    contactConsentRetention: "POST";
+    [key: string]: unknown;
+  };
+  auth: {
+    modes: Array<"session" | "api-key">;
+    headers: Array<string>;
+    requiredPermissions: {
+      read: "forms.view";
+      create: "forms.create";
+      update: "forms.edit";
+      manage: "forms.manage";
+      export: "forms.export";
+      delete: "forms.delete";
+      activity: "activity.export";
+      [key: string]: unknown;
+    };
+    siteScope: true;
+    [key: string]: unknown;
+  };
+  sdkHelpers: {
+    list: "adminForms";
+    create: "createAdminForm";
+    detail: "adminForm";
+    update: "updateAdminForm";
+    delete: "deleteAdminForm";
+    clone: "cloneAdminForm";
+    embedBlock: "createAdminFormEmbedBlock";
+    analytics: "formsAnalytics";
+    contactSegments: "formContactSegments";
+    contactLists: "formContactLists";
+    saveContactList: "saveFormContactList";
+    deleteContactList: "deleteFormContactList";
+    submissions: "formSubmissions";
+    submission: "formSubmission";
+    updateSubmission: "updateFormSubmission";
+    reviewSubmission: "reviewFormSubmission";
+    retryWebhook: "retryFormSubmissionWebhook";
+    retryEmail: "retryFormSubmissionEmail";
+    formConsentRetention: "applyAdminFormConsentRetention";
+    formsConsentRetention: "applyAdminFormsConsentRetention";
+    contacts: "formContacts";
+    createContact: "createFormContact";
+    updateContact: "updateFormContact";
+    importContacts: "importFormContactsCsv";
+    syncContacts: "syncFormContacts";
+    promoteContactUser: "promoteFormContactToUser";
+    promoteContactCustomer: "promoteFormContactToCustomer";
+    contactConsentRetention: "applyFormContactConsentRetention";
+    [key: string]: unknown;
+  };
+  responseContracts: Record<string, unknown>;
+  privacy: {
+    publicDefinitionsExcludeSubmissions: true;
+    submissionsArePrivate: true;
+    contactsArePrivate: true;
+    deliveryRetriesMayContainVisitorPayloads: true;
+    databaseCredentialsNeverReturned: true;
+    [key: string]: unknown;
+  };
+  secretHandling: string;
+  [key: string]: unknown;
+};
+
 export type GeneratedBackyOpenApiFormListEnvelope = {
   success: boolean;
   requestId: string;
@@ -2384,6 +2503,7 @@ export interface GeneratedBackyOpenApiComponentSchemas {
   FormSubmissionValidationErrorEnvelope?: GeneratedBackyOpenApiFormSubmissionValidationErrorEnvelope;
   FormSubmissionsEnvelope?: GeneratedBackyOpenApiFormSubmissionsEnvelope;
   FormValidationRule?: GeneratedBackyOpenApiFormValidationRule;
+  FormsManagementPolicy?: GeneratedBackyOpenApiFormsManagementPolicy;
   FrontendDesignContract?: GeneratedBackyOpenApiFrontendDesignContract;
   FrontendDesignEnvelope?: GeneratedBackyOpenApiFrontendDesignEnvelope;
   FrontendDesignTemplate?: GeneratedBackyOpenApiFrontendDesignTemplate;
@@ -3856,6 +3976,13 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           conditionalRequests: boolean;
           cacheableDefinitions: boolean;
           privateSubmissionData: boolean;
+          authenticatedManagement: boolean;
+          formBuilderManagement: boolean;
+          submissionModeration: boolean;
+          contactCrm: boolean;
+          deliveryRetries: boolean;
+          consentRetention: boolean;
+          persistenceCertification: boolean;
           [key: string]: unknown;
         };
         cache: {
@@ -3870,6 +3997,123 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           submissionPayloadsContainVisitorData: boolean;
           publicDefinitionExcludesSubmissions: boolean;
           contactPayloadsArePrivate: boolean;
+          [key: string]: unknown;
+        };
+        managementPolicy: {
+          schemaVersion: "backy.forms-management.v1";
+          endpoints: {
+            adminList: string;
+            create: string;
+            detail: string;
+            clone: string;
+            embedBlock: string;
+            analytics: string;
+            contactSegments: string;
+            contactLists: string;
+            consentRetention: string;
+            submissions: string;
+            submission: string;
+            reviewSubmission: string;
+            retryWebhook: string;
+            retryEmail: string;
+            formConsentRetention: string;
+            contacts: string;
+            contact: string;
+            importContacts: string;
+            syncContacts: string;
+            promoteContactUser: string;
+            promoteContactCustomer: string;
+            contactConsentRetention: string;
+            [key: string]: unknown;
+          };
+          methods: {
+            list: "GET";
+            create: "POST";
+            update: "PATCH";
+            delete: "DELETE";
+            clone: "POST";
+            embedBlock: "POST";
+            analytics: "GET";
+            contactSegments: "GET";
+            contactLists: "GET";
+            saveContactList: "POST";
+            deleteContactList: "DELETE";
+            consentRetention: "POST";
+            submissions: "GET";
+            submission: "GET";
+            updateSubmission: "PATCH";
+            reviewSubmission: "POST";
+            retryWebhook: "POST";
+            retryEmail: "POST";
+            formConsentRetention: "POST";
+            contacts: "GET";
+            createContact: "POST";
+            updateContact: "PATCH";
+            deleteContact: "DELETE";
+            importContacts: "POST";
+            syncContacts: "POST";
+            promoteContactUser: "POST";
+            promoteContactCustomer: "POST";
+            contactConsentRetention: "POST";
+            [key: string]: unknown;
+          };
+          auth: {
+            modes: Array<"session" | "api-key">;
+            headers: Array<string>;
+            requiredPermissions: {
+              read: "forms.view";
+              create: "forms.create";
+              update: "forms.edit";
+              manage: "forms.manage";
+              export: "forms.export";
+              delete: "forms.delete";
+              activity: "activity.export";
+              [key: string]: unknown;
+            };
+            siteScope: true;
+            [key: string]: unknown;
+          };
+          sdkHelpers: {
+            list: "adminForms";
+            create: "createAdminForm";
+            detail: "adminForm";
+            update: "updateAdminForm";
+            delete: "deleteAdminForm";
+            clone: "cloneAdminForm";
+            embedBlock: "createAdminFormEmbedBlock";
+            analytics: "formsAnalytics";
+            contactSegments: "formContactSegments";
+            contactLists: "formContactLists";
+            saveContactList: "saveFormContactList";
+            deleteContactList: "deleteFormContactList";
+            submissions: "formSubmissions";
+            submission: "formSubmission";
+            updateSubmission: "updateFormSubmission";
+            reviewSubmission: "reviewFormSubmission";
+            retryWebhook: "retryFormSubmissionWebhook";
+            retryEmail: "retryFormSubmissionEmail";
+            formConsentRetention: "applyAdminFormConsentRetention";
+            formsConsentRetention: "applyAdminFormsConsentRetention";
+            contacts: "formContacts";
+            createContact: "createFormContact";
+            updateContact: "updateFormContact";
+            importContacts: "importFormContactsCsv";
+            syncContacts: "syncFormContacts";
+            promoteContactUser: "promoteFormContactToUser";
+            promoteContactCustomer: "promoteFormContactToCustomer";
+            contactConsentRetention: "applyFormContactConsentRetention";
+            [key: string]: unknown;
+          };
+          responseContracts: Record<string, unknown>;
+          privacy: {
+            publicDefinitionsExcludeSubmissions: true;
+            submissionsArePrivate: true;
+            contactsArePrivate: true;
+            deliveryRetriesMayContainVisitorPayloads: true;
+            databaseCredentialsNeverReturned: true;
+            [key: string]: unknown;
+          };
+          secretHandling: string;
           [key: string]: unknown;
         };
         schemas: {
