@@ -670,7 +670,7 @@ export interface BackyFieldSchema {
   type: string;
   required?: boolean;
   unique?: boolean;
-  options?: string[];
+  options?: Array<string | Record<string, unknown>>;
   referenceCollectionId?: string;
   [key: string]: unknown;
 }
@@ -725,6 +725,24 @@ export interface BackyCollectionRecordWriteOptions {
 
 export interface BackyCollectionRecordCreateOptions extends BackyCollectionRecordWriteOptions {
   slug?: string;
+}
+
+export type BackyCollectionRecordWriteMode = "create" | "update";
+
+export interface BackyCollectionRecordWriteInputOptions
+  extends BackyCollectionRecordCreateOptions {
+  mode?: BackyCollectionRecordWriteMode;
+  includeUnmappedValues?: boolean;
+}
+
+export interface BackyCollectionRecordWriteInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> {
+  mode: BackyCollectionRecordWriteMode;
+  values: TValues;
+  options: BackyCollectionRecordCreateOptions;
+  ignoredFields: string[];
+  allowedFields: string[];
 }
 
 export interface BackyCollectionRecordMutationResult<
@@ -851,6 +869,209 @@ export interface BackyManifestCollectionsRuntimeModule {
     [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+const BACKY_COLLECTION_RECORD_TRANSPORT_KEYS = new Set([
+  "values",
+  "fields",
+  "slug",
+  "requestId",
+  "publicWriteToken",
+]);
+
+const backyCollectionRecordRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const firstBackyCollectionRecordRecord = (
+  ...values: unknown[]
+): Record<string, unknown> | null => {
+  for (const value of values) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+};
+
+const backyCollectionRecordText = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) return text;
+    }
+  }
+  return "";
+};
+
+const normalizeBackyCollectionRecordAliasKey = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9_ -]/g, "")
+    .replace(/[\s-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const backyCollectionFieldKeySet = (
+  collection: BackyCollectionSchema | undefined | null,
+): Set<string> =>
+  new Set(
+    (collection?.fields || [])
+      .map((field) => field.key)
+      .filter((key): key is string => typeof key === "string" && key.length > 0),
+  );
+
+const backyCollectionFieldAliasMap = (
+  collection: BackyCollectionSchema | undefined | null,
+): Record<string, string> => {
+  const aliases: Record<string, string> = {};
+  for (const field of collection?.fields || []) {
+    if (typeof field.key !== "string" || !field.key) continue;
+    aliases[field.key] = field.key;
+    aliases[normalizeBackyCollectionRecordAliasKey(field.key)] = field.key;
+    if (typeof field.label === "string" && field.label.trim()) {
+      aliases[field.label] = field.key;
+      aliases[normalizeBackyCollectionRecordAliasKey(field.label)] = field.key;
+    }
+    const name = field.name;
+    if (typeof name === "string" && name.trim()) {
+      aliases[name] = field.key;
+      aliases[normalizeBackyCollectionRecordAliasKey(name)] = field.key;
+    }
+  }
+  return aliases;
+};
+
+const backyCollectionRecordStringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.length > 0)
+    : [];
+
+const backyCollectionVisitorWritePolicy = (
+  collection: BackyCollectionSchema | undefined | null,
+): BackyCollectionRecordWritePolicy => {
+  const metadata = backyCollectionRecordRecord(collection?.metadata);
+  return backyCollectionRecordRecord(
+    metadata.visitorWritePolicy,
+  ) as BackyCollectionRecordWritePolicy;
+};
+
+const resolveBackyCollectionRecordFieldKey = (
+  rawKey: string,
+  fieldKeys: Set<string>,
+  fieldAliasMap: Record<string, string>,
+): string | undefined => {
+  if (fieldKeys.size === 0 || fieldKeys.has(rawKey)) {
+    return rawKey;
+  }
+  const mapped =
+    fieldAliasMap[rawKey] ||
+    fieldAliasMap[normalizeBackyCollectionRecordAliasKey(rawKey)];
+  return mapped && fieldKeys.has(mapped) ? mapped : undefined;
+};
+
+const normalizeBackyCollectionRecordValues = (
+  collection: BackyCollectionSchema | undefined | null,
+  values: Record<string, unknown>,
+  options: BackyCollectionRecordWriteInputOptions,
+): {
+  values: Record<string, unknown>;
+  ignoredFields: string[];
+  allowedFields: string[];
+} => {
+  const mode = options.mode || "create";
+  const fieldKeys = backyCollectionFieldKeySet(collection);
+  const fieldAliasMap = backyCollectionFieldAliasMap(collection);
+  const policy = backyCollectionVisitorWritePolicy(collection);
+  const selectedAllowedFields =
+    mode === "update"
+      ? backyCollectionRecordStringList(policy.allowedUpdateFields)
+      : backyCollectionRecordStringList(policy.allowedCreateFields);
+  const fieldMode =
+    mode === "update" ? policy.updateFieldMode : policy.createFieldMode;
+  const allowedSet =
+    fieldMode === "selected" ? new Set(selectedAllowedFields) : null;
+  const normalized: Record<string, unknown> = {};
+  const ignoredFields: string[] = [];
+
+  for (const [rawKey, value] of Object.entries(values)) {
+    const resolved = resolveBackyCollectionRecordFieldKey(
+      rawKey,
+      fieldKeys,
+      fieldAliasMap,
+    );
+    if (!resolved) {
+      if (options.includeUnmappedValues === true && fieldKeys.size === 0) {
+        normalized[rawKey] = value;
+      } else {
+        ignoredFields.push(rawKey);
+      }
+      continue;
+    }
+    if (allowedSet && !allowedSet.has(resolved)) {
+      ignoredFields.push(resolved);
+      continue;
+    }
+    normalized[resolved] = value;
+  }
+
+  return {
+    values: normalized,
+    ignoredFields,
+    allowedFields: allowedSet
+      ? Array.from(allowedSet)
+      : Array.from(fieldKeys),
+  };
+};
+
+export function buildBackyCollectionRecordWriteInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+>(
+  collection: BackyCollectionSchema | undefined | null,
+  source: Record<string, unknown> | undefined | null,
+  options: BackyCollectionRecordWriteInputOptions = {},
+): BackyCollectionRecordWriteInput<TValues> {
+  const body = backyCollectionRecordRecord(source);
+  const valuesCandidate = firstBackyCollectionRecordRecord(
+    body.values,
+    body.fields,
+  );
+  const rawValues =
+    valuesCandidate ||
+    Object.entries(body).reduce<Record<string, unknown>>(
+      (values, [key, value]) => {
+        if (!BACKY_COLLECTION_RECORD_TRANSPORT_KEYS.has(key)) {
+          values[key] = value;
+        }
+        return values;
+      },
+      {},
+    );
+  const mode = options.mode || "create";
+  const normalized = normalizeBackyCollectionRecordValues(
+    collection,
+    rawValues,
+    options,
+  );
+  const slug = backyCollectionRecordText(options.slug, body.slug);
+  const requestId = backyCollectionRecordText(options.requestId, body.requestId);
+  const publicWriteToken = backyCollectionRecordText(
+    options.publicWriteToken,
+    body.publicWriteToken,
+  );
+
+  return {
+    mode,
+    values: normalized.values as TValues,
+    options: {
+      ...(options.siteId ? { siteId: options.siteId } : {}),
+      ...(requestId ? { requestId } : {}),
+      ...(publicWriteToken ? { publicWriteToken } : {}),
+      ...(slug ? { slug } : {}),
+    },
+    ignoredFields: normalized.ignoredFields,
+    allowedFields: normalized.allowedFields,
+  };
 }
 
 export interface BackyCommerceProduct {

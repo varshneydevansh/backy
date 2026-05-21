@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
@@ -1489,19 +1490,57 @@ if (runWriteSmoke) {
     assert(savedSection.data.section?.content?.elements?.[0]?.id === 'sdk-smoke-section-root', 'reusableSection() missing SDK smoke section detail');
     writeChecks.push('reusableSection');
 
-    const createdRecord = await writeClient.createRecord(fixture.collectionId, {
-      title: 'SDK Public Record',
-      summary: 'Created through the SDK write smoke.',
-      category: 'Featured',
-    }, `sdk-public-record-${Date.now()}`);
+    const collectionForWrites = await writeClient.collectionCached(fixture.collectionId);
+    assert(collectionForWrites.notModified === false, 'collectionCached() should return SDK smoke collection for writes');
+    const sdkWriteCollection = {
+      ...collectionForWrites.body.data.collection,
+      metadata: {
+        ...(collectionForWrites.body.data.collection?.metadata || {}),
+        visitorWritePolicy: {
+          createFieldMode: 'all',
+          updateFieldMode: 'selected',
+          allowedUpdateFields: ['summary', 'category'],
+        },
+      },
+    };
+    const collectionRecordCreateInput = buildBackyCollectionRecordWriteInput(sdkWriteCollection, {
+      fields: {
+        Title: 'SDK Public Record',
+        Summary: 'Created through the SDK write smoke.',
+        Category: 'Featured',
+        Unknown: 'ignored by the SDK builder',
+      },
+      slug: `sdk-public-record-${Date.now()}`,
+      requestId: 'sdk-record-create',
+    });
+    assert(collectionRecordCreateInput.values.title === 'SDK Public Record', 'buildBackyCollectionRecordWriteInput() did not map title label');
+    assert(collectionRecordCreateInput.values.summary === 'Created through the SDK write smoke.', 'buildBackyCollectionRecordWriteInput() did not map summary label');
+    assert(collectionRecordCreateInput.values.Unknown === undefined, 'buildBackyCollectionRecordWriteInput() leaked unknown fields');
+    assert(collectionRecordCreateInput.options.slug?.startsWith('sdk-public-record-'), 'buildBackyCollectionRecordWriteInput() did not preserve slug option');
+    const createdRecord = await writeClient.createRecord(
+      fixture.collectionId,
+      collectionRecordCreateInput.values,
+      collectionRecordCreateInput.options,
+    );
     assert(createdRecord.data.record?.status === 'draft', 'createRecord() should create draft public records');
     writeChecks.push('createRecord');
 
-    const updatedRecord = await writeClient.updateRecord(fixture.collectionId, createdRecord.data.record.id, {
-      title: 'SDK Public Record Ignored Title',
-      summary: 'Updated through the SDK write smoke.',
-      category: 'Standard',
-    }, { publicWriteToken: fixture.publicWriteToken });
+    const collectionRecordUpdateInput = buildBackyCollectionRecordWriteInput(sdkWriteCollection, {
+      fields: {
+        Title: 'SDK Public Record Ignored Title',
+        Summary: 'Updated through the SDK write smoke.',
+        Category: 'Standard',
+      },
+      publicWriteToken: fixture.publicWriteToken,
+    }, { mode: 'update' });
+    assert(collectionRecordUpdateInput.values.title === undefined, 'buildBackyCollectionRecordWriteInput() should omit disallowed update fields');
+    assert(collectionRecordUpdateInput.ignoredFields.includes('title'), 'buildBackyCollectionRecordWriteInput() should report ignored update fields');
+    const updatedRecord = await writeClient.updateRecord(
+      fixture.collectionId,
+      createdRecord.data.record.id,
+      collectionRecordUpdateInput.values,
+      collectionRecordUpdateInput.options,
+    );
     assert(updatedRecord.data.record?.values?.summary === 'Updated through the SDK write smoke.', 'updateRecord() did not update an allowed public field');
     assert(updatedRecord.data.record?.values?.category === 'Standard', 'updateRecord() did not update select field value');
     assert(updatedRecord.data.record?.values?.title === 'SDK Public Record', 'updateRecord() should respect public update field policy');

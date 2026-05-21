@@ -29,6 +29,7 @@ import type {
   BackyFrontendLaunchReadiness,
   BackyClient,
   BackyCommerceOrderInput,
+  BackyCollectionRecordWriteInput,
   BackyFormSubmissionInput,
   BackyContentElementDescriptor,
   BackyContentEditableFieldPatch,
@@ -213,6 +214,7 @@ import type {
   GeneratedBackyThemeTokens,
 } from "../src/index";
 import {
+  buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
@@ -266,6 +268,12 @@ type LiveManagedPageUpdateMethodReturnsContract = Assert<
 >;
 type CommerceOrderInputBuilderReturnsContract = Assert<
   Equal<ReturnType<typeof buildBackyCommerceOrderInput>, BackyCommerceOrderInput>
+>;
+type CollectionRecordWriteInputBuilderReturnsContract = Assert<
+  Equal<
+    ReturnType<typeof buildBackyCollectionRecordWriteInput>,
+    BackyCollectionRecordWriteInput
+  >
 >;
 type FormSubmissionInputBuilderReturnsContract = Assert<
   Equal<ReturnType<typeof buildBackyFormSubmissionInput>, BackyFormSubmissionInput>
@@ -3533,6 +3541,32 @@ const collectionRecordEnvelope = {
   },
 } satisfies GeneratedBackyOpenApiCollectionRecordEnvelope;
 
+const sdkCollectionRecordCreateInput =
+  buildBackyCollectionRecordWriteInput(
+    {
+      ...collectionSchema,
+      metadata: {
+        visitorWritePolicy: {
+          createFieldMode: "selected",
+          allowedCreateFields: ["title", "slug"],
+          updateFieldMode: "selected",
+          allowedUpdateFields: ["title"],
+        },
+      },
+    },
+    {
+      fields: {
+        Title: "Generated collection record",
+        Slug: "generated-collection-record",
+        Status: "draft",
+      },
+      requestId: "sdk-collection-create",
+    },
+    { mode: "create" },
+  );
+const sdkCollectionRecordCreateInputContract =
+  sdkCollectionRecordCreateInput satisfies BackyCollectionRecordWriteInput;
+
 const publicDeleteEnvelope = {
   success: true,
   requestId: "req_collection_record_delete",
@@ -5621,6 +5655,8 @@ void collectionEnvelope;
 void collectionRecord;
 void collectionRecordListEnvelope;
 void collectionRecordEnvelope;
+void sdkCollectionRecordCreateInput;
+void sdkCollectionRecordCreateInputContract;
 void publicDeleteEnvelope;
 void formValidationRule;
 void formField;
