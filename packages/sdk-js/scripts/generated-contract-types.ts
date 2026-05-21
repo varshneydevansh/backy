@@ -218,6 +218,7 @@ import {
   patchBackyContentEditableFields,
   patchBackyContentEditableMapEntry,
   patchBackyContentEditableMapEntries,
+  patchBackyContentEditableMapValues,
   patchBackyContentElement,
   patchBackyContentElements,
 } from "../src/index";
@@ -745,6 +746,14 @@ const keyedEditableMapBulkPatchedContent = patchBackyContentEditableMapEntries(
     { key: "nested.message", value: "Nested keyed editable-map update" },
   ],
 );
+const keyedEditableMapValuesPatchedContent = patchBackyContentEditableMapValues(
+  editableContentForHelpers,
+  editableMapForContentHelpers,
+  {
+    "interactive.rounds": 9,
+    "nested.message": "Nested keyed editable-map values update",
+  },
+);
 
 void patchedEditableContent;
 void foundEditableElement;
@@ -754,6 +763,7 @@ void editableMapPatchedContent;
 void editableMapBulkPatchedContent;
 void keyedEditableMapPatchedContent;
 void keyedEditableMapBulkPatchedContent;
+void keyedEditableMapValuesPatchedContent;
 
 const renderMediaAsset = {
   id: "media_hero",

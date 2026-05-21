@@ -6,6 +6,7 @@ import {
   listBackyContentElements,
   patchBackyContentEditableFields,
   patchBackyContentEditableMapEntries,
+  patchBackyContentEditableMapValues,
   patchBackyContentElement,
   patchBackyContentElements,
 } from '../dist/index.js';
@@ -1414,21 +1415,12 @@ if (runWriteSmoke) {
         editable: true,
       },
     };
-    const patchedLivePostContent = patchBackyContentEditableMapEntries(liveManagedPost.data.post.content, liveManagedPostEditableMap, [
-      {
-        key: 'sdk-smoke-post-heading.content',
-        value: 'SDK live-managed blog post',
-      },
-      {
-        key: 'sdk-smoke-post-heading.color',
-        value: '#111827',
-      },
-      {
-        key: 'sdk-smoke-post-heading.x',
-        value: 96,
-      },
-    ]);
-    assert(patchedLivePostContent, 'patchBackyContentEditableMapEntries() did not patch the blog content tree');
+    const patchedLivePostContent = patchBackyContentEditableMapValues(liveManagedPost.data.post.content, liveManagedPostEditableMap, {
+      'sdk-smoke-post-heading.content': 'SDK live-managed blog post',
+      'sdk-smoke-post-heading.color': '#111827',
+      'sdk-smoke-post-heading.x': 96,
+    });
+    assert(patchedLivePostContent, 'patchBackyContentEditableMapValues() did not patch the blog content tree');
     const liveManagedPostUpdate = await writeClient.updateLiveManagedBlogPost(fixture.postId, {
       title: liveManagedPost.data.post.title,
       content: patchedLivePostContent,
@@ -1664,6 +1656,7 @@ console.log(JSON.stringify({
     'patchBackyContentElements',
     'patchBackyContentEditableFields',
     'patchBackyContentEditableMapEntries',
+    'patchBackyContentEditableMapValues',
     'findBackyContentElement',
     'listBackyContentElements',
     'blog',

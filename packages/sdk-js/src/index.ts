@@ -1656,6 +1656,10 @@ export interface BackyContentEditableMapPatch {
   remove?: boolean;
 }
 
+export interface BackyContentEditableMapValuesOptions {
+  removeUndefined?: boolean;
+}
+
 const BACKY_LAYOUT_TARGET_ALIASES: Record<string, string> = {
   x: "x",
   y: "y",
@@ -2109,6 +2113,23 @@ export function patchBackyContentEditableMapEntries<
     );
 
   return patchBackyContentEditableFields(content, fieldPatches);
+}
+
+export function patchBackyContentEditableMapValues<
+  TContent extends BackyEditableContent,
+>(
+  content: TContent | undefined | null,
+  editableMap: BackyContentEditableMap | Record<string, unknown> | undefined | null,
+  values: Record<string, unknown>,
+  options: BackyContentEditableMapValuesOptions = {},
+): TContent | null {
+  const patches = Object.entries(values).map(([key, value]) => ({
+    key,
+    value,
+    remove: options.removeUndefined === true && value === undefined,
+  }));
+
+  return patchBackyContentEditableMapEntries(content, editableMap, patches);
 }
 
 export function patchBackyContentEditableFields<
