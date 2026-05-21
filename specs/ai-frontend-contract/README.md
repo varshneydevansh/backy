@@ -115,6 +115,8 @@ Published manifest and OpenAPI responses include short public discovery cache he
 
 Comment delivery retry is exposed as a named OpenAPI request/envelope pair for `POST /api/sites/:siteId/comments/:commentId/delivery-retry`, letting authenticated moderation consoles retry failed webhook or email attempts by event id without importing the admin app.
 
+Private comment moderation analytics are exposed as a named OpenAPI envelope at `GET /api/sites/:siteId/comments/analytics`, with `days`, `targetType`, and `targetId` filters for external moderation dashboards that need status totals, report reasons, thread pressure, target hotspots, and daily activity.
+
 ## Current SEO discovery endpoint
 
 Backy exposes route-level SEO metadata for custom and default frontends:
@@ -136,6 +138,8 @@ Admin SEO read/save responses also include a `preview` object with supported tit
 Manifest `data.contract.frontendLaunchReadiness` and OpenAPI `x-backy-frontend-launch-readiness` expose `backy.frontend-launch-readiness.v1` plus `backy.frontend-launch-action-plan.v1` for custom frontend launch planning. They summarize endpoint/route/module counts, readiness status/score, routing/render, CMS/design, media/font, visitor interaction, commerce, live-management, and database-certification checks, recommended gate commands, and the explicit no-secrets boundary for database URLs, provider keys, private order records, and form submission values.
 
 The SDK additionally exposes `retryCommentDelivery(commentId, { eventId })` with per-call admin auth options, using the same audited comment-delivery retry API advertised by OpenAPI for external moderation and support tools.
+
+The SDK also exposes `commentAnalytics({ days, targetType, targetId })` with the same admin auth options, returning the private moderation analytics envelope for support and community dashboards.
 
 The SDK also exports `BackyManifestPagesRuntimeModule`, `BackyManifestBlogRuntimeModule`, `BackyManifestCollectionsRuntimeModule`, `BackyManifestReusableSectionsRuntimeModule`, and `BackyManifestCommerceRuntimeModule`, and generated schema types now include structured manifest `pagesRuntime`, `blogRuntime`, `collectionsRuntime`, `reusableSectionsRuntime`, and `commerceRuntime` discovery next to the existing theme/live-management/forms-runtime/comments discovery coverage.
 

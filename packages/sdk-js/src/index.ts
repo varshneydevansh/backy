@@ -55,6 +55,11 @@ export type {
   GeneratedBackyOpenApiCommentBlocklistEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateRequest,
+  GeneratedBackyOpenApiCommentAnalytics,
+  GeneratedBackyOpenApiCommentAnalyticsEnvelope,
+  GeneratedBackyOpenApiCommentAnalyticsStatusCounts,
+  GeneratedBackyOpenApiCommentAnalyticsTarget,
+  GeneratedBackyOpenApiCommentAnalyticsThread,
   GeneratedBackyOpenApiCommentDeliveryRetryAttempt,
   GeneratedBackyOpenApiCommentDeliveryRetryEnvelope,
   GeneratedBackyOpenApiCommentDeliveryRetryRequest,
@@ -6477,6 +6482,87 @@ export interface BackyCommentBlocklistOptions extends BackyListOptions {
   q?: string;
   requestId?: string;
 }
+
+export interface BackyCommentAnalyticsOptions
+  extends BackyLiveManagementRequestOptions {
+  days?: number;
+  targetType?: "page" | "post" | "all";
+  targetId?: string;
+}
+
+export interface BackyCommentAnalyticsStatusCounts {
+  pending: number;
+  approved: number;
+  rejected: number;
+  spam: number;
+  blocked: number;
+  [key: string]: unknown;
+}
+
+export interface BackyCommentAnalyticsTarget {
+  targetType: "page" | "post" | string;
+  targetId: string;
+  total: number;
+  pending: number;
+  reported: number;
+  replies: number;
+  [key: string]: unknown;
+}
+
+export interface BackyCommentAnalyticsThread
+  extends BackyCommentAnalyticsTarget {
+  id: string;
+  latestAt: string;
+}
+
+export interface BackyCommentAnalytics {
+  siteId: string;
+  generatedAt: string;
+  windowDays: number;
+  totals: {
+    comments: number;
+    allTimeComments: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    spam: number;
+    blocked: number;
+    reported: number;
+    reviewed: number;
+    unreviewed: number;
+    replies: number;
+    [key: string]: unknown;
+  };
+  byStatus: BackyCommentAnalyticsStatusCounts;
+  reports: {
+    comments: number;
+    reasons: Array<{ reason: string; count: number; [key: string]: unknown }>;
+    [key: string]: unknown;
+  };
+  threads: {
+    total: number;
+    withReplies: number;
+    reported: number;
+    pendingReplies: number;
+    top: BackyCommentAnalyticsThread[];
+    [key: string]: unknown;
+  };
+  targets: BackyCommentAnalyticsTarget[];
+  daily: Array<{
+    date: string;
+    submitted: number;
+    reviewed: number;
+    reported: number;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+export type BackyCommentAnalyticsResponse = BackyEnvelope<
+  {
+    analytics: BackyCommentAnalytics;
+  } & Record<string, unknown>
+>;
 
 export interface BackyEventListOptions extends BackyListOptions {
   kind?: string;
@@ -13637,6 +13723,25 @@ export class BackyClient {
         method: "DELETE",
         body: { ids },
         requestId: input.requestId,
+      },
+    );
+  }
+
+  commentAnalytics(
+    options: BackyCommentAnalyticsOptions = {},
+  ): Promise<BackyCommentAnalyticsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = normalizeListQuery(
+      rest as Record<string, string | number | boolean | undefined>,
+    );
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/comments/analytics`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
       },
     );
   }

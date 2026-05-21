@@ -3276,6 +3276,45 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             },
           },
+          [`/api/sites/${site.id}/comments/analytics`]: {
+            get: {
+              tags: ["Interactions"],
+              summary: "Read private comment moderation analytics",
+              description:
+                "Authenticated comment viewers can inspect moderation totals, report reasons, threaded reply pressure, target hotspots, and daily comment activity for external moderation dashboards.",
+              operationId: "getBackyCommentAnalytics",
+              parameters: [
+                queryParameter("days", {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 365,
+                  default: 30,
+                }),
+                queryParameter("targetType", {
+                  type: "string",
+                  enum: ["page", "post", "all"],
+                  default: "all",
+                }),
+                queryParameter(
+                  "targetId",
+                  { type: "string" },
+                  "Optional page or post id to scope analytics.",
+                ),
+              ],
+              responses: {
+                "200": {
+                  description: "Private comment moderation analytics",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/CommentAnalyticsEnvelope",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
           [`/api/sites/${site.id}/comments/{commentId}`]: {
             get: {
               tags: ["Interactions"],
@@ -6636,6 +6675,168 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 deletedCount: { type: "integer", minimum: 0 },
                 missingIds: { type: "array", items: { type: "string" } },
+              },
+            }),
+            CommentAnalyticsStatusCounts: {
+              type: "object",
+              additionalProperties: false,
+              required: ["pending", "approved", "rejected", "spam", "blocked"],
+              properties: {
+                pending: { type: "integer", minimum: 0 },
+                approved: { type: "integer", minimum: 0 },
+                rejected: { type: "integer", minimum: 0 },
+                spam: { type: "integer", minimum: 0 },
+                blocked: { type: "integer", minimum: 0 },
+              },
+            },
+            CommentAnalyticsTarget: {
+              type: "object",
+              additionalProperties: true,
+              required: ["targetType", "targetId", "total", "pending", "reported", "replies"],
+              properties: {
+                targetType: { type: "string", enum: ["page", "post"] },
+                targetId: { type: "string" },
+                total: { type: "integer", minimum: 0 },
+                pending: { type: "integer", minimum: 0 },
+                reported: { type: "integer", minimum: 0 },
+                replies: { type: "integer", minimum: 0 },
+              },
+            },
+            CommentAnalyticsThread: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "id",
+                "targetType",
+                "targetId",
+                "total",
+                "replies",
+                "pending",
+                "reported",
+                "latestAt",
+              ],
+              properties: {
+                id: { type: "string" },
+                targetType: { type: "string", enum: ["page", "post"] },
+                targetId: { type: "string" },
+                total: { type: "integer", minimum: 0 },
+                replies: { type: "integer", minimum: 0 },
+                pending: { type: "integer", minimum: 0 },
+                reported: { type: "integer", minimum: 0 },
+                latestAt: { type: "string", format: "date-time" },
+              },
+            },
+            CommentAnalytics: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "siteId",
+                "generatedAt",
+                "windowDays",
+                "totals",
+                "byStatus",
+                "reports",
+                "threads",
+                "targets",
+                "daily",
+              ],
+              properties: {
+                siteId: { type: "string" },
+                generatedAt: { type: "string", format: "date-time" },
+                windowDays: { type: "integer", minimum: 1, maximum: 365 },
+                totals: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: [
+                    "comments",
+                    "allTimeComments",
+                    "pending",
+                    "approved",
+                    "rejected",
+                    "spam",
+                    "blocked",
+                    "reported",
+                    "reviewed",
+                    "unreviewed",
+                    "replies",
+                  ],
+                  properties: {
+                    comments: { type: "integer", minimum: 0 },
+                    allTimeComments: { type: "integer", minimum: 0 },
+                    pending: { type: "integer", minimum: 0 },
+                    approved: { type: "integer", minimum: 0 },
+                    rejected: { type: "integer", minimum: 0 },
+                    spam: { type: "integer", minimum: 0 },
+                    blocked: { type: "integer", minimum: 0 },
+                    reported: { type: "integer", minimum: 0 },
+                    reviewed: { type: "integer", minimum: 0 },
+                    unreviewed: { type: "integer", minimum: 0 },
+                    replies: { type: "integer", minimum: 0 },
+                  },
+                },
+                byStatus: {
+                  $ref: "#/components/schemas/CommentAnalyticsStatusCounts",
+                },
+                reports: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: ["comments", "reasons"],
+                  properties: {
+                    comments: { type: "integer", minimum: 0 },
+                    reasons: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: true,
+                        required: ["reason", "count"],
+                        properties: {
+                          reason: { type: "string" },
+                          count: { type: "integer", minimum: 0 },
+                        },
+                      },
+                    },
+                  },
+                },
+                threads: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: ["total", "withReplies", "reported", "pendingReplies", "top"],
+                  properties: {
+                    total: { type: "integer", minimum: 0 },
+                    withReplies: { type: "integer", minimum: 0 },
+                    reported: { type: "integer", minimum: 0 },
+                    pendingReplies: { type: "integer", minimum: 0 },
+                    top: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/CommentAnalyticsThread" },
+                    },
+                  },
+                },
+                targets: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/CommentAnalyticsTarget" },
+                },
+                daily: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: true,
+                    required: ["date", "submitted", "reviewed", "reported"],
+                    properties: {
+                      date: { type: "string" },
+                      submitted: { type: "integer", minimum: 0 },
+                      reviewed: { type: "integer", minimum: 0 },
+                      reported: { type: "integer", minimum: 0 },
+                    },
+                  },
+                },
+              },
+            },
+            CommentAnalyticsEnvelope: envelopeSchema({
+              type: "object",
+              required: ["analytics"],
+              properties: {
+                analytics: { $ref: "#/components/schemas/CommentAnalytics" },
               },
             }),
             CommentsEnvelope: envelopeSchema({

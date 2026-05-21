@@ -154,6 +154,7 @@ import type {
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
+  BackyCommentAnalyticsResponse,
   BackyCommentDeliveryRetryResponse,
   BackyCommentInput,
   BackyCommentReportInput,
@@ -259,6 +260,8 @@ import type {
   GeneratedBackyOpenApiCommentBlocklistEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateRequest,
+  GeneratedBackyOpenApiCommentAnalytics,
+  GeneratedBackyOpenApiCommentAnalyticsEnvelope,
   GeneratedBackyOpenApiCommentDeliveryRetryEnvelope,
   GeneratedBackyOpenApiCommentDeliveryRetryRequest,
   GeneratedBackyOpenApiCommentEnvelope,
@@ -842,6 +845,12 @@ type ProductNotificationEventsMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["productNotificationEvents"]>,
     BackyAdminSiteEventsResponse
+  >
+>;
+type CommentAnalyticsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commentAnalytics"]>,
+    BackyCommentAnalyticsResponse
   >
 >;
 type RetryCommentDeliveryMethodReturnsContract = Assert<
@@ -8709,6 +8718,88 @@ const commentReportEnvelope = {
   },
 } satisfies GeneratedBackyOpenApiCommentReportEnvelope;
 
+const commentAnalytics = {
+  siteId: "site_demo",
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  windowDays: 30,
+  totals: {
+    comments: 1,
+    allTimeComments: 2,
+    pending: 0,
+    approved: 1,
+    rejected: 0,
+    spam: 0,
+    blocked: 0,
+    reported: 1,
+    reviewed: 1,
+    unreviewed: 0,
+    replies: 0,
+  },
+  byStatus: {
+    pending: 0,
+    approved: 1,
+    rejected: 0,
+    spam: 0,
+    blocked: 0,
+  },
+  reports: {
+    comments: 1,
+    reasons: [{ reason: "spam", count: 1 }],
+  },
+  threads: {
+    total: 1,
+    withReplies: 0,
+    reported: 1,
+    pendingReplies: 0,
+    top: [
+      {
+        id: "thread_home",
+        targetType: "page",
+        targetId: "page_home",
+        total: 1,
+        replies: 0,
+        pending: 0,
+        reported: 1,
+        latestAt: "2026-05-16T00:01:00.000Z",
+      },
+    ],
+  },
+  targets: [
+    {
+      targetType: "page",
+      targetId: "page_home",
+      total: 1,
+      pending: 0,
+      reported: 1,
+      replies: 0,
+    },
+  ],
+  daily: [
+    {
+      date: "2026-05-16",
+      submitted: 1,
+      reviewed: 1,
+      reported: 1,
+    },
+  ],
+} satisfies GeneratedBackyOpenApiCommentAnalytics;
+
+const commentAnalyticsEnvelope = {
+  success: true,
+  requestId: "req_comment_analytics",
+  data: {
+    analytics: commentAnalytics,
+  },
+} satisfies GeneratedBackyOpenApiCommentAnalyticsEnvelope;
+
+const sdkCommentAnalyticsEnvelope = {
+  success: true,
+  requestId: "req_comment_analytics",
+  data: {
+    analytics: commentAnalytics,
+  },
+} satisfies BackyCommentAnalyticsResponse;
+
 const commentDeliveryRetryRequest = {
   eventId: "event_comment_delivery_failed",
   requestId: "req_comment_delivery_retry",
@@ -10328,6 +10419,9 @@ void commentBlocklistDeleteRequest;
 void commentBlocklistDeleteEnvelope;
 void commentReportReasonsEnvelope;
 void commentReportEnvelope;
+void commentAnalytics;
+void commentAnalyticsEnvelope;
+void sdkCommentAnalyticsEnvelope;
 void commentDeliveryRetryRequest;
 void commentDeliveryRetryEnvelope;
 void sdkCommentDeliveryRetryEnvelope;
