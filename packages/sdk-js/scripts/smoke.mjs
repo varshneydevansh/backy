@@ -1285,6 +1285,7 @@ const privateClient = createBackyClient({
 
 const comments = await privateClient.siteComments({ limit: 5 });
 assert(Array.isArray(comments.data.comments), 'siteComments() missing comments array');
+assert(typeof privateClient.retryCommentDelivery === 'function', 'retryCommentDelivery() missing SDK method');
 
 const events = await privateClient.events({ limit: 5 });
 assert(Array.isArray(events.data.events), 'events() missing events array');
@@ -2202,6 +2203,7 @@ console.log(JSON.stringify({
     'reportReasons',
     'reportReasonsCached',
     'siteComments',
+    'retryCommentDelivery',
     'events',
     ...(commerceCatalogChecked ? ['commerceOrderContract', 'commerceOrderContractCached', 'commerceCatalog', 'commerceCatalogCached'] : []),
   ],

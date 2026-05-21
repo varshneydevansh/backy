@@ -3320,6 +3320,47 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             },
           },
+          [`/api/sites/${site.id}/comments/{commentId}/delivery-retry`]: {
+            post: {
+              tags: ["Interactions"],
+              summary: "Retry a failed comment delivery event",
+              description:
+                "Authenticated comment managers can retry failed webhook or email delivery attempts recorded for a comment. The request references an existing failed delivery event id and preserves Backy's audited delivery boundary.",
+              operationId: "retryBackyCommentDelivery",
+              parameters: [pathParameter("commentId", "Comment id")],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      $ref: "#/components/schemas/CommentDeliveryRetryRequest",
+                    },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Retried comment delivery",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/CommentDeliveryRetryEnvelope",
+                      },
+                    },
+                  },
+                },
+                "409": {
+                  description:
+                    "Delivery event is not failed, not retryable, mismatched, or has an invalid target.",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           [`/api/sites/${site.id}/comments/report-reasons`]: {
             get: {
               tags: ["Interactions"],
@@ -6624,6 +6665,45 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "array",
                   items: { $ref: "#/components/schemas/Comment" },
                 },
+              },
+            }),
+            CommentDeliveryRetryRequest: {
+              type: "object",
+              additionalProperties: false,
+              required: ["eventId"],
+              properties: {
+                eventId: {
+                  type: "string",
+                  description:
+                    "Failed comment delivery event id from the protected site events feed.",
+                },
+                requestId: { type: "string" },
+              },
+            },
+            CommentDeliveryRetryAttempt: {
+              type: "object",
+              additionalProperties: true,
+              required: ["attempted", "status"],
+              properties: {
+                attempted: { type: "boolean" },
+                channel: { type: "string", enum: ["webhook", "email"] },
+                target: { type: "string" },
+                status: { type: "string", enum: ["queued", "succeeded", "failed"] },
+                statusCode: { type: "integer" },
+                provider: { type: "string" },
+                metadata: { type: "object", additionalProperties: true },
+                error: { type: "string" },
+              },
+            },
+            CommentDeliveryRetryEnvelope: envelopeSchema({
+              type: "object",
+              required: ["delivery", "retryOf", "comment"],
+              properties: {
+                delivery: {
+                  $ref: "#/components/schemas/CommentDeliveryRetryAttempt",
+                },
+                retryOf: { type: "string" },
+                comment: { $ref: "#/components/schemas/Comment" },
               },
             }),
             CommentReportReasonsEnvelope: envelopeSchema({

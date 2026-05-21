@@ -154,6 +154,7 @@ import type {
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
+  BackyCommentDeliveryRetryResponse,
   BackyCommentInput,
   BackyCommentReportInput,
   BackyCommerceOrderInput,
@@ -258,6 +259,8 @@ import type {
   GeneratedBackyOpenApiCommentBlocklistEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateRequest,
+  GeneratedBackyOpenApiCommentDeliveryRetryEnvelope,
+  GeneratedBackyOpenApiCommentDeliveryRetryRequest,
   GeneratedBackyOpenApiCommentEnvelope,
   GeneratedBackyOpenApiCommentReportEnvelope,
   GeneratedBackyOpenApiCommentReportReasonsEnvelope,
@@ -839,6 +842,12 @@ type ProductNotificationEventsMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["productNotificationEvents"]>,
     BackyAdminSiteEventsResponse
+  >
+>;
+type RetryCommentDeliveryMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["retryCommentDelivery"]>,
+    BackyCommentDeliveryRetryResponse
   >
 >;
 type AdminPagesMethodReturnsContract = Assert<
@@ -8700,6 +8709,47 @@ const commentReportEnvelope = {
   },
 } satisfies GeneratedBackyOpenApiCommentReportEnvelope;
 
+const commentDeliveryRetryRequest = {
+  eventId: "event_comment_delivery_failed",
+  requestId: "req_comment_delivery_retry",
+} satisfies GeneratedBackyOpenApiCommentDeliveryRetryRequest;
+
+const commentDeliveryRetryEnvelope = {
+  success: true,
+  requestId: "req_comment_delivery_retry",
+  data: {
+    delivery: {
+      attempted: true,
+      channel: "webhook",
+      target: "https://example.com/comment-webhook",
+      status: "succeeded",
+      statusCode: 200,
+      provider: "webhook",
+      metadata: {
+        retry: true,
+      },
+    },
+    retryOf: "event_comment_delivery_failed",
+    comment,
+  },
+} satisfies GeneratedBackyOpenApiCommentDeliveryRetryEnvelope;
+
+const sdkCommentDeliveryRetryEnvelope = {
+  success: true,
+  requestId: "req_comment_delivery_retry",
+  data: {
+    delivery: {
+      attempted: true,
+      channel: "email",
+      target: "mailto:moderator@example.com",
+      status: "queued",
+      provider: "email",
+    },
+    retryOf: "event_comment_email_failed",
+    comment,
+  },
+} satisfies BackyCommentDeliveryRetryResponse;
+
 const sdkCommentReportInput = buildBackyCommentReportInput({
   report: {
     category: "spam",
@@ -10278,6 +10328,9 @@ void commentBlocklistDeleteRequest;
 void commentBlocklistDeleteEnvelope;
 void commentReportReasonsEnvelope;
 void commentReportEnvelope;
+void commentDeliveryRetryRequest;
+void commentDeliveryRetryEnvelope;
+void sdkCommentDeliveryRetryEnvelope;
 void sdkCommentReportInput;
 void sdkCommentReportInputContract;
 void eventsEnvelope;

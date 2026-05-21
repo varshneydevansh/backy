@@ -55,6 +55,9 @@ export type {
   GeneratedBackyOpenApiCommentBlocklistEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateEnvelope,
   GeneratedBackyOpenApiCommentBulkUpdateRequest,
+  GeneratedBackyOpenApiCommentDeliveryRetryAttempt,
+  GeneratedBackyOpenApiCommentDeliveryRetryEnvelope,
+  GeneratedBackyOpenApiCommentDeliveryRetryRequest,
   GeneratedBackyOpenApiCommentEnvelope,
   GeneratedBackyOpenApiCommentReportEnvelope,
   GeneratedBackyOpenApiCommentReportReasonsEnvelope,
@@ -5241,9 +5244,9 @@ export interface BackyComment {
   commentThreadId?: string;
   status?: string;
   content?: string;
-  authorName?: string;
-  authorEmail?: string;
-  authorWebsite?: string;
+  authorName?: string | null;
+  authorEmail?: string | null;
+  authorWebsite?: string | null;
   userId?: string | null;
   parentId?: string | null;
   reviewedBy?: string | null;
@@ -5269,6 +5272,32 @@ export interface BackyInteractionEvent {
   createdAt?: string;
   [key: string]: unknown;
 }
+
+export interface BackyCommentDeliveryRetryInput {
+  eventId: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCommentDeliveryRetryAttempt {
+  attempted: boolean;
+  channel?: "webhook" | "email" | string;
+  target?: string;
+  status: "queued" | "succeeded" | "failed" | string;
+  statusCode?: number;
+  provider?: string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export type BackyCommentDeliveryRetryResponse = BackyEnvelope<
+  {
+    delivery: BackyCommentDeliveryRetryAttempt;
+    retryOf: string;
+    comment: BackyComment;
+  } & Record<string, unknown>
+>;
 
 export interface BackyMediaListOptions extends BackyListOptions {
   type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other";
@@ -13640,6 +13669,24 @@ export class BackyClient {
       `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
       {
         method: "DELETE",
+      },
+    );
+  }
+
+  retryCommentDelivery(
+    commentId: string,
+    input: BackyCommentDeliveryRetryInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommentDeliveryRetryResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/delivery-retry`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
