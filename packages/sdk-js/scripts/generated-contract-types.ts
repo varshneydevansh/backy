@@ -28,6 +28,7 @@ import type {
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
+  BackyContentElementDescriptor,
   BackyContentElementPatch,
   BackyEditableContent,
   BackyLiveManagedBlogPostResponse,
@@ -210,6 +211,7 @@ import type {
 import {
   findBackyContentElement,
   generatedBackyContractTypeSources,
+  listBackyContentElements,
   patchBackyContentElement,
   patchBackyContentElements,
 } from "../src/index";
@@ -684,10 +686,14 @@ const bulkPatchedEditableContent = patchBackyContentElements(
     },
   ],
 );
+const editableElementDescriptors = listBackyContentElements(
+  editableContentForHelpers,
+) satisfies BackyContentElementDescriptor[];
 
 void patchedEditableContent;
 void foundEditableElement;
 void bulkPatchedEditableContent;
+void editableElementDescriptors;
 
 const renderMediaAsset = {
   id: "media_hero",

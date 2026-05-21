@@ -1589,6 +1589,44 @@ export interface BackyContentElementPatch {
   remove?: string[];
 }
 
+export type BackyContentEditableTargetSource =
+  | "field"
+  | "layout"
+  | "props"
+  | "styles"
+  | "visibility";
+
+export interface BackyContentEditableTarget {
+  path: string;
+  source: BackyContentEditableTargetSource;
+  value?: unknown;
+  valueType:
+    | "string"
+    | "richText"
+    | "number"
+    | "boolean"
+    | "color"
+    | "image"
+    | "video"
+    | "url"
+    | "json"
+    | string;
+}
+
+export interface BackyContentElementDescriptor {
+  id: string;
+  type: string;
+  name?: string;
+  parentId?: string;
+  depth: number;
+  index: number;
+  path: string;
+  childCount: number;
+  editableTargetPaths: string[];
+  editableTargets: BackyContentEditableTarget[];
+  element: BackyElement;
+}
+
 const BACKY_LAYOUT_TARGET_ALIASES: Record<string, string> = {
   x: "x",
   y: "y",
@@ -1600,6 +1638,15 @@ const BACKY_LAYOUT_TARGET_ALIASES: Record<string, string> = {
   locked: "locked",
   name: "name",
 };
+
+const BACKY_LAYER_LAYOUT_TARGETS = [
+  "x",
+  "y",
+  "width",
+  "height",
+  "zIndex",
+  "rotation",
+] as const;
 
 function isBackyRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1648,6 +1695,93 @@ function visitBackyContentElements(
   };
 
   roots.forEach(visit);
+}
+
+function inferBackyEditableValueType(
+  path: string,
+  value: unknown,
+): BackyContentEditableTarget["valueType"] {
+  const normalizedPath = path.toLowerCase();
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "number") return "number";
+  if (Array.isArray(value)) return "richText";
+  if (
+    normalizedPath.includes("color") ||
+    (typeof value === "string" && /^#(?:[0-9a-f]{3}){1,2}$/i.test(value))
+  ) {
+    return "color";
+  }
+  if (normalizedPath.includes("image") || normalizedPath.includes("poster")) {
+    return "image";
+  }
+  if (normalizedPath.includes("video")) {
+    return "video";
+  }
+  if (
+    normalizedPath.includes("href") ||
+    normalizedPath.includes("url") ||
+    normalizedPath.includes("src")
+  ) {
+    return "url";
+  }
+  if (typeof value === "string") return "string";
+  return "json";
+}
+
+function pushBackyEditableTarget(
+  targets: BackyContentEditableTarget[],
+  path: string,
+  source: BackyContentEditableTargetSource,
+  value: unknown,
+): void {
+  targets.push({
+    path,
+    source,
+    value,
+    valueType: inferBackyEditableValueType(path, value),
+  });
+}
+
+function editableTargetsForBackyElement(
+  element: Record<string, unknown>,
+): BackyContentEditableTarget[] {
+  const targets: BackyContentEditableTarget[] = [];
+  if (typeof element.name === "string") {
+    pushBackyEditableTarget(targets, "name", "field", element.name);
+  }
+  BACKY_LAYER_LAYOUT_TARGETS.forEach((field) => {
+    if (element[field] !== undefined) {
+      pushBackyEditableTarget(
+        targets,
+        `layout.${field}`,
+        "layout",
+        element[field],
+      );
+    }
+  });
+  pushBackyEditableTarget(
+    targets,
+    "visibility.hidden",
+    "visibility",
+    element.visible === false,
+  );
+  pushBackyEditableTarget(
+    targets,
+    "visibility.locked",
+    "visibility",
+    Boolean(element.locked),
+  );
+  if (isBackyRecord(element.props)) {
+    Object.entries(element.props).forEach(([key, value]) => {
+      pushBackyEditableTarget(targets, `props.${key}`, "props", value);
+    });
+  }
+  if (isBackyRecord(element.styles)) {
+    Object.entries(element.styles).forEach(([key, value]) => {
+      pushBackyEditableTarget(targets, `styles.${key}`, "styles", value);
+    });
+  }
+  return targets;
 }
 
 function mergeElementRecord(
@@ -1790,6 +1924,57 @@ export function findBackyContentElement(
   });
 
   return found as BackyElement | null;
+}
+
+export function listBackyContentElements(
+  content: BackyEditableContent | undefined | null,
+): BackyContentElementDescriptor[] {
+  if (!content) {
+    return [];
+  }
+
+  const descriptors: BackyContentElementDescriptor[] = [];
+  const walk = (
+    items: unknown[],
+    rootPath: string,
+    parentId: string | undefined,
+    depth: number,
+  ) => {
+    items.forEach((item, index) => {
+      if (!isBackyRecord(item) || typeof item.id !== "string") return;
+      const path = `${rootPath}.${index}`;
+      const editableTargets = editableTargetsForBackyElement(item);
+      descriptors.push({
+        id: item.id,
+        type: typeof item.type === "string" ? item.type : "unknown",
+        ...(typeof item.name === "string" ? { name: item.name } : {}),
+        ...(parentId ? { parentId } : {}),
+        depth,
+        index,
+        path,
+        childCount: Array.isArray(item.children) ? item.children.length : 0,
+        editableTargetPaths: editableTargets.map((target) => target.path),
+        editableTargets,
+        element: item as BackyElement,
+      });
+      if (Array.isArray(item.children)) {
+        walk(item.children, `${path}.children`, item.id, depth + 1);
+      }
+    });
+  };
+
+  if (isBackyRecord(content) && Array.isArray(content.elements)) {
+    walk(content.elements, "elements", undefined, 0);
+  }
+  if (
+    isBackyRecord(content) &&
+    isBackyRecord(content.contentDocument) &&
+    Array.isArray(content.contentDocument.elements)
+  ) {
+    walk(content.contentDocument.elements, "contentDocument.elements", undefined, 0);
+  }
+
+  return descriptors;
 }
 
 export function patchBackyContentElement<TContent extends BackyEditableContent>(

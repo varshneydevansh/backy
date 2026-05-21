@@ -3,6 +3,7 @@
 import {
   createBackyClient,
   findBackyContentElement,
+  listBackyContentElements,
   patchBackyContentElement,
   patchBackyContentElements,
 } from '../dist/index.js';
@@ -1345,6 +1346,17 @@ if (runWriteSmoke) {
     });
     assert(liveManagedPage.data.page?.id === fixture.pageId, 'liveManagedPage() returned wrong page');
     assert(findBackyContentElement(liveManagedPage.data.page.content, 'sdk-smoke-form-title')?.id === 'sdk-smoke-form-title', 'findBackyContentElement() missing nested page form input');
+    const liveManagedPageElements = listBackyContentElements(liveManagedPage.data.page.content);
+    assert(
+      liveManagedPageElements.some((element) => (
+        element.id === 'sdk-smoke-form-message' &&
+        element.parentId === 'sdk-smoke-form' &&
+        element.depth === 1 &&
+        element.editableTargetPaths.includes('props.placeholder') &&
+        element.editableTargetPaths.includes('layout.y')
+      )),
+      'listBackyContentElements() missing editable nested page element metadata',
+    );
     writeChecks.push('liveManagedPage');
 
     const patchedLivePageContent = patchBackyContentElements(liveManagedPage.data.page.content, [
@@ -1626,6 +1638,7 @@ console.log(JSON.stringify({
     'patchBackyContentElement',
     'patchBackyContentElements',
     'findBackyContentElement',
+    'listBackyContentElements',
     'blog',
     'blogFeeds',
     'blogRss',
