@@ -1299,6 +1299,16 @@ assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-s
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
 assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
 
+const adminFrontendDesign = await privateClient.adminFrontendDesign();
+assert(adminFrontendDesign.data.frontendDesign?.schemaVersion === 'backy.frontend-design.v1', 'adminFrontendDesign() missing design contract');
+assert(adminFrontendDesign.data.templateRegistry?.schemaVersion === 'backy.template-registry.v1', 'adminFrontendDesign() missing template registry summary');
+assert(adminFrontendDesign.data.endpoints?.templates?.includes('/templates'), 'adminFrontendDesign() missing templates endpoint');
+
+const adminTemplates = await privateClient.adminTemplates({ type: 'page' });
+assert(adminTemplates.data.registry?.schemaVersion === 'backy.template-registry.v1', 'adminTemplates() missing registry schema');
+assert(Array.isArray(adminTemplates.data.templates), 'adminTemplates() missing templates array');
+assert(adminTemplates.data.registry?.cloneField === 'frontendDesignTemplateId', 'adminTemplates() missing clone field');
+
 const adminNavigation = await privateClient.adminNavigation();
 assert(Array.isArray(adminNavigation.data.navigation?.settings?.primary), 'adminNavigation() missing editable primary settings');
 assert(Array.isArray(adminNavigation.data.navigation?.resolved?.primary), 'adminNavigation() missing resolved public primary navigation');

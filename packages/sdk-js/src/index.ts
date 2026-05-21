@@ -525,6 +525,186 @@ export interface BackyFrontendDesignResponse {
   [key: string]: unknown;
 }
 
+export type BackyTemplateRegistryType =
+  | "page"
+  | "blogPost"
+  | "form"
+  | "product"
+  | "collection"
+  | "section";
+
+export interface BackyTemplateVersionReadiness {
+  schemaVersion: "backy.template-version.v1" | string;
+  ready: boolean;
+  status: string;
+  version?: string | number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  issues: string[];
+  recommendation?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyTemplateRegistryEntry {
+  id: string;
+  type: BackyTemplateRegistryType | string;
+  name: string;
+  description?: string | null;
+  routePattern?: string | null;
+  status?: string;
+  source?: string;
+  version?: string | number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  versioning: BackyTemplateVersionReadiness;
+  contentSummary: {
+    hasContent: boolean;
+    elementCount: number;
+    fieldCount: number;
+    bindingHintCount: number;
+    hasCanvas: boolean;
+    canvasSize?: Record<string, unknown> | null;
+    [key: string]: unknown;
+  };
+  clone: {
+    method: "POST" | string;
+    endpoint: string;
+    body: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface BackyTemplateRegistryVersionSummary {
+  schemaVersion: "backy.template-version-readiness.v1" | string;
+  ready: boolean;
+  readyCount: number;
+  templateCount: number;
+  missingVersionCount: number;
+  missingUpdatedAtCount: number;
+  inactiveCount: number;
+  latestUpdatedAt?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyTemplateRegistryActionPlan {
+  schemaVersion: "backy.template-registry-action-plan.v1" | string;
+  status: "empty" | "ready" | "needs-version-metadata" | string;
+  recommendedNextAction: string;
+  steps: string[];
+  [key: string]: unknown;
+}
+
+export interface BackyTemplateRegistrySummary {
+  schemaVersion: "backy.template-registry.v1" | string;
+  status: string;
+  templateCount: number;
+  supportedTypes: string[];
+  cloneField: "frontendDesignTemplateId" | string;
+  cloneTargets: Record<string, string>;
+  versionSummary: BackyTemplateRegistryVersionSummary;
+  actionPlan: BackyTemplateRegistryActionPlan;
+  [key: string]: unknown;
+}
+
+export interface BackyTemplateRegistry extends BackyTemplateRegistrySummary {
+  source?: BackyFrontendDesignSource;
+  totalTemplateCount: number;
+  templates: BackyTemplateRegistryEntry[];
+  byType: Record<string, BackyTemplateRegistryEntry[]>;
+}
+
+export type BackyAdminFrontendDesignResponse = BackyEnvelope<
+  {
+    site: {
+      id: string;
+      slug: string;
+      name: string;
+      customDomain?: string | null;
+      [key: string]: unknown;
+    };
+    frontendDesign: BackyFrontendDesignContract;
+    endpoints: {
+      admin: string;
+      templates: string;
+      publicManifest: string;
+      [key: string]: string;
+    };
+    templateRegistry: BackyTemplateRegistrySummary;
+    nextSteps: string[];
+    cacheInvalidation?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminTemplateRegistryOptions
+  extends BackyLiveManagementRequestOptions {
+  type?: BackyTemplateRegistryType | string;
+  search?: string;
+}
+
+export type BackyAdminTemplateRegistryResponse = BackyEnvelope<
+  {
+    site: {
+      id: string;
+      slug: string;
+      name: string;
+      [key: string]: unknown;
+    };
+    registry: BackyTemplateRegistry;
+    templates: BackyTemplateRegistryEntry[];
+    byType: Record<string, BackyTemplateRegistryEntry[]>;
+    endpoints: {
+      frontendDesign: string;
+      templates: string;
+      [key: string]: string;
+    };
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminFrontendDesignUpdateInput = {
+  requestId?: string;
+  frontendDesign?: BackyFrontendDesignContract | Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type BackyAdminFrontendDesignImportInput = {
+  requestId?: string;
+  frontendDesign?: BackyFrontendDesignContract | Record<string, unknown>;
+  contract?: BackyFrontendDesignContract | Record<string, unknown>;
+  design?: BackyFrontendDesignContract | Record<string, unknown>;
+  manifest?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type BackyAdminFrontendDesignTemplateCaptureResourceType =
+  | "page"
+  | "pages"
+  | "blogPost"
+  | "post"
+  | "blog"
+  | "form"
+  | "forms"
+  | "product"
+  | "products"
+  | "collection"
+  | "collections"
+  | "section"
+  | "reusableSection"
+  | "reusable-section";
+
+export type BackyAdminFrontendDesignTemplateCaptureInput = {
+  resourceType: BackyAdminFrontendDesignTemplateCaptureResourceType;
+  resourceId: string;
+  collectionId?: string;
+  templateId?: string;
+  templateName?: string;
+  routePattern?: string;
+  requestId?: string;
+  [key: string]: unknown;
+};
+
 export interface BackyNavigationItem {
   id?: string;
   type?: "page" | "route" | "url" | string;
@@ -7120,6 +7300,112 @@ export class BackyClient {
         requestId: options.requestId ?? requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
+      },
+    );
+  }
+
+  adminFrontendDesign(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFrontendDesignResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminFrontendDesign(
+    input: BackyAdminFrontendDesignUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFrontendDesignResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  importAdminFrontendDesign(
+    input: BackyAdminFrontendDesignImportInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFrontendDesignResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`,
+      {
+        method: "POST",
+        body: {
+          ...body,
+          action: "import-frontend-contract",
+        },
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  captureAdminSiteDefaults(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFrontendDesignResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`,
+      {
+        method: "POST",
+        body: {
+          action: "capture-site-defaults",
+        },
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  captureAdminContentTemplate(
+    input: BackyAdminFrontendDesignTemplateCaptureInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFrontendDesignResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`,
+      {
+        method: "POST",
+        body: {
+          ...body,
+          action: "capture-content-template",
+        },
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminTemplates(
+    options: BackyAdminTemplateRegistryOptions = {},
+  ): Promise<BackyAdminTemplateRegistryResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/templates`,
+      {
+        query: {
+          type: rest.type,
+          search: rest.search,
+        },
+        requestId,
+        headers,
+        credentials,
       },
     );
   }

@@ -7,6 +7,7 @@ import type {
   BackyMediaListOptions,
   BackyAdminAuditLog,
   BackyAdminAuditLogsResponse,
+  BackyAdminFrontendDesignResponse,
   BackyManifestBlogAuthor,
   BackyManifestBlogCategory,
   BackyManifestBlogModule,
@@ -27,6 +28,7 @@ import type {
   BackyAdminSiteReadinessResponse,
   BackyAdminSiteResponse,
   BackyAdminSitesResponse,
+  BackyAdminTemplateRegistryResponse,
   BackyAdminTeam,
   BackyAdminTeamDeleteResponse,
   BackyAdminTeamMember,
@@ -411,6 +413,42 @@ type AdminSiteSettingsUpdateMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateAdminSiteSettings"]>,
     BackySiteSettingsResponse
+  >
+>;
+type AdminFrontendDesignMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminFrontendDesign"]>,
+    BackyAdminFrontendDesignResponse
+  >
+>;
+type UpdateAdminFrontendDesignMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminFrontendDesign"]>,
+    BackyAdminFrontendDesignResponse
+  >
+>;
+type ImportAdminFrontendDesignMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importAdminFrontendDesign"]>,
+    BackyAdminFrontendDesignResponse
+  >
+>;
+type CaptureAdminSiteDefaultsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["captureAdminSiteDefaults"]>,
+    BackyAdminFrontendDesignResponse
+  >
+>;
+type CaptureAdminContentTemplateMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["captureAdminContentTemplate"]>,
+    BackyAdminFrontendDesignResponse
+  >
+>;
+type AdminTemplatesMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminTemplates"]>,
+    BackyAdminTemplateRegistryResponse
   >
 >;
 type AdminNavigationMethodReturnsContract = Assert<
@@ -1427,6 +1465,200 @@ const sdkAdminSiteDuplicateEnvelope = {
     pagesCopied: 3,
   },
 } satisfies BackyAdminSiteDuplicateResponse;
+
+const sdkAdminFrontendDesign = {
+  schemaVersion: "backy.frontend-design.v1",
+  status: "captured",
+  source: {
+    type: "custom-frontend",
+    label: "Marketing frontend",
+    capturedAt: "2026-05-21T00:00:00.000Z",
+  },
+  tokens: {
+    colors: {
+      primary: "#2563eb",
+    },
+  },
+  chrome: {
+    header: {
+      variant: "centered",
+    },
+  },
+  templates: [
+    {
+      id: "template_home",
+      type: "page",
+      name: "Homepage",
+      routePattern: "/",
+      version: "1.0.0",
+      status: "active",
+      updatedAt: "2026-05-21T00:00:00.000Z",
+      content: {
+        elements: [
+          {
+            id: "hero_title",
+            type: "heading",
+            props: {
+              content: "Launch",
+            },
+          },
+        ],
+      },
+      bindingHints: [
+        {
+          role: "hero.title",
+          binding: "page.title",
+        },
+      ],
+    },
+  ],
+  editableMap: [
+    {
+      elementId: "hero_title",
+      role: "hero.title",
+      binding: "page.title",
+      fields: ["props.content"],
+    },
+  ],
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkTemplateRegistryEntry = {
+  id: "template_home",
+  type: "page",
+  name: "Homepage",
+  description: null,
+  routePattern: "/",
+  status: "active",
+  source: "frontend-design",
+  version: "1.0.0",
+  createdAt: null,
+  updatedAt: "2026-05-21T00:00:00.000Z",
+  versioning: {
+    schemaVersion: "backy.template-version.v1",
+    ready: true,
+    status: "active",
+    version: "1.0.0",
+    createdAt: null,
+    updatedAt: "2026-05-21T00:00:00.000Z",
+    issues: [],
+    recommendation:
+      "Template is ready for version-aware cloning and custom frontend handoff.",
+  },
+  contentSummary: {
+    hasContent: true,
+    elementCount: 1,
+    fieldCount: 0,
+    bindingHintCount: 1,
+    hasCanvas: false,
+    canvasSize: null,
+  },
+  clone: {
+    method: "POST",
+    endpoint: "/api/admin/sites/site_demo/pages",
+    body: {
+      frontendDesignTemplateId: "template_home",
+      title: "Homepage",
+    },
+  },
+};
+
+const sdkTemplateRegistrySummary = {
+  schemaVersion: "backy.template-registry.v1",
+  status: "captured",
+  templateCount: 1,
+  supportedTypes: ["page", "blogPost", "form", "product", "collection", "section"],
+  cloneField: "frontendDesignTemplateId",
+  cloneTargets: {
+    page: "/api/admin/sites/site_demo/pages",
+    blogPost: "/api/admin/sites/site_demo/blog",
+    form: "/api/admin/sites/site_demo/forms",
+    section: "/api/admin/sites/site_demo/reusable-sections",
+    collection: "/api/admin/sites/site_demo/collections",
+    product: "/api/admin/sites/site_demo/collections/products/records",
+  },
+  versionSummary: {
+    schemaVersion: "backy.template-version-readiness.v1",
+    ready: true,
+    readyCount: 1,
+    templateCount: 1,
+    missingVersionCount: 0,
+    missingUpdatedAtCount: 0,
+    inactiveCount: 0,
+    latestUpdatedAt: "2026-05-21T00:00:00.000Z",
+  },
+  actionPlan: {
+    schemaVersion: "backy.template-registry-action-plan.v1",
+    status: "ready",
+    recommendedNextAction:
+      "Use clone targets to create version-aware pages, posts, forms, products, collections, and sections.",
+    steps: [
+      "Use frontendDesignTemplateId in clone bodies so custom frontends can preserve template provenance.",
+    ],
+  },
+};
+
+const sdkAdminFrontendDesignEnvelope = {
+  success: true,
+  requestId: "req_admin_frontend_design",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo Site",
+      customDomain: null,
+    },
+    frontendDesign: sdkAdminFrontendDesign,
+    endpoints: {
+      admin: "/api/admin/sites/site_demo/frontend-design",
+      templates: "/api/admin/sites/site_demo/templates",
+      publicManifest: "/api/sites/site_demo/manifest",
+    },
+    templateRegistry: sdkTemplateRegistrySummary,
+    nextSteps: [
+      "Use the templates endpoint to list clone-ready page, blog, form, product, collection, and section templates.",
+    ],
+  },
+} satisfies BackyAdminFrontendDesignResponse;
+
+const sdkAdminTemplateRegistryEnvelope = {
+  success: true,
+  requestId: "req_admin_templates",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo Site",
+    },
+    registry: {
+      ...sdkTemplateRegistrySummary,
+      source: sdkAdminFrontendDesign.source,
+      totalTemplateCount: 1,
+      templates: [sdkTemplateRegistryEntry],
+      byType: {
+        page: [sdkTemplateRegistryEntry],
+        blogPost: [],
+        form: [],
+        product: [],
+        collection: [],
+        section: [],
+      },
+    },
+    templates: [sdkTemplateRegistryEntry],
+    byType: {
+      page: [sdkTemplateRegistryEntry],
+      blogPost: [],
+      form: [],
+      product: [],
+      collection: [],
+      section: [],
+    },
+    endpoints: {
+      frontendDesign: "/api/admin/sites/site_demo/frontend-design",
+      templates: "/api/admin/sites/site_demo/templates",
+    },
+  },
+} satisfies BackyAdminTemplateRegistryResponse;
 
 const sdkAdminSettings = {
   schemaVersion: "backy.admin-settings.v1",
