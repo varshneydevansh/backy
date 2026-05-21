@@ -1980,6 +1980,114 @@ if (runWriteSmoke) {
     assert(liveManagedPageUpdate.data.page?.id === fixture.pageId, 'updateLiveManagedPage() returned wrong page');
     writeChecks.push('updateLiveManagedPage');
 
+    const lifecyclePageSlug = `sdk-lifecycle-page-${Date.now()}`;
+    const lifecyclePage = await writeClient.createAdminPage({
+      title: 'SDK Lifecycle Page',
+      slug: lifecyclePageSlug,
+      status: 'draft',
+      meta: {
+        title: 'SDK Lifecycle Page',
+        description: 'Temporary page for SDK lifecycle coverage.',
+        canonical: `/${lifecyclePageSlug}`,
+      },
+      content: {
+        canvasSize: { width: 960, height: 640 },
+        elements: [
+          {
+            id: 'sdk-lifecycle-heading',
+            type: 'heading',
+            x: 80,
+            y: 80,
+            width: 640,
+            height: 88,
+            props: {
+              content: 'SDK lifecycle page',
+              level: 'h1',
+            },
+          },
+        ],
+      },
+      requestId: 'sdk-admin-page-create',
+    });
+    const lifecyclePageId = lifecyclePage.data.page?.id;
+    assert(lifecyclePageId, 'createAdminPage() missing created page id');
+    assert(lifecyclePage.data.page.slug === lifecyclePageSlug, 'createAdminPage() returned wrong page slug');
+    assert(lifecyclePage.data.page.updatedAt, 'createAdminPage() missing updatedAt for conflict-safe writes');
+    writeChecks.push('createAdminPage');
+
+    const updatedLifecyclePage = await writeClient.updateAdminPage(lifecyclePageId, {
+      title: 'SDK Lifecycle Page Updated',
+      expectedUpdatedAt: lifecyclePage.data.page.updatedAt,
+      content: {
+        canvasSize: { width: 960, height: 640 },
+        elements: [
+          {
+            id: 'sdk-lifecycle-heading',
+            type: 'heading',
+            x: 96,
+            y: 96,
+            width: 660,
+            height: 88,
+            props: {
+              content: 'SDK lifecycle page updated',
+              level: 'h1',
+            },
+          },
+        ],
+      },
+      requestId: 'sdk-admin-page-update',
+    });
+    assert(updatedLifecyclePage.data.page?.title === 'SDK Lifecycle Page Updated', 'updateAdminPage() did not update the page title');
+    assert(updatedLifecyclePage.data.page?.updatedAt, 'updateAdminPage() missing updatedAt');
+    writeChecks.push('updateAdminPage');
+
+    const lifecycleReadiness = await writeClient.adminPageReadiness(lifecyclePageId, {
+      requestId: 'sdk-admin-page-lifecycle-readiness',
+    });
+    const lifecycleReadinessErrors = lifecycleReadiness.data.readiness?.checks?.filter?.((check) => (
+      check?.severity === 'error' && check?.status !== 'pass'
+    )) || [];
+    assert(lifecycleReadiness.data.readiness?.id === lifecyclePageId, 'adminPageReadiness() returned wrong lifecycle page');
+    assert(lifecycleReadinessErrors.length === 0, 'adminPageReadiness() found lifecycle page readiness errors');
+    writeChecks.push('adminPageReadiness:lifecycle');
+
+    const lifecyclePreview = await writeClient.createAdminPagePreviewToken(lifecyclePageId, {
+      ttlSeconds: 300,
+      requestId: 'sdk-admin-page-preview-token',
+    });
+    assert(lifecyclePreview.data.targetId === lifecyclePageId, 'createAdminPagePreviewToken() returned wrong target');
+    assert(lifecyclePreview.data.previewToken, 'createAdminPagePreviewToken() missing preview token');
+    assert(lifecyclePreview.data.renderUrl?.includes('previewToken='), 'createAdminPagePreviewToken() missing render preview URL');
+    writeChecks.push('createAdminPagePreviewToken');
+
+    const publishedLifecyclePage = await writeClient.publishAdminPage(lifecyclePageId, {
+      expectedUpdatedAt: updatedLifecyclePage.data.page.updatedAt,
+      requestId: 'sdk-admin-page-publish',
+    });
+    assert(publishedLifecyclePage.data.page?.status === 'published', 'publishAdminPage() did not publish lifecycle page');
+    writeChecks.push('publishAdminPage');
+
+    const archivedLifecyclePage = await writeClient.archiveAdminPage(lifecyclePageId, {
+      expectedUpdatedAt: publishedLifecyclePage.data.page.updatedAt,
+      requestId: 'sdk-admin-page-archive',
+    });
+    assert(archivedLifecyclePage.data.page?.status === 'archived', 'archiveAdminPage() did not archive lifecycle page');
+    writeChecks.push('archiveAdminPage');
+
+    const lifecyclePageRevisions = await writeClient.adminPageRevisions(lifecyclePageId, {
+      limit: 5,
+      requestId: 'sdk-admin-page-lifecycle-revisions',
+    });
+    assert(Array.isArray(lifecyclePageRevisions.data.revisions), 'adminPageRevisions() missing lifecycle page revisions array');
+    writeChecks.push('adminPageRevisions:lifecycle');
+
+    const deletedLifecyclePage = await writeClient.deleteAdminPage(lifecyclePageId, {
+      requestId: 'sdk-admin-page-delete',
+    });
+    assert(deletedLifecyclePage.data.deleted === true, 'deleteAdminPage() did not delete lifecycle page');
+    assert(deletedLifecyclePage.data.pageId === lifecyclePageId, 'deleteAdminPage() returned wrong page id');
+    writeChecks.push('deleteAdminPage');
+
     const liveManagedPost = await writeClient.liveManagedBlogPost(fixture.postId, {
       actor: 'sdk-smoke-live-editor',
       requestId: 'sdk-live-managed-blog-read',
