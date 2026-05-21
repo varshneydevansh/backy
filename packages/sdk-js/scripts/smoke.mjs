@@ -1319,6 +1319,22 @@ assert(adminSite.data.site?.id === privateClient.getSiteId(), 'adminSite() retur
 const adminSiteReadiness = await privateClient.adminSiteReadiness();
 assert(adminSiteReadiness.data.readiness, 'adminSiteReadiness() missing readiness payload');
 
+const adminUsers = await privateClient.adminUsers({ limit: 5 });
+assert(Array.isArray(adminUsers.data.users), 'adminUsers() missing users array');
+const firstAdminUserId = adminUsers.data.users[0]?.id;
+if (firstAdminUserId) {
+  const adminUser = await privateClient.adminUser(firstAdminUserId);
+  assert(adminUser.data.user?.id === firstAdminUserId, 'adminUser() returned wrong user');
+  const userPermissions = await privateClient.adminUserPermissions(firstAdminUserId);
+  assert(userPermissions.data.permissions?.userId === firstAdminUserId, 'adminUserPermissions() returned wrong user');
+  const userMfa = await privateClient.adminUserMfa(firstAdminUserId);
+  assert(typeof userMfa.data.mfa?.enabled === 'boolean', 'adminUserMfa() missing enabled state');
+}
+if (adminSessionToken && !adminRequestApiKey) {
+  const authSessions = await privateClient.adminAuthSessions();
+  assert(Array.isArray(authSessions.data.sessions), 'adminAuthSessions() missing sessions array');
+}
+
 const adminPages = await privateClient.adminPages({ limit: 5 });
 assert(Array.isArray(adminPages.data.pages), 'adminPages() missing pages array');
 const firstAdminPageId = adminPages.data.pages[0]?.id;

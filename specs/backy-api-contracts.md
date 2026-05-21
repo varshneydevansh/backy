@@ -781,6 +781,23 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   - Current local runtime persists audit logs in `data/backy/admin-content.json` with a bounded recent-log history; database mode uses the shared `auditLogs` repository backed by the activity log table.
   - Settings delivery/API-key changes emit `settings.update` and `settings.api_keys.regenerate` audit events with redacted key snapshots. Media create/update/delete emits `create`, `update`, and `delete` audit events for uploaded assets. Reusable-section create/update/delete/restore/import/instance-propagation emits `reusableSection.*` audit events with request-id correlation.
 
+### 3.10 Users and sessions
+
+- `GET/POST /api/admin/users`
+- `GET/PATCH/DELETE /api/admin/users/:userId`
+- `POST /api/admin/users/bulk`
+- `POST /api/admin/users/import`
+- `POST /api/admin/users/import/rollback`
+- `GET/PATCH /api/admin/users/:userId/permissions`
+- `GET/PATCH /api/admin/users/:userId/mfa`
+- `POST /api/admin/users/:userId/invite-link`
+- `POST /api/admin/users/:userId/password-reset`
+- `POST /api/admin/users/:userId/transfer-ownership`
+- `GET/DELETE /api/admin/auth/sessions`
+  - User APIs return `{ success, requestId, data }` envelopes with paginated user lists, validated user create/update/delete, selected-user bulk status/delete actions, invite/password-reset delivery metadata, permission matrices, per-user MFA enrollment summaries, active session summaries, and CSV import/rollback results.
+  - Mutations enforce `users.view`, `users.create`, `users.manage`, `users.delete`, or owner-session requirements as appropriate, preserve current-user and last-active-owner/admin safeguards, and emit request-id-backed audit events.
+  - The JS SDK exposes this workspace user-management surface through `adminUsers()`, `createAdminUser()`, `adminUser()`, `updateAdminUser()`, `deleteAdminUser()`, `bulkAdminUsers()`, `adminUserPermissions()`, `updateAdminUserPermissions()`, `adminUserMfa()`, `updateAdminUserMfa()`, `createAdminUserInvite()`, `createAdminUserPasswordReset()`, `transferAdminUserOwnership()`, `adminAuthSessions()`, `revokeAdminAuthSession()`, `importAdminUsersCsv()`, and `rollbackAdminUsersImport()` so custom admin consoles can manage accounts without scraping Backy's admin app. CSV import sends raw `text/csv` and keeps SDK `requestId` values in headers unless the rollback endpoint explicitly needs an import audit request id.
+
 ---
 
 ## 4) Canonical contracts and bindings

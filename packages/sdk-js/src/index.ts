@@ -3493,6 +3493,7 @@ function buildBackyMediaUploadFormData(
 function backyRequestBody(value: unknown): BodyInit | undefined {
   if (value === undefined) return undefined;
   if (isBackyFormData(value)) return value;
+  if (typeof value === "string") return value;
   return JSON.stringify(value);
 }
 
@@ -6257,6 +6258,361 @@ export type BackyAdminRedirectsUpdateInput =
       };
     });
 
+export type BackyAdminUserRole = "owner" | "admin" | "editor" | "viewer";
+export type BackyAdminUserStatus =
+  | "active"
+  | "inactive"
+  | "invited"
+  | "suspended";
+
+export interface BackyAdminUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: BackyAdminUserRole;
+  status: BackyAdminUserStatus;
+  avatarUrl?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lastActiveAt?: string | null;
+  invitedAt?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminUserDeliveryResult {
+  attempted?: boolean;
+  provider?: "local-outbox" | "http-endpoint" | "resend" | "smtp" | string;
+  status?: "queued" | "failed" | string;
+  deliveryConfigured?: boolean;
+  statusCode?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminInviteToken {
+  id: string;
+  token: string;
+  userId?: string;
+  email?: string;
+  createdAt?: string;
+  expiresAt: string;
+  requestedById?: string | null;
+  deliveryConfigured?: boolean;
+  inviteUrl: string;
+  delivery?: BackyAdminUserDeliveryResult | null;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminPasswordResetToken {
+  id: string;
+  token: string;
+  userId: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  requestedById?: string | null;
+  deliveryConfigured?: boolean;
+  resetUrl: string;
+  delivery?: BackyAdminUserDeliveryResult | null;
+  [key: string]: unknown;
+}
+
+export type BackyAdminUsersResponse = BackyEnvelope<
+  {
+    users: BackyAdminUser[];
+    pagination?: BackyPagination;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminUserResponse = BackyEnvelope<
+  {
+    user: BackyAdminUser;
+    invite?: BackyAdminInviteToken | null;
+    inviteDelivery?: BackyAdminUserDeliveryResult | null;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminUserDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    userId: string;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminUserCreateInput = {
+  fullName: string;
+  email: string;
+  role: BackyAdminUserRole;
+  status?: BackyAdminUserStatus;
+  createInvite?: boolean;
+  requestId?: string;
+  [key: string]: unknown;
+};
+
+export type BackyAdminUserUpdateInput = {
+  fullName?: string;
+  email?: string;
+  role?: BackyAdminUserRole;
+  status?: BackyAdminUserStatus;
+  avatarUrl?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+};
+
+export type BackyAdminUserSortBy =
+  | "fullName"
+  | "email"
+  | "role"
+  | "status"
+  | "createdAt"
+  | "updatedAt";
+
+export interface BackyAdminUserListOptions
+  extends BackyLiveManagementRequestOptions,
+    BackyListOptions {
+  search?: string;
+  role?: BackyAdminUserRole;
+  status?: BackyAdminUserStatus;
+  sortBy?: BackyAdminUserSortBy;
+  sort?: BackyAdminUserSortBy;
+  sortDirection?: "asc" | "desc";
+  direction?: "asc" | "desc";
+}
+
+export type BackyAdminUserBulkInput =
+  | {
+      action: "updateStatus";
+      userIds: string[];
+      status: BackyAdminUserStatus;
+      requestId?: string;
+    }
+  | {
+      action: "delete";
+      userIds: string[];
+      requestId?: string;
+    };
+
+export type BackyAdminUserBulkResponse = BackyEnvelope<
+  {
+    action: "delete" | "updateStatus";
+    updated: number;
+    deleted: number;
+    userIds: string[];
+    users: BackyAdminUser[];
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminPermissionCapability =
+  | "view"
+  | "create"
+  | "edit"
+  | "publish"
+  | "delete"
+  | "manage"
+  | "export"
+  | "configure";
+
+export type BackyAdminPermissionOverrideValue = "allow" | "deny";
+
+export interface BackyAdminPermissionRule {
+  key: string;
+  label: string;
+  capability: BackyAdminPermissionCapability | string;
+  allowed: boolean;
+  source: "role" | "status" | "override" | string;
+  override: BackyAdminPermissionOverrideValue | null;
+  reason: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminPermissionGroup {
+  key: string;
+  label: string;
+  description: string;
+  permissions: BackyAdminPermissionRule[];
+  [key: string]: unknown;
+}
+
+export interface BackyAdminUserPermissionMatrix {
+  userId: string;
+  role: BackyAdminUserRole;
+  status: BackyAdminUserStatus;
+  canSignIn: boolean;
+  summary: {
+    allowed: number;
+    total: number;
+    blockedByStatus: boolean;
+    [key: string]: unknown;
+  };
+  groups: BackyAdminPermissionGroup[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminUserPermissionsResponse = BackyEnvelope<
+  {
+    user?: Pick<
+      BackyAdminUser,
+      "id" | "fullName" | "email" | "role" | "status"
+    >;
+    permissions: BackyAdminUserPermissionMatrix;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminUserPermissionsUpdateInput = {
+  requestId?: string;
+  overrides: Record<string, BackyAdminPermissionOverrideValue | null>;
+};
+
+export interface BackyAdminUserMfaEnrollment {
+  enabled: boolean;
+  userId?: string;
+  email?: string;
+  recoveryCodesRemaining?: number;
+  updatedAt?: string | null;
+  [key: string]: unknown;
+}
+
+export type BackyAdminUserMfaResponse = BackyEnvelope<
+  {
+    user: Pick<BackyAdminUser, "id" | "fullName" | "email" | "role" | "status">;
+    mfa: BackyAdminUserMfaEnrollment;
+    recoveryCodes?: string[];
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminUserMfaUpdateInput = {
+  enabled?: boolean;
+  generateRecoveryCodes?: boolean;
+  requestId?: string;
+};
+
+export type BackyAdminUserInviteResponse = BackyEnvelope<
+  {
+    invite: BackyAdminInviteToken;
+    inviteDelivery?: BackyAdminUserDeliveryResult | null;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminUserPasswordResetResponse = BackyEnvelope<
+  {
+    reset: BackyAdminPasswordResetToken;
+    resetDelivery?: BackyAdminUserDeliveryResult | null;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminUserTokenInput = {
+  expiresInMinutes?: number;
+  requestId?: string;
+};
+
+export type BackyAdminUserOwnershipTransferResponse = BackyEnvelope<
+  {
+    transfer: {
+      previousOwner: BackyAdminUser;
+      newOwner: BackyAdminUser;
+      [key: string]: unknown;
+    };
+    users?: BackyAdminUser[];
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminAuthSessionSummary {
+  id: string;
+  user: BackyAdminUser;
+  issuedAt: string;
+  expiresAt: string;
+  lastSeenAt: string;
+  authMode: "local-demo" | "supabase" | string;
+  current: boolean;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminAuthSessionListOptions
+  extends BackyLiveManagementRequestOptions {
+  userId?: string;
+  email?: string;
+}
+
+export type BackyAdminAuthSessionsResponse = BackyEnvelope<
+  {
+    sessions: BackyAdminAuthSessionSummary[];
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminAuthSessionRevokeResponse = BackyEnvelope<
+  {
+    revoked: boolean;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminUserImportError {
+  row: number;
+  email?: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminUserImportResult {
+  mode?: "create" | "upsert";
+  dryRun?: boolean;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: BackyAdminUserImportError[];
+  rollbackAvailable?: boolean;
+  rollbackRequestId?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminUserImportOptions
+  extends BackyLiveManagementRequestOptions {
+  mode?: "create" | "upsert";
+  dryRun?: boolean;
+}
+
+export type BackyAdminUserImportResponse = BackyEnvelope<
+  {
+    users: BackyAdminUser[];
+    import: BackyAdminUserImportResult;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminUserImportRollbackResult {
+  importRequestId?: string | null;
+  importAction?: string;
+  deleted: number;
+  restored: number;
+  skipped: Array<{
+    userId: string;
+    email: string;
+    reason: string;
+    [key: string]: unknown;
+  }>;
+  deletedUserIds: string[];
+  restoredUserIds: string[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminUserImportRollbackResponse = BackyEnvelope<
+  {
+    rollback: BackyAdminUserImportRollbackResult;
+    [key: string]: unknown;
+  }
+>;
+
 export interface BackyFrontendLaunchReadiness {
   schemaVersion: "backy.frontend-launch-readiness.v1";
   status: "ready" | "attention" | "blocked";
@@ -6692,6 +7048,269 @@ export class BackyClient {
         credentials: options.credentials,
       },
     );
+  }
+
+  adminUsers(
+    options: BackyAdminUserListOptions = {},
+  ): Promise<BackyAdminUsersResponse> {
+    const { requestId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request("/api/admin/users", {
+      query: normalizeListQuery<BackyAdminUserListOptions>({
+        search: rest.search,
+        role: rest.role,
+        status: rest.status,
+        sortBy: rest.sortBy,
+        sort: rest.sort,
+        sortDirection: rest.sortDirection,
+        direction: rest.direction,
+        limit: rest.limit,
+        offset: rest.offset,
+      }),
+      requestId,
+      headers,
+      credentials,
+    });
+  }
+
+  createAdminUser(
+    input: BackyAdminUserCreateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/users", {
+      method: "POST",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  adminUser(
+    userId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserResponse> {
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}`, {
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  updateAdminUser(
+    userId: string,
+    input: BackyAdminUserUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserResponse> {
+    const { requestId, ...body } = input;
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  deleteAdminUser(
+    userId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserDeleteResponse> {
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  bulkAdminUsers(
+    input: BackyAdminUserBulkInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserBulkResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/users/bulk", {
+      method: "POST",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  adminUserPermissions(
+    userId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserPermissionsResponse> {
+    return this.request(
+      `/api/admin/users/${encodeURIComponent(userId)}/permissions`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminUserPermissions(
+    userId: string,
+    input: BackyAdminUserPermissionsUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserPermissionsResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/users/${encodeURIComponent(userId)}/permissions`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminUserMfa(
+    userId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserMfaResponse> {
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}/mfa`, {
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  updateAdminUserMfa(
+    userId: string,
+    input: BackyAdminUserMfaUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserMfaResponse> {
+    const { requestId, ...body } = input;
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}/mfa`, {
+      method: "PATCH",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  createAdminUserInvite(
+    userId: string,
+    input: BackyAdminUserTokenInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserInviteResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/users/${encodeURIComponent(userId)}/invite-link`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createAdminUserPasswordReset(
+    userId: string,
+    input: BackyAdminUserTokenInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserPasswordResetResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/users/${encodeURIComponent(userId)}/password-reset`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  transferAdminUserOwnership(
+    userId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserOwnershipTransferResponse> {
+    return this.request(
+      `/api/admin/users/${encodeURIComponent(userId)}/transfer-ownership`,
+      {
+        method: "POST",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminAuthSessions(
+    options: BackyAdminAuthSessionListOptions = {},
+  ): Promise<BackyAdminAuthSessionsResponse> {
+    const { requestId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request("/api/admin/auth/sessions", {
+      query: {
+        userId: rest.userId,
+        email: rest.email,
+      },
+      requestId,
+      headers,
+      credentials,
+    });
+  }
+
+  revokeAdminAuthSession(
+    sessionId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminAuthSessionRevokeResponse> {
+    return this.request("/api/admin/auth/sessions", {
+      method: "DELETE",
+      body: { sessionId },
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  importAdminUsersCsv(
+    csv: string,
+    options: BackyAdminUserImportOptions = {},
+  ): Promise<BackyAdminUserImportResponse> {
+    const { requestId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const requestHeaders = new Headers(headers);
+    if (!requestHeaders.has("content-type")) {
+      requestHeaders.set("content-type", "text/csv; charset=utf-8");
+    }
+    return this.request("/api/admin/users/import", {
+      method: "POST",
+      query: {
+        mode: rest.mode,
+        dryRun: rest.dryRun,
+      },
+      body: csv,
+      requestId,
+      headers: requestHeaders,
+      credentials,
+    });
+  }
+
+  rollbackAdminUsersImport(
+    importRequestId?: string | null,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminUserImportRollbackResponse> {
+    return this.request("/api/admin/users/import/rollback", {
+      method: "POST",
+      body: importRequestId ? { requestId: importRequestId } : {},
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
   }
 
   sites(): Promise<

@@ -16,6 +16,8 @@ import type {
   BackyAdminSettings,
   BackyAdminSettingsResponse,
   BackyAdminNavigationResponse,
+  BackyAdminAuthSessionRevokeResponse,
+  BackyAdminAuthSessionsResponse,
   BackyAdminRedirectsResponse,
   BackyAdminSeoResponse,
   BackyAdminSiteDeleteResponse,
@@ -23,6 +25,18 @@ import type {
   BackyAdminSiteReadinessResponse,
   BackyAdminSiteResponse,
   BackyAdminSitesResponse,
+  BackyAdminUser,
+  BackyAdminUserBulkResponse,
+  BackyAdminUserDeleteResponse,
+  BackyAdminUserImportResponse,
+  BackyAdminUserImportRollbackResponse,
+  BackyAdminUserInviteResponse,
+  BackyAdminUserMfaResponse,
+  BackyAdminUserOwnershipTransferResponse,
+  BackyAdminUserPasswordResetResponse,
+  BackyAdminUserPermissionsResponse,
+  BackyAdminUserResponse,
+  BackyAdminUsersResponse,
   BackyAdminBlogPostDeleteResponse,
   BackyAdminBlogPostPreviewResponse,
   BackyAdminBlogPostReadinessResponse,
@@ -423,6 +437,93 @@ type AdminRedirectsUpdateMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateAdminRedirects"]>,
     BackyAdminRedirectsResponse
+  >
+>;
+type AdminUsersMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminUsers"]>, BackyAdminUsersResponse>
+>;
+type CreateAdminUserMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["createAdminUser"]>, BackyAdminUserResponse>
+>;
+type AdminUserMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminUser"]>, BackyAdminUserResponse>
+>;
+type UpdateAdminUserMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateAdminUser"]>, BackyAdminUserResponse>
+>;
+type DeleteAdminUserMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminUser"]>,
+    BackyAdminUserDeleteResponse
+  >
+>;
+type BulkAdminUsersMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["bulkAdminUsers"]>,
+    BackyAdminUserBulkResponse
+  >
+>;
+type AdminUserPermissionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminUserPermissions"]>,
+    BackyAdminUserPermissionsResponse
+  >
+>;
+type UpdateAdminUserPermissionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminUserPermissions"]>,
+    BackyAdminUserPermissionsResponse
+  >
+>;
+type AdminUserMfaMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminUserMfa"]>, BackyAdminUserMfaResponse>
+>;
+type UpdateAdminUserMfaMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminUserMfa"]>,
+    BackyAdminUserMfaResponse
+  >
+>;
+type CreateAdminUserInviteMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminUserInvite"]>,
+    BackyAdminUserInviteResponse
+  >
+>;
+type CreateAdminUserPasswordResetMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminUserPasswordReset"]>,
+    BackyAdminUserPasswordResetResponse
+  >
+>;
+type TransferAdminUserOwnershipMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["transferAdminUserOwnership"]>,
+    BackyAdminUserOwnershipTransferResponse
+  >
+>;
+type AdminAuthSessionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminAuthSessions"]>,
+    BackyAdminAuthSessionsResponse
+  >
+>;
+type RevokeAdminAuthSessionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["revokeAdminAuthSession"]>,
+    BackyAdminAuthSessionRevokeResponse
+  >
+>;
+type ImportAdminUsersCsvMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importAdminUsersCsv"]>,
+    BackyAdminUserImportResponse
+  >
+>;
+type RollbackAdminUsersImportMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["rollbackAdminUsersImport"]>,
+    BackyAdminUserImportRollbackResponse
   >
 >;
 type AdminPagesMethodReturnsContract = Assert<
@@ -1528,6 +1629,255 @@ const sdkAdminRedirectsEnvelope = {
     },
   },
 } satisfies BackyAdminRedirectsResponse;
+
+const sdkAdminUser = {
+  id: "user_editor",
+  fullName: "Editor User",
+  email: "editor@example.com",
+  role: "editor",
+  status: "active",
+  avatarUrl: null,
+  createdAt: "2026-05-16T00:00:00.000Z",
+  updatedAt: "2026-05-16T00:00:00.000Z",
+} satisfies BackyAdminUser;
+
+const sdkAdminUsersEnvelope = {
+  success: true,
+  requestId: "req_admin_users",
+  data: {
+    users: [sdkAdminUser],
+    pagination: {
+      total: 1,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminUsersResponse;
+
+const sdkAdminUserEnvelope = {
+  success: true,
+  requestId: "req_admin_user",
+  data: {
+    user: sdkAdminUser,
+    invite: null,
+    inviteDelivery: null,
+  },
+} satisfies BackyAdminUserResponse;
+
+const sdkAdminUserDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_user_delete",
+  data: {
+    deleted: true,
+    userId: sdkAdminUser.id,
+  },
+} satisfies BackyAdminUserDeleteResponse;
+
+const sdkAdminUserBulkEnvelope = {
+  success: true,
+  requestId: "req_admin_user_bulk",
+  data: {
+    action: "updateStatus",
+    updated: 1,
+    deleted: 0,
+    userIds: [sdkAdminUser.id],
+    users: [sdkAdminUser],
+  },
+} satisfies BackyAdminUserBulkResponse;
+
+const sdkAdminUserPermissionsEnvelope = {
+  success: true,
+  requestId: "req_admin_user_permissions",
+  data: {
+    user: {
+      id: sdkAdminUser.id,
+      fullName: sdkAdminUser.fullName,
+      email: sdkAdminUser.email,
+      role: sdkAdminUser.role,
+      status: sdkAdminUser.status,
+    },
+    permissions: {
+      userId: sdkAdminUser.id,
+      role: sdkAdminUser.role,
+      status: sdkAdminUser.status,
+      canSignIn: true,
+      summary: {
+        allowed: 2,
+        total: 3,
+        blockedByStatus: false,
+      },
+      groups: [
+        {
+          key: "content",
+          label: "Content",
+          description: "Content permissions",
+          permissions: [
+            {
+              key: "pages.view",
+              label: "View pages",
+              capability: "view",
+              allowed: true,
+              source: "role",
+              override: null,
+              reason: "Allowed by role.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+} satisfies BackyAdminUserPermissionsResponse;
+
+const sdkAdminUserMfaEnvelope = {
+  success: true,
+  requestId: "req_admin_user_mfa",
+  data: {
+    user: {
+      id: sdkAdminUser.id,
+      fullName: sdkAdminUser.fullName,
+      email: sdkAdminUser.email,
+      role: sdkAdminUser.role,
+      status: sdkAdminUser.status,
+    },
+    mfa: {
+      enabled: true,
+      userId: sdkAdminUser.id,
+      email: sdkAdminUser.email,
+      recoveryCodesRemaining: 8,
+      updatedAt: "2026-05-16T00:00:00.000Z",
+    },
+    recoveryCodes: ["ABCD-EFGH"],
+  },
+} satisfies BackyAdminUserMfaResponse;
+
+const sdkAdminUserInviteEnvelope = {
+  success: true,
+  requestId: "req_admin_user_invite",
+  data: {
+    invite: {
+      id: "invite_editor",
+      token: "invite-token",
+      userId: sdkAdminUser.id,
+      email: sdkAdminUser.email,
+      createdAt: "2026-05-16T00:00:00.000Z",
+      expiresAt: "2026-05-23T00:00:00.000Z",
+      requestedById: "user_owner",
+      deliveryConfigured: true,
+      inviteUrl: "https://example.com/accept-invite?token=invite-token",
+    },
+    inviteDelivery: {
+      attempted: true,
+      provider: "local-outbox",
+      status: "queued",
+      deliveryConfigured: true,
+    },
+  },
+} satisfies BackyAdminUserInviteResponse;
+
+const sdkAdminUserPasswordResetEnvelope = {
+  success: true,
+  requestId: "req_admin_user_reset",
+  data: {
+    reset: {
+      id: "reset_editor",
+      token: "reset-token",
+      userId: sdkAdminUser.id,
+      email: sdkAdminUser.email,
+      createdAt: "2026-05-16T00:00:00.000Z",
+      expiresAt: "2026-05-16T01:00:00.000Z",
+      requestedById: "user_owner",
+      deliveryConfigured: true,
+      resetUrl: "https://example.com/reset-password?token=reset-token",
+    },
+    resetDelivery: {
+      attempted: true,
+      provider: "local-outbox",
+      status: "queued",
+      deliveryConfigured: true,
+    },
+  },
+} satisfies BackyAdminUserPasswordResetResponse;
+
+const sdkAdminUserOwnershipTransferEnvelope = {
+  success: true,
+  requestId: "req_admin_user_transfer",
+  data: {
+    transfer: {
+      previousOwner: {
+        ...sdkAdminUser,
+        id: "user_owner",
+        email: "owner@example.com",
+        role: "admin",
+      },
+      newOwner: {
+        ...sdkAdminUser,
+        role: "owner",
+      },
+    },
+    users: [sdkAdminUser],
+  },
+} satisfies BackyAdminUserOwnershipTransferResponse;
+
+const sdkAdminAuthSessionsEnvelope = {
+  success: true,
+  requestId: "req_admin_auth_sessions",
+  data: {
+    sessions: [
+      {
+        id: "session_editor",
+        user: sdkAdminUser,
+        issuedAt: "2026-05-16T00:00:00.000Z",
+        expiresAt: "2026-05-17T00:00:00.000Z",
+        lastSeenAt: "2026-05-16T00:10:00.000Z",
+        authMode: "local-demo",
+        current: false,
+      },
+    ],
+  },
+} satisfies BackyAdminAuthSessionsResponse;
+
+const sdkAdminAuthSessionRevokeEnvelope = {
+  success: true,
+  requestId: "req_admin_auth_session_revoke",
+  data: {
+    revoked: true,
+  },
+} satisfies BackyAdminAuthSessionRevokeResponse;
+
+const sdkAdminUserImportEnvelope = {
+  success: true,
+  requestId: "req_admin_user_import",
+  data: {
+    users: [sdkAdminUser],
+    import: {
+      mode: "create",
+      dryRun: true,
+      created: 1,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+      rollbackAvailable: false,
+      rollbackRequestId: null,
+    },
+  },
+} satisfies BackyAdminUserImportResponse;
+
+const sdkAdminUserImportRollbackEnvelope = {
+  success: true,
+  requestId: "req_admin_user_import_rollback",
+  data: {
+    rollback: {
+      importRequestId: "req_admin_user_import",
+      importAction: "user.import",
+      deleted: 1,
+      restored: 0,
+      skipped: [],
+      deletedUserIds: [sdkAdminUser.id],
+      restoredUserIds: [],
+    },
+  },
+} satisfies BackyAdminUserImportRollbackResponse;
 
 const sdkAdminPage = {
   id: "page_home",
