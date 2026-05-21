@@ -6291,7 +6291,47 @@ export interface BackyCommentBlocklistOptions extends BackyListOptions {
 
 export interface BackyEventListOptions extends BackyListOptions {
   kind?: string;
+  siteId?: string;
+  formId?: string;
+  commentId?: string;
+  contactId?: string;
+  eventRequestId?: string;
 }
+
+export type BackyAdminSiteEventKind =
+  | "form-submission"
+  | "contact-shared"
+  | "contact-sync"
+  | "contact-status"
+  | "commerce-order"
+  | "commerce-product"
+  | "commerce-webhook"
+  | "comment-submitted"
+  | "comment-status"
+  | "comment-reported"
+  | "interactive-runtime"
+  | "all"
+  | string;
+
+export interface BackyAdminSiteEventListOptions
+  extends BackyLiveManagementRequestOptions {
+  kind?: BackyAdminSiteEventKind;
+  formId?: string;
+  commentId?: string;
+  contactId?: string;
+  eventRequestId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export type BackyAdminSiteEventsResponse = BackyEnvelope<
+  {
+    siteId: string;
+    events: BackyInteractionEvent[];
+    count: number;
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
 
 export type BackyInteractiveRuntimeEventType =
   | "ready"
@@ -13418,15 +13458,72 @@ export class BackyClient {
       pagination?: BackyPagination;
     }>
   > {
-    const { requestId, ...queryOptions } = options;
+    const { requestId, siteId, eventRequestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
+    if (eventRequestId) {
+      query.requestId = eventRequestId;
+    }
     return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/events`,
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/events`,
       {
         query,
         requestId,
       },
     );
+  }
+
+  adminSiteEvents(
+    options: BackyAdminSiteEventListOptions = {},
+  ): Promise<BackyAdminSiteEventsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const { eventRequestId, ...queryOptions } = rest;
+    const query = normalizeListQuery(
+      queryOptions as BackyListOptions &
+        Record<string, string | number | boolean | undefined>,
+    );
+    if (eventRequestId) {
+      query.requestId = eventRequestId;
+    }
+
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/events`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  formDeliveryEvents(
+    formId: string,
+    options: Omit<BackyAdminSiteEventListOptions, "kind" | "formId"> = {},
+  ): Promise<BackyAdminSiteEventsResponse> {
+    return this.adminSiteEvents({
+      ...options,
+      kind: "form-submission",
+      formId,
+    });
+  }
+
+  orderDeliveryEvents(
+    options: Omit<BackyAdminSiteEventListOptions, "kind"> = {},
+  ): Promise<BackyAdminSiteEventsResponse> {
+    return this.adminSiteEvents({
+      ...options,
+      kind: "commerce-order",
+    });
+  }
+
+  productNotificationEvents(
+    options: Omit<BackyAdminSiteEventListOptions, "kind"> = {},
+  ): Promise<BackyAdminSiteEventsResponse> {
+    return this.adminSiteEvents({
+      ...options,
+      kind: "commerce-product",
+    });
   }
 
   private requireSiteId(): string {

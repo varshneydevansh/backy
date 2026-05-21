@@ -36,6 +36,7 @@ import type {
   BackyAdminNavigationResponse,
   BackyAdminAuthSessionRevokeResponse,
   BackyAdminAuthSessionsResponse,
+  BackyAdminSiteEventsResponse,
   BackyAdminRedirectsResponse,
   BackyAdminSeoResponse,
   BackyAdminSiteDeleteResponse,
@@ -792,6 +793,30 @@ type AdminAuditLogsMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["adminAuditLogs"]>,
     BackyAdminAuditLogsResponse
+  >
+>;
+type AdminSiteEventsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminSiteEvents"]>,
+    BackyAdminSiteEventsResponse
+  >
+>;
+type FormDeliveryEventsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["formDeliveryEvents"]>,
+    BackyAdminSiteEventsResponse
+  >
+>;
+type OrderDeliveryEventsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["orderDeliveryEvents"]>,
+    BackyAdminSiteEventsResponse
+  >
+>;
+type ProductNotificationEventsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["productNotificationEvents"]>,
+    BackyAdminSiteEventsResponse
   >
 >;
 type AdminPagesMethodReturnsContract = Assert<
@@ -2974,6 +2999,35 @@ const sdkAdminAuditLogsEnvelope = {
     },
   },
 } satisfies BackyAdminAuditLogsResponse;
+
+const sdkAdminSiteEventsEnvelope = {
+  success: true,
+  requestId: "req_admin_site_events",
+  data: {
+    siteId: "site_demo",
+    events: [
+      {
+        id: "event_form_delivery",
+        siteId: "site_demo",
+        kind: "form-submission",
+        formId: "form_contact",
+        requestId: "req_submission",
+        status: "succeeded",
+        metadata: {
+          channel: "email",
+        },
+        createdAt: "2026-05-16T00:02:00.000Z",
+      },
+    ],
+    count: 1,
+    pagination: {
+      total: 1,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminSiteEventsResponse;
 
 const sdkAdminPage = {
   id: "page_home",

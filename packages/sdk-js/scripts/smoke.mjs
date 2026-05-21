@@ -1527,10 +1527,22 @@ assert(Array.isArray(adminMediaFolders.data.folders), 'adminMediaFolders() missi
 const adminForms = await privateClient.adminForms({ limit: 5 });
 assert(Array.isArray(adminForms.data.forms), 'adminForms() missing forms array');
 assert(adminForms.data.persistenceCertification?.schemaVersion === 'backy.forms-persistence-certification.v1', 'adminForms() missing forms persistence certification handoff');
+assert(typeof privateClient.adminSiteEvents === 'function', 'adminSiteEvents() missing SDK method');
+assert(typeof privateClient.formDeliveryEvents === 'function', 'formDeliveryEvents() missing SDK method');
+assert(typeof privateClient.orderDeliveryEvents === 'function', 'orderDeliveryEvents() missing SDK method');
+assert(typeof privateClient.productNotificationEvents === 'function', 'productNotificationEvents() missing SDK method');
+const adminSiteEvents = await privateClient.adminSiteEvents({ kind: 'form-submission', limit: 5 });
+assert(Array.isArray(adminSiteEvents.data.events), 'adminSiteEvents() missing events array');
 if (adminForms.data.forms.length > 0) {
   const adminForm = await privateClient.adminForm(adminForms.data.forms[0].id);
   assert(adminForm.data.form?.id === adminForms.data.forms[0].id, 'adminForm() returned wrong form');
+  const formDeliveryEvents = await privateClient.formDeliveryEvents(adminForms.data.forms[0].id, { limit: 5 });
+  assert(Array.isArray(formDeliveryEvents.data.events), 'formDeliveryEvents() missing events array');
 }
+const orderDeliveryEvents = await privateClient.orderDeliveryEvents({ limit: 5 });
+assert(Array.isArray(orderDeliveryEvents.data.events), 'orderDeliveryEvents() missing events array');
+const productNotificationEvents = await privateClient.productNotificationEvents({ limit: 5 });
+assert(Array.isArray(productNotificationEvents.data.events), 'productNotificationEvents() missing events array');
 const formsAnalytics = await privateClient.formsAnalytics({ days: 30 });
 assert(formsAnalytics.data.analytics, 'formsAnalytics() missing analytics payload');
 const formContactSegments = await privateClient.formContactSegments();
