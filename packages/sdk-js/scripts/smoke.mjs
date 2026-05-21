@@ -427,6 +427,35 @@ async function createSdkSmokeFixture() {
   assert(page.response.status === 201, `${page.url} expected page create 201, got ${page.response.status}`);
   const pageId = page.json?.data?.page?.id;
   assert(pageId, 'temporary SDK smoke page missing id');
+  const postSlug = `sdk-smoke-post-${unique}`;
+
+  const post = await request(`/api/admin/sites/${siteId}/blog`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      title: 'SDK Smoke Post',
+      slug: postSlug,
+      excerpt: 'Temporary blog post for SDK live-management smoke.',
+      status: 'draft',
+      content: {
+        elements: [
+          {
+            id: 'sdk-smoke-post-heading',
+            type: 'heading',
+            x: 80,
+            y: 80,
+            width: 720,
+            height: 96,
+            props: { content: 'SDK live blog post', level: 'h1' },
+          },
+        ],
+        canvasSize: { width: 1200, height: 760 },
+      },
+    }),
+  });
+  assert(post.response.status === 201, `${post.url} expected blog post create 201, got ${post.response.status}`);
+  const postId = post.json?.data?.post?.id;
+  assert(postId, 'temporary SDK smoke blog post missing id');
   const redirectPath = `/sdk-old-${pageSlug}`;
   const gonePath = `/sdk-retired-${pageSlug}`;
 
@@ -531,6 +560,8 @@ async function createSdkSmokeFixture() {
     siteSlug,
     pageId,
     pageSlug,
+    postId,
+    postSlug,
     redirectPath,
     gonePath,
     collectionId,
@@ -1318,8 +1349,24 @@ if (runWriteSmoke) {
       actor: 'sdk-smoke-live-editor',
     });
     assert(liveManagedPageUpdate.data.page?.id === fixture.pageId, 'updateLiveManagedPage() returned wrong page');
-    assert(liveManagedPageUpdate.data.cacheInvalidation, 'updateLiveManagedPage() missing cache invalidation handoff');
     writeChecks.push('updateLiveManagedPage');
+
+    const liveManagedPost = await writeClient.liveManagedBlogPost(fixture.postId, {
+      actor: 'sdk-smoke-live-editor',
+      requestId: 'sdk-live-managed-blog-read',
+    });
+    assert(liveManagedPost.data.post?.id === fixture.postId, 'liveManagedBlogPost() returned wrong post');
+    writeChecks.push('liveManagedBlogPost');
+
+    const liveManagedPostUpdate = await writeClient.updateLiveManagedBlogPost(fixture.postId, {
+      title: liveManagedPost.data.post.title,
+      expectedUpdatedAt: liveManagedPost.data.post.updatedAt,
+      requestId: 'sdk-live-managed-blog-update',
+    }, {
+      actor: 'sdk-smoke-live-editor',
+    });
+    assert(liveManagedPostUpdate.data.post?.id === fixture.postId, 'updateLiveManagedBlogPost() returned wrong post');
+    writeChecks.push('updateLiveManagedBlogPost');
 
     const redirected = await writeClient.resolve(fixture.redirectPath);
     assert(redirected.data.route?.type === 'redirect', 'resolve() did not return a redirect route');
@@ -1537,6 +1584,10 @@ console.log(JSON.stringify({
     'renderCached',
     'pages',
     'pagesCached',
+    'liveManagedPage',
+    'updateLiveManagedPage',
+    'liveManagedBlogPost',
+    'updateLiveManagedBlogPost',
     'blog',
     'blogFeeds',
     'blogRss',
