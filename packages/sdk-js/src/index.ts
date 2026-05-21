@@ -6483,6 +6483,42 @@ export interface BackyCommentBlocklistOptions extends BackyListOptions {
   requestId?: string;
 }
 
+export type BackySiteCommentsResponse = BackyEnvelope<{
+  comments: BackyComment[];
+  count: number;
+  pagination?: BackyPagination;
+}>;
+
+export type BackyCommentBulkUpdateResponse = BackyEnvelope<{
+  siteId?: string;
+  updated: BackyComment[];
+  updatedCount?: number;
+  missingIds?: string[];
+}>;
+
+export type BackyCommentBlocklistResponse = BackyEnvelope<{
+  siteId?: string;
+  blocklist: BackyCommentBlocklistEntry[];
+  count: number;
+  pagination?: BackyPagination;
+}>;
+
+export type BackyCommentBlocklistDeleteResponse = BackyEnvelope<{
+  siteId?: string;
+  deleted: BackyCommentBlocklistEntry[];
+  deletedCount?: number;
+  missingIds?: string[];
+}>;
+
+export type BackySiteCommentResponse = BackyEnvelope<{
+  comment: BackyComment;
+}>;
+
+export type BackyCommentDeleteResponse = BackyEnvelope<{
+  deleted: BackyComment[];
+  deletedCount: number;
+}>;
+
 export interface BackyCommentAnalyticsOptions
   extends BackyLiveManagementRequestOptions {
   days?: number;
@@ -13626,13 +13662,7 @@ export class BackyClient {
 
   siteComments(
     options: BackyCommentListOptions = {},
-  ): Promise<
-    BackyEnvelope<{
-      comments: BackyComment[];
-      count: number;
-      pagination?: BackyPagination;
-    }>
-  > {
+  ): Promise<BackySiteCommentsResponse> {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
     return this.request(
@@ -13646,14 +13676,7 @@ export class BackyClient {
 
   updateComments(
     input: BackyCommentBulkUpdateInput,
-  ): Promise<
-    BackyEnvelope<{
-      siteId?: string;
-      updated: BackyComment[];
-      updatedCount?: number;
-      missingIds?: string[];
-    }>
-  > {
+  ): Promise<BackyCommentBulkUpdateResponse> {
     return this.request(
       `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`,
       {
@@ -13670,14 +13693,7 @@ export class BackyClient {
       BackyCommentBulkUpdateInput,
       "commentIds" | "ids" | "action" | "clearReports" | "status"
     > = {},
-  ): Promise<
-    BackyEnvelope<{
-      siteId?: string;
-      updated: BackyComment[];
-      updatedCount?: number;
-      missingIds?: string[];
-    }>
-  > {
+  ): Promise<BackyCommentBulkUpdateResponse> {
     return this.updateComments({
       ...input,
       commentIds,
@@ -13687,14 +13703,7 @@ export class BackyClient {
 
   commentBlocklist(
     options: BackyCommentBlocklistOptions = {},
-  ): Promise<
-    BackyEnvelope<{
-      siteId?: string;
-      blocklist: BackyCommentBlocklistEntry[];
-      count: number;
-      pagination?: BackyPagination;
-    }>
-  > {
+  ): Promise<BackyCommentBlocklistResponse> {
     const { requestId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions);
     return this.request(
@@ -13709,14 +13718,7 @@ export class BackyClient {
   deleteCommentBlocklistEntries(
     ids: string[],
     input: { requestId?: string } = {},
-  ): Promise<
-    BackyEnvelope<{
-      siteId?: string;
-      deleted: BackyCommentBlocklistEntry[];
-      deletedCount?: number;
-      missingIds?: string[];
-    }>
-  > {
+  ): Promise<BackyCommentBlocklistDeleteResponse> {
     return this.request(
       `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`,
       {
@@ -13746,9 +13748,7 @@ export class BackyClient {
     );
   }
 
-  comment(
-    commentId: string,
-  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+  comment(commentId: string): Promise<BackySiteCommentResponse> {
     return this.request(
       `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
     );
@@ -13757,7 +13757,7 @@ export class BackyClient {
   updateComment(
     commentId: string,
     updates: Record<string, unknown>,
-  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+  ): Promise<BackySiteCommentResponse> {
     return this.request(
       `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
       {
@@ -13767,9 +13767,7 @@ export class BackyClient {
     );
   }
 
-  deleteComment(
-    commentId: string,
-  ): Promise<BackyEnvelope<{ deleted: BackyComment[]; deletedCount: number }>> {
+  deleteComment(commentId: string): Promise<BackyCommentDeleteResponse> {
     return this.request(
       `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
       {

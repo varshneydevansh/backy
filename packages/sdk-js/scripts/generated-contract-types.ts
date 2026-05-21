@@ -154,10 +154,16 @@ import type {
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
+  BackyCommentBlocklistDeleteResponse,
+  BackyCommentBlocklistResponse,
+  BackyCommentBulkUpdateResponse,
   BackyCommentAnalyticsResponse,
+  BackyCommentDeleteResponse,
   BackyCommentDeliveryRetryResponse,
   BackyCommentInput,
   BackyCommentReportInput,
+  BackySiteCommentResponse,
+  BackySiteCommentsResponse,
   BackyCommerceOrderInput,
   BackyCommerceOrderAnalyticsResponse,
   BackyCommerceOrderStatusHandoffResponse,
@@ -857,6 +863,45 @@ type RetryCommentDeliveryMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["retryCommentDelivery"]>,
     BackyCommentDeliveryRetryResponse
+  >
+>;
+type SiteCommentsMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["siteComments"]>, BackySiteCommentsResponse>
+>;
+type UpdateCommentsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateComments"]>,
+    BackyCommentBulkUpdateResponse
+  >
+>;
+type ClearCommentReportsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["clearCommentReports"]>,
+    BackyCommentBulkUpdateResponse
+  >
+>;
+type CommentBlocklistMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commentBlocklist"]>,
+    BackyCommentBlocklistResponse
+  >
+>;
+type DeleteCommentBlocklistEntriesMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteCommentBlocklistEntries"]>,
+    BackyCommentBlocklistDeleteResponse
+  >
+>;
+type CommentMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["comment"]>, BackySiteCommentResponse>
+>;
+type UpdateCommentMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateComment"]>, BackySiteCommentResponse>
+>;
+type DeleteCommentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteComment"]>,
+    BackyCommentDeleteResponse
   >
 >;
 type AdminPagesMethodReturnsContract = Assert<

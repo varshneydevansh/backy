@@ -2133,6 +2133,44 @@ if (runWriteSmoke) {
     });
     assert(reportEvents.data.events?.some?.((event) => event.commentId === commentId && event.metadata?.details === 'SDK smoke report detail'), 'events() missing comment report event details');
     writeChecks.push('events:write');
+
+    const clearedReports = await writeClient.clearCommentReports([commentId], {
+      reviewedBy: 'sdk-smoke',
+      requestId: 'sdk-comment-clear-reports',
+    });
+    assert(clearedReports.data.updatedCount === 1, 'clearCommentReports() did not update the reported comment');
+    assert(clearedReports.data.updated?.[0]?.reportCount === 0, 'clearCommentReports() did not clear report count');
+    writeChecks.push('clearCommentReports');
+
+    const blockedComments = await writeClient.updateComments({
+      commentIds: [commentId],
+      status: 'blocked',
+      reviewedBy: 'sdk-smoke',
+      blockReason: 'spam',
+      requestId: 'sdk-comment-block',
+    });
+    assert(blockedComments.data.updatedCount === 1, 'updateComments() did not bulk block the comment');
+    assert(blockedComments.data.updated?.[0]?.status === 'blocked', 'updateComments() did not return blocked status');
+    writeChecks.push('updateComments');
+
+    const blocklist = await writeClient.commentBlocklist({
+      type: 'email',
+      q: 'sdk-commenter@example.com',
+    });
+    const blocklistEntry = blocklist.data.blocklist?.find?.((entry) => entry.value === 'sdk-commenter@example.com');
+    assert(blocklistEntry?.id, 'commentBlocklist() missing blocked commenter email entry');
+    writeChecks.push('commentBlocklist');
+
+    const deletedBlocklist = await writeClient.deleteCommentBlocklistEntries([blocklistEntry.id], {
+      requestId: 'sdk-comment-blocklist-delete',
+    });
+    assert(deletedBlocklist.data.deletedCount === 1, 'deleteCommentBlocklistEntries() did not remove blocklist entry');
+    writeChecks.push('deleteCommentBlocklistEntries');
+
+    const deletedComment = await writeClient.deleteComment(commentId);
+    assert(deletedComment.data.deletedCount >= 1, 'deleteComment() did not delete the moderated comment');
+    assert(deletedComment.data.deleted?.some?.((item) => item.id === commentId), 'deleteComment() response missing deleted comment');
+    writeChecks.push('deleteComment');
   } finally {
     await deleteFixture(fixture.siteId);
   }
@@ -2187,6 +2225,9 @@ console.log(JSON.stringify({
     'seoCached',
     'media',
     'mediaCached',
+    'mediaFolders',
+    'mediaFoldersCached',
+    'mediaAsset',
     'mediaAssetCached',
     'mediaFonts',
     'mediaFontsCached',
