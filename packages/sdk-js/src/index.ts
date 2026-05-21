@@ -2556,6 +2556,7 @@ export interface BackyFormDefinition {
   active?: boolean;
   isActive?: boolean;
   fields?: Array<Record<string, unknown>>;
+  frontendFieldKeyMap?: Record<string, string>;
   submitUrl?: string;
   detailUrl?: string;
   definitionUrl?: string;
@@ -2683,6 +2684,260 @@ export interface BackyFormSubmissionInput {
   startedAt?: string | number;
   contactShareOverride?: unknown;
   [fieldKey: string]: unknown;
+}
+
+export type BackyFormSubmissionInputSource = Partial<
+  BackyFormSubmissionInput
+> &
+  Record<string, unknown>;
+
+export interface BackyFormSubmissionInputBuildOptions {
+  requestId?: string;
+  pageId?: string;
+  postId?: string;
+  honeypot?: string;
+  startedAt?: string | number;
+  contactShareOverride?: unknown;
+  captchaToken?: string;
+  rateLimitBypass?: boolean;
+  includeUnmappedValues?: boolean;
+}
+
+const BACKY_FORM_SUBMISSION_TRANSPORT_KEYS = new Set([
+  "values",
+  "fields",
+  "data",
+  "submission",
+  "requestId",
+  "pageId",
+  "postId",
+  "honeypot",
+  "startedAt",
+  "contactShareOverride",
+  "captcha",
+  "captchaToken",
+  "turnstileToken",
+  "hcaptchaToken",
+  "recaptchaToken",
+  "g-recaptcha-response",
+  "cf-turnstile-response",
+  "rateLimitBypass",
+]);
+
+const backyFormRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const firstBackyFormRecord = (
+  ...values: unknown[]
+): Record<string, unknown> | null => {
+  for (const value of values) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+};
+
+const backyFormText = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) return text;
+    }
+  }
+  return "";
+};
+
+const normalizeBackyFormAliasKey = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9_ -]/g, "")
+    .replace(/[\s-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const backyFormFieldKeySet = (
+  form: BackyFormDefinition | undefined | null,
+): Set<string> =>
+  new Set(
+    (form?.fields || [])
+      .map((field) => field.key)
+      .filter((key): key is string => typeof key === "string" && key.length > 0),
+  );
+
+const backyFormFrontendFieldKeyMap = (
+  form: BackyFormDefinition | undefined | null,
+): Record<string, string> => {
+  const direct =
+    form?.frontendFieldKeyMap &&
+    typeof form.frontendFieldKeyMap === "object" &&
+    !Array.isArray(form.frontendFieldKeyMap)
+      ? form.frontendFieldKeyMap
+      : {};
+  const settings = backyFormRecord(form?.settings);
+  const settingsMap = backyFormRecord(settings.frontendFieldKeyMap);
+  return {
+    ...settingsMap,
+    ...direct,
+  } as Record<string, string>;
+};
+
+const resolveBackyFormFieldKey = (
+  rawKey: string,
+  fieldKeys: Set<string>,
+  frontendFieldKeyMap: Record<string, string>,
+): string | undefined => {
+  if (fieldKeys.size === 0 || fieldKeys.has(rawKey)) {
+    return rawKey;
+  }
+  const mapped =
+    frontendFieldKeyMap[rawKey] ||
+    frontendFieldKeyMap[normalizeBackyFormAliasKey(rawKey)];
+  return mapped && fieldKeys.has(mapped) ? mapped : undefined;
+};
+
+const normalizeBackyFormValues = (
+  form: BackyFormDefinition | undefined | null,
+  values: Record<string, unknown>,
+  includeUnmappedValues: boolean,
+): Record<string, unknown> => {
+  const fieldKeys = backyFormFieldKeySet(form);
+  const frontendFieldKeyMap = backyFormFrontendFieldKeyMap(form);
+  return Object.entries(values).reduce<Record<string, unknown>>(
+    (normalized, [rawKey, value]) => {
+      const key = resolveBackyFormFieldKey(
+        rawKey,
+        fieldKeys,
+        frontendFieldKeyMap,
+      );
+      if (key) {
+        normalized[key] = value;
+      } else if (includeUnmappedValues) {
+        normalized[rawKey] = value;
+      }
+      return normalized;
+    },
+    {},
+  );
+};
+
+const normalizeBackyFormContactShareOverride = (
+  form: BackyFormDefinition | undefined | null,
+  value: unknown,
+): unknown => {
+  const raw = backyFormRecord(value);
+  if (Object.keys(raw).length === 0) {
+    return undefined;
+  }
+  const fieldKeys = backyFormFieldKeySet(form);
+  const frontendFieldKeyMap = backyFormFrontendFieldKeyMap(form);
+  const normalized: Record<string, unknown> = {};
+  if (typeof raw.enabled === "boolean") {
+    normalized.enabled = raw.enabled;
+  }
+  if (typeof raw.dedupeByEmail === "boolean") {
+    normalized.dedupeByEmail = raw.dedupeByEmail;
+  }
+  for (const key of ["nameField", "emailField", "phoneField", "notesField"]) {
+    const rawField = raw[key];
+    if (typeof rawField !== "string") continue;
+    const resolved = resolveBackyFormFieldKey(
+      rawField,
+      fieldKeys,
+      frontendFieldKeyMap,
+    );
+    if (resolved) {
+      normalized[key] = resolved;
+    }
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+const backyFormCaptchaToken = (
+  source: Record<string, unknown>,
+  options: BackyFormSubmissionInputBuildOptions,
+): string => {
+  const captcha = backyFormRecord(source.captcha);
+  return backyFormText(
+    options.captchaToken,
+    source.captchaToken,
+    source.turnstileToken,
+    source.hcaptchaToken,
+    source.recaptchaToken,
+    source["g-recaptcha-response"],
+    source["cf-turnstile-response"],
+    captcha.token,
+    captcha.response,
+  );
+};
+
+export function buildBackyFormSubmissionInput(
+  form: BackyFormDefinition | undefined | null,
+  source: BackyFormSubmissionInputSource | undefined | null,
+  options: BackyFormSubmissionInputBuildOptions = {},
+): BackyFormSubmissionInput {
+  const body = backyFormRecord(source);
+  const valuesCandidate = firstBackyFormRecord(
+    body.values,
+    body.fields,
+    body.data,
+    body.submission,
+  );
+  const directValues =
+    valuesCandidate
+      ? valuesCandidate
+      : Object.entries(body).reduce<Record<string, unknown>>(
+          (values, [key, value]) => {
+            if (!BACKY_FORM_SUBMISSION_TRANSPORT_KEYS.has(key)) {
+              values[key] = value;
+            }
+            return values;
+          },
+          {},
+        );
+  const input: BackyFormSubmissionInput = {
+    values: normalizeBackyFormValues(
+      form,
+      directValues,
+      options.includeUnmappedValues === true,
+    ),
+  };
+  const requestId = backyFormText(options.requestId, body.requestId);
+  const pageId = backyFormText(options.pageId, body.pageId);
+  const postId = backyFormText(options.postId, body.postId);
+  const honeypot = backyFormText(options.honeypot, body.honeypot);
+  const captchaToken = backyFormCaptchaToken(body, options);
+  const startedAt = options.startedAt ?? body.startedAt;
+  const contactShareOverride = normalizeBackyFormContactShareOverride(
+    form,
+    options.contactShareOverride ?? body.contactShareOverride,
+  );
+  const rateLimitBypass =
+    typeof options.rateLimitBypass === "boolean"
+      ? options.rateLimitBypass
+      : typeof body.rateLimitBypass === "boolean"
+        ? body.rateLimitBypass
+        : undefined;
+
+  if (requestId) input.requestId = requestId;
+  if (pageId) input.pageId = pageId;
+  if (postId) input.postId = postId;
+  if (honeypot) input.honeypot = honeypot;
+  if (typeof startedAt === "string" || typeof startedAt === "number") {
+    input.startedAt = startedAt;
+  }
+  if (contactShareOverride) {
+    input.contactShareOverride = contactShareOverride;
+  }
+  if (captchaToken) {
+    input.captchaToken = captchaToken;
+  }
+  if (typeof rateLimitBypass === "boolean") {
+    input.rateLimitBypass = rateLimitBypass;
+  }
+
+  return input;
 }
 
 export interface BackyFormSubmissionValidationDetail {

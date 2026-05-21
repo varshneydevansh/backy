@@ -29,6 +29,7 @@ import type {
   BackyFrontendLaunchReadiness,
   BackyClient,
   BackyCommerceOrderInput,
+  BackyFormSubmissionInput,
   BackyContentElementDescriptor,
   BackyContentEditableFieldPatch,
   BackyContentEditableMapPatch,
@@ -213,6 +214,7 @@ import type {
 } from "../src/index";
 import {
   buildBackyCommerceOrderInput,
+  buildBackyFormSubmissionInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyLiveManagedPageEditableMapUpdate,
   findBackyContentElement,
@@ -264,6 +266,9 @@ type LiveManagedPageUpdateMethodReturnsContract = Assert<
 >;
 type CommerceOrderInputBuilderReturnsContract = Assert<
   Equal<ReturnType<typeof buildBackyCommerceOrderInput>, BackyCommerceOrderInput>
+>;
+type FormSubmissionInputBuilderReturnsContract = Assert<
+  Equal<ReturnType<typeof buildBackyFormSubmissionInput>, BackyFormSubmissionInput>
 >;
 type LiveManagedBlogPostMethodReturnsContract = Assert<
   Equal<
@@ -3554,6 +3559,14 @@ const formField = {
   required: true,
 } satisfies GeneratedBackyOpenApiFormFieldDefinition;
 
+const formMessageField = {
+  key: "message",
+  label: "Message",
+  type: "textarea",
+  placeholder: "How can we help?",
+  required: false,
+} satisfies GeneratedBackyOpenApiFormFieldDefinition;
+
 const formDefinition = {
   id: "form_contact",
   siteId: "site_demo",
@@ -3562,7 +3575,7 @@ const formDefinition = {
   description: "Send the team a message.",
   audience: "public",
   isActive: true,
-  fields: [formField],
+  fields: [formField, formMessageField],
   notificationEmail: "team@example.com",
   successMessage: "Thanks, we will reply soon.",
   enableHoneypot: true,
@@ -3656,6 +3669,35 @@ const formSubmissionRequest = {
     token: "captcha-token",
   },
 } satisfies GeneratedBackyOpenApiFormSubmissionRequest;
+
+const sdkFormSubmissionInput = buildBackyFormSubmissionInput(
+  {
+    ...formDefinition,
+    frontendFieldKeyMap: {
+      "Your email": "email",
+      your_message: "message",
+    },
+  },
+  {
+    fields: {
+      "Your email": "reader@example.com",
+      "Your message": "Please send the product brief.",
+      ignoredTransportValue: "not part of the field map",
+    },
+    pageId: "page_contact",
+    requestId: "sdk-form-submit",
+    contactShareOverride: {
+      enabled: true,
+      emailField: "Your email",
+      notesField: "Your message",
+    },
+    captcha: {
+      token: "captcha-token",
+    },
+  },
+);
+const sdkFormSubmissionInputContract =
+  sdkFormSubmissionInput satisfies BackyFormSubmissionInput;
 
 const formSubmissionValidationDetail = {
   field: "email",
@@ -5582,6 +5624,7 @@ void collectionRecordEnvelope;
 void publicDeleteEnvelope;
 void formValidationRule;
 void formField;
+void formMessageField;
 void formDefinition;
 void formListEnvelope;
 void formEnvelope;
@@ -5590,6 +5633,8 @@ void formCollectionRecordLink;
 void formCollectionRecordError;
 void formSubmission;
 void formSubmissionRequest;
+void sdkFormSubmissionInput;
+void sdkFormSubmissionInputContract;
 void formSubmissionValidationDetail;
 void formSubmissionValidationErrorEnvelope;
 void formSubmissionEnvelope;

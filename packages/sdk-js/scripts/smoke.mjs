@@ -2,6 +2,7 @@
 
 import {
   buildBackyCommerceOrderInput,
+  buildBackyFormSubmissionInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   createBackyClient,
   findBackyContentElement,
@@ -1541,11 +1542,12 @@ if (runWriteSmoke) {
     assert(revalidatedFormDefinition.notModified === true, 'formDefinitionCached() SDK smoke revalidation failed');
     writeChecks.push('formDefinitionCached');
 
-    const submittedForm = await writeClient.submitForm('sdk-smoke-form', {
-      values: {
+    const formSubmissionInput = buildBackyFormSubmissionInput(formDefinition.body.data.form, {
+      fields: {
         title: 'SDK Form Record',
         message: 'Submitted through the SDK.',
         category: 'Standard',
+        requestId: 'should stay inside form values only when explicitly mapped',
       },
       pageId: fixture.pageId,
       requestId: 'sdk-form-submit',
@@ -1556,6 +1558,12 @@ if (runWriteSmoke) {
         notesField: 'message',
       },
     });
+    assert(formSubmissionInput.values?.title === 'SDK Form Record', 'buildBackyFormSubmissionInput() did not preserve title value');
+    assert(formSubmissionInput.values?.message === 'Submitted through the SDK.', 'buildBackyFormSubmissionInput() did not preserve message value');
+    assert(formSubmissionInput.values?.requestId === undefined, 'buildBackyFormSubmissionInput() leaked reserved metadata into values');
+    assert(formSubmissionInput.pageId === fixture.pageId, 'buildBackyFormSubmissionInput() did not preserve page id metadata');
+    assert(formSubmissionInput.contactShareOverride?.nameField === 'title', 'buildBackyFormSubmissionInput() did not normalize contact share fields');
+    const submittedForm = await writeClient.submitForm('sdk-smoke-form', formSubmissionInput);
     const submissionId = submittedForm.data.submission?.id;
     const contactId = submittedForm.data.contact?.id;
     assert(submissionId, 'submitForm() missing submission id');
