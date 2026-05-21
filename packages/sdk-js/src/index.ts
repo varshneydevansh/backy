@@ -2869,6 +2869,202 @@ export interface BackyMediaListOptions extends BackyListOptions {
   siteId?: string;
 }
 
+export type BackyMediaBindingTargetType = "page" | "post";
+export type BackyMediaBindingAction = "bind" | "unbind";
+
+export interface BackyMediaBindingRecord {
+  id: string;
+  mediaId: string;
+  scope: BackyMediaBindingTargetType;
+  targetId: string;
+  usageType: string;
+  attachedBy: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyMediaBindingInput {
+  targetType: BackyMediaBindingTargetType;
+  targetId: string;
+  action?: BackyMediaBindingAction;
+  usageType?: string;
+  attachedBy?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyMediaBindingInputSource = Partial<BackyMediaBindingInput> &
+  Record<string, unknown>;
+
+export interface BackyMediaBindingInputBuildOptions {
+  targetType?: BackyMediaBindingTargetType | string;
+  targetId?: string;
+  pageId?: string;
+  postId?: string;
+  blogId?: string;
+  blogPostId?: string;
+  action?: BackyMediaBindingAction | string;
+  usageType?: string;
+  attachedBy?: string;
+  requestId?: string;
+}
+
+export type BackyMediaBindingRequestOptions = BackyLiveManagementRequestOptions;
+
+export type BackyMediaBindingResponse = BackyEnvelope<{
+  media: BackyMediaAsset;
+  cacheInvalidation?: Record<string, unknown>;
+  binding: BackyMediaBindingRecord | null;
+  target: {
+    type: BackyMediaBindingTargetType;
+    id: string;
+    bound: boolean;
+    referenceKey: "pageIds" | "postIds" | string;
+    [key: string]: unknown;
+  };
+}>;
+
+const backyMediaBindingRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const backyMediaBindingText = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) return text;
+    }
+  }
+  return "";
+};
+
+const normalizeBackyMediaBindingAction = (
+  value: unknown,
+): BackyMediaBindingAction | undefined => {
+  const text = backyMediaBindingText(value).toLowerCase();
+  if (["unbind", "remove", "detach", "disconnect", "unlink"].includes(text)) {
+    return "unbind";
+  }
+  if (["bind", "add", "attach", "connect", "link"].includes(text)) {
+    return "bind";
+  }
+  return undefined;
+};
+
+const normalizeBackyMediaBindingTargetType = (
+  value: unknown,
+): BackyMediaBindingTargetType | undefined => {
+  const text = backyMediaBindingText(value).toLowerCase();
+  if (text === "page" || text === "pages") return "page";
+  if (
+    text === "post" ||
+    text === "posts" ||
+    text === "blog" ||
+    text === "blogpost" ||
+    text === "blog-post" ||
+    text === "article"
+  ) {
+    return "post";
+  }
+  return undefined;
+};
+
+export function buildBackyMediaBindingInput(
+  source: BackyMediaBindingInputSource | undefined | null,
+  options: BackyMediaBindingInputBuildOptions = {},
+): BackyMediaBindingInput {
+  const body = backyMediaBindingRecord(source);
+  const target = backyMediaBindingRecord(body.target);
+  const resource = backyMediaBindingRecord(body.resource);
+  const pageId = backyMediaBindingText(
+    options.pageId,
+    body.pageId,
+    target.pageId,
+    resource.pageId,
+  );
+  const postId = backyMediaBindingText(
+    options.postId,
+    options.blogId,
+    options.blogPostId,
+    body.postId,
+    body.blogId,
+    body.blogPostId,
+    target.postId,
+    target.blogId,
+    target.blogPostId,
+    resource.postId,
+    resource.blogId,
+    resource.blogPostId,
+  );
+  const targetType =
+    normalizeBackyMediaBindingTargetType(options.targetType) ??
+    normalizeBackyMediaBindingTargetType(body.targetType) ??
+    normalizeBackyMediaBindingTargetType(body.scope) ??
+    normalizeBackyMediaBindingTargetType(body.resourceType) ??
+    normalizeBackyMediaBindingTargetType(target.type) ??
+    normalizeBackyMediaBindingTargetType(target.targetType) ??
+    normalizeBackyMediaBindingTargetType(target.resourceType) ??
+    normalizeBackyMediaBindingTargetType(resource.type) ??
+    normalizeBackyMediaBindingTargetType(resource.targetType) ??
+    normalizeBackyMediaBindingTargetType(resource.resourceType) ??
+    (pageId ? "page" : postId ? "post" : "page");
+  const targetId = backyMediaBindingText(
+    options.targetId,
+    body.targetId,
+    target.id,
+    target.targetId,
+    target.resourceId,
+    resource.targetId,
+    resource.resourceId,
+    targetType === "page" ? pageId : postId,
+  );
+  const action =
+    normalizeBackyMediaBindingAction(options.action) ??
+    normalizeBackyMediaBindingAction(body.action) ??
+    normalizeBackyMediaBindingAction(body.operation) ??
+    normalizeBackyMediaBindingAction(body.mode) ??
+    (body.unbind === true ||
+    body.detach === true ||
+    body.remove === true ||
+    body.bound === false
+      ? "unbind"
+      : "bind");
+  const usageType = backyMediaBindingText(
+    options.usageType,
+    body.usageType,
+    body.usage,
+    body.context,
+    body.slot,
+    target.usageType,
+    target.usage,
+  );
+  const attachedBy = backyMediaBindingText(
+    options.attachedBy,
+    body.attachedBy,
+    body.actor,
+    body.editor,
+    body.userId,
+    target.attachedBy,
+  );
+  const requestId = backyMediaBindingText(
+    options.requestId,
+    body.requestId,
+    target.requestId,
+  );
+
+  const input: BackyMediaBindingInput = {
+    targetType,
+    targetId,
+    action,
+    usageType: usageType || "content",
+  };
+  if (attachedBy) input.attachedBy = attachedBy;
+  if (requestId) input.requestId = requestId;
+  return input;
+}
+
 export interface BackyPageListOptions extends BackyListOptions {
   path?: string;
   slug?: string;
@@ -5248,6 +5444,24 @@ export class BackyClient {
       {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
+      },
+    );
+  }
+
+  bindMedia(
+    mediaId: string,
+    input: BackyMediaBindingInputSource,
+    options: BackyMediaBindingRequestOptions = {},
+  ): Promise<BackyMediaBindingResponse> {
+    const body = buildBackyMediaBindingInput(input);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/bind`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? body.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }

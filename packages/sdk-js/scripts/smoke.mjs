@@ -8,6 +8,7 @@ import {
   buildBackyFormSubmissionInput,
   buildBackyInteractiveRuntimeEventInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
+  buildBackyMediaBindingInput,
   createBackyClient,
   findBackyContentElement,
   listBackyContentElements,
@@ -771,6 +772,19 @@ assert(manifestMedia.deliveryPolicy?.acceptedDispositions?.includes?.('attachmen
 assert(manifestMedia.deliveryPolicy?.downloadableTypes?.includes?.('document'), 'manifest() media discovery missing document downloadable type');
 assert(manifestMedia.schemas?.folders === 'backy.media-folders.v1', 'manifest() media discovery missing folder schema');
 assert(manifestMedia.schemas?.fileCategories === 'backy.media-file-categories.v1', 'manifest() media discovery missing file category schema');
+const mediaBindingInput = buildBackyMediaBindingInput({
+  target: {
+    type: 'blog-post',
+    id: 'sdk-smoke-post',
+  },
+  usage: 'featured',
+  editor: 'sdk-smoke',
+  requestId: 'sdk-media-bind',
+});
+assert(mediaBindingInput.targetType === 'post', 'buildBackyMediaBindingInput() did not normalize blog-post targets');
+assert(mediaBindingInput.targetId === 'sdk-smoke-post', 'buildBackyMediaBindingInput() did not normalize target id');
+assert(mediaBindingInput.usageType === 'featured', 'buildBackyMediaBindingInput() did not normalize usage alias');
+assert(mediaBindingInput.attachedBy === 'sdk-smoke', 'buildBackyMediaBindingInput() did not normalize attachedBy alias');
 const manifestTheme = manifest.data.modules?.theme;
 assert(manifestTheme?.schemaVersion === 'backy.theme-discovery.v1', 'manifest() missing theme discovery module');
 assert(manifestTheme.tokenSchemaVersion === 'backy.theme.v1', 'manifest() theme discovery missing token schema marker');

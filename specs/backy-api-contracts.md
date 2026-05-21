@@ -561,6 +561,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `POST /api/admin/sites/:siteId/media/:mediaId/bind`
   - Body: `{ targetType: "page"|"post", targetId, action?: "bind"|"unbind", usageType?, attachedBy? }`
   - Binds or unbinds media to page/post contexts, updates `pageIds`/`postIds`, and stores lightweight binding metadata under `media.metadata.bindings`.
+  - The SDK exports `buildBackyMediaBindingInput()` and `bindMedia()` so authenticated custom editors can normalize target aliases such as `target.type`, `target.id`, `pageId`, `postId`, `blogId`, `usage`, `context`, `actor`, and `editor` into this audited admin binding payload without importing Backy's admin UI.
   - Page/post create, update, rollback, and delete paths also sync `pageIds`/`postIds` from saved content `mediaId`/`assetId` references and featured media.
   - Media create/update/delete/replace writes emit admin audit logs with entity `media`, request id correlation, before/after snapshots where applicable, and non-secret storage metadata for traceability.
 

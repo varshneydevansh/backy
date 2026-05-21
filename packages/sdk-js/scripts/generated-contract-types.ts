@@ -24,6 +24,8 @@ import type {
   BackyManifestRoutingModule,
   BackyManifestRouteFrontendDesign,
   BackyManifestRoutePattern,
+  BackyMediaBindingInput,
+  BackyMediaBindingResponse,
   BackyManifestDeliveryDiscovery,
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
@@ -223,6 +225,7 @@ import {
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
   buildBackyInteractiveRuntimeEventInput,
+  buildBackyMediaBindingInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyLiveManagedPageEditableMapUpdate,
   findBackyContentElement,
@@ -289,6 +292,12 @@ type CommentInputBuilderReturnsContract = Assert<
 >;
 type CommentReportInputBuilderReturnsContract = Assert<
   Equal<ReturnType<typeof buildBackyCommentReportInput>, BackyCommentReportInput>
+>;
+type MediaBindingInputBuilderReturnsContract = Assert<
+  Equal<ReturnType<typeof buildBackyMediaBindingInput>, BackyMediaBindingInput>
+>;
+type MediaBindingMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["bindMedia"]>, BackyMediaBindingResponse>
 >;
 type InteractiveRuntimeEventInputBuilderReturnsContract = Assert<
   Equal<
@@ -3943,6 +3952,18 @@ const sdkGenericFileMediaListOptions = {
   siteId: "site_demo",
   limit: 20,
 } satisfies BackyMediaListOptions;
+
+const sdkMediaBindingInput = buildBackyMediaBindingInput({
+  target: {
+    type: "page",
+    id: "page_home",
+  },
+  usage: "hero-image",
+  editor: "designer@example.com",
+  requestId: "sdk-media-bind",
+});
+const sdkMediaBindingInputContract =
+  sdkMediaBindingInput satisfies BackyMediaBindingInput;
 
 const mediaFolder = {
   id: "folder_brand",
