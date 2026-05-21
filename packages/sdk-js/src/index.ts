@@ -2472,6 +2472,132 @@ export type BackyAdminPageRevisionsResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export type BackyAdminBlogPostStatus =
+  | "draft"
+  | "published"
+  | "scheduled"
+  | "archived"
+  | string;
+
+export interface BackyAdminBlogPostResource extends BackyPostResource {
+  authorId?: string | null;
+  categoryIds?: string[];
+  tagIds?: string[];
+  featuredImageId?: string | null;
+  scheduledAt?: string | null;
+  publishedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackyAdminBlogPostListOptions
+  extends BackyLiveManagementRequestOptions {
+  status?: BackyAdminBlogPostStatus | "all";
+  categoryId?: string;
+  categorySlug?: string;
+  tagId?: string;
+  tagSlug?: string;
+  authorId?: string;
+  authorSlug?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface BackyAdminBlogPostCreateInput {
+  title: string;
+  slug?: string;
+  excerpt?: string | null;
+  status?: BackyAdminBlogPostStatus;
+  content?: BackyEditableContent | Record<string, unknown> | unknown[];
+  meta?: Record<string, unknown>;
+  featuredImageId?: string | null;
+  authorId?: string | null;
+  categoryIds?: string[];
+  tagIds?: string[];
+  scheduledAt?: string | null;
+  frontendDesignTemplateId?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminBlogPostUpdateInput
+  extends Partial<Omit<BackyAdminBlogPostCreateInput, "title">> {
+  title?: string;
+  expectedUpdatedAt?: string;
+  revisionNote?: string;
+}
+
+export interface BackyAdminBlogPostVersionInput {
+  expectedUpdatedAt?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminBlogPostPreviewInput {
+  ttlSeconds?: number;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminBlogPostRollbackInput {
+  revisionId: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminBlogPostRevisionListOptions
+  extends BackyLiveManagementRequestOptions {
+  limit?: number;
+  offset?: number;
+}
+
+export type BackyAdminBlogPostsResponse = BackyEnvelope<
+  {
+    posts: BackyAdminBlogPostResource[];
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogPostResponse = BackyEnvelope<
+  {
+    post: BackyAdminBlogPostResource;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogPostDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    postId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogPostReadinessResponse = BackyEnvelope<
+  {
+    readiness: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogPostPreviewResponse = BackyEnvelope<
+  {
+    previewToken: string;
+    expiresAt: string;
+    targetType: "post" | string;
+    targetId: string;
+    hostedUrl: string;
+    postApiUrl: string;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminBlogPostRevisionsResponse = BackyEnvelope<
+  {
+    revisions: Array<Record<string, unknown>>;
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
 export type BackyEditableContent =
   | BackyContentDocument
   | (Record<string, unknown> & {
@@ -6685,6 +6811,206 @@ export class BackyClient {
       {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogPosts(
+    options: BackyAdminBlogPostListOptions = {},
+  ): Promise<BackyAdminBlogPostsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = {
+      status: rest.status,
+      categoryId: rest.categoryId,
+      categorySlug: rest.categorySlug,
+      tagId: rest.tagId,
+      tagSlug: rest.tagSlug,
+      authorId: rest.authorId,
+      authorSlug: rest.authorSlug,
+      limit: rest.limit,
+      offset: rest.offset,
+    };
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/blog`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  createAdminBlogPost(
+    input: BackyAdminBlogPostCreateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogPost(
+    postId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminBlogPost(
+    postId: string,
+    input: BackyAdminBlogPostUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostResponse> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminBlogPost(
+    postId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogPostReadiness(
+    postId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostReadinessResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}/readiness`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  publishAdminBlogPost(
+    postId: string,
+    input: BackyAdminBlogPostVersionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}/publish`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  archiveAdminBlogPost(
+    postId: string,
+    input: BackyAdminBlogPostVersionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}/archive`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createAdminBlogPostPreviewToken(
+    postId: string,
+    input: BackyAdminBlogPostPreviewInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostPreviewResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}/preview`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogPostRevisions(
+    postId: string,
+    options: BackyAdminBlogPostRevisionListOptions = {},
+  ): Promise<BackyAdminBlogPostRevisionsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = normalizeListQuery({
+      limit: rest.limit,
+      offset: rest.offset,
+    });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}/revisions`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  rollbackAdminBlogPost(
+    postId: string,
+    input: BackyAdminBlogPostRollbackInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogPostResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}/rollback`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },
     );

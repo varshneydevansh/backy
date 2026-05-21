@@ -1319,6 +1319,18 @@ if (firstAdminPageId) {
   assert(Array.isArray(pageRevisions.data.revisions), 'adminPageRevisions() missing revisions array');
 }
 
+const adminBlogPosts = await privateClient.adminBlogPosts({ limit: 5 });
+assert(Array.isArray(adminBlogPosts.data.posts), 'adminBlogPosts() missing posts array');
+const firstAdminBlogPostId = adminBlogPosts.data.posts[0]?.id;
+if (firstAdminBlogPostId) {
+  const adminBlogPost = await privateClient.adminBlogPost(firstAdminBlogPostId);
+  assert(adminBlogPost.data.post?.id === firstAdminBlogPostId, 'adminBlogPost() returned wrong post');
+  const postReadiness = await privateClient.adminBlogPostReadiness(firstAdminBlogPostId);
+  assert(postReadiness.data.readiness, 'adminBlogPostReadiness() missing readiness payload');
+  const postRevisions = await privateClient.adminBlogPostRevisions(firstAdminBlogPostId, { limit: 5 });
+  assert(Array.isArray(postRevisions.data.revisions), 'adminBlogPostRevisions() missing revisions array');
+}
+
 const adminMedia = await privateClient.adminMedia({ limit: 5 });
 assert(Array.isArray(adminMedia.data.media), 'adminMedia() missing media array');
 assert(adminMedia.data.quota, 'adminMedia() missing quota payload');

@@ -20,6 +20,12 @@ import type {
   BackyAdminSiteReadinessResponse,
   BackyAdminSiteResponse,
   BackyAdminSitesResponse,
+  BackyAdminBlogPostDeleteResponse,
+  BackyAdminBlogPostPreviewResponse,
+  BackyAdminBlogPostReadinessResponse,
+  BackyAdminBlogPostResponse,
+  BackyAdminBlogPostRevisionsResponse,
+  BackyAdminBlogPostsResponse,
   BackySiteSettingsScope,
   BackyManifestLocalizedRoutePatternGroup,
   BackyManifestPageResource,
@@ -413,6 +419,66 @@ type AdminPageRevisionsMethodReturnsContract = Assert<
 >;
 type RollbackAdminPageMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["rollbackAdminPage"]>, BackyAdminPageResponse>
+>;
+type AdminBlogPostsMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminBlogPosts"]>, BackyAdminBlogPostsResponse>
+>;
+type CreateAdminBlogPostMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminBlogPost"]>,
+    BackyAdminBlogPostResponse
+  >
+>;
+type AdminBlogPostMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminBlogPost"]>, BackyAdminBlogPostResponse>
+>;
+type UpdateAdminBlogPostMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminBlogPost"]>,
+    BackyAdminBlogPostResponse
+  >
+>;
+type DeleteAdminBlogPostMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminBlogPost"]>,
+    BackyAdminBlogPostDeleteResponse
+  >
+>;
+type AdminBlogPostReadinessMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminBlogPostReadiness"]>,
+    BackyAdminBlogPostReadinessResponse
+  >
+>;
+type PublishAdminBlogPostMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["publishAdminBlogPost"]>,
+    BackyAdminBlogPostResponse
+  >
+>;
+type ArchiveAdminBlogPostMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["archiveAdminBlogPost"]>,
+    BackyAdminBlogPostResponse
+  >
+>;
+type AdminBlogPostPreviewMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminBlogPostPreviewToken"]>,
+    BackyAdminBlogPostPreviewResponse
+  >
+>;
+type AdminBlogPostRevisionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminBlogPostRevisions"]>,
+    BackyAdminBlogPostRevisionsResponse
+  >
+>;
+type RollbackAdminBlogPostMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["rollbackAdminBlogPost"]>,
+    BackyAdminBlogPostResponse
+  >
 >;
 type AdminFormsMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["adminForms"]>, BackyAdminFormsResponse>
@@ -1254,6 +1320,123 @@ const sdkAdminPageRevisionsEnvelope = {
     },
   },
 } satisfies BackyAdminPageRevisionsResponse;
+
+const sdkAdminBlogPost = {
+  id: "post_launch",
+  siteId: "site_demo",
+  title: "Launch Notes",
+  slug: "launch-notes",
+  excerpt: "A Backy launch update",
+  status: "draft",
+  authorId: "author_demo",
+  categoryIds: ["category_updates"],
+  tagIds: ["tag_launch"],
+  featuredImageId: "media_launch",
+  content: {
+    elements: [
+      {
+        id: "post-title",
+        type: "heading",
+        props: {
+          text: "Launch Notes",
+        },
+        x: 48,
+        y: 64,
+        width: 640,
+        height: 72,
+      },
+    ],
+    canvasSize: {
+      width: 960,
+      height: 1200,
+    },
+  },
+  meta: {
+    title: "Launch Notes",
+  },
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminBlogPostsEnvelope = {
+  success: true,
+  requestId: "req_admin_blog_posts",
+  data: {
+    posts: [sdkAdminBlogPost],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminBlogPostsResponse;
+
+const sdkAdminBlogPostEnvelope = {
+  success: true,
+  requestId: "req_admin_blog_post",
+  data: {
+    post: sdkAdminBlogPost,
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminBlogPostResponse;
+
+const sdkAdminBlogPostDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_blog_post_delete",
+  data: {
+    deleted: true,
+    postId: "post_launch",
+  },
+} satisfies BackyAdminBlogPostDeleteResponse;
+
+const sdkAdminBlogPostReadinessEnvelope = {
+  success: true,
+  requestId: "req_admin_blog_post_readiness",
+  data: {
+    readiness: {
+      id: "post_launch",
+      status: "ready",
+      checks: [],
+    },
+  },
+} satisfies BackyAdminBlogPostReadinessResponse;
+
+const sdkAdminBlogPostPreviewEnvelope = {
+  success: true,
+  requestId: "req_admin_blog_post_preview",
+  data: {
+    previewToken: "preview_post_123",
+    expiresAt: "2026-05-21T01:00:00.000Z",
+    targetType: "post",
+    targetId: "post_launch",
+    hostedUrl:
+      "https://demo.example.test/sites/demo/blog/launch-notes?previewToken=preview_post_123",
+    postApiUrl:
+      "https://demo.example.test/api/sites/demo/blog?slug=launch-notes&previewToken=preview_post_123",
+  },
+} satisfies BackyAdminBlogPostPreviewResponse;
+
+const sdkAdminBlogPostRevisionsEnvelope = {
+  success: true,
+  requestId: "req_admin_blog_post_revisions",
+  data: {
+    revisions: [
+      {
+        id: "rev_post_1",
+        targetType: "post",
+        targetId: "post_launch",
+      },
+    ],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminBlogPostRevisionsResponse;
 
 const sdkCommerceProviderCertification = {
   schemaVersion: "backy.commerce-provider-certification-handoff.v1",

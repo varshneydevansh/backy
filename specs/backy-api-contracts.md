@@ -700,6 +700,7 @@ The `/reusable-sections` admin workspace now also exposes a copyable `backy.reus
   - Current implementation returns `{ success, requestId, data: { posts, pagination } }` and includes unpublished posts for admin use.
   - Admin blog list/detail/readiness/revision/author/taxonomy reads require `pages.view`; post/category/tag create and update plus archive/rollback require `pages.edit`; publish and preview-token creation require `pages.publish`; deletes require `pages.delete`.
   - Invalid admin blog list filters return explicit `400` errors instead of silently widening or clamping the query: `INVALID_BLOG_STATUS`, `INVALID_BLOG_LIMIT`, or `INVALID_BLOG_OFFSET`.
+  - The SDK exposes authenticated blog-post lifecycle helpers for custom builders: `adminBlogPosts()`, `createAdminBlogPost()`, `adminBlogPost()`, `updateAdminBlogPost()`, `deleteAdminBlogPost()`, `adminBlogPostReadiness()`, `publishAdminBlogPost()`, `archiveAdminBlogPost()`, `createAdminBlogPostPreviewToken()`, `adminBlogPostRevisions()`, and `rollbackAdminBlogPost()`. They use the same per-call admin auth options as live management and pair with `liveManagedBlogPost()`/`updateLiveManagedBlogPost()` plus editable-map helpers for external blog editors.
 
 - `POST /api/admin/sites/:siteId/blog`
   - Body: `{ title, slug?, excerpt?, status?, content?, meta?, featuredImageId?, authorId?, categoryIds?, tagIds?, scheduledAt? }`
