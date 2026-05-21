@@ -1348,6 +1348,68 @@ assert(typeof privateClient.runAdminSettingsStorageCredentialRotationProbe === '
 assert(typeof privateClient.runAdminSettingsStorageSecretManager === 'function', 'runAdminSettingsStorageSecretManager() missing SDK method');
 assert(typeof privateClient.testAdminSettingsNotificationWebhook === 'function', 'testAdminSettingsNotificationWebhook() missing SDK method');
 
+const settingsInfrastructure = await privateClient.validateAdminSettingsInfrastructure({
+  deliveryMode: adminSettings.data.settings?.deliveryMode || 'managed-hosting',
+  integrations: adminSettings.data.settings?.integrations || {},
+  recordHistory: false,
+  requestId: 'sdk-settings-infrastructure',
+});
+assert(Array.isArray(settingsInfrastructure.data.diagnostics), 'validateAdminSettingsInfrastructure() missing diagnostics array');
+const settingsDiagnosticAreas = new Set(settingsInfrastructure.data.diagnostics.map((diagnostic) => diagnostic.area));
+for (const area of ['database', 'storage', 'notifications']) {
+  assert(settingsDiagnosticAreas.has(area), `validateAdminSettingsInfrastructure() missing ${area} diagnostic`);
+}
+
+const settingsStorageProvisioning = await privateClient.runAdminSettingsStorageProvisioningProbe({
+  requestId: 'sdk-settings-storage-provisioning',
+});
+assert(settingsStorageProvisioning.data.provider, 'runAdminSettingsStorageProvisioningProbe() missing provider');
+assert(settingsStorageProvisioning.data.status, 'runAdminSettingsStorageProvisioningProbe() missing status');
+assert(Array.isArray(settingsStorageProvisioning.data.checks), 'runAdminSettingsStorageProvisioningProbe() missing checks');
+
+const settingsCredentialRotation = await privateClient.runAdminSettingsStorageCredentialRotationProbe({
+  requestId: 'sdk-settings-credential-rotation',
+});
+assert(settingsCredentialRotation.data.provider, 'runAdminSettingsStorageCredentialRotationProbe() missing provider');
+assert(settingsCredentialRotation.data.probePath, 'runAdminSettingsStorageCredentialRotationProbe() missing probe path');
+assert(Array.isArray(settingsCredentialRotation.data.fields), 'runAdminSettingsStorageCredentialRotationProbe() missing rotation fields');
+assert(Array.isArray(settingsCredentialRotation.data.checks), 'runAdminSettingsStorageCredentialRotationProbe() missing checks');
+
+const settingsSecretManager = await privateClient.runAdminSettingsStorageSecretManager({
+  mode: 'plan',
+  dryRun: true,
+  targetEnvironments: ['preview'],
+  requestId: 'sdk-settings-secret-manager',
+});
+assert(settingsSecretManager.data.secretManager === 'vercel-env', 'runAdminSettingsStorageSecretManager() returned wrong secret manager');
+assert(settingsSecretManager.data.mode === 'plan', 'runAdminSettingsStorageSecretManager() did not preserve plan mode');
+assert(settingsSecretManager.data.dryRun === true, 'runAdminSettingsStorageSecretManager() did not preserve dryRun');
+assert(settingsSecretManager.data.executed === false, 'runAdminSettingsStorageSecretManager() should not execute in dry-run plan mode');
+assert(Array.isArray(settingsSecretManager.data.operations), 'runAdminSettingsStorageSecretManager() missing operations');
+
+const settingsNotificationReceiver = await startSmokeWebhookReceiver('/sdk-settings-notification');
+try {
+  const settingsNotification = await privateClient.testAdminSettingsNotificationWebhook({
+    webhookUrl: settingsNotificationReceiver.url,
+    requestId: 'sdk-settings-notification-webhook',
+  });
+  assert(settingsNotification.data.settings?.schemaVersion === 'backy.admin-settings.v1', 'testAdminSettingsNotificationWebhook() missing settings payload');
+  assert(settingsNotification.data.delivery?.attempted === true, 'testAdminSettingsNotificationWebhook() did not attempt delivery');
+  assert(settingsNotification.data.delivery?.status === 'succeeded', 'testAdminSettingsNotificationWebhook() did not report success');
+  assert(settingsNotification.data.delivery?.statusCode === 204, 'testAdminSettingsNotificationWebhook() returned wrong status code');
+  const settingsNotificationRequest = settingsNotificationReceiver.requests[0];
+  assert(settingsNotificationRequest?.method === 'POST', 'testAdminSettingsNotificationWebhook() did not POST to the receiver');
+  assert(settingsNotificationRequest?.url === '/sdk-settings-notification', 'testAdminSettingsNotificationWebhook() posted to the wrong path');
+  assert(settingsNotificationRequest?.headers?.['x-backy-settings-webhook-test'] === 'true', 'testAdminSettingsNotificationWebhook() missing test header');
+  assert(settingsNotificationRequest?.headers?.['x-backy-event-kind'] === 'settings.notification_webhook.test', 'testAdminSettingsNotificationWebhook() missing event-kind header');
+  assert(settingsNotificationRequest?.headers?.['x-backy-request-id'] === 'sdk-settings-notification-webhook', 'testAdminSettingsNotificationWebhook() missing request id header');
+  assert(settingsNotificationRequest?.json?.schemaVersion === 'backy.settings-notification-webhook-test.v1', 'testAdminSettingsNotificationWebhook() missing schema version');
+  assert(settingsNotificationRequest?.json?.kind === 'settings.notification_webhook.test', 'testAdminSettingsNotificationWebhook() missing payload kind');
+  assert(settingsNotificationRequest?.json?.requestId === 'sdk-settings-notification-webhook', 'testAdminSettingsNotificationWebhook() missing payload request id');
+} finally {
+  await settingsNotificationReceiver.close();
+}
+
 const adminSiteSettings = await privateClient.adminSiteSettings();
 assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-scope.v1', 'adminSiteSettings() missing site settings schema version');
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
@@ -2591,6 +2653,11 @@ console.log(JSON.stringify({
     'commentAnalytics',
     'retryCommentDelivery',
     'events',
+    'validateAdminSettingsInfrastructure',
+    'runAdminSettingsStorageProvisioningProbe',
+    'runAdminSettingsStorageCredentialRotationProbe',
+    'runAdminSettingsStorageSecretManager',
+    'testAdminSettingsNotificationWebhook',
     ...(commerceCatalogChecked ? ['commerceOrderContract', 'commerceOrderContractCached', 'commerceCatalog', 'commerceCatalogCached'] : []),
   ],
   writeChecked: writeChecks,
