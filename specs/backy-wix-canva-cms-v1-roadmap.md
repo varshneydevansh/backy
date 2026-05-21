@@ -41,7 +41,7 @@ It explicitly excludes:
 1. backend-backed admin/public routes across most core pages in `apps/admin` and `apps/public`
 2. page editor interactions for drag, resize, selection, multi-select, grouping/ungrouping, layers, shortcuts, responsive overrides, history, save, and publish-state workflows
 3. shared editor/public renderer contracts for the current element and interactive component set
-4. public form/comment/media/manifest/OpenAPI/SDK routes with cache and contract headers, plus authenticated SDK site, page, blog-post, CMS collection, and reusable-section lifecycle helpers for custom builders
+4. public form/comment/media/manifest/OpenAPI/SDK routes with cache and contract headers, plus authenticated SDK site, site-structure, page, blog-post, CMS collection, and reusable-section lifecycle helpers for custom builders
 5. shared DB package, migrations, repository adapters, and repository-mode smoke coverage for the main content/settings modules
 6. release, database, Settings provider, Commerce provider, and mock-provider certification workflows with source-level preflight guards
 
@@ -132,7 +132,7 @@ It explicitly excludes:
 2. `/login`: secure auth, session middleware, reset flow
 3. `/sites`: create/list/edit site with ownership and domain assignment
 4. `/sites.new`: schema validation, retryable permission recovery, and backend success/fail states
-5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, theme-token editing, navigation/redirect/SEO editors, form/comment operations, loaded-comment bulk moderation summaries, frontend handoff, site-level comment policy controls, and backend permission/ownership scoping; remaining work is live domain/deploy execution and deeper workflow polish
+5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, theme-token editing, navigation/redirect/SEO editors, authenticated SDK site-structure methods for custom builders, form/comment operations, loaded-comment bulk moderation summaries, frontend handoff, site-level comment policy controls, and backend permission/ownership scoping; remaining work is live domain/deploy execution and deeper workflow polish
 6. `/pages`: persisted filtering, paging, search, status chips
 7. `/pages.new`: slug uniqueness, template starter, validation, scheduled publish checks, and retryable permission recovery
 8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring for `interactiveFigure`/`codeComponent` blocks; uploaded/signed custom component bundles, hostile-bundle browser security fixtures, component usage governance, and production repository smoke are now covered for the current platform scope

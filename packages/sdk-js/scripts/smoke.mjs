@@ -1299,6 +1299,18 @@ assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-s
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
 assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
 
+const adminNavigation = await privateClient.adminNavigation();
+assert(Array.isArray(adminNavigation.data.navigation?.settings?.primary), 'adminNavigation() missing editable primary settings');
+assert(Array.isArray(adminNavigation.data.navigation?.resolved?.primary), 'adminNavigation() missing resolved public primary navigation');
+
+const adminSeo = await privateClient.adminSeo();
+assert(adminSeo.data.seo && typeof adminSeo.data.seo === 'object', 'adminSeo() missing editable SEO settings');
+assert(Array.isArray(adminSeo.data.preview?.supportedVariables), 'adminSeo() missing SEO preview supported variables');
+
+const adminRedirects = await privateClient.adminRedirects();
+assert(Array.isArray(adminRedirects.data.redirects?.rules), 'adminRedirects() missing redirect rules');
+assert(Array.isArray(adminRedirects.data.redirects?.conflicts), 'adminRedirects() missing redirect conflict diagnostics');
+
 const adminSites = await privateClient.adminSites({ includeUnpublished: true });
 assert(Array.isArray(adminSites.data.sites), 'adminSites() missing sites array');
 assert(adminSites.data.sites.some((site) => site.id === privateClient.getSiteId()), 'adminSites() missing active site');

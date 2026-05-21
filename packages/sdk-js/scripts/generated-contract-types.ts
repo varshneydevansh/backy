@@ -15,6 +15,9 @@ import type {
   BackyManifestCollectionsRuntimeModule,
   BackyAdminSettings,
   BackyAdminSettingsResponse,
+  BackyAdminNavigationResponse,
+  BackyAdminRedirectsResponse,
+  BackyAdminSeoResponse,
   BackyAdminSiteDeleteResponse,
   BackyAdminSiteDuplicateResponse,
   BackyAdminSiteReadinessResponse,
@@ -384,6 +387,42 @@ type AdminSiteSettingsUpdateMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateAdminSiteSettings"]>,
     BackySiteSettingsResponse
+  >
+>;
+type AdminNavigationMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminNavigation"]>,
+    BackyAdminNavigationResponse
+  >
+>;
+type AdminNavigationUpdateMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminNavigation"]>,
+    BackyAdminNavigationResponse
+  >
+>;
+type AdminSeoMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminSeo"]>, BackyAdminSeoResponse>
+>;
+type AdminSeoUpdateMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateAdminSeo"]>, BackyAdminSeoResponse>
+>;
+type AdminRedirectsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminRedirects"]>,
+    BackyAdminRedirectsResponse
+  >
+>;
+type AdminRedirectsPreviewMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["previewAdminRedirects"]>,
+    BackyAdminRedirectsResponse
+  >
+>;
+type AdminRedirectsUpdateMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminRedirects"]>,
+    BackyAdminRedirectsResponse
   >
 >;
 type AdminPagesMethodReturnsContract = Assert<
@@ -1318,6 +1357,177 @@ const sdkSiteSettingsEnvelope = {
     settings: sdkSiteSettings,
   },
 } satisfies BackySiteSettingsResponse;
+
+const sdkAdminNavigationEnvelope = {
+  success: true,
+  requestId: "req_admin_navigation",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo Site",
+    },
+    navigation: {
+      settings: {
+        primary: [
+          {
+            id: "nav_docs",
+            type: "page",
+            pageId: "page_docs",
+            label: "Docs",
+            children: [
+              {
+                id: "nav_docs_child",
+                type: "route",
+                label: "API",
+                path: "/docs/api",
+              },
+            ],
+          },
+        ],
+        footer: [
+          {
+            id: "nav_terms",
+            type: "route",
+            label: "Terms",
+            path: "/terms",
+          },
+        ],
+        layout: {
+          header: "centered",
+          footer: "columns",
+        },
+      },
+      resolved: {
+        primary: [
+          {
+            id: "nav_docs",
+            type: "page",
+            pageId: "page_docs",
+            label: "Docs",
+            title: "Docs",
+            path: "/docs",
+            href: "/docs",
+            children: [],
+          },
+        ],
+        footer: [],
+      },
+    },
+  },
+} satisfies BackyAdminNavigationResponse;
+
+const sdkAdminSeoEnvelope = {
+  success: true,
+  requestId: "req_admin_seo",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo Site",
+    },
+    seo: {
+      titleTemplate: "%s | Demo",
+      defaultDescription: "Demo site",
+      defaultOgImage: "/media/og.webp",
+      favicon: "/favicon.ico",
+      jsonLd: [
+        {
+          "@type": "WebSite",
+          name: "Demo Site",
+        },
+      ],
+      sitemap: {
+        enabled: true,
+        defaultChangeFrequency: "weekly",
+        defaultPriority: 0.7,
+        includeDynamicRoutes: true,
+      },
+      robots: {
+        index: true,
+        follow: true,
+        extraRules: "Sitemap: /sitemap.xml",
+      },
+      routeOverrides: [
+        {
+          id: "override_docs",
+          match: "/docs",
+          title: "Docs",
+          description: "Backy documentation",
+          canonical: "/docs",
+          ogImage: "/media/docs.webp",
+          keywords: ["docs"],
+          jsonLd: [],
+          priority: 0.8,
+          changeFrequency: "weekly",
+          robots: {
+            index: true,
+            follow: true,
+          },
+          enabled: true,
+        },
+      ],
+    },
+    preview: {
+      supportedVariables: ["%s", "{title}", "{siteName}"],
+      routes: [
+        {
+          type: "dynamicList",
+          title: "Docs | Demo",
+          description: "Demo site",
+          canonical: "/docs",
+          sourceTitle: "Docs",
+          sourceDescription: "",
+          variables: {
+            title: "Docs",
+            siteName: "Demo Site",
+          },
+        },
+      ],
+    },
+  },
+} satisfies BackyAdminSeoResponse;
+
+const sdkAdminRedirectsEnvelope = {
+  success: true,
+  requestId: "req_admin_redirects",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo Site",
+    },
+    redirects: {
+      rules: [
+        {
+          id: "redirect_old_docs",
+          from: "/old-docs",
+          to: "/docs",
+          statusCode: 301,
+          enabled: true,
+        },
+        {
+          id: "gone_retired",
+          from: "/retired",
+          statusCode: 410,
+          enabled: true,
+        },
+      ],
+      conflicts: [
+        {
+          index: 0,
+          ruleId: "redirect_old_docs",
+          from: "/old-docs",
+          to: "/docs",
+          kind: "target-route-missing",
+          severity: "warning",
+          message: "/old-docs points to /docs, but that route is not indexed yet.",
+        },
+      ],
+      persisted: true,
+    },
+  },
+} satisfies BackyAdminRedirectsResponse;
 
 const sdkAdminPage = {
   id: "page_home",

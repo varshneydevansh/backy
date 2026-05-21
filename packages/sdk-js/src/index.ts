@@ -6093,6 +6093,170 @@ export type BackySiteSettingsUpdateInput = Record<string, unknown> & {
   requestId?: string;
 };
 
+export interface BackySiteNavigationConfig {
+  primary: BackyNavigationItem[];
+  footer?: BackyNavigationItem[];
+  layout?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminNavigationResponseData {
+  site: BackySiteSummary;
+  navigation: {
+    settings: BackySiteNavigationConfig;
+    resolved: BackySiteNavigationConfig;
+    [key: string]: unknown;
+  };
+  cacheInvalidation?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type BackyAdminNavigationResponse =
+  BackyEnvelope<BackyAdminNavigationResponseData>;
+
+export type BackyAdminNavigationUpdateInput = Record<string, unknown> & {
+  requestId?: string;
+  navigation?: Partial<BackySiteNavigationConfig>;
+  primary?: BackyNavigationItem[];
+  footer?: BackyNavigationItem[];
+  layout?: Record<string, unknown>;
+};
+
+export type BackyAdminSeoChangeFrequency = "daily" | "weekly" | "monthly";
+
+export interface BackyAdminSeoRouteOverride {
+  id: string;
+  label?: string;
+  match: string;
+  title?: string;
+  description?: string;
+  canonical?: string;
+  ogImage?: string;
+  keywords?: string[];
+  jsonLd?: Array<Record<string, unknown>>;
+  priority?: number;
+  changeFrequency?: BackyAdminSeoChangeFrequency;
+  robots?: {
+    index?: boolean;
+    follow?: boolean;
+    [key: string]: unknown;
+  };
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSeoSettings {
+  titleTemplate?: string;
+  defaultDescription?: string;
+  defaultOgImage?: string;
+  favicon?: string;
+  jsonLd?: Array<Record<string, unknown>>;
+  sitemap?: {
+    enabled?: boolean;
+    defaultChangeFrequency?: BackyAdminSeoChangeFrequency;
+    defaultPriority?: number;
+    includeDynamicRoutes?: boolean;
+    [key: string]: unknown;
+  };
+  robots?: {
+    index?: boolean;
+    follow?: boolean;
+    extraRules?: string;
+    [key: string]: unknown;
+  };
+  routeOverrides?: BackyAdminSeoRouteOverride[];
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSeoPreviewRoute {
+  type: "dynamicList" | "dynamicItem" | string;
+  title: string;
+  description: string;
+  canonical: string;
+  sourceTitle: string;
+  sourceDescription: string;
+  variables: Record<string, string>;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSeoPreview {
+  supportedVariables: string[];
+  routes: BackyAdminSeoPreviewRoute[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminSeoResponse = BackyEnvelope<
+  {
+    site: BackySiteSummary;
+    seo: BackyAdminSeoSettings;
+    preview: BackyAdminSeoPreview;
+    cacheInvalidation?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminSeoUpdateInput = Partial<BackyAdminSeoSettings> & {
+  requestId?: string;
+  seo?: Partial<BackyAdminSeoSettings>;
+};
+
+export type BackyAdminRedirectStatusCode = 301 | 302 | 307 | 308 | 410;
+
+export interface BackyAdminRedirectRule {
+  id?: string;
+  from: string;
+  to?: string | null;
+  destination?: string;
+  statusCode?: BackyAdminRedirectStatusCode;
+  permanent?: boolean;
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminRedirectConflict {
+  index: number;
+  ruleId?: string;
+  from: string;
+  to?: string;
+  kind: "source-route-conflict" | "target-route-missing" | string;
+  severity: "warning" | string;
+  message: string;
+  route?: {
+    type: "page" | "post" | "dynamicList" | "dynamicItem" | string;
+    id: string;
+    path: string;
+    title: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export type BackyAdminRedirectsResponse = BackyEnvelope<
+  {
+    site: BackySiteSummary;
+    redirects: {
+      rules: BackyAdminRedirectRule[];
+      conflicts: BackyAdminRedirectConflict[];
+      persisted: boolean;
+      [key: string]: unknown;
+    };
+    cacheInvalidation?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminRedirectsUpdateInput =
+  | BackyAdminRedirectRule[]
+  | (Record<string, unknown> & {
+      requestId?: string;
+      redirectRules?: BackyAdminRedirectRule[];
+      rules?: BackyAdminRedirectRule[];
+      redirects?: {
+        rules?: BackyAdminRedirectRule[];
+        [key: string]: unknown;
+      };
+    });
+
 export interface BackyFrontendLaunchReadiness {
   schemaVersion: "backy.frontend-launch-readiness.v1";
   status: "ready" | "attention" | "blocked";
@@ -6407,6 +6571,119 @@ export class BackyClient {
     const { requestId, ...body } = input;
     return this.request(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminNavigation(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminNavigationResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/navigation`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminNavigation(
+    input: BackyAdminNavigationUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminNavigationResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/navigation`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminSeo(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSeoResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/seo`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminSeo(
+    input: BackyAdminSeoUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSeoResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/seo`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminRedirects(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminRedirectsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/redirects`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  previewAdminRedirects(
+    input: BackyAdminRedirectsUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminRedirectsResponse> {
+    const requestId = Array.isArray(input) ? undefined : input.requestId;
+    const body = Array.isArray(input)
+      ? { redirectRules: input }
+      : (({ requestId: _requestId, ...rest }) => rest)(input);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/redirects`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminRedirects(
+    input: BackyAdminRedirectsUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminRedirectsResponse> {
+    const requestId = Array.isArray(input) ? undefined : input.requestId;
+    const body = Array.isArray(input)
+      ? { redirectRules: input }
+      : (({ requestId: _requestId, ...rest }) => rest)(input);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/redirects`,
       {
         method: "PATCH",
         body,

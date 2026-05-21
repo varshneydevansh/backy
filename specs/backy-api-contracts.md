@@ -314,6 +314,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - `POST` validates a submitted rule list and returns the normalized rules plus conflict diagnostics without persisting them.
   - `PATCH` validates and saves rules, then returns the saved rules plus conflict diagnostics.
   - Conflict diagnostics warn when an enabled source path shadows an existing page, post, dynamic list, or dynamic item route pattern, and when an internal redirect destination does not currently resolve.
+  - The JS SDK wraps these admin site-structure contracts for custom builders with `adminNavigation()`/`updateAdminNavigation()`, `adminSeo()`/`updateAdminSeo()`, and `adminRedirects()`/`previewAdminRedirects()`/`updateAdminRedirects()`. The helpers use the same per-call admin-session/API-key/bearer auth options as live-management and keep `requestId` in the request header rather than PATCH bodies.
 
 - `GET /api/sites/:siteId/seo`
 - `GET /api/sites/:siteId/seo?format=sitemap`
