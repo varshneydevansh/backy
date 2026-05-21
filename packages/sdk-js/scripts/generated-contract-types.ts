@@ -208,6 +208,8 @@ import type {
   BackyContentEditableFieldPatch,
   BackyContentEditableMapPatch,
   BackyContentElementPatch,
+  BackyContentGroupResult,
+  BackyContentUngroupResult,
   BackyEditableContent,
   BackyLiveManagedBlogPostResponse,
   BackyLiveManagedBlogPostUpdateInput,
@@ -403,6 +405,7 @@ import {
   buildBackyLiveManagedPageEditableMapUpdate,
   findBackyContentElement,
   generatedBackyContractTypeSources,
+  groupBackyContentElements,
   listBackyContentElements,
   patchBackyContentEditableField,
   patchBackyContentEditableFields,
@@ -411,6 +414,7 @@ import {
   patchBackyContentEditableMapValues,
   patchBackyContentElement,
   patchBackyContentElements,
+  ungroupBackyContentElements,
 } from "../src/index";
 
 type Equal<Left, Right> =
@@ -4621,6 +4625,53 @@ const editableContentForHelpers = {
   },
   canvasSize: { width: 1200, height: 760 },
 } satisfies BackyEditableContent;
+
+const editableGroupingContentForHelpers: BackyEditableContent = {
+  elements: [
+    {
+      id: "helper-card-title",
+      type: "heading",
+      x: 24,
+      y: 32,
+      width: 280,
+      height: 48,
+      zIndex: 1,
+      children: [],
+      props: { content: "Card title" },
+      responsive: {
+        tablet: { x: 16, width: 240 },
+      },
+    },
+    {
+      id: "helper-card-button",
+      type: "button",
+      x: 24,
+      y: 104,
+      width: 180,
+      height: 44,
+      zIndex: 2,
+      children: [],
+      props: { label: "Start" },
+      styles: { backgroundColor: "#111827", color: "#ffffff" },
+      responsive: {
+        tablet: { x: 16, y: 92, width: 160 },
+      },
+    },
+  ],
+  canvasSize: { width: 1200, height: 760 },
+};
+
+const groupedEditableContent: BackyContentGroupResult | null = groupBackyContentElements(
+  editableGroupingContentForHelpers,
+  ["helper-card-title", "helper-card-button"],
+  { groupId: "helper-card-group", name: "Helper card group" },
+);
+const ungroupedEditableContent: BackyContentUngroupResult | null = groupedEditableContent
+  ? ungroupBackyContentElements(
+    groupedEditableContent.content,
+    ["helper-card-group"],
+  )
+  : null;
 
 const editableElementPatch = {
   elementId: "interactive-rounds",

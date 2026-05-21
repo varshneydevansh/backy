@@ -3704,6 +3704,41 @@ export interface BackyContentElementDescriptor {
   element: BackyElement;
 }
 
+export interface BackyContentGroupOptions {
+  groupId?: string;
+  name?: string;
+  type?: string;
+  allowLocked?: boolean;
+  props?: Record<string, unknown>;
+  styles?: Record<string, unknown>;
+  fields?: Record<string, unknown>;
+}
+
+export interface BackyContentGroupResult<
+  TContent extends BackyEditableContent = BackyEditableContent,
+> {
+  content: TContent;
+  groupId: string;
+  groupedIds: string[];
+  parentId?: string;
+  childCount: number;
+}
+
+export interface BackyContentUngroupOptions {
+  allowLocked?: boolean;
+  requireEditorGroup?: boolean;
+}
+
+export interface BackyContentUngroupResult<
+  TContent extends BackyEditableContent = BackyEditableContent,
+> {
+  content: TContent;
+  ungroupedIds: string[];
+  expandedIds: string[];
+  parentId?: string;
+  childCount: number;
+}
+
 export interface BackyContentEditableFieldPatch {
   elementId: string;
   field?: string;
@@ -3762,6 +3797,16 @@ const BACKY_LAYER_LAYOUT_TARGETS = [
   "zIndex",
   "rotation",
 ] as const;
+const BACKY_RESPONSIVE_BREAKPOINTS = ["tablet", "mobile"] as const;
+const BACKY_RESPONSIVE_GEOMETRY_FIELDS = [
+  "x",
+  "y",
+  "width",
+  "height",
+  "zIndex",
+  "rotation",
+] as const;
+const BACKY_RESPONSIVE_LAYER_FIELDS = ["visible", "locked"] as const;
 
 function isBackyRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -3793,6 +3838,245 @@ function contentElementRoots(content: unknown): unknown[][] {
     roots.push(content.contentDocument.elements);
   }
   return roots;
+}
+
+function backyElementId(element: unknown): string | null {
+  return isBackyRecord(element) && typeof element.id === "string"
+    ? element.id
+    : null;
+}
+
+function backyNumberField(
+  element: Record<string, unknown>,
+  field: string,
+  fallback: number,
+): number {
+  const value = element[field];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function backyBooleanField(
+  element: Record<string, unknown>,
+  field: string,
+  fallback: boolean,
+): boolean {
+  const value = element[field];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function backyResponsiveOverride(
+  element: Record<string, unknown>,
+  breakpoint: typeof BACKY_RESPONSIVE_BREAKPOINTS[number],
+): Record<string, unknown> | undefined {
+  return isBackyRecord(element.responsive) &&
+    isBackyRecord(element.responsive[breakpoint])
+    ? (element.responsive[breakpoint] as Record<string, unknown>)
+    : undefined;
+}
+
+function backyResponsiveGeometry(
+  element: Record<string, unknown>,
+  breakpoint: typeof BACKY_RESPONSIVE_BREAKPOINTS[number],
+) {
+  const override = backyResponsiveOverride(element, breakpoint);
+  return {
+    x: backyNumberField(override || {}, "x", backyNumberField(element, "x", 0)),
+    y: backyNumberField(override || {}, "y", backyNumberField(element, "y", 0)),
+    width: Math.max(1, backyNumberField(override || {}, "width", backyNumberField(element, "width", 1))),
+    height: Math.max(1, backyNumberField(override || {}, "height", backyNumberField(element, "height", 1))),
+    zIndex: backyNumberField(override || {}, "zIndex", backyNumberField(element, "zIndex", 1)),
+  };
+}
+
+function hasBackyResponsiveLayoutOverride(
+  override: Record<string, unknown> | undefined,
+  baseElement?: Record<string, unknown>,
+): boolean {
+  if (!override) return false;
+  return BACKY_RESPONSIVE_GEOMETRY_FIELDS.some((field) => (
+    override[field] !== undefined &&
+    (!baseElement || override[field] !== baseElement[field])
+  ));
+}
+
+function pruneBackyResponsive(
+  responsive: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!responsive) return undefined;
+  const pruned = Object.entries(responsive).reduce<Record<string, unknown>>((acc, [breakpoint, override]) => {
+    if (isBackyRecord(override) && Object.keys(override).length > 0) {
+      acc[breakpoint] = override;
+    }
+    return acc;
+  }, {});
+  return Object.keys(pruned).length > 0 ? pruned : undefined;
+}
+
+function setBackyResponsiveOverride(
+  responsive: Record<string, unknown> | undefined,
+  breakpoint: typeof BACKY_RESPONSIVE_BREAKPOINTS[number],
+  override: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  return pruneBackyResponsive({
+    ...(responsive || {}),
+    [breakpoint]: override,
+  });
+}
+
+function buildBackyGroupResponsiveChildren(
+  selectedSiblings: Record<string, unknown>[],
+  groupId: string,
+  groupBase: { x: number; y: number; width: number; height: number; zIndex: number },
+): { children: Record<string, unknown>[]; responsive?: Record<string, unknown> } {
+  const breakpointBounds = BACKY_RESPONSIVE_BREAKPOINTS.reduce<Record<string, {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    zIndex: number;
+    hasGroupGeometryOverride: boolean;
+    hasAnyChildGeometryOverride: boolean;
+  }>>((acc, breakpoint) => {
+    const hasAnyChildGeometryOverride = selectedSiblings.some((item) => (
+      hasBackyResponsiveLayoutOverride(backyResponsiveOverride(item, breakpoint), item)
+    ));
+    if (!hasAnyChildGeometryOverride) return acc;
+
+    const geometries = selectedSiblings.map((item) => backyResponsiveGeometry(item, breakpoint));
+    const minX = Math.min(...geometries.map((item) => item.x));
+    const minY = Math.min(...geometries.map((item) => item.y));
+    const maxX = Math.max(...geometries.map((item) => item.x + item.width));
+    const maxY = Math.max(...geometries.map((item) => item.y + item.height));
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+    const zIndex = Math.max(...geometries.map((item) => item.zIndex));
+
+    acc[breakpoint] = {
+      x: minX,
+      y: minY,
+      width,
+      height,
+      zIndex,
+      hasGroupGeometryOverride:
+        minX !== groupBase.x ||
+        minY !== groupBase.y ||
+        width !== groupBase.width ||
+        height !== groupBase.height ||
+        zIndex !== groupBase.zIndex,
+      hasAnyChildGeometryOverride,
+    };
+    return acc;
+  }, {});
+
+  const responsive = BACKY_RESPONSIVE_BREAKPOINTS.reduce<Record<string, unknown> | undefined>((acc, breakpoint) => {
+    const bounds = breakpointBounds[breakpoint];
+    if (!bounds?.hasGroupGeometryOverride) return acc;
+
+    const override: Record<string, unknown> = {};
+    if (bounds.x !== groupBase.x) override.x = bounds.x;
+    if (bounds.y !== groupBase.y) override.y = bounds.y;
+    if (bounds.width !== groupBase.width) override.width = bounds.width;
+    if (bounds.height !== groupBase.height) override.height = bounds.height;
+    if (bounds.zIndex !== groupBase.zIndex) override.zIndex = bounds.zIndex;
+    return setBackyResponsiveOverride(acc, breakpoint, override);
+  }, undefined);
+
+  return {
+    children: selectedSiblings.map((item, index) => {
+      const nextChild: Record<string, unknown> = {
+        ...item,
+        parentId: groupId,
+        x: backyNumberField(item, "x", 0) - groupBase.x,
+        y: backyNumberField(item, "y", 0) - groupBase.y,
+        zIndex: index + 1,
+      };
+      const nextResponsive = BACKY_RESPONSIVE_BREAKPOINTS.reduce<Record<string, unknown> | undefined>((acc, breakpoint) => {
+        const bounds = breakpointBounds[breakpoint];
+        const existing = backyResponsiveOverride(item, breakpoint);
+        if (!bounds?.hasAnyChildGeometryOverride && !existing) return acc;
+
+        const geometry = backyResponsiveGeometry(item, breakpoint);
+        const override: Record<string, unknown> = { ...(existing || {}) };
+        if (bounds?.hasGroupGeometryOverride || existing?.x !== undefined) {
+          override.x = geometry.x - (bounds?.x ?? groupBase.x);
+        }
+        if (bounds?.hasGroupGeometryOverride || existing?.y !== undefined) {
+          override.y = geometry.y - (bounds?.y ?? groupBase.y);
+        }
+        if (existing?.width !== undefined || geometry.width !== backyNumberField(item, "width", 1)) {
+          override.width = geometry.width;
+        }
+        if (existing?.height !== undefined || geometry.height !== backyNumberField(item, "height", 1)) {
+          override.height = geometry.height;
+        }
+        if (existing?.zIndex !== undefined) override.zIndex = existing.zIndex;
+        if (existing?.rotation !== undefined) override.rotation = existing.rotation;
+        return setBackyResponsiveOverride(acc, breakpoint, override);
+      }, undefined);
+
+      if (nextResponsive) {
+        nextChild.responsive = nextResponsive;
+      } else {
+        delete nextChild.responsive;
+      }
+      return nextChild;
+    }),
+    responsive,
+  };
+}
+
+function restoreBackyUngroupedChildResponsive(
+  group: Record<string, unknown>,
+  child: Record<string, unknown>,
+  ungroupedChild: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  return BACKY_RESPONSIVE_BREAKPOINTS.reduce<Record<string, unknown> | undefined>((acc, breakpoint) => {
+    const groupOverride = backyResponsiveOverride(group, breakpoint);
+    const childOverride = backyResponsiveOverride(child, breakpoint);
+    if (!groupOverride && !childOverride) return acc;
+
+    const groupGeometry = backyResponsiveGeometry(group, breakpoint);
+    const childGeometry = backyResponsiveGeometry(child, breakpoint);
+    const override: Record<string, unknown> = { ...(childOverride || {}) };
+    const absoluteX = groupGeometry.x + childGeometry.x;
+    const absoluteY = groupGeometry.y + childGeometry.y;
+    const absoluteZIndex = groupGeometry.zIndex + Math.max(0, childGeometry.zIndex - 1);
+    const groupHasLayoutOverride = hasBackyResponsiveLayoutOverride(groupOverride, group);
+
+    if (groupHasLayoutOverride || childOverride?.x !== undefined || absoluteX !== backyNumberField(ungroupedChild, "x", 0)) {
+      override.x = absoluteX;
+    } else {
+      delete override.x;
+    }
+    if (groupHasLayoutOverride || childOverride?.y !== undefined || absoluteY !== backyNumberField(ungroupedChild, "y", 0)) {
+      override.y = absoluteY;
+    } else {
+      delete override.y;
+    }
+    if (childOverride?.width !== undefined || childGeometry.width !== backyNumberField(ungroupedChild, "width", 1)) {
+      override.width = childGeometry.width;
+    } else {
+      delete override.width;
+    }
+    if (childOverride?.height !== undefined || childGeometry.height !== backyNumberField(ungroupedChild, "height", 1)) {
+      override.height = childGeometry.height;
+    } else {
+      delete override.height;
+    }
+    if (groupOverride?.zIndex !== undefined || childOverride?.zIndex !== undefined || absoluteZIndex !== backyNumberField(ungroupedChild, "zIndex", 1)) {
+      override.zIndex = absoluteZIndex;
+    } else {
+      delete override.zIndex;
+    }
+    BACKY_RESPONSIVE_LAYER_FIELDS.forEach((field) => {
+      if (groupOverride?.[field] !== undefined && childOverride?.[field] === undefined) {
+        override[field] = field === "visible"
+          ? backyBooleanField(groupOverride, field, true)
+          : backyBooleanField(groupOverride, field, false);
+      }
+    });
+    return setBackyResponsiveOverride(acc, breakpoint, override);
+  }, undefined);
 }
 
 function visitBackyContentElements(
@@ -4155,6 +4439,206 @@ export function listBackyContentElements(
   }
 
   return descriptors;
+}
+
+export function groupBackyContentElements<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  elementIds: readonly string[],
+  options: BackyContentGroupOptions = {},
+): BackyContentGroupResult<TContent> | null {
+  const selectedIds = Array.from(new Set(elementIds.filter(Boolean)));
+  if (!content || selectedIds.length < 2) {
+    return null;
+  }
+
+  const selectedSet = new Set(selectedIds);
+  const nextContent = cloneBackyContent(content);
+  const groupId = options.groupId || `backy-group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const groupType = options.type || "box";
+  let result: BackyContentGroupResult<TContent> | null = null;
+
+  const groupInSiblings = (siblings: unknown[], parentId?: string): boolean => {
+    const selectedIndexes: number[] = [];
+    const selectedSiblings: Record<string, unknown>[] = [];
+
+    siblings.forEach((item, index) => {
+      const id = backyElementId(item);
+      if (id && selectedSet.has(id) && isBackyRecord(item)) {
+        selectedIndexes.push(index);
+        selectedSiblings.push(item);
+      }
+    });
+
+    if (selectedSiblings.length === selectedIds.length) {
+      if (!options.allowLocked && selectedSiblings.some((item) => item.locked === true)) {
+        return false;
+      }
+
+      const minX = Math.min(...selectedSiblings.map((item) => backyNumberField(item, "x", 0)));
+      const minY = Math.min(...selectedSiblings.map((item) => backyNumberField(item, "y", 0)));
+      const maxX = Math.max(...selectedSiblings.map((item) => (
+        backyNumberField(item, "x", 0) + Math.max(1, backyNumberField(item, "width", 1))
+      )));
+      const maxY = Math.max(...selectedSiblings.map((item) => (
+        backyNumberField(item, "y", 0) + Math.max(1, backyNumberField(item, "height", 1))
+      )));
+      const groupBase = {
+        x: minX,
+        y: minY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY),
+        zIndex: Math.max(...selectedSiblings.map((item) => backyNumberField(item, "zIndex", 1))),
+      };
+      const responsiveGroup = buildBackyGroupResponsiveChildren(selectedSiblings, groupId, groupBase);
+      const group: Record<string, unknown> = {
+        id: groupId,
+        type: groupType,
+        name: options.name || "Group",
+        ...groupBase,
+        visible: true,
+        props: {
+          backgroundColor: "transparent",
+          borderRadius: 0,
+          borderWidth: 0,
+          editorGroup: true,
+          padding: 0,
+          ...(options.props || {}),
+        },
+        children: responsiveGroup.children,
+        ...(options.styles ? { styles: options.styles } : {}),
+        ...(responsiveGroup.responsive ? { responsive: responsiveGroup.responsive } : {}),
+        ...(options.fields || {}),
+      };
+      if (parentId) {
+        group.parentId = parentId;
+      } else {
+        delete group.parentId;
+      }
+
+      const firstSelectedIndex = Math.min(...selectedIndexes);
+      const nextSiblings = siblings.filter((item) => {
+        const id = backyElementId(item);
+        return !id || !selectedSet.has(id);
+      });
+      nextSiblings.splice(firstSelectedIndex, 0, group);
+      siblings.splice(0, siblings.length, ...nextSiblings);
+
+      result = {
+        content: nextContent,
+        groupId,
+        groupedIds: selectedIds,
+        ...(parentId ? { parentId } : {}),
+        childCount: selectedIds.length,
+      };
+      return true;
+    }
+
+    return siblings.some((item) => (
+      isBackyRecord(item) &&
+      Array.isArray(item.children) &&
+      groupInSiblings(item.children, backyElementId(item) || undefined)
+    ));
+  };
+
+  for (const root of contentElementRoots(nextContent)) {
+    if (groupInSiblings(root)) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+export function ungroupBackyContentElements<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  groupIds: readonly string[],
+  options: BackyContentUngroupOptions = {},
+): BackyContentUngroupResult<TContent> | null {
+  const selectedIds = Array.from(new Set(groupIds.filter(Boolean)));
+  if (!content || selectedIds.length === 0) {
+    return null;
+  }
+
+  const selectedSet = new Set(selectedIds);
+  const requireEditorGroup = options.requireEditorGroup !== false;
+  const nextContent = cloneBackyContent(content);
+  let result: BackyContentUngroupResult<TContent> | null = null;
+
+  const ungroupInSiblings = (siblings: unknown[], parentId?: string): boolean => {
+    const selectedGroups = siblings.filter((item): item is Record<string, unknown> => {
+      const id = backyElementId(item);
+      if (!id || !selectedSet.has(id) || !isBackyRecord(item)) return false;
+      if (!options.allowLocked && item.locked === true) return false;
+      if (!Array.isArray(item.children) || item.children.length === 0) return false;
+      if (requireEditorGroup && !(isBackyRecord(item.props) && item.props.editorGroup === true)) {
+        return false;
+      }
+      return true;
+    });
+
+    if (selectedGroups.length === selectedIds.length) {
+      const expandedIds: string[] = [];
+      const nextSiblings = siblings.flatMap((item) => {
+        const id = backyElementId(item);
+        if (!id || !selectedSet.has(id) || !isBackyRecord(item)) {
+          return [item];
+        }
+
+        return (Array.isArray(item.children) ? item.children : [])
+          .filter(isBackyRecord)
+          .map((child, index) => {
+            const nextChild: Record<string, unknown> = {
+              ...child,
+              x: backyNumberField(item, "x", 0) + backyNumberField(child, "x", 0),
+              y: backyNumberField(item, "y", 0) + backyNumberField(child, "y", 0),
+              zIndex: backyNumberField(item, "zIndex", 1) + Math.max(0, backyNumberField(child, "zIndex", index + 1) - 1),
+            };
+            if (parentId) {
+              nextChild.parentId = parentId;
+            } else {
+              delete nextChild.parentId;
+            }
+
+            const nextResponsive = restoreBackyUngroupedChildResponsive(item, child, nextChild);
+            if (nextResponsive) {
+              nextChild.responsive = nextResponsive;
+            } else {
+              delete nextChild.responsive;
+            }
+
+            const childId = backyElementId(nextChild);
+            if (childId) {
+              expandedIds.push(childId);
+            }
+            return nextChild;
+          });
+      });
+      siblings.splice(0, siblings.length, ...nextSiblings);
+
+      result = {
+        content: nextContent,
+        ungroupedIds: selectedIds,
+        expandedIds,
+        ...(parentId ? { parentId } : {}),
+        childCount: expandedIds.length,
+      };
+      return true;
+    }
+
+    return siblings.some((item) => (
+      isBackyRecord(item) &&
+      Array.isArray(item.children) &&
+      ungroupInSiblings(item.children, backyElementId(item) || undefined)
+    ));
+  };
+
+  for (const root of contentElementRoots(nextContent)) {
+    if (ungroupInSiblings(root)) {
+      break;
+    }
+  }
+
+  return result;
 }
 
 export function patchBackyContentElement<TContent extends BackyEditableContent>(

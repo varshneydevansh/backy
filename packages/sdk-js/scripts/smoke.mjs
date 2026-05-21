@@ -14,12 +14,14 @@ import {
   buildBackyMediaSignedUrlInput,
   createBackyClient,
   findBackyContentElement,
+  groupBackyContentElements,
   listBackyContentElements,
   patchBackyContentEditableFields,
   patchBackyContentEditableMapEntries,
   patchBackyContentEditableMapValues,
   patchBackyContentElement,
   patchBackyContentElements,
+  ungroupBackyContentElements,
 } from '../dist/index.js';
 
 const baseUrl = (process.env.BACKY_SDK_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
@@ -1980,7 +1982,55 @@ if (runWriteSmoke) {
     );
     writeChecks.push('liveManagedPage');
 
-    const patchedLivePageContent = patchBackyContentElements(liveManagedPage.data.page.content, [
+    const groupedLivePageContent = groupBackyContentElements(
+      liveManagedPage.data.page.content,
+      ['sdk-smoke-form-title', 'sdk-smoke-form-message'],
+      {
+        groupId: 'sdk-smoke-form-field-group',
+        name: 'SDK form field group',
+      },
+    );
+    assert(groupedLivePageContent?.groupId === 'sdk-smoke-form-field-group', 'groupBackyContentElements() did not return the expected group id');
+    assert(groupedLivePageContent.childCount === 2, 'groupBackyContentElements() did not group both selected form fields');
+    const groupedFormField = findBackyContentElement(groupedLivePageContent.content, 'sdk-smoke-form-field-group');
+    assert(groupedFormField?.props?.editorGroup === true, 'groupBackyContentElements() did not mark the new layer as an editor group');
+    assert(Array.isArray(groupedFormField.children) && groupedFormField.children.length === 2, 'groupBackyContentElements() did not move children under the group');
+    assert(
+      groupedFormField.children.every((child) => child.parentId === 'sdk-smoke-form-field-group'),
+      'groupBackyContentElements() did not rewrite child parent ids',
+    );
+    writeChecks.push('groupBackyContentElements');
+
+    const groupedLiveManagedPageUpdate = await writeClient.updateLiveManagedPage(fixture.pageId, {
+      title: liveManagedPage.data.page.title,
+      content: groupedLivePageContent.content,
+      expectedUpdatedAt: liveManagedPage.data.page.updatedAt,
+      requestId: 'sdk-live-managed-page-group',
+    }, {
+      actor: 'sdk-smoke-live-editor',
+    });
+    assert(
+      findBackyContentElement(groupedLiveManagedPageUpdate.data.page?.content, 'sdk-smoke-form-field-group')?.id === 'sdk-smoke-form-field-group',
+      'updateLiveManagedPage() did not persist SDK-grouped page content',
+    );
+    writeChecks.push('updateLiveManagedPage:grouped');
+
+    const ungroupedLivePageContent = ungroupBackyContentElements(
+      groupedLiveManagedPageUpdate.data.page.content,
+      ['sdk-smoke-form-field-group'],
+    );
+    assert(
+      ungroupedLivePageContent?.expandedIds.includes('sdk-smoke-form-title') &&
+        ungroupedLivePageContent.expandedIds.includes('sdk-smoke-form-message'),
+      'ungroupBackyContentElements() did not expand the grouped form fields',
+    );
+    assert(
+      findBackyContentElement(ungroupedLivePageContent.content, 'sdk-smoke-form-field-group') === null,
+      'ungroupBackyContentElements() left the editor group in the content tree',
+    );
+    writeChecks.push('ungroupBackyContentElements');
+
+    const patchedLivePageContent = patchBackyContentElements(ungroupedLivePageContent.content, [
       {
         elementId: 'sdk-smoke-form-title',
         changes: {
@@ -1998,9 +2048,9 @@ if (runWriteSmoke) {
     ]);
     assert(patchedLivePageContent, 'patchBackyContentElements() did not patch the page content tree');
     const liveManagedPageUpdate = await writeClient.updateLiveManagedPage(fixture.pageId, {
-      title: liveManagedPage.data.page.title,
+      title: groupedLiveManagedPageUpdate.data.page.title,
       content: patchedLivePageContent,
-      expectedUpdatedAt: liveManagedPage.data.page.updatedAt,
+      expectedUpdatedAt: groupedLiveManagedPageUpdate.data.page.updatedAt,
       requestId: 'sdk-live-managed-page-update',
     }, {
       actor: 'sdk-smoke-live-editor',
@@ -3105,6 +3155,8 @@ console.log(JSON.stringify({
     'updateLiveManagedBlogPost',
     'buildBackyCommerceOrderInput',
     'buildBackyLiveManagedBlogPostEditableMapUpdate',
+    'groupBackyContentElements',
+    'ungroupBackyContentElements',
     'patchBackyContentElement',
     'patchBackyContentElements',
     'patchBackyContentEditableFields',
