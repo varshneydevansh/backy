@@ -68,6 +68,12 @@ import type {
   BackyAdminCollectionRecordsResponse,
   BackyAdminCollectionResponse,
   BackyAdminCollectionsResponse,
+  BackyAdminCommerceOrderDeleteResponse,
+  BackyAdminCommerceOrderResponse,
+  BackyAdminCommerceOrdersResponse,
+  BackyAdminCommerceProductDeleteResponse,
+  BackyAdminCommerceProductResponse,
+  BackyAdminCommerceProductsResponse,
   BackyAdminReusableSectionDeleteResponse,
   BackyAdminReusableSectionResponse,
   BackyAdminReusableSectionRestoreResponse,
@@ -846,6 +852,66 @@ type DeleteAdminCollectionRecordMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["deleteAdminCollectionRecord"]>,
     BackyAdminCollectionRecordDeleteResponse
+  >
+>;
+type AdminCommerceProductsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCommerceProducts"]>,
+    BackyAdminCommerceProductsResponse
+  >
+>;
+type CreateAdminCommerceProductMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminCommerceProduct"]>,
+    BackyAdminCommerceProductResponse
+  >
+>;
+type AdminCommerceProductMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCommerceProduct"]>,
+    BackyAdminCommerceProductResponse
+  >
+>;
+type UpdateAdminCommerceProductMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminCommerceProduct"]>,
+    BackyAdminCommerceProductResponse
+  >
+>;
+type DeleteAdminCommerceProductMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminCommerceProduct"]>,
+    BackyAdminCommerceProductDeleteResponse
+  >
+>;
+type AdminCommerceOrdersMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCommerceOrders"]>,
+    BackyAdminCommerceOrdersResponse
+  >
+>;
+type CreateAdminCommerceOrderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminCommerceOrder"]>,
+    BackyAdminCommerceOrderResponse
+  >
+>;
+type AdminCommerceOrderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCommerceOrder"]>,
+    BackyAdminCommerceOrderResponse
+  >
+>;
+type UpdateAdminCommerceOrderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminCommerceOrder"]>,
+    BackyAdminCommerceOrderResponse
+  >
+>;
+type DeleteAdminCommerceOrderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminCommerceOrder"]>,
+    BackyAdminCommerceOrderDeleteResponse
   >
 >;
 type AdminReusableSectionsMethodReturnsContract = Assert<
@@ -2872,6 +2938,125 @@ const sdkAdminCollectionRecordDeleteEnvelope = {
     recordId: "record_project_1",
   },
 } satisfies BackyAdminCollectionRecordDeleteResponse;
+
+const sdkAdminCommerceProductCollection = {
+  ...sdkAdminCollection,
+  id: "products",
+  slug: "products",
+  name: "Products",
+};
+
+const sdkAdminCommerceProductRecord = {
+  id: "product_starter",
+  slug: "starter-template",
+  status: "published",
+  values: {
+    title: "Starter Template",
+    price: 4900,
+    currency: "USD",
+    productType: "digital",
+  },
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminCommerceProductsEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_products",
+  data: {
+    collection: sdkAdminCommerceProductCollection,
+    records: [sdkAdminCommerceProductRecord],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminCommerceProductsResponse;
+
+const sdkAdminCommerceProductEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_product",
+  data: {
+    collection: sdkAdminCommerceProductCollection,
+    record: sdkAdminCommerceProductRecord,
+    cacheInvalidation: {
+      scope: "collections",
+    },
+  },
+} satisfies BackyAdminCommerceProductResponse;
+
+const sdkAdminCommerceProductDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_product_delete",
+  data: {
+    deleted: true,
+    recordId: "product_starter",
+  },
+} satisfies BackyAdminCommerceProductDeleteResponse;
+
+const sdkAdminCommerceOrderCollection = {
+  ...sdkAdminCollection,
+  id: "orders",
+  slug: "orders",
+  name: "Orders",
+  permissions: {
+    publicRead: false,
+    publicCreate: true,
+    publicUpdate: false,
+    publicDelete: false,
+  },
+};
+
+const sdkAdminCommerceOrderRecord = {
+  id: "order_1001",
+  slug: "order-1001",
+  status: "draft",
+  values: {
+    orderNumber: "1001",
+    paymentStatus: "pending",
+    fulfillmentStatus: "unfulfilled",
+    total: 10250,
+    currency: "USD",
+  },
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminCommerceOrdersEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_orders",
+  data: {
+    collection: sdkAdminCommerceOrderCollection,
+    records: [sdkAdminCommerceOrderRecord],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminCommerceOrdersResponse;
+
+const sdkAdminCommerceOrderEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_order",
+  data: {
+    collection: sdkAdminCommerceOrderCollection,
+    record: sdkAdminCommerceOrderRecord,
+    cacheInvalidation: {
+      scope: "collections",
+    },
+  },
+} satisfies BackyAdminCommerceOrderResponse;
+
+const sdkAdminCommerceOrderDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_order_delete",
+  data: {
+    deleted: true,
+    recordId: "order_1001",
+  },
+} satisfies BackyAdminCommerceOrderDeleteResponse;
 
 const sdkAdminReusableSection = {
   id: "section_hero",

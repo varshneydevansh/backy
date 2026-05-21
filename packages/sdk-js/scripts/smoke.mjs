@@ -1404,7 +1404,7 @@ if (firstAdminBlogPostId) {
   assert(Array.isArray(postRevisions.data.revisions), 'adminBlogPostRevisions() missing revisions array');
 }
 
-const adminCollections = await privateClient.adminCollections({ limit: 5 });
+const adminCollections = await privateClient.adminCollections({ limit: 50 });
 assert(Array.isArray(adminCollections.data.collections), 'adminCollections() missing collections array');
 const firstAdminCollectionId = adminCollections.data.collections[0]?.id;
 if (firstAdminCollectionId) {
@@ -1416,6 +1416,28 @@ if (firstAdminCollectionId) {
   if (firstAdminRecordId) {
     const adminCollectionRecord = await privateClient.adminCollectionRecord(firstAdminCollectionId, firstAdminRecordId);
     assert(adminCollectionRecord.data.record?.id === firstAdminRecordId, 'adminCollectionRecord() returned wrong record');
+  }
+}
+const hasAdminProductsCollection = adminCollections.data.collections.some((collection) => collection.slug === 'products' || collection.id === 'products');
+if (hasAdminProductsCollection) {
+  const adminCommerceProducts = await privateClient.adminCommerceProducts({ limit: 5 });
+  assert(Array.isArray(adminCommerceProducts.data.records), 'adminCommerceProducts() missing records array');
+  assert(adminCommerceProducts.data.collection?.slug === 'products', 'adminCommerceProducts() returned wrong collection');
+  const firstAdminProductId = adminCommerceProducts.data.records[0]?.id;
+  if (firstAdminProductId) {
+    const adminCommerceProduct = await privateClient.adminCommerceProduct(firstAdminProductId);
+    assert(adminCommerceProduct.data.record?.id === firstAdminProductId, 'adminCommerceProduct() returned wrong product');
+  }
+}
+const hasAdminOrdersCollection = adminCollections.data.collections.some((collection) => collection.slug === 'orders' || collection.id === 'orders');
+if (hasAdminOrdersCollection) {
+  const adminCommerceOrders = await privateClient.adminCommerceOrders({ limit: 5 });
+  assert(Array.isArray(adminCommerceOrders.data.records), 'adminCommerceOrders() missing records array');
+  assert(adminCommerceOrders.data.collection?.slug === 'orders', 'adminCommerceOrders() returned wrong collection');
+  const firstAdminOrderId = adminCommerceOrders.data.records[0]?.id;
+  if (firstAdminOrderId) {
+    const adminCommerceOrder = await privateClient.adminCommerceOrder(firstAdminOrderId);
+    assert(adminCommerceOrder.data.record?.id === firstAdminOrderId, 'adminCommerceOrder() returned wrong order');
   }
 }
 

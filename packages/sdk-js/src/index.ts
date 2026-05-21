@@ -1132,6 +1132,69 @@ export type BackyAdminCollectionRecordDeleteResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export const BACKY_COMMERCE_PRODUCTS_COLLECTION = "products";
+export const BACKY_COMMERCE_ORDERS_COLLECTION = "orders";
+
+export interface BackyAdminCommerceRecordRequestOptions
+  extends BackyLiveManagementRequestOptions {
+  collectionId?: string;
+}
+
+export interface BackyAdminCommerceRecordListOptions
+  extends BackyAdminCollectionRecordListOptions {
+  collectionId?: string;
+}
+
+export type BackyAdminCommerceProductValues = Record<string, unknown>;
+export type BackyAdminCommerceOrderValues = Record<string, unknown>;
+
+export type BackyAdminCommerceProductListOptions =
+  BackyAdminCommerceRecordListOptions;
+export type BackyAdminCommerceOrderListOptions =
+  BackyAdminCommerceRecordListOptions;
+export type BackyAdminCommerceProductRequestOptions =
+  BackyAdminCommerceRecordRequestOptions;
+export type BackyAdminCommerceOrderRequestOptions =
+  BackyAdminCommerceRecordRequestOptions;
+
+export type BackyAdminCommerceProductCreateInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordCreateInput<TValues>;
+
+export type BackyAdminCommerceProductUpdateInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordUpdateInput<TValues>;
+
+export type BackyAdminCommerceOrderCreateInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+> = BackyAdminCollectionRecordCreateInput<TValues>;
+
+export type BackyAdminCommerceOrderUpdateInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+> = BackyAdminCollectionRecordUpdateInput<TValues>;
+
+export type BackyAdminCommerceProductsResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordsResponse<TValues>;
+
+export type BackyAdminCommerceProductResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordResponse<TValues>;
+
+export type BackyAdminCommerceProductDeleteResponse =
+  BackyAdminCollectionRecordDeleteResponse;
+
+export type BackyAdminCommerceOrdersResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+> = BackyAdminCollectionRecordsResponse<TValues>;
+
+export type BackyAdminCommerceOrderResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+> = BackyAdminCollectionRecordResponse<TValues>;
+
+export type BackyAdminCommerceOrderDeleteResponse =
+  BackyAdminCollectionRecordDeleteResponse;
+
 export interface BackyCommerceProductDesign {
   templateId?: string;
   templateName?: string;
@@ -10214,6 +10277,166 @@ export class BackyClient {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
       },
+    );
+  }
+
+  adminCommerceProducts<
+    TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+  >(
+    options: BackyAdminCommerceProductListOptions = {},
+  ): Promise<BackyAdminCommerceProductsResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...recordOptions
+    } = options;
+    return this.adminCollectionRecords<TValues>(collectionId, recordOptions);
+  }
+
+  createAdminCommerceProduct<
+    TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+  >(
+    input: BackyAdminCommerceProductCreateInput<TValues>,
+    options: BackyAdminCommerceProductRequestOptions = {},
+  ): Promise<BackyAdminCommerceProductResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.createAdminCollectionRecord<TValues>(
+      collectionId,
+      input,
+      requestOptions,
+    );
+  }
+
+  adminCommerceProduct<
+    TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+  >(
+    productId: string,
+    options: BackyAdminCommerceProductRequestOptions = {},
+  ): Promise<BackyAdminCommerceProductResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.adminCollectionRecord<TValues>(
+      collectionId,
+      productId,
+      requestOptions,
+    );
+  }
+
+  updateAdminCommerceProduct<
+    TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+  >(
+    productId: string,
+    input: BackyAdminCommerceProductUpdateInput<TValues>,
+    options: BackyAdminCommerceProductRequestOptions = {},
+  ): Promise<BackyAdminCommerceProductResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.updateAdminCollectionRecord<TValues>(
+      collectionId,
+      productId,
+      input,
+      requestOptions,
+    );
+  }
+
+  deleteAdminCommerceProduct(
+    productId: string,
+    options: BackyAdminCommerceProductRequestOptions = {},
+  ): Promise<BackyAdminCommerceProductDeleteResponse> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.deleteAdminCollectionRecord(
+      collectionId,
+      productId,
+      requestOptions,
+    );
+  }
+
+  adminCommerceOrders<
+    TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+  >(
+    options: BackyAdminCommerceOrderListOptions = {},
+  ): Promise<BackyAdminCommerceOrdersResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...recordOptions
+    } = options;
+    return this.adminCollectionRecords<TValues>(collectionId, recordOptions);
+  }
+
+  createAdminCommerceOrder<
+    TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+  >(
+    input: BackyAdminCommerceOrderCreateInput<TValues>,
+    options: BackyAdminCommerceOrderRequestOptions = {},
+  ): Promise<BackyAdminCommerceOrderResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.createAdminCollectionRecord<TValues>(
+      collectionId,
+      input,
+      requestOptions,
+    );
+  }
+
+  adminCommerceOrder<
+    TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+  >(
+    orderId: string,
+    options: BackyAdminCommerceOrderRequestOptions = {},
+  ): Promise<BackyAdminCommerceOrderResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.adminCollectionRecord<TValues>(
+      collectionId,
+      orderId,
+      requestOptions,
+    );
+  }
+
+  updateAdminCommerceOrder<
+    TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+  >(
+    orderId: string,
+    input: BackyAdminCommerceOrderUpdateInput<TValues>,
+    options: BackyAdminCommerceOrderRequestOptions = {},
+  ): Promise<BackyAdminCommerceOrderResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.updateAdminCollectionRecord<TValues>(
+      collectionId,
+      orderId,
+      input,
+      requestOptions,
+    );
+  }
+
+  deleteAdminCommerceOrder(
+    orderId: string,
+    options: BackyAdminCommerceOrderRequestOptions = {},
+  ): Promise<BackyAdminCommerceOrderDeleteResponse> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.deleteAdminCollectionRecord(
+      collectionId,
+      orderId,
+      requestOptions,
     );
   }
 
