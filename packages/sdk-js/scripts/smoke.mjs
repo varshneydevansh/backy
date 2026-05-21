@@ -1369,6 +1369,40 @@ try {
   assert(cachedCommerceCatalog.meta.etag, 'commerceCatalogCached() missing response ETag');
   const revalidatedCommerceCatalog = await client.commerceCatalogCached({ limit: 5, etag: cachedCommerceCatalog.meta.etag });
   assert(revalidatedCommerceCatalog.notModified === true, 'commerceCatalogCached() did not return notModified for matching ETag');
+
+  try {
+    const orderAnalytics = await privateClient.commerceOrderAnalytics();
+    assert(orderAnalytics.data.analytics, 'commerceOrderAnalytics() missing analytics payload');
+    assertCommerceProviderCertification(
+      { providerCertification: orderAnalytics.data.providerCertification },
+      'commerceOrderAnalytics()',
+    );
+  } catch (analyticsError) {
+    if (analyticsError?.status !== 404 || !['ORDER_QUEUE_NOT_FOUND', 'SITE_NOT_FOUND'].includes(analyticsError?.code)) {
+      throw analyticsError;
+    }
+  }
+
+  const syncProduct = commerceCatalog.data.products?.[0];
+  const syncProductId = syncProduct?.id || syncProduct?.slug;
+  if (syncProductId) {
+    try {
+      const providerSync = await privateClient.commerceProductProviderSync(String(syncProductId));
+      assert(providerSync.data.sync, 'commerceProductProviderSync() missing sync payload');
+      assert(providerSync.data.product?.id || providerSync.data.product?.slug, 'commerceProductProviderSync() missing product payload');
+      assertCommerceProviderCertification(
+        { providerCertification: providerSync.data.providerCertification },
+        'commerceProductProviderSync()',
+      );
+    } catch (syncError) {
+      if (
+        syncError?.status !== 404 ||
+        !['PRODUCT_CATALOG_NOT_FOUND', 'PRODUCT_NOT_FOUND', 'SITE_NOT_FOUND'].includes(syncError?.code)
+      ) {
+        throw syncError;
+      }
+    }
+  }
   commerceCatalogChecked = true;
 } catch (error) {
   if (error?.status !== 404 || !['PRODUCT_CATALOG_NOT_FOUND', 'SITE_NOT_FOUND'].includes(error?.code)) {

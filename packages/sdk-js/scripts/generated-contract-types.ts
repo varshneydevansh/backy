@@ -39,6 +39,9 @@ import type {
   BackyCommentInput,
   BackyCommentReportInput,
   BackyCommerceOrderInput,
+  BackyCommerceOrderAnalyticsResponse,
+  BackyCommerceProviderCertification,
+  BackyCommerceProductProviderSyncResponse,
   BackyCollectionRecordWriteInput,
   BackyFormSubmissionInput,
   BackyInteractiveRuntimeEventInput,
@@ -295,6 +298,24 @@ type AdminSiteSettingsUpdateMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateAdminSiteSettings"]>,
     BackySiteSettingsResponse
+  >
+>;
+type CommerceOrderAnalyticsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderAnalytics"]>,
+    BackyCommerceOrderAnalyticsResponse
+  >
+>;
+type CommerceProductProviderSyncMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceProductProviderSync"]>,
+    BackyCommerceProductProviderSyncResponse
+  >
+>;
+type SyncCommerceProductProviderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["syncCommerceProductProvider"]>,
+    BackyCommerceProductProviderSyncResponse
   >
 >;
 type LiveManagedPageUpdateMethodReturnsContract = Assert<
@@ -703,6 +724,138 @@ const sdkSiteSettingsEnvelope = {
     settings: sdkSiteSettings,
   },
 } satisfies BackySiteSettingsResponse;
+
+const sdkCommerceProviderCertification = {
+  schemaVersion: "backy.commerce-provider-certification-handoff.v1",
+  status: "external-live-provider-gate",
+  localMockGate: "ci:commerce-provider-smoke",
+  liveCertificationGate: "ci:commerce-provider-certification",
+  requiredFor: "live-commerce-provider-launch",
+  secretHandling:
+    "Provider secrets stay in server-side environment variables.",
+  operatorCommandTemplate: {
+    command: "npm run ci:commerce-provider-certification",
+    envTemplate: "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1",
+    envTemplateSchemaVersion:
+      "backy.commerce-provider-certification-env-template.v1",
+    providerChoices: {
+      payment: ["stripe", "manual"],
+      tax: ["auto", "stripe", "http"],
+      shipping: ["auto", "easypost", "shippo", "http"],
+      discount: ["auto", "stripe", "http"],
+      catalog: ["auto", "stripe", "http"],
+      subscription: ["auto", "stripe", "http"],
+      webhook: ["auto", "stripe", "http"],
+    },
+    requiredInputs: ["BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1"],
+    targetInputs: ["BACKY_COMMERCE_CERTIFICATION_BASE_URL"],
+    secretHandling:
+      "Generated commands name provider selector aliases only; credentials stay in CI secrets.",
+  },
+  operatorEnvTemplate: {
+    schemaVersion: "backy.commerce-provider-certification-env-template.v1",
+    format: "shell-env",
+    fileName: ".env.backy-commerce-provider-certification",
+    body: "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1",
+    secretHandling:
+      "Replace placeholders with CI/local shell secrets before execution.",
+  },
+  runtime: {
+    paymentConfigured: false,
+    taxConfigured: false,
+    shippingConfigured: false,
+    discountConfigured: false,
+    catalogSyncConfigured: false,
+    subscriptionConfigured: false,
+    webhookSecretConfigured: false,
+    configuredFamilies: [],
+    missingFamilies: ["payment", "webhook"],
+    secretHandling: "Runtime readiness exposes booleans only.",
+  },
+  groups: [
+    {
+      family: "payment",
+      providers: ["stripe", "paypal", "manual"],
+      gate: "ci:commerce-provider-certification",
+      requiredInputs: ["BACKY_STRIPE_SECRET_KEY"],
+      evidence: "checkout settlement",
+    },
+  ],
+} satisfies BackyCommerceProviderCertification;
+
+const sdkCommerceOrderAnalyticsEnvelope = {
+  success: true,
+  requestId: "req_order_analytics",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo",
+    },
+    collection: {
+      id: "orders",
+      slug: "orders",
+      name: "Orders",
+    },
+    analytics: {
+      schemaVersion: "backy.order-analytics.v1",
+      totals: {
+        orders: 12,
+      },
+      revenue: {
+        currency: "USD",
+        gross: 12345,
+      },
+    },
+    providerCertification: {
+      ...sdkCommerceProviderCertification,
+      scenarioEvidence: {
+        schemaVersion: "backy.order-provider-certification-evidence.v1",
+        status: "attention",
+        coverage: {
+          covered: 3,
+          total: 7,
+          missing: ["provider-refunds"],
+        },
+        scenarios: [],
+      },
+    },
+  },
+} satisfies BackyCommerceOrderAnalyticsResponse;
+
+const sdkCommerceProductProviderSyncEnvelope = {
+  success: true,
+  requestId: "req_product_provider_sync",
+  data: {
+    sync: {
+      schemaVersion: "backy.commerce-product-sync.v1",
+      provider: "stripe",
+      status: "handoff",
+      executionMode: "manual-handoff",
+    },
+    product: {
+      id: "product_starter",
+      slug: "starter-template",
+      status: "published",
+      values: {
+        title: "Starter Template",
+      },
+    },
+    providerCertification: {
+      ...sdkCommerceProviderCertification,
+      scenarioEvidence: {
+        schemaVersion: "backy.product-provider-certification-evidence.v1",
+        status: "attention",
+        coverage: {
+          covered: 4,
+          total: 8,
+          missing: ["catalog-sync"],
+        },
+        scenarios: [],
+      },
+    },
+  },
+} satisfies BackyCommerceProductProviderSyncResponse;
 
 const frontendLaunchReadiness = {
   generatedAt: "2026-05-21T00:00:00.000Z",

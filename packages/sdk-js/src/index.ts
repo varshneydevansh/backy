@@ -1387,6 +1387,67 @@ export interface BackyCommerceStorefrontContract {
   [key: string]: unknown;
 }
 
+export type BackyCommerceProviderCertification = NonNullable<
+  BackyCommerceStorefrontContract["providerCertification"]
+> &
+  Record<string, unknown>;
+
+export interface BackyCommerceOrderAnalytics {
+  schemaVersion?: "backy.order-analytics.v1" | string;
+  totals?: Record<string, unknown>;
+  revenue?: Record<string, unknown>;
+  payment?: Record<string, unknown>;
+  fulfillment?: Record<string, unknown>;
+  operations?: Record<string, unknown>;
+  trends?: Array<Record<string, unknown>>;
+  recentOrders?: Array<Record<string, unknown>>;
+  providerExecution?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type BackyCommerceOrderAnalyticsResponse = BackyEnvelope<
+  {
+    site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
+    collection?: {
+      id: string;
+      slug?: string;
+      name?: string;
+      [key: string]: unknown;
+    };
+    analytics: BackyCommerceOrderAnalytics;
+    providerCertification?: BackyCommerceProviderCertification;
+  } & Record<string, unknown>
+>;
+
+export interface BackyCommerceProductProviderSyncInput {
+  provider?:
+    | "auto"
+    | "stripe"
+    | "paypal"
+    | "paddle"
+    | "square"
+    | "shopify"
+    | "bigcommerce"
+    | "woocommerce"
+    | "etsy"
+    | "magento"
+    | "http"
+    | "generic-http"
+    | "custom-http"
+    | string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyCommerceProductProviderSyncResponse = BackyEnvelope<
+  {
+    sync: Record<string, unknown>;
+    product: BackyCollectionRecord;
+    cacheInvalidation?: Record<string, unknown>;
+    providerCertification?: BackyCommerceProviderCertification;
+  } & Record<string, unknown>
+>;
+
 export interface BackyManifestCommerceRuntimeModule {
   schemaVersion: "backy.commerce-discovery.v1";
   enabled: boolean;
@@ -6019,6 +6080,51 @@ export class BackyClient {
       {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
+      },
+    );
+  }
+
+  commerceOrderAnalytics(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderAnalyticsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/analytics`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceProductProviderSync(
+    productId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceProductProviderSyncResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/products/${encodeURIComponent(productId)}/provider-sync`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  syncCommerceProductProvider(
+    productId: string,
+    input: BackyCommerceProductProviderSyncInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceProductProviderSyncResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/products/${encodeURIComponent(productId)}/provider-sync`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
