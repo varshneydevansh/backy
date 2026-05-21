@@ -1660,6 +1660,11 @@ export interface BackyContentEditableMapValuesOptions {
   removeUndefined?: boolean;
 }
 
+export interface BackyLiveManagedEditableMapUpdateOptions {
+  requestId?: string;
+  valuesOptions?: BackyContentEditableMapValuesOptions;
+}
+
 const BACKY_LAYOUT_TARGET_ALIASES: Record<string, string> = {
   x: "x",
   y: "y",
@@ -2000,6 +2005,12 @@ function editableMapPatchToFieldPatch(
   };
 }
 
+function liveManagedResourceUpdatedAt(
+  resource: Record<string, unknown>,
+): string | undefined {
+  return typeof resource.updatedAt === "string" ? resource.updatedAt : undefined;
+}
+
 export function findBackyContentElement(
   content: BackyEditableContent | undefined | null,
   elementId: string,
@@ -2130,6 +2141,64 @@ export function patchBackyContentEditableMapValues<
   }));
 
   return patchBackyContentEditableMapEntries(content, editableMap, patches);
+}
+
+export function buildBackyLiveManagedPageEditableMapUpdate(
+  page: BackyPageResource | undefined | null,
+  editableMap: BackyContentEditableMap | Record<string, unknown> | undefined | null,
+  values: Record<string, unknown>,
+  options: BackyLiveManagedEditableMapUpdateOptions = {},
+): BackyLiveManagedPageUpdateInput | null {
+  if (!page?.content) {
+    return null;
+  }
+
+  const content = patchBackyContentEditableMapValues(
+    page.content,
+    editableMap,
+    values,
+    options.valuesOptions,
+  );
+  if (!content) {
+    return null;
+  }
+
+  const expectedUpdatedAt = liveManagedResourceUpdatedAt(page);
+  return {
+    title: page.title,
+    content: content as BackyLiveManagedPageUpdateInput["content"],
+    ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+    ...(options.requestId ? { requestId: options.requestId } : {}),
+  };
+}
+
+export function buildBackyLiveManagedBlogPostEditableMapUpdate(
+  post: BackyPostResource | undefined | null,
+  editableMap: BackyContentEditableMap | Record<string, unknown> | undefined | null,
+  values: Record<string, unknown>,
+  options: BackyLiveManagedEditableMapUpdateOptions = {},
+): BackyLiveManagedBlogPostUpdateInput | null {
+  if (!post?.content) {
+    return null;
+  }
+
+  const content = patchBackyContentEditableMapValues(
+    post.content,
+    editableMap,
+    values,
+    options.valuesOptions,
+  );
+  if (!content) {
+    return null;
+  }
+
+  const expectedUpdatedAt = liveManagedResourceUpdatedAt(post);
+  return {
+    title: post.title,
+    content: content as BackyLiveManagedBlogPostUpdateInput["content"],
+    ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+    ...(options.requestId ? { requestId: options.requestId } : {}),
+  };
 }
 
 export function patchBackyContentEditableFields<

@@ -211,6 +211,8 @@ import type {
   GeneratedBackyThemeTokens,
 } from "../src/index";
 import {
+  buildBackyLiveManagedBlogPostEditableMapUpdate,
+  buildBackyLiveManagedPageEditableMapUpdate,
   findBackyContentElement,
   generatedBackyContractTypeSources,
   listBackyContentElements,
@@ -754,6 +756,36 @@ const keyedEditableMapValuesPatchedContent = patchBackyContentEditableMapValues(
     "nested.message": "Nested keyed editable-map values update",
   },
 );
+const liveManagedPageUpdateFromEditableMap =
+  buildBackyLiveManagedPageEditableMapUpdate(
+    {
+      id: "page-editable-map",
+      title: "Editable map page",
+      slug: "editable-map-page",
+      updatedAt: "2026-05-21T00:00:00.000Z",
+      content: editableContentForHelpers,
+    },
+    editableMapForContentHelpers,
+    {
+      "interactive.rounds": 10,
+    },
+    { requestId: "sdk-editable-map-page-update" },
+  );
+const liveManagedPostUpdateFromEditableMap =
+  buildBackyLiveManagedBlogPostEditableMapUpdate(
+    {
+      id: "post-editable-map",
+      title: "Editable map post",
+      slug: "editable-map-post",
+      updatedAt: "2026-05-21T00:00:00.000Z",
+      content: editableContentForHelpers,
+    },
+    editableMapForContentHelpers,
+    {
+      "nested.message": "Blog post editable-map values update",
+    },
+    { requestId: "sdk-editable-map-post-update" },
+  );
 
 void patchedEditableContent;
 void foundEditableElement;
@@ -764,6 +796,8 @@ void editableMapBulkPatchedContent;
 void keyedEditableMapPatchedContent;
 void keyedEditableMapBulkPatchedContent;
 void keyedEditableMapValuesPatchedContent;
+void liveManagedPageUpdateFromEditableMap;
+void liveManagedPostUpdateFromEditableMap;
 
 const renderMediaAsset = {
   id: "media_hero",

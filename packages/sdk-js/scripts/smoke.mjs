@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  buildBackyLiveManagedBlogPostEditableMapUpdate,
   createBackyClient,
   findBackyContentElement,
   listBackyContentElements,
@@ -1415,18 +1416,15 @@ if (runWriteSmoke) {
         editable: true,
       },
     };
-    const patchedLivePostContent = patchBackyContentEditableMapValues(liveManagedPost.data.post.content, liveManagedPostEditableMap, {
+    const liveManagedPostUpdateInput = buildBackyLiveManagedBlogPostEditableMapUpdate(liveManagedPost.data.post, liveManagedPostEditableMap, {
       'sdk-smoke-post-heading.content': 'SDK live-managed blog post',
       'sdk-smoke-post-heading.color': '#111827',
       'sdk-smoke-post-heading.x': 96,
-    });
-    assert(patchedLivePostContent, 'patchBackyContentEditableMapValues() did not patch the blog content tree');
-    const liveManagedPostUpdate = await writeClient.updateLiveManagedBlogPost(fixture.postId, {
-      title: liveManagedPost.data.post.title,
-      content: patchedLivePostContent,
-      expectedUpdatedAt: liveManagedPost.data.post.updatedAt,
-      requestId: 'sdk-live-managed-blog-update',
     }, {
+      requestId: 'sdk-live-managed-blog-update',
+    });
+    assert(liveManagedPostUpdateInput?.content, 'buildBackyLiveManagedBlogPostEditableMapUpdate() did not build a content update');
+    const liveManagedPostUpdate = await writeClient.updateLiveManagedBlogPost(fixture.postId, liveManagedPostUpdateInput, {
       actor: 'sdk-smoke-live-editor',
     });
     assert(liveManagedPostUpdate.data.post?.id === fixture.postId, 'updateLiveManagedBlogPost() returned wrong post');
@@ -1652,6 +1650,7 @@ console.log(JSON.stringify({
     'updateLiveManagedPage',
     'liveManagedBlogPost',
     'updateLiveManagedBlogPost',
+    'buildBackyLiveManagedBlogPostEditableMapUpdate',
     'patchBackyContentElement',
     'patchBackyContentElements',
     'patchBackyContentEditableFields',
