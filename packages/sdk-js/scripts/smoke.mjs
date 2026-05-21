@@ -1346,6 +1346,16 @@ if (firstAdminCollectionId) {
   }
 }
 
+const adminReusableSections = await privateClient.adminReusableSections({ status: 'all', search: '' });
+assert(Array.isArray(adminReusableSections.data.sections), 'adminReusableSections() missing sections array');
+const firstAdminReusableSectionId = adminReusableSections.data.sections[0]?.id;
+if (firstAdminReusableSectionId) {
+  const adminReusableSection = await privateClient.adminReusableSection(firstAdminReusableSectionId);
+  assert(adminReusableSection.data.section?.id === firstAdminReusableSectionId, 'adminReusableSection() returned wrong section');
+  const reusableSectionVersions = await privateClient.adminReusableSectionVersions(firstAdminReusableSectionId);
+  assert(Array.isArray(reusableSectionVersions.data.versions), 'adminReusableSectionVersions() missing versions array');
+}
+
 const adminMedia = await privateClient.adminMedia({ limit: 5 });
 assert(Array.isArray(adminMedia.data.media), 'adminMedia() missing media array');
 assert(adminMedia.data.quota, 'adminMedia() missing quota payload');

@@ -32,6 +32,11 @@ import type {
   BackyAdminCollectionRecordsResponse,
   BackyAdminCollectionResponse,
   BackyAdminCollectionsResponse,
+  BackyAdminReusableSectionDeleteResponse,
+  BackyAdminReusableSectionResponse,
+  BackyAdminReusableSectionRestoreResponse,
+  BackyAdminReusableSectionVersionsResponse,
+  BackyAdminReusableSectionsResponse,
   BackySiteSettingsScope,
   BackyManifestLocalizedRoutePatternGroup,
   BackyManifestPageResource,
@@ -544,6 +549,48 @@ type DeleteAdminCollectionRecordMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["deleteAdminCollectionRecord"]>,
     BackyAdminCollectionRecordDeleteResponse
+  >
+>;
+type AdminReusableSectionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminReusableSections"]>,
+    BackyAdminReusableSectionsResponse
+  >
+>;
+type CreateAdminReusableSectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminReusableSection"]>,
+    BackyAdminReusableSectionResponse
+  >
+>;
+type AdminReusableSectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminReusableSection"]>,
+    BackyAdminReusableSectionResponse
+  >
+>;
+type UpdateAdminReusableSectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminReusableSection"]>,
+    BackyAdminReusableSectionResponse
+  >
+>;
+type DeleteAdminReusableSectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminReusableSection"]>,
+    BackyAdminReusableSectionDeleteResponse
+  >
+>;
+type AdminReusableSectionVersionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminReusableSectionVersions"]>,
+    BackyAdminReusableSectionVersionsResponse
+  >
+>;
+type RestoreAdminReusableSectionVersionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["restoreAdminReusableSectionVersion"]>,
+    BackyAdminReusableSectionRestoreResponse
   >
 >;
 type AdminFormsMethodReturnsContract = Assert<
@@ -1613,6 +1660,109 @@ const sdkAdminCollectionRecordDeleteEnvelope = {
     recordId: "record_project_1",
   },
 } satisfies BackyAdminCollectionRecordDeleteResponse;
+
+const sdkAdminReusableSection = {
+  id: "section_hero",
+  siteId: "site_demo",
+  name: "Hero Block",
+  slug: "hero-block",
+  description: "Reusable homepage hero",
+  category: "marketing",
+  status: "active",
+  tags: ["hero", "homepage"],
+  content: {
+    elements: [
+      {
+        id: "hero-heading",
+        type: "heading",
+        children: [],
+        props: {
+          text: "Reusable Hero",
+        },
+        x: 64,
+        y: 72,
+        width: 720,
+        height: 80,
+      },
+    ],
+    canvasSize: {
+      width: 1200,
+      height: 420,
+    },
+  },
+  metadata: {
+    reusableSection: {
+      version: 2,
+    },
+  },
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminReusableSectionsEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_sections",
+  data: {
+    sections: [sdkAdminReusableSection],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminReusableSectionsResponse;
+
+const sdkAdminReusableSectionEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section",
+  data: {
+    section: sdkAdminReusableSection,
+    version: 2,
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminReusableSectionResponse;
+
+const sdkAdminReusableSectionDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_delete",
+  data: {
+    deleted: true,
+    sectionId: "section_hero",
+  },
+} satisfies BackyAdminReusableSectionDeleteResponse;
+
+const sdkAdminReusableSectionVersionsEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_versions",
+  data: {
+    sectionId: "section_hero",
+    currentVersion: 2,
+    versions: [
+      {
+        version: 2,
+        name: "Hero Block",
+        slug: "hero-block",
+        updatedAt: "2026-05-21T00:00:00.000Z",
+      },
+    ],
+  },
+} satisfies BackyAdminReusableSectionVersionsResponse;
+
+const sdkAdminReusableSectionRestoreEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_restore",
+  data: {
+    restored: true,
+    restoredFromVersion: 1,
+    version: 3,
+    section: sdkAdminReusableSection,
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminReusableSectionRestoreResponse;
 
 const sdkCommerceProviderCertification = {
   schemaVersion: "backy.commerce-provider-certification-handoff.v1",

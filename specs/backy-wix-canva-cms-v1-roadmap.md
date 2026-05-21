@@ -41,7 +41,7 @@ It explicitly excludes:
 1. backend-backed admin/public routes across most core pages in `apps/admin` and `apps/public`
 2. page editor interactions for drag, resize, selection, multi-select, grouping/ungrouping, layers, shortcuts, responsive overrides, history, save, and publish-state workflows
 3. shared editor/public renderer contracts for the current element and interactive component set
-4. public form/comment/media/manifest/OpenAPI/SDK routes with cache and contract headers, plus authenticated SDK site, page, blog-post, and CMS collection lifecycle helpers for custom builders
+4. public form/comment/media/manifest/OpenAPI/SDK routes with cache and contract headers, plus authenticated SDK site, page, blog-post, CMS collection, and reusable-section lifecycle helpers for custom builders
 5. shared DB package, migrations, repository adapters, and repository-mode smoke coverage for the main content/settings modules
 6. release, database, Settings provider, Commerce provider, and mock-provider certification workflows with source-level preflight guards
 

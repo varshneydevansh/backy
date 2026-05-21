@@ -3566,6 +3566,92 @@ export interface BackyReusableSection {
   [key: string]: unknown;
 }
 
+export interface BackyAdminReusableSectionListOptions
+  extends BackyLiveManagementRequestOptions {
+  status?: "active" | "archived" | "all" | string;
+  category?: string;
+  tag?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface BackyAdminReusableSectionCreateInput {
+  name: string;
+  slug?: string;
+  description?: string | null;
+  category?: string;
+  status?: "active" | "archived" | string;
+  tags?: string[];
+  content: BackyReusableSection["content"] | BackyEditableContent;
+  metadata?: Record<string, unknown>;
+  sourceElementId?: string | null;
+  frontendDesignTemplateId?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminReusableSectionUpdateInput
+  extends Partial<Omit<BackyAdminReusableSectionCreateInput, "name" | "content">> {
+  name?: string;
+  content?: BackyReusableSection["content"] | BackyEditableContent;
+  expectedUpdatedAt?: string;
+  expectedVersion?: number;
+}
+
+export interface BackyAdminReusableSectionRestoreInput {
+  expectedUpdatedAt?: string;
+  expectedVersion?: number;
+  restoredBy?: string;
+  updatedBy?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminReusableSectionsResponse = BackyEnvelope<
+  {
+    sections: BackyReusableSection[];
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminReusableSectionResponse = BackyEnvelope<
+  {
+    section: BackyReusableSection;
+    version?: number;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminReusableSectionDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    sectionId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminReusableSectionVersionsResponse = BackyEnvelope<
+  {
+    sectionId: string;
+    versions: Array<Record<string, unknown>>;
+    currentVersion?: number;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminReusableSectionRestoreResponse = BackyEnvelope<
+  {
+    restored: boolean;
+    restoredFromVersion: number;
+    version?: number;
+    section: BackyReusableSection;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
 export interface BackyFormDefinition {
   id: string;
   title?: string;
@@ -7808,6 +7894,129 @@ export class BackyClient {
       {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
+      },
+    );
+  }
+
+  adminReusableSections(
+    options: BackyAdminReusableSectionListOptions = {},
+  ): Promise<BackyAdminReusableSectionsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = {
+      status: rest.status,
+      category: rest.category,
+      tag: rest.tag,
+      search: rest.search,
+      limit: rest.limit,
+      offset: rest.offset,
+    };
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/reusable-sections`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  createAdminReusableSection(
+    input: BackyAdminReusableSectionCreateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminReusableSectionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminReusableSection(
+    sectionId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminReusableSectionResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminReusableSection(
+    sectionId: string,
+    input: BackyAdminReusableSectionUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminReusableSectionResponse> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminReusableSection(
+    sectionId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminReusableSectionDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminReusableSectionVersions(
+    sectionId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminReusableSectionVersionsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}/versions`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  restoreAdminReusableSectionVersion(
+    sectionId: string,
+    version: number | string,
+    input: BackyAdminReusableSectionRestoreInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminReusableSectionRestoreResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}/versions/${encodeURIComponent(String(version))}/restore`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
