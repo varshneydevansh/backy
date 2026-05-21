@@ -1404,6 +1404,29 @@ if (firstAdminPageId) {
   assert(Array.isArray(pageRevisions.data.revisions), 'adminPageRevisions() missing revisions array');
 }
 
+assert(typeof privateClient.createAdminBlogCategory === 'function', 'createAdminBlogCategory() missing SDK method');
+assert(typeof privateClient.updateAdminBlogCategory === 'function', 'updateAdminBlogCategory() missing SDK method');
+assert(typeof privateClient.deleteAdminBlogCategory === 'function', 'deleteAdminBlogCategory() missing SDK method');
+assert(typeof privateClient.createAdminBlogTag === 'function', 'createAdminBlogTag() missing SDK method');
+assert(typeof privateClient.updateAdminBlogTag === 'function', 'updateAdminBlogTag() missing SDK method');
+assert(typeof privateClient.deleteAdminBlogTag === 'function', 'deleteAdminBlogTag() missing SDK method');
+const adminBlogCategories = await privateClient.adminBlogCategories();
+assert(Array.isArray(adminBlogCategories.data.categories), 'adminBlogCategories() missing categories array');
+const firstAdminBlogCategoryId = adminBlogCategories.data.categories[0]?.id;
+if (firstAdminBlogCategoryId) {
+  const adminBlogCategory = await privateClient.adminBlogCategory(firstAdminBlogCategoryId);
+  assert(adminBlogCategory.data.category?.id === firstAdminBlogCategoryId, 'adminBlogCategory() returned wrong category');
+}
+const adminBlogTags = await privateClient.adminBlogTags();
+assert(Array.isArray(adminBlogTags.data.tags), 'adminBlogTags() missing tags array');
+const firstAdminBlogTagId = adminBlogTags.data.tags[0]?.id;
+if (firstAdminBlogTagId) {
+  const adminBlogTag = await privateClient.adminBlogTag(firstAdminBlogTagId);
+  assert(adminBlogTag.data.tag?.id === firstAdminBlogTagId, 'adminBlogTag() returned wrong tag');
+}
+const adminBlogAuthors = await privateClient.adminBlogAuthors();
+assert(Array.isArray(adminBlogAuthors.data.authors), 'adminBlogAuthors() missing authors array');
+
 const adminBlogPosts = await privateClient.adminBlogPosts({ limit: 5 });
 assert(Array.isArray(adminBlogPosts.data.posts), 'adminBlogPosts() missing posts array');
 const firstAdminBlogPostId = adminBlogPosts.data.posts[0]?.id;

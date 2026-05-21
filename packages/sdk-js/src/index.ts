@@ -3280,6 +3280,97 @@ export type BackyAdminPageRevisionsResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export interface BackyAdminBlogCategoryResource extends BackyBlogCategory {
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackyAdminBlogCategoryInput {
+  name: string;
+  slug?: string;
+  description?: string | null;
+  color?: string | null;
+  sortOrder?: number;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminBlogCategoryUpdateInput
+  extends Partial<Omit<BackyAdminBlogCategoryInput, "name">> {
+  name?: string;
+}
+
+export interface BackyAdminBlogTagResource extends BackyBlogTag {
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackyAdminBlogTagInput {
+  name: string;
+  slug?: string;
+  description?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminBlogTagUpdateInput
+  extends Partial<Omit<BackyAdminBlogTagInput, "name">> {
+  name?: string;
+}
+
+export interface BackyAdminBlogAuthorResource extends BackyBlogAuthor {
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type BackyAdminBlogCategoriesResponse = BackyEnvelope<
+  {
+    categories: BackyAdminBlogCategoryResource[];
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogCategoryResponse = BackyEnvelope<
+  {
+    category: BackyAdminBlogCategoryResource;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogCategoryDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    categoryId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogTagsResponse = BackyEnvelope<
+  {
+    tags: BackyAdminBlogTagResource[];
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogTagResponse = BackyEnvelope<
+  {
+    tag: BackyAdminBlogTagResource;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogTagDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    tagId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminBlogAuthorsResponse = BackyEnvelope<
+  {
+    authors: BackyAdminBlogAuthorResource[];
+  } & Record<string, unknown>
+>;
+
 export type BackyAdminBlogPostStatus =
   | "draft"
   | "published"
@@ -10116,6 +10207,177 @@ export class BackyClient {
       {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogCategories(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogCategoriesResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createAdminBlogCategory(
+    input: BackyAdminBlogCategoryInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogCategoryResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogCategory(
+    categoryId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogCategoryResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories/${encodeURIComponent(categoryId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminBlogCategory(
+    categoryId: string,
+    input: BackyAdminBlogCategoryUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogCategoryResponse> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories/${encodeURIComponent(categoryId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminBlogCategory(
+    categoryId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogCategoryDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories/${encodeURIComponent(categoryId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogTags(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogTagsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createAdminBlogTag(
+    input: BackyAdminBlogTagInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogTagResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogTag(
+    tagId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogTagResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags/${encodeURIComponent(tagId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminBlogTag(
+    tagId: string,
+    input: BackyAdminBlogTagUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogTagResponse> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags/${encodeURIComponent(tagId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminBlogTag(
+    tagId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogTagDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags/${encodeURIComponent(tagId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminBlogAuthors(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminBlogAuthorsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/authors`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },
     );
