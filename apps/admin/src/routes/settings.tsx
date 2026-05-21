@@ -206,6 +206,38 @@ type SettingsLaunchActionPlan = {
   ownerSurfaces: Array<SettingsTab | 'release'>;
 };
 
+type BackyCompletionGateStatus = 'ready-to-run' | 'blocked-missing-inputs';
+
+type BackyCompletionGate = {
+  key: 'forms-postgres' | 'sdk-postgres' | 'settings-provider-certification' | 'commerce-provider-certification';
+  label: string;
+  status: BackyCompletionGateStatus;
+  command: string;
+  workflow: string;
+  affectedSurfaces: string[];
+  requiredEnvAliases: string[];
+  runtime: Record<string, unknown>;
+};
+
+const BACKY_COMPLETION_AUDIT = {
+  source: 'specs/page-completion-audit/backy-page-surface-audit.md',
+  ready: 39,
+  partial: 6,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 87,
+} as const;
+
+const BACKY_COMPLETION_SURFACES = [
+  { key: 'products', label: '/products', status: 'partial', blocker: 'commerce-provider-certification', gate: 'npm run ci:commerce-provider-certification' },
+  { key: 'orders', label: '/orders', status: 'partial', blocker: 'commerce-provider-certification', gate: 'npm run ci:commerce-provider-certification' },
+  { key: 'forms', label: '/forms', status: 'partial', blocker: 'forms-postgres', gate: 'npm run ci:forms-postgres' },
+  { key: 'settings', label: '/settings', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
+  { key: 'settings-admin-apis', label: 'Settings admin APIs', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
+  { key: 'frontend-contracts', label: 'Frontend manifest/OpenAPI/SDK APIs', status: 'partial', blocker: 'sdk-postgres', gate: 'npm run ci:sdk-postgres-smoke' },
+] as const;
+
 const DELIVERY_OPTIONS: Array<{
   id: DeliveryMode;
   title: string;
@@ -1187,6 +1219,16 @@ const buildSettingsLaunchActionPlan = (checks: SettingsLaunchReadinessCheck[]): 
     recommendedCommands,
     ownerSurfaces: uniqueTextValues(actionableChecks.map((check) => check.ownerSurface)) as Array<SettingsTab | 'release'>,
   };
+};
+
+const BACKY_COMPLETION_GATE_STYLES: Record<BackyCompletionGateStatus, string> = {
+  'ready-to-run': 'bg-emerald-50 text-emerald-700',
+  'blocked-missing-inputs': 'bg-amber-50 text-amber-700',
+};
+
+const BACKY_COMPLETION_GATE_LABELS: Record<BackyCompletionGateStatus, string> = {
+  'ready-to-run': 'Ready to run',
+  'blocked-missing-inputs': 'Needs inputs',
 };
 
 const FRONTEND_API_CAPABILITIES: FrontendApiCapability[] = [
@@ -2584,8 +2626,112 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
   ]);
+  const settingsBackyCompletionStatus = useMemo(() => {
+    const databaseGateReady = frontendDatabaseCertificationScenarioEvidence.status === 'ready';
+    const settingsGateReady = providerCertificationRuntimeEvidence.localRuntimeInputsConfigured;
+    const commerceProviderScenario = providerCertificationScenarioEvidence.scenarios.find((scenario) => scenario.key === 'commerce-provider-bridge');
+    const commerceGateReady = commerceProviderScenario?.status === 'covered';
+    const databaseRuntime = {
+      databaseMode: runtimeDatabase?.mode || 'unknown',
+      databaseConfigured: Boolean(runtimeDatabase?.configured),
+      publicApiReady: Boolean(runtimePublicApi?.corsAllowedOriginsConfigured && runtimePublicApi.exposedContractHeaders.length),
+      scenarioEvidence: frontendDatabaseCertificationScenarioEvidence.schemaVersion,
+      missingScenarios: frontendDatabaseCertificationScenarioEvidence.coverage.missing,
+    };
+    const providerRuntime = {
+      settingsProviderEvidence: providerCertificationScenarioEvidence.schemaVersion,
+      missingAliases: providerCertificationRuntimeEvidence.missingInputAliases,
+      localRuntimeInputsConfigured: providerCertificationRuntimeEvidence.localRuntimeInputsConfigured,
+    };
+    const gates: BackyCompletionGate[] = [
+      {
+        key: 'forms-postgres',
+        label: 'Forms Supabase/Postgres persistence',
+        status: databaseGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
+        command: 'npm run ci:forms-postgres',
+        workflow: '.github/workflows/forms-postgres-contract.yml',
+        affectedSurfaces: ['/forms'],
+        requiredEnvAliases: ['BACKY_DATABASE_URL', 'DATABASE_URL', 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'],
+        runtime: databaseRuntime,
+      },
+      {
+        key: 'sdk-postgres',
+        label: 'Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke',
+        status: databaseGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
+        command: 'npm run ci:sdk-postgres-smoke',
+        workflow: '.github/workflows/sdk-postgres-smoke.yml',
+        affectedSurfaces: ['Frontend manifest/OpenAPI/SDK APIs'],
+        requiredEnvAliases: ['BACKY_DATABASE_URL', 'DATABASE_URL', 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', 'BACKY_SDK_REQUIRE_DATABASE=1'],
+        runtime: databaseRuntime,
+      },
+      {
+        key: 'settings-provider-certification',
+        label: 'Settings live provider certification',
+        status: settingsGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
+        command: 'npm run ci:settings-provider-certification',
+        workflow: '.github/workflows/settings-provider-certification.yml',
+        affectedSurfaces: ['/settings', 'Settings admin APIs'],
+        requiredEnvAliases: SETTINGS_PROVIDER_CERTIFICATION_GROUPS
+          .filter((group) => !group.gate.includes('commerce'))
+          .flatMap((group) => group.requiredInputs),
+        runtime: providerRuntime,
+      },
+      {
+        key: 'commerce-provider-certification',
+        label: 'Commerce live provider certification',
+        status: commerceGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
+        command: 'npm run ci:commerce-provider-certification',
+        workflow: '.github/workflows/commerce-provider-certification.yml',
+        affectedSurfaces: ['/products', '/orders'],
+        requiredEnvAliases: SETTINGS_PROVIDER_CERTIFICATION_GROUPS
+          .filter((group) => group.gate.includes('commerce'))
+          .flatMap((group) => group.requiredInputs),
+        runtime: {
+          ...providerRuntime,
+          commerceProviderScenario: commerceProviderScenario || null,
+        },
+      },
+    ];
+    const blockedGates = gates.filter((gate) => gate.status !== 'ready-to-run');
+
+    return {
+      generatedAt: new Date().toISOString(),
+      schemaVersion: 'backy.completion-status.v1',
+      status: blockedGates.length === 0 ? 'certification-ready' : 'external-gates-required',
+      summary: 'Backy has the core local backend/editor/API surface implemented for the current audit; the remaining Partial rows need external database or live provider certification evidence.',
+      audit: BACKY_COMPLETION_AUDIT,
+      surfaces: BACKY_COMPLETION_SURFACES,
+      gates,
+      nextAction: blockedGates[0]
+        ? `Run ${blockedGates[0].command} after configuring ${blockedGates[0].requiredEnvAliases.slice(0, 3).join(', ')}.`
+        : 'Run the release certification workflow and attach evidence before moving the remaining Partial rows to Ready.',
+      recommendedCommands: uniqueTextValues([
+        'npm run test:partial-gate-preflights',
+        ...gates.map((gate) => gate.command),
+      ]),
+      localPreflight: 'npm run test:partial-gate-preflights',
+      linkedContracts: {
+        publicManifest: '/api/sites/{siteId}/manifest#data.contract.completionStatus',
+        openApi: '/api/sites/{siteId}/openapi#x-backy-completion-status',
+        sdkTypes: ['BackyCompletionStatus', 'GeneratedBackyFrontendManifestCompletionStatus', 'GeneratedBackyOpenApiBackyCompletionStatus'],
+      },
+      privacy: {
+        includesSecretValues: false,
+        exposesOnlyAliasPresence: true,
+        secretHandling: 'Completion status exposes audited counts, gate names, workflow paths, env alias presence, and missing provider families only; database URLs, provider keys, admin keys, and customer/order/submission payloads are never returned.',
+      },
+    };
+  }, [
+    frontendDatabaseCertificationScenarioEvidence,
+    providerCertificationRuntimeEvidence,
+    providerCertificationScenarioEvidence,
+    runtimeDatabase,
+    runtimePublicApi?.corsAllowedOriginsConfigured,
+    runtimePublicApi?.exposedContractHeaders.length,
+  ]);
   const settingsHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
+    completionStatus: settingsBackyCompletionStatus,
     launchReadiness: settingsLaunchReadiness,
     delivery: {
       mode: deliveryMode,
@@ -2760,6 +2906,7 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
     seoSettings,
+    settingsBackyCompletionStatus,
     settingsLaunchReadiness,
     siteScopedSettingsDraft,
     hasSiteScopedSettingsUnsavedChanges,
@@ -2769,6 +2916,7 @@ function SettingsPage() {
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationHandoff, null, 2), [providerCertificationHandoff]);
   const frontendDatabaseCertificationHandoffText = useMemo(() => JSON.stringify(frontendDatabaseCertificationHandoff, null, 2), [frontendDatabaseCertificationHandoff]);
   const settingsLaunchReadinessText = useMemo(() => JSON.stringify(settingsLaunchReadiness, null, 2), [settingsLaunchReadiness]);
+  const settingsBackyCompletionStatusText = useMemo(() => JSON.stringify(settingsBackyCompletionStatus, null, 2), [settingsBackyCompletionStatus]);
 
   const copySettingsHandoffText = async (value: string, label: string) => {
     if (isSaving) return;
@@ -3154,6 +3302,92 @@ function SettingsPage() {
                     </div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
                   </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="settings-backy-completion-status">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold">Backy completion status</h3>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                      {settingsBackyCompletionStatus.audit.ready} Ready / {settingsBackyCompletionStatus.audit.partial} Partial
+                    </span>
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      {settingsBackyCompletionStatus.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                    This is the same non-secret completion handoff exposed to custom admin clients through the public manifest and OpenAPI. It names the remaining Partial pages, proving gates, workflows, and env aliases without exposing database URLs, provider keys, order records, or form submissions.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isSaving || !canConfigureSettings}
+                  title={configurePermissionTitle}
+                  onClick={() => void copySettingsHandoffText(settingsBackyCompletionStatusText, 'Backy completion status handoff')}
+                  iconStart={<Copy className="size-4" />}
+                  data-testid="settings-backy-completion-status-copy-button"
+                >
+                  Copy status JSON
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                {[
+                  { label: 'Schema', value: settingsBackyCompletionStatus.schemaVersion },
+                  { label: 'Audit', value: `${settingsBackyCompletionStatus.audit.readyPercent}% ready` },
+                  { label: 'Partial surfaces', value: `${settingsBackyCompletionStatus.surfaces.length}` },
+                  { label: 'Local preflight', value: settingsBackyCompletionStatus.localPreflight },
+                  { label: 'Public contract', value: 'data.contract.completionStatus' },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                    <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-backy-completion-status-action-plan">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Next action</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{settingsBackyCompletionStatus.nextAction}</p>
+                  </div>
+                  <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    x-backy-completion-status
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {settingsBackyCompletionStatus.recommendedCommands.map((command) => (
+                    <span key={command} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {command}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-2 xl:grid-cols-4" data-testid="settings-backy-completion-status-gates">
+                {settingsBackyCompletionStatus.gates.map((gate) => (
+                  <div key={gate.key} className="rounded-md border border-border bg-card px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-semibold text-foreground">{gate.label}</div>
+                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', BACKY_COMPLETION_GATE_STYLES[gate.status])}>
+                        {BACKY_COMPLETION_GATE_LABELS[gate.status]}
+                      </span>
+                    </div>
+                    <div className="mt-2 break-words font-mono text-[11px] leading-4 text-muted-foreground">{gate.command}</div>
+                    <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                      Affects {gate.affectedSurfaces.join(', ')}.
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {settingsBackyCompletionStatus.surfaces.map((surface) => (
+                  <span key={surface.key} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                    {surface.label}: {surface.blocker}
+                  </span>
                 ))}
               </div>
             </div>

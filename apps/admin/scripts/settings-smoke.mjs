@@ -212,6 +212,20 @@ const assertSettingsSourceContracts = () => {
     "schemaVersion: 'backy.settings-launch-action-plan.v1'",
     'includesSecretValues: false',
     "copySettingsHandoffText(settingsLaunchReadinessText, 'Settings launch readiness handoff')",
+    'data-testid="settings-backy-completion-status"',
+    'data-testid="settings-backy-completion-status-copy-button"',
+    'data-testid="settings-backy-completion-status-action-plan"',
+    'data-testid="settings-backy-completion-status-gates"',
+    'settingsBackyCompletionStatus',
+    'settingsBackyCompletionStatusText',
+    'BACKY_COMPLETION_AUDIT',
+    'BACKY_COMPLETION_SURFACES',
+    "schemaVersion: 'backy.completion-status.v1'",
+    'data.contract.completionStatus',
+    'x-backy-completion-status',
+    'GeneratedBackyFrontendManifestCompletionStatus',
+    'npm run test:partial-gate-preflights',
+    "copySettingsHandoffText(settingsBackyCompletionStatusText, 'Backy completion status handoff')",
   ];
 
   const missingRouteSnippets = requiredSettingsRouteSnippets.filter((snippet) => !settingsRoute.includes(snippet));
@@ -1817,6 +1831,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     const providerCommandBuilderText = document.querySelector('[data-testid="settings-provider-certification-command-builder"]')?.textContent || '';
     const providerEnvTemplateText = document.querySelector('[data-testid="settings-provider-certification-env-template-body"]')?.textContent || '';
     const providerCommandText = document.querySelector('[data-testid="settings-provider-certification-command"]')?.textContent || '';
+    const completionStatusText = document.querySelector('[data-testid="settings-backy-completion-status"]')?.textContent || '';
     return {
     search: window.location.search,
     text: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 500) || '',
@@ -1855,6 +1870,24 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationDatabaseGate: runbookText.includes('certify_database') && runbookText.includes('BACKY_DATABASE_URL') && runbookText.includes('DATABASE_URL'),
     hasReleaseCertificationSettingsGate: runbookText.includes('certify_settings_providers') && runbookText.includes('ci:settings-provider-certification'),
     hasReleaseCertificationCommerceGate: runbookText.includes('certify_commerce_providers') && runbookText.includes('ci:commerce-provider-certification'),
+    hasBackyCompletionStatus: Boolean(document.querySelector('[data-testid="settings-backy-completion-status"]')) &&
+      completionStatusText.includes('Backy completion status') &&
+      completionStatusText.includes('39 Ready / 6 Partial') &&
+      completionStatusText.includes('backy.completion-status.v1') &&
+      completionStatusText.includes('data.contract.completionStatus') &&
+      completionStatusText.includes('x-backy-completion-status'),
+    hasBackyCompletionStatusCopyButton: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-copy-button"]')),
+    hasBackyCompletionStatusActionPlan: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-action-plan"]')) &&
+      completionStatusText.includes('npm run test:partial-gate-preflights') &&
+      completionStatusText.includes('npm run ci:forms-postgres') &&
+      completionStatusText.includes('npm run ci:sdk-postgres-smoke') &&
+      completionStatusText.includes('npm run ci:settings-provider-certification') &&
+      completionStatusText.includes('npm run ci:commerce-provider-certification'),
+    hasBackyCompletionStatusGates: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-gates"]')) &&
+      completionStatusText.includes('Forms Supabase/Postgres persistence') &&
+      completionStatusText.includes('Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke') &&
+      completionStatusText.includes('Settings live provider certification') &&
+      completionStatusText.includes('Commerce live provider certification'),
     hasProviderCertificationMatrix: Boolean(document.querySelector('[data-testid="settings-provider-certification"]')),
     hasProviderRuntimeEvidence: Boolean(document.querySelector('[data-testid="settings-provider-runtime-evidence"]')),
     hasProviderRuntimeEvidenceCopy: document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Runtime provider evidence') && document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Public API/CORS') || false,
@@ -1943,6 +1976,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationDatabaseGate &&
       infrastructureState.hasReleaseCertificationSettingsGate &&
       infrastructureState.hasReleaseCertificationCommerceGate &&
+      infrastructureState.hasBackyCompletionStatus &&
+      infrastructureState.hasBackyCompletionStatusCopyButton &&
+      infrastructureState.hasBackyCompletionStatusActionPlan &&
+      infrastructureState.hasBackyCompletionStatusGates &&
       infrastructureState.hasProviderCertificationMatrix &&
       infrastructureState.hasProviderCertificationDownloadButton &&
       infrastructureState.hasProviderCertificationCopyButton &&
