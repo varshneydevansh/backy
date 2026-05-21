@@ -14,6 +14,17 @@ const assert = (condition, message) => {
   }
 };
 
+const assertPostgresDriverResolvable = async () => {
+  try {
+    const driver = await import('postgres');
+    assert(typeof driver.default === 'function', 'postgres package must export the default client factory.');
+  } catch (error) {
+    throw new Error(`SDK Postgres certification requires the postgres npm package before the database smoke can run: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+await assertPostgresDriverResolvable();
+
 const sdkSmokeCi = read('../../../scripts/sdk-smoke-ci.mjs');
 const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkTypeSmoke = read('../../../packages/sdk-js/scripts/generated-contract-types.ts');
@@ -690,4 +701,5 @@ assert(
 console.log(JSON.stringify({
   ok: true,
   contract: 'backy.sdk-postgres-preflight.v1',
+  postgresDriver: true,
 }, null, 2));

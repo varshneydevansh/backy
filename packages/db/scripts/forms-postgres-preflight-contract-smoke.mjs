@@ -22,10 +22,21 @@ const assert = (condition, message) => {
   }
 };
 
+const assertPostgresDriverResolvable = async () => {
+  try {
+    const driver = await import('postgres');
+    assert(typeof driver.default === 'function', 'postgres package must export the default client factory.');
+  } catch (error) {
+    throw new Error(`Forms Postgres certification requires the postgres npm package before the database smoke can run: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
 const includesEvery = (source, values, label) => {
   const missing = values.filter((value) => !source.includes(value));
   assert(missing.length === 0, `${label} missing: ${missing.join(', ')}`);
 };
+
+await assertPostgresDriverResolvable();
 
 const smoke = await readFile(files.smoke, 'utf8');
 const migration = await readFile(files.migration, 'utf8');
@@ -394,6 +405,7 @@ console.log(JSON.stringify({
   ok: true,
   contract: 'backy.forms-postgres-preflight.v1',
   checked: {
+    postgresDriver: true,
     tables: formTables,
     policies: policies.length,
     hardeningMigration: true,
