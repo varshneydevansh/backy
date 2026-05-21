@@ -146,11 +146,16 @@ import type {
   BackyCollectionRecordWriteInput,
   BackyAdminFormCloneResponse,
   BackyAdminFormConsentRetentionResponse,
+  BackyAdminFormContactConsentRetentionResponse,
+  BackyAdminFormContactCustomerPromotionResponse,
   BackyAdminFormContactDeleteResponse,
+  BackyAdminFormContactImportResponse,
   BackyAdminFormContactListMutationResponse,
   BackyAdminFormContactListsResponse,
   BackyAdminFormContactResponse,
   BackyAdminFormContactsResponse,
+  BackyAdminFormContactSyncResponse,
+  BackyAdminFormContactUserPromotionResponse,
   BackyAdminFormDeleteResponse,
   BackyAdminFormDeliveryRetryResponse,
   BackyAdminFormEmbedBlockResponse,
@@ -1135,10 +1140,46 @@ type ApplyAdminFormsConsentRetentionMethodReturnsContract = Assert<
 type FormContactsMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["formContacts"]>, BackyAdminFormContactsResponse>
 >;
+type CreateFormContactMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createFormContact"]>,
+    BackyAdminFormContactResponse
+  >
+>;
+type ImportFormContactsCsvMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importFormContactsCsv"]>,
+    BackyAdminFormContactImportResponse
+  >
+>;
 type UpdateFormContactMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateFormContact"]>,
     BackyAdminFormContactResponse
+  >
+>;
+type PromoteFormContactToUserMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["promoteFormContactToUser"]>,
+    BackyAdminFormContactUserPromotionResponse
+  >
+>;
+type PromoteFormContactToCustomerMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["promoteFormContactToCustomer"]>,
+    BackyAdminFormContactCustomerPromotionResponse
+  >
+>;
+type SyncFormContactsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["syncFormContacts"]>,
+    BackyAdminFormContactSyncResponse
+  >
+>;
+type ApplyFormContactConsentRetentionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["applyFormContactConsentRetention"]>,
+    BackyAdminFormContactConsentRetentionResponse
   >
 >;
 type DeleteFormContactMethodReturnsContract = Assert<
@@ -7287,6 +7328,112 @@ const sdkAdminFormContactEnvelope = {
   },
 } satisfies BackyAdminFormContactResponse;
 
+const sdkAdminFormContactImportEnvelope = {
+  success: true,
+  requestId: "req_admin_contact_import",
+  data: {
+    formId: "form_contact",
+    contacts: [formContact],
+    import: {
+      created: 1,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+    },
+  },
+} satisfies BackyAdminFormContactImportResponse;
+
+const sdkAdminFormContactUserPromotionEnvelope = {
+  success: true,
+  requestId: "req_admin_contact_user_promotion",
+  data: {
+    contact: {
+      ...formContact,
+      status: "qualified",
+    },
+    user: sdkAdminUser,
+    existingUser: false,
+    invite: {
+      id: "invite_contact",
+      token: "token_contact",
+      userId: sdkAdminUser.id,
+      email: sdkAdminUser.email,
+      inviteUrl: "https://demo.example/admin/accept-invite?token=token_contact",
+      expiresAt: "2026-05-28T00:00:00.000Z",
+    },
+  },
+} satisfies BackyAdminFormContactUserPromotionResponse;
+
+const sdkAdminFormContactCustomerPromotionEnvelope = {
+  success: true,
+  requestId: "req_admin_contact_customer_promotion",
+  data: {
+    contact: {
+      ...formContact,
+      status: "qualified",
+    },
+    collection: sdkAdminCollection,
+    record: sdkAdminCollectionRecord,
+    existingRecord: false,
+    createdCollection: true,
+  },
+} satisfies BackyAdminFormContactCustomerPromotionResponse;
+
+const sdkAdminFormContactSyncEnvelope = {
+  success: true,
+  requestId: "req_admin_contact_sync",
+  data: {
+    formId: "form_contact",
+    delivery: {
+      target: "https://example.com/contact-sync",
+      status: "succeeded",
+      statusCode: 200,
+      error: null,
+      count: 1,
+      contactIds: [formContact.id],
+    },
+  },
+} satisfies BackyAdminFormContactSyncResponse;
+
+const sdkAdminFormContactConsentRetentionEnvelope = {
+  success: true,
+  requestId: "req_admin_contact_consent_retention",
+  data: {
+    formId: "form_contact",
+    dryRun: true,
+    policy: {
+      deleteAfterDays: 730,
+      now: "2026-05-21T00:00:00.000Z",
+    },
+    consentFieldKeys: ["privacyConsent"],
+    scanned: 1,
+    due: 1,
+    anonymized: 0,
+    contacts: [
+      {
+        id: formContact.id,
+        formId: "form_contact",
+        pageId: "page_contact",
+        postId: null,
+        status: "qualified",
+        name: formContact.name,
+        email: formContact.email,
+        phone: null,
+        requestId: "req_submission",
+        sourceSubmissionId: "submission_1",
+        sourceIpHash: "ip_hash_1",
+        consentValues: {
+          privacyConsent: true,
+        },
+        dueAt: "2026-05-21T00:00:00.000Z",
+        due: true,
+        createdAt: "2026-05-16T00:00:00.000Z",
+        updatedAt: "2026-05-16T00:01:00.000Z",
+      },
+    ],
+  },
+} satisfies BackyAdminFormContactConsentRetentionResponse;
+
 const sdkAdminFormContactDeleteEnvelope = {
   success: true,
   requestId: "req_admin_contact_delete",
@@ -9467,6 +9614,11 @@ void sdkAdminFormConsentRetentionEnvelope;
 void sdkAdminFormsConsentRetentionEnvelope;
 void sdkAdminFormContactsEnvelope;
 void sdkAdminFormContactEnvelope;
+void sdkAdminFormContactImportEnvelope;
+void sdkAdminFormContactUserPromotionEnvelope;
+void sdkAdminFormContactCustomerPromotionEnvelope;
+void sdkAdminFormContactSyncEnvelope;
+void sdkAdminFormContactConsentRetentionEnvelope;
 void sdkAdminFormContactDeleteEnvelope;
 void mediaReferenceTarget;
 void mediaReferences;

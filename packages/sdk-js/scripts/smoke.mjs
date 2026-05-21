@@ -1492,6 +1492,12 @@ assert(typeof privateClient.retryFormSubmissionWebhook === 'function', 'retryFor
 assert(typeof privateClient.retryFormSubmissionEmail === 'function', 'retryFormSubmissionEmail() missing SDK method');
 assert(typeof privateClient.applyAdminFormConsentRetention === 'function', 'applyAdminFormConsentRetention() missing SDK method');
 assert(typeof privateClient.applyAdminFormsConsentRetention === 'function', 'applyAdminFormsConsentRetention() missing SDK method');
+assert(typeof privateClient.createFormContact === 'function', 'createFormContact() missing SDK method');
+assert(typeof privateClient.importFormContactsCsv === 'function', 'importFormContactsCsv() missing SDK method');
+assert(typeof privateClient.promoteFormContactToUser === 'function', 'promoteFormContactToUser() missing SDK method');
+assert(typeof privateClient.promoteFormContactToCustomer === 'function', 'promoteFormContactToCustomer() missing SDK method');
+assert(typeof privateClient.syncFormContacts === 'function', 'syncFormContacts() missing SDK method');
+assert(typeof privateClient.applyFormContactConsentRetention === 'function', 'applyFormContactConsentRetention() missing SDK method');
 
 let commerceCatalogChecked = false;
 try {

@@ -4520,6 +4520,163 @@ export type BackyAdminFormContactDeleteResponse = BackyEnvelope<
   { deleted: boolean; contact?: BackyContact } & Record<string, unknown>
 >;
 
+export interface BackyAdminFormContactInput {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  status?: "new" | "contacted" | "qualified" | "archived" | string;
+  pageId?: string | null;
+  postId?: string | null;
+  requestId?: string | null;
+  sourceValues?: Record<string, unknown>;
+  upsertByEmail?: boolean;
+  sourceSubmissionId?: string | null;
+  sourceIpHash?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminFormContactImportOptions
+  extends BackyLiveManagementRequestOptions {
+  upsertByEmail?: boolean;
+  upsert?: boolean;
+}
+
+export interface BackyAdminFormContactImportError {
+  row: number;
+  email?: string;
+  code?: string;
+  message: string;
+  details?: unknown;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminFormContactImportSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: BackyAdminFormContactImportError[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormContactImportResponse = BackyEnvelope<
+  {
+    formId: string;
+    contacts: BackyContact[];
+    import: BackyAdminFormContactImportSummary;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminFormContactUserPromotionInput {
+  role?: "viewer" | "editor" | string;
+  status?: "invited" | "active" | string;
+  createInvite?: boolean;
+  expiresInMinutes?: number;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormContactUserPromotionResponse = BackyEnvelope<
+  {
+    contact: BackyContact;
+    user: BackyAdminUser;
+    existingUser: boolean;
+    invite?: BackyAdminInviteToken | null;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminFormContactCustomerPromotionInput {
+  customerStatus?: "lead" | "customer" | "vip" | "inactive" | string;
+  notes?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormContactCustomerPromotionResponse<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> = BackyEnvelope<
+  {
+    contact: BackyContact;
+    collection: BackyCollectionSchema;
+    record: BackyCollectionRecord<TValues>;
+    existingRecord: boolean;
+    createdCollection?: boolean;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminFormContactSyncInput {
+  contactIds: string[];
+  targetUrl: string;
+  includeSourceValues?: boolean;
+  reason?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminFormContactSyncDelivery {
+  target: string;
+  status: "queued" | "succeeded" | "failed" | string;
+  statusCode?: number | null;
+  error?: string | null;
+  count: number;
+  contactIds: string[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormContactSyncResponse = BackyEnvelope<
+  {
+    formId: string;
+    delivery: BackyAdminFormContactSyncDelivery;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminFormContactConsentRetentionInput {
+  contactIds?: string[];
+  dryRun?: boolean;
+  retentionDays?: number;
+  now?: string;
+  actor?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminFormContactConsentEvidence {
+  id: string;
+  formId: string;
+  pageId?: string | null;
+  postId?: string | null;
+  status: string;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  requestId?: string | null;
+  sourceSubmissionId?: string | null;
+  sourceIpHash?: string | null;
+  consentValues: Record<string, unknown>;
+  dueAt?: string | null;
+  due: boolean;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormContactConsentRetentionResponse = BackyEnvelope<
+  {
+    formId: string;
+    dryRun: boolean;
+    policy: {
+      deleteAfterDays: number;
+      now: string;
+      [key: string]: unknown;
+    };
+    consentFieldKeys: string[];
+    scanned: number;
+    due: number;
+    anonymized: number;
+    contacts: BackyAdminFormContactConsentEvidence[];
+  } & Record<string, unknown>
+>;
+
 export type BackyAdminFormsAnalyticsResponse = BackyEnvelope<
   {
     site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
@@ -11811,6 +11968,52 @@ export class BackyClient {
     );
   }
 
+  createFormContact(
+    formId: string,
+    input: BackyAdminFormContactInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`,
+      {
+        method: "POST",
+        body,
+        requestId:
+          options.requestId ??
+          (typeof requestId === "string" ? requestId : undefined),
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  importFormContactsCsv(
+    formId: string,
+    csv: string,
+    options: BackyAdminFormContactImportOptions = {},
+  ): Promise<BackyAdminFormContactImportResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const requestHeaders = new Headers(headers);
+    if (!requestHeaders.has("content-type")) {
+      requestHeaders.set("content-type", "text/csv; charset=utf-8");
+    }
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/import`,
+      {
+        method: "POST",
+        query: {
+          upsertByEmail: rest.upsertByEmail ?? rest.upsert,
+        },
+        body: csv,
+        requestId,
+        headers: requestHeaders,
+        credentials,
+      },
+    );
+  }
+
   updateFormContact(
     formId: string,
     contactId: string,
@@ -11824,6 +12027,82 @@ export class BackyClient {
         method: "PATCH",
         body,
         requestId: options.requestId ?? (requestId as string | undefined),
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  promoteFormContactToUser(
+    formId: string,
+    contactId: string,
+    input: BackyAdminFormContactUserPromotionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactUserPromotionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}/promote`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  promoteFormContactToCustomer<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    formId: string,
+    contactId: string,
+    input: BackyAdminFormContactCustomerPromotionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactCustomerPromotionResponse<TValues>> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}/promote-customer`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  syncFormContacts(
+    formId: string,
+    input: BackyAdminFormContactSyncInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactSyncResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/sync`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  applyFormContactConsentRetention(
+    formId: string,
+    input: BackyAdminFormContactConsentRetentionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormContactConsentRetentionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/consent-retention`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },
