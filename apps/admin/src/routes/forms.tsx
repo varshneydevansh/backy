@@ -163,6 +163,58 @@ interface FormLaunchReadinessHandoff {
   actionPlan: FormLaunchActionPlan;
   nextSteps: string[];
 }
+
+interface FormDeliveryHandoff {
+  schemaVersion: 'backy.form-delivery-handoff.v1';
+  generatedAt: string;
+  selectedSiteId: string;
+  form: {
+    id: string;
+    name: string;
+    title: string;
+    isActive: boolean;
+  } | null;
+  endpoints: {
+    events: string;
+    webhookRetryTemplate: string;
+    emailRetryTemplate: string;
+  };
+  configuration: {
+    notificationEmailConfigured: boolean;
+    notificationWebhookConfigured: boolean;
+    moderationMode: FormDefinition['moderationMode'] | '';
+  };
+  metrics: FormLaunchReadinessHandoff['delivery'];
+  recentEvents: Array<{
+    id: string;
+    kind: string;
+    channel: string;
+    status: string;
+    statusCode: number | null;
+    requestId: string | null;
+    submissionId: string | null;
+    retry: boolean;
+    retryable: boolean;
+    hasTarget: boolean;
+    hasError: boolean;
+    createdAt: string;
+  }>;
+  retry: {
+    failedRetryableCount: number;
+    retryableSubmissionIds: string[];
+  };
+  actionPlan: {
+    status: 'ready' | 'attention';
+    nextSteps: string[];
+  };
+  privacy: {
+    includesSubmissionValues: boolean;
+    includesProviderTargets: boolean;
+    includesProviderResponses: boolean;
+    excludedFields: string[];
+  };
+}
+
 interface FormsPersistenceScenarioEvidence {
   schemaVersion: 'backy.forms-persistence-scenario-evidence.v1';
   status: 'ready' | 'attention';
@@ -1397,6 +1449,21 @@ function FormsRoute() {
     selectedFormSamplePayload,
     selectedFormSubmitUrl,
   ]);
+  const selectedFormDeliveryHandoff = useMemo<FormDeliveryHandoff>(() => buildFormDeliveryHandoff({
+    activeSiteId,
+    form: selectedForm,
+    adminBaseUrl,
+    publicBaseUrl,
+    deliveryMetrics: selectedDeliveryMetrics,
+    events: selectedDeliveryEvents,
+  }), [
+    activeSiteId,
+    adminBaseUrl,
+    publicBaseUrl,
+    selectedDeliveryEvents,
+    selectedDeliveryMetrics,
+    selectedForm,
+  ]);
   const formsHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1447,6 +1514,7 @@ function FormsRoute() {
     },
     persistenceCertification: formPersistenceCertification,
     selectedFormLaunchReadiness,
+    selectedFormDeliveryHandoff,
     templateExport: {
       schemaVersion: formsTemplatePack.schemaVersion,
       format: formsTemplatePack.export.format,
@@ -1562,12 +1630,14 @@ function FormsRoute() {
     selectedFormContactsUrl,
     selectedFormCurlExample,
     selectedFormDefinitionUrl,
+    selectedFormDeliveryHandoff,
     selectedFormLaunchReadiness,
     selectedFormSamplePayload,
     selectedFormSubmitUrl,
   ]);
   const formsTemplatePackText = useMemo(() => JSON.stringify(formsTemplatePack, null, 2), [formsTemplatePack]);
   const selectedFormLaunchReadinessText = useMemo(() => JSON.stringify(selectedFormLaunchReadiness, null, 2), [selectedFormLaunchReadiness]);
+  const selectedFormDeliveryHandoffText = useMemo(() => JSON.stringify(selectedFormDeliveryHandoff, null, 2), [selectedFormDeliveryHandoff]);
   const formPersistenceOperatorGate = formPersistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE;
   const formPersistenceCertificationText = useMemo(() => JSON.stringify(formPersistenceCertification, null, 2), [formPersistenceCertification]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
@@ -5477,6 +5547,22 @@ function FormsRoute() {
                         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                           Review queued, failed, retried, and email notification deliveries without leaving the form workspace.
                         </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-background px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                            backy.form-delivery-handoff.v1
+                          </span>
+                          <Button
+                            data-testid="forms-delivery-handoff-copy-button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isFormsBusy || !canExportForms}
+                            title={!canExportForms ? exportPermissionTitle : undefined}
+                            onClick={() => void copyFormApiText(selectedFormDeliveryHandoffText, 'Form delivery handoff')}
+                            iconStart={<Copy className="size-4" />}
+                          >
+                            Copy delivery JSON
+                          </Button>
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-background px-2.5 py-1 text-xs font-semibold text-muted-foreground">
@@ -6562,6 +6648,109 @@ const buildFormLaunchReadinessHandoff = ({
     nextSteps: nextSteps.length
       ? nextSteps
       : ['Form launch handoff is ready for custom frontends, embed blocks, lead routing, and operator certification review.'],
+  };
+};
+
+const getFormDeliveryEventChannel = (event: FormDeliveryEvent): string => {
+  const channel = event.metadata?.channel;
+  return typeof channel === 'string' && channel.trim() ? channel : 'webhook';
+};
+
+const buildFormDeliveryHandoff = ({
+  activeSiteId,
+  form,
+  adminBaseUrl,
+  publicBaseUrl,
+  deliveryMetrics,
+  events,
+}: {
+  activeSiteId: string;
+  form: FormDefinition | null;
+  adminBaseUrl: string;
+  publicBaseUrl: string;
+  deliveryMetrics: FormDeliveryHandoff['metrics'];
+  events: FormDeliveryEvent[];
+}): FormDeliveryHandoff => {
+  const eventEndpoint = form
+    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=form-submission&formId=${encodeURIComponent(form.id)}`
+    : `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=form-submission`;
+  const retryBase = form
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/submissions/{submissionId}`
+    : '';
+  const hasDeliveryConfig = Boolean(form?.notificationEmail || form?.notificationWebhook);
+  const hasFailedEvents = deliveryMetrics.failed > 0;
+  const retryableSubmissionIds = [...new Set(events
+    .filter((event) => event.status === 'failed' && Boolean(event.submissionId))
+    .map((event) => event.submissionId as string))];
+  const nextSteps = [
+    !form ? 'Select a form before exporting delivery handoff evidence.' : null,
+    form && !hasDeliveryConfig ? 'Configure notification email or webhook delivery before launch.' : null,
+    hasFailedEvents ? 'Retry or inspect failed delivery events from the Forms workspace.' : null,
+    form && hasDeliveryConfig && !hasFailedEvents ? 'Delivery handoff is ready for custom admin consoles and operator review.' : null,
+  ].filter((step): step is string => Boolean(step));
+
+  return {
+    schemaVersion: 'backy.form-delivery-handoff.v1',
+    generatedAt: new Date().toISOString(),
+    selectedSiteId: activeSiteId,
+    form: form
+      ? {
+          id: form.id,
+          name: form.name,
+          title: form.title || form.name,
+          isActive: form.isActive,
+        }
+      : null,
+    endpoints: {
+      events: eventEndpoint,
+      webhookRetryTemplate: retryBase ? `${retryBase}/webhook-retry` : '',
+      emailRetryTemplate: retryBase ? `${retryBase}/email-retry` : '',
+    },
+    configuration: {
+      notificationEmailConfigured: Boolean(form?.notificationEmail),
+      notificationWebhookConfigured: Boolean(form?.notificationWebhook),
+      moderationMode: form?.moderationMode || '',
+    },
+    metrics: deliveryMetrics,
+    recentEvents: events.slice(0, 12).map((event) => ({
+      id: event.id,
+      kind: event.kind,
+      channel: getFormDeliveryEventChannel(event),
+      status: event.status,
+      statusCode: typeof event.statusCode === 'number' ? event.statusCode : null,
+      requestId: event.requestId || null,
+      submissionId: event.submissionId || null,
+      retry: event.metadata?.retry === true,
+      retryable: event.status === 'failed' && Boolean(event.submissionId),
+      hasTarget: Boolean(event.target),
+      hasError: Boolean(event.error),
+      createdAt: event.createdAt,
+    })),
+    retry: {
+      failedRetryableCount: retryableSubmissionIds.length,
+      retryableSubmissionIds,
+    },
+    actionPlan: {
+      status: form && hasDeliveryConfig && !hasFailedEvents ? 'ready' : 'attention',
+      nextSteps,
+    },
+    privacy: {
+      includesSubmissionValues: false,
+      includesProviderTargets: false,
+      includesProviderResponses: false,
+      excludedFields: [
+        'submission.values',
+        'event.target',
+        'delivery.providerResponse',
+        'notificationWebhook',
+        'notificationEmail',
+        'databaseUrl',
+        'headers',
+        'payload',
+        'ipHash',
+        'userAgent',
+      ],
+    },
   };
 };
 

@@ -93,6 +93,18 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('Form edits, submission review, consent retention, and embed-block changes will appear here.'), 'Forms audit empty state must explain which actions populate activity');
   assert(source.includes('title="No delivery events yet"'), 'Forms delivery panel must keep the empty delivery title visible');
   assert(source.includes('Webhook and email delivery attempts, retries, and provider responses for this form will appear here.'), 'Forms delivery empty state must explain which events populate delivery history');
+  assert(
+    source.includes('data-testid="forms-delivery-handoff-copy-button"') &&
+      source.includes("schemaVersion: 'backy.form-delivery-handoff.v1'") &&
+      source.includes('selectedFormDeliveryHandoffText') &&
+      source.includes('selectedFormDeliveryHandoff') &&
+      source.includes('buildFormDeliveryHandoff') &&
+      source.includes("selectedFormDeliveryHandoffText, 'Form delivery handoff'") &&
+      source.includes('delivery.providerResponse') &&
+      source.includes('includesSubmissionValues: false') &&
+      source.includes('includesProviderResponses: false'),
+    'Forms delivery panel must expose a copyable selected-form delivery handoff without private delivery payloads',
+  );
   assert(source.includes('title="No form analytics yet"'), 'Forms analytics panel must keep the no-analytics empty-state title visible');
   assert(source.includes('Submission, moderation, and collection-routing metrics appear after forms receive traffic.'), 'Forms analytics empty state must explain what will populate metrics');
   assert(source.includes('title="No lead segments yet"'), 'Forms lead analytics panel must keep the no-segments empty-state title visible');
@@ -2501,7 +2513,10 @@ const assertLayout = async (client) => {
       document.body?.innerText?.includes('Public API') &&
       document.body?.innerText?.includes('Next action'),
     hasDeliveryPanel: Boolean(document.querySelector('[data-testid="forms-webhook-delivery-panel"]')) &&
-      document.body?.innerText?.includes('Webhook delivery'),
+      Boolean(document.querySelector('[data-testid="forms-delivery-handoff-copy-button"]')) &&
+      document.body?.innerText?.includes('Webhook delivery') &&
+      document.body?.innerText?.includes('backy.form-delivery-handoff.v1') &&
+      document.body?.innerText?.includes('Copy delivery JSON'),
     hasTemplates: document.body?.innerText?.includes('Form templates') || false,
     hasInbox: document.body?.innerText?.includes('Submission inbox') || false,
   }))()`);
