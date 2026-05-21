@@ -35,6 +35,12 @@ import type {
   BackyAdminMediaResponse,
   BackyAdminMediaUploadInput,
   BackyAdminMediaUpdateInput,
+  BackyAdminPageDeleteResponse,
+  BackyAdminPagePreviewResponse,
+  BackyAdminPageReadinessResponse,
+  BackyAdminPageResponse,
+  BackyAdminPageRevisionsResponse,
+  BackyAdminPagesResponse,
   BackyMediaBindingInput,
   BackyMediaBindingResponse,
   BackyMediaSignedUrlInput,
@@ -327,6 +333,51 @@ type AdminSiteSettingsUpdateMethodReturnsContract = Assert<
     AwaitedReturn<BackyClient["updateAdminSiteSettings"]>,
     BackySiteSettingsResponse
   >
+>;
+type AdminPagesMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminPages"]>, BackyAdminPagesResponse>
+>;
+type CreateAdminPageMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["createAdminPage"]>, BackyAdminPageResponse>
+>;
+type AdminPageMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminPage"]>, BackyAdminPageResponse>
+>;
+type UpdateAdminPageMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateAdminPage"]>, BackyAdminPageResponse>
+>;
+type DeleteAdminPageMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminPage"]>,
+    BackyAdminPageDeleteResponse
+  >
+>;
+type AdminPageReadinessMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminPageReadiness"]>,
+    BackyAdminPageReadinessResponse
+  >
+>;
+type PublishAdminPageMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["publishAdminPage"]>, BackyAdminPageResponse>
+>;
+type ArchiveAdminPageMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["archiveAdminPage"]>, BackyAdminPageResponse>
+>;
+type AdminPagePreviewMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminPagePreviewToken"]>,
+    BackyAdminPagePreviewResponse
+  >
+>;
+type AdminPageRevisionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminPageRevisions"]>,
+    BackyAdminPageRevisionsResponse
+  >
+>;
+type RollbackAdminPageMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["rollbackAdminPage"]>, BackyAdminPageResponse>
 >;
 type AdminFormsMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["adminForms"]>, BackyAdminFormsResponse>
@@ -971,6 +1022,121 @@ const sdkSiteSettingsEnvelope = {
     settings: sdkSiteSettings,
   },
 } satisfies BackySiteSettingsResponse;
+
+const sdkAdminPage = {
+  id: "page_home",
+  siteId: "site_demo",
+  title: "Home",
+  slug: "index",
+  status: "draft",
+  description: "Home page",
+  isHomepage: true,
+  content: {
+    elements: [
+      {
+        id: "hero-title",
+        type: "heading",
+        props: {
+          text: "Build with Backy",
+        },
+        x: 64,
+        y: 80,
+        width: 480,
+        height: 72,
+      },
+    ],
+    canvasSize: {
+      width: 1200,
+      height: 900,
+    },
+  },
+  meta: {
+    title: "Home",
+  },
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminPagesEnvelope = {
+  success: true,
+  requestId: "req_admin_pages",
+  data: {
+    pages: [sdkAdminPage],
+    pagination: {
+      total: 1,
+      limit: 100,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminPagesResponse;
+
+const sdkAdminPageEnvelope = {
+  success: true,
+  requestId: "req_admin_page",
+  data: {
+    page: sdkAdminPage,
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminPageResponse;
+
+const sdkAdminPageDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_page_delete",
+  data: {
+    deleted: true,
+    pageId: "page_home",
+  },
+} satisfies BackyAdminPageDeleteResponse;
+
+const sdkAdminPageReadinessEnvelope = {
+  success: true,
+  requestId: "req_admin_page_readiness",
+  data: {
+    readiness: {
+      id: "page_home",
+      status: "ready",
+      checks: [],
+    },
+  },
+} satisfies BackyAdminPageReadinessResponse;
+
+const sdkAdminPagePreviewEnvelope = {
+  success: true,
+  requestId: "req_admin_page_preview",
+  data: {
+    previewToken: "preview_123",
+    expiresAt: "2026-05-21T01:00:00.000Z",
+    targetType: "page",
+    targetId: "page_home",
+    hostedUrl: "https://demo.example.test/sites/demo?previewToken=preview_123",
+    renderUrl:
+      "https://demo.example.test/api/sites/demo/render?path=/&previewToken=preview_123",
+    pageApiUrl:
+      "https://demo.example.test/api/sites/demo/pages?slug=index&previewToken=preview_123",
+  },
+} satisfies BackyAdminPagePreviewResponse;
+
+const sdkAdminPageRevisionsEnvelope = {
+  success: true,
+  requestId: "req_admin_page_revisions",
+  data: {
+    revisions: [
+      {
+        id: "rev_home_1",
+        targetType: "page",
+        targetId: "page_home",
+      },
+    ],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminPageRevisionsResponse;
 
 const sdkCommerceProviderCertification = {
   schemaVersion: "backy.commerce-provider-certification-handoff.v1",

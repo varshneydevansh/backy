@@ -1299,6 +1299,18 @@ assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-s
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
 assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
 
+const adminPages = await privateClient.adminPages({ limit: 5 });
+assert(Array.isArray(adminPages.data.pages), 'adminPages() missing pages array');
+const firstAdminPageId = adminPages.data.pages[0]?.id;
+if (firstAdminPageId) {
+  const adminPage = await privateClient.adminPage(firstAdminPageId);
+  assert(adminPage.data.page?.id === firstAdminPageId, 'adminPage() returned wrong page');
+  const pageReadiness = await privateClient.adminPageReadiness(firstAdminPageId);
+  assert(pageReadiness.data.readiness, 'adminPageReadiness() missing readiness payload');
+  const pageRevisions = await privateClient.adminPageRevisions(firstAdminPageId, { limit: 5 });
+  assert(Array.isArray(pageRevisions.data.revisions), 'adminPageRevisions() missing revisions array');
+}
+
 const adminMedia = await privateClient.adminMedia({ limit: 5 });
 assert(Array.isArray(adminMedia.data.media), 'adminMedia() missing media array');
 assert(adminMedia.data.quota, 'adminMedia() missing quota payload');

@@ -2269,6 +2269,126 @@ export type BackyLiveManagedBlogPostResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export type BackyAdminPageStatus =
+  | "draft"
+  | "published"
+  | "scheduled"
+  | "archived"
+  | string;
+
+export interface BackyAdminPageResource extends BackyPageResource {
+  content?: Record<string, unknown>;
+  isHomepage?: boolean;
+  parentId?: string | null;
+  sortOrder?: number;
+  scheduledAt?: string | null;
+  publishedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackyAdminPageListOptions
+  extends BackyLiveManagementRequestOptions {
+  includeUnpublished?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface BackyAdminPageCreateInput {
+  title: string;
+  slug?: string;
+  description?: string | null;
+  status?: BackyAdminPageStatus;
+  isHomepage?: boolean;
+  parentId?: string | null;
+  sortOrder?: number;
+  scheduledAt?: string | null;
+  content?: BackyEditableContent | Record<string, unknown> | unknown[];
+  meta?: Record<string, unknown>;
+  frontendDesignTemplateId?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminPageUpdateInput
+  extends Partial<Omit<BackyAdminPageCreateInput, "title">> {
+  title?: string;
+  expectedUpdatedAt?: string;
+  revisionNote?: string;
+}
+
+export interface BackyAdminPageVersionInput {
+  expectedUpdatedAt?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminPagePreviewInput {
+  ttlSeconds?: number;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminPageRollbackInput {
+  revisionId: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminPageRevisionListOptions
+  extends BackyLiveManagementRequestOptions {
+  limit?: number;
+  offset?: number;
+}
+
+export type BackyAdminPagesResponse = BackyEnvelope<
+  {
+    pages: BackyAdminPageResource[];
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminPageResponse = BackyEnvelope<
+  {
+    page: BackyAdminPageResource;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminPageDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    pageId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminPageReadinessResponse = BackyEnvelope<
+  {
+    readiness: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminPagePreviewResponse = BackyEnvelope<
+  {
+    previewToken: string;
+    expiresAt: string;
+    targetType: "page" | string;
+    targetId: string;
+    hostedUrl: string;
+    renderUrl: string;
+    pageApiUrl: string;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminPageRevisionsResponse = BackyEnvelope<
+  {
+    revisions: Array<Record<string, unknown>>;
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
 export type BackyEditableContent =
   | BackyContentDocument
   | (Record<string, unknown> & {
@@ -6062,6 +6182,200 @@ export class BackyClient {
         query,
         ifNoneMatch: etag,
         requestId,
+      },
+    );
+  }
+
+  adminPages(
+    options: BackyAdminPageListOptions = {},
+  ): Promise<BackyAdminPagesResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = {
+      includeUnpublished: rest.includeUnpublished,
+      limit: rest.limit,
+      offset: rest.offset,
+    };
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  createAdminPage(
+    input: BackyAdminPageCreateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminPage(
+    pageId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminPage(
+    pageId: string,
+    input: BackyAdminPageUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageResponse> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminPage(
+    pageId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminPageReadiness(
+    pageId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageReadinessResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/readiness`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  publishAdminPage(
+    pageId: string,
+    input: BackyAdminPageVersionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/publish`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  archiveAdminPage(
+    pageId: string,
+    input: BackyAdminPageVersionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/archive`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createAdminPagePreviewToken(
+    pageId: string,
+    input: BackyAdminPagePreviewInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPagePreviewResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/preview`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminPageRevisions(
+    pageId: string,
+    options: BackyAdminPageRevisionListOptions = {},
+  ): Promise<BackyAdminPageRevisionsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = normalizeListQuery({
+      limit: rest.limit,
+      offset: rest.offset,
+    });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/revisions`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  rollbackAdminPage(
+    pageId: string,
+    input: BackyAdminPageRollbackInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminPageResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/rollback`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
