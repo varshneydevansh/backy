@@ -1132,6 +1132,62 @@ export type BackyAdminCollectionRecordDeleteResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export interface BackyAdminCollectionRecordsCsvOptions
+  extends BackyAdminCollectionRecordListOptions {}
+
+export interface BackyAdminCollectionRecordImportError {
+  row: number;
+  slug?: string;
+  message: string;
+  details?: unknown;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminCollectionRecordImportOptions
+  extends BackyLiveManagementRequestOptions {
+  upsert?: boolean;
+}
+
+export interface BackyAdminCollectionRecordImportSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: BackyAdminCollectionRecordImportError[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminCollectionRecordImportResponse<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> = BackyEnvelope<
+  {
+    collection: BackyCollectionSchema;
+    records: Array<BackyCollectionRecord<TValues>>;
+    import: BackyAdminCollectionRecordImportSummary;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminCollectionRecordBulkInput {
+  action: "delete" | "updateStatus";
+  recordIds: string[];
+  status?: BackyAdminCollectionStatus;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminCollectionRecordBulkResponse<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> = BackyEnvelope<
+  {
+    action: "delete" | "updateStatus" | string;
+    deleted: number;
+    updated: number;
+    skipped: number;
+    records: Array<BackyCollectionRecord<TValues>>;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
 export const BACKY_COMMERCE_PRODUCTS_COLLECTION = "products";
 export const BACKY_COMMERCE_ORDERS_COLLECTION = "orders";
 
@@ -1156,6 +1212,10 @@ export type BackyAdminCommerceProductRequestOptions =
   BackyAdminCommerceRecordRequestOptions;
 export type BackyAdminCommerceOrderRequestOptions =
   BackyAdminCommerceRecordRequestOptions;
+export type BackyAdminCommerceProductImportOptions =
+  BackyAdminCommerceRecordRequestOptions & { upsert?: boolean };
+export type BackyAdminCommerceOrderImportOptions =
+  BackyAdminCommerceRecordRequestOptions & { upsert?: boolean };
 
 export type BackyAdminCommerceProductCreateInput<
   TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
@@ -1172,6 +1232,10 @@ export type BackyAdminCommerceOrderCreateInput<
 export type BackyAdminCommerceOrderUpdateInput<
   TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
 > = BackyAdminCollectionRecordUpdateInput<TValues>;
+export type BackyAdminCommerceProductBulkInput =
+  BackyAdminCollectionRecordBulkInput;
+export type BackyAdminCommerceOrderBulkInput =
+  BackyAdminCollectionRecordBulkInput;
 
 export type BackyAdminCommerceProductsResponse<
   TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
@@ -1183,6 +1247,12 @@ export type BackyAdminCommerceProductResponse<
 
 export type BackyAdminCommerceProductDeleteResponse =
   BackyAdminCollectionRecordDeleteResponse;
+export type BackyAdminCommerceProductImportResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordImportResponse<TValues>;
+export type BackyAdminCommerceProductBulkResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordBulkResponse<TValues>;
 
 export type BackyAdminCommerceOrdersResponse<
   TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
@@ -1194,6 +1264,12 @@ export type BackyAdminCommerceOrderResponse<
 
 export type BackyAdminCommerceOrderDeleteResponse =
   BackyAdminCollectionRecordDeleteResponse;
+export type BackyAdminCommerceOrderImportResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+> = BackyAdminCollectionRecordImportResponse<TValues>;
+export type BackyAdminCommerceOrderBulkResponse<
+  TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+> = BackyAdminCollectionRecordBulkResponse<TValues>;
 
 export interface BackyCommerceProductDesign {
   templateId?: string;
@@ -9988,6 +10064,83 @@ export class BackyClient {
     );
   }
 
+  adminCollectionRecordsCsv(
+    collectionId: string,
+    options: BackyAdminCollectionRecordsCsvOptions = {},
+  ): Promise<string> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.requestText(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`,
+      {
+        query: {
+          format: "csv",
+          status: rest.status,
+          slug: rest.slug,
+          q: rest.q,
+          search: rest.search,
+          fieldKey: rest.fieldKey,
+          fieldValue: rest.fieldValue,
+          sortBy: rest.sortBy,
+          sortDirection: rest.sortDirection,
+          limit: rest.limit,
+          offset: rest.offset,
+        },
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  importAdminCollectionRecordsCsv<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    collectionId: string,
+    csv: string,
+    options: BackyAdminCollectionRecordImportOptions = {},
+  ): Promise<BackyAdminCollectionRecordImportResponse<TValues>> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const requestHeaders = new Headers(headers);
+    if (!requestHeaders.has("content-type")) {
+      requestHeaders.set("content-type", "text/csv; charset=utf-8");
+    }
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/import`,
+      {
+        method: "POST",
+        query: {
+          upsert: rest.upsert,
+        },
+        body: csv,
+        requestId,
+        headers: requestHeaders,
+        credentials,
+      },
+    );
+  }
+
+  bulkAdminCollectionRecords<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    collectionId: string,
+    input: BackyAdminCollectionRecordBulkInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionRecordBulkResponse<TValues>> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/bulk`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
   reusableSections(
     options: {
       category?: string;
@@ -10360,6 +10513,50 @@ export class BackyClient {
     );
   }
 
+  adminCommerceProductsCsv(
+    options: BackyAdminCommerceProductListOptions = {},
+  ): Promise<string> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.adminCollectionRecordsCsv(collectionId, requestOptions);
+  }
+
+  importAdminCommerceProductsCsv<
+    TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+  >(
+    csv: string,
+    options: BackyAdminCommerceProductImportOptions = {},
+  ): Promise<BackyAdminCommerceProductImportResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.importAdminCollectionRecordsCsv<TValues>(
+      collectionId,
+      csv,
+      requestOptions,
+    );
+  }
+
+  bulkAdminCommerceProducts<
+    TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+  >(
+    input: BackyAdminCommerceProductBulkInput,
+    options: BackyAdminCommerceProductRequestOptions = {},
+  ): Promise<BackyAdminCommerceProductBulkResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_PRODUCTS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.bulkAdminCollectionRecords<TValues>(
+      collectionId,
+      input,
+      requestOptions,
+    );
+  }
+
   adminCommerceOrders<
     TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
   >(
@@ -10436,6 +10633,50 @@ export class BackyClient {
     return this.deleteAdminCollectionRecord(
       collectionId,
       orderId,
+      requestOptions,
+    );
+  }
+
+  adminCommerceOrdersCsv(
+    options: BackyAdminCommerceOrderListOptions = {},
+  ): Promise<string> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.adminCollectionRecordsCsv(collectionId, requestOptions);
+  }
+
+  importAdminCommerceOrdersCsv<
+    TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+  >(
+    csv: string,
+    options: BackyAdminCommerceOrderImportOptions = {},
+  ): Promise<BackyAdminCommerceOrderImportResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.importAdminCollectionRecordsCsv<TValues>(
+      collectionId,
+      csv,
+      requestOptions,
+    );
+  }
+
+  bulkAdminCommerceOrders<
+    TValues extends Record<string, unknown> = BackyAdminCommerceOrderValues,
+  >(
+    input: BackyAdminCommerceOrderBulkInput,
+    options: BackyAdminCommerceOrderRequestOptions = {},
+  ): Promise<BackyAdminCommerceOrderBulkResponse<TValues>> {
+    const {
+      collectionId = BACKY_COMMERCE_ORDERS_COLLECTION,
+      ...requestOptions
+    } = options;
+    return this.bulkAdminCollectionRecords<TValues>(
+      collectionId,
+      input,
       requestOptions,
     );
   }

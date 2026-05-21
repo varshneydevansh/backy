@@ -1412,6 +1412,8 @@ if (firstAdminCollectionId) {
   assert(adminCollection.data.collection?.id === firstAdminCollectionId, 'adminCollection() returned wrong collection');
   const adminCollectionRecords = await privateClient.adminCollectionRecords(firstAdminCollectionId, { limit: 5 });
   assert(Array.isArray(adminCollectionRecords.data.records), 'adminCollectionRecords() missing records array');
+  const adminCollectionRecordsCsv = await privateClient.adminCollectionRecordsCsv(firstAdminCollectionId, { limit: 5 });
+  assert(typeof adminCollectionRecordsCsv === 'string', 'adminCollectionRecordsCsv() did not return CSV text');
   const firstAdminRecordId = adminCollectionRecords.data.records[0]?.id;
   if (firstAdminRecordId) {
     const adminCollectionRecord = await privateClient.adminCollectionRecord(firstAdminCollectionId, firstAdminRecordId);
@@ -1423,6 +1425,8 @@ if (hasAdminProductsCollection) {
   const adminCommerceProducts = await privateClient.adminCommerceProducts({ limit: 5 });
   assert(Array.isArray(adminCommerceProducts.data.records), 'adminCommerceProducts() missing records array');
   assert(adminCommerceProducts.data.collection?.slug === 'products', 'adminCommerceProducts() returned wrong collection');
+  const adminCommerceProductsCsv = await privateClient.adminCommerceProductsCsv({ limit: 5 });
+  assert(typeof adminCommerceProductsCsv === 'string', 'adminCommerceProductsCsv() did not return CSV text');
   const firstAdminProductId = adminCommerceProducts.data.records[0]?.id;
   if (firstAdminProductId) {
     const adminCommerceProduct = await privateClient.adminCommerceProduct(firstAdminProductId);
@@ -1434,6 +1438,8 @@ if (hasAdminOrdersCollection) {
   const adminCommerceOrders = await privateClient.adminCommerceOrders({ limit: 5 });
   assert(Array.isArray(adminCommerceOrders.data.records), 'adminCommerceOrders() missing records array');
   assert(adminCommerceOrders.data.collection?.slug === 'orders', 'adminCommerceOrders() returned wrong collection');
+  const adminCommerceOrdersCsv = await privateClient.adminCommerceOrdersCsv({ limit: 5 });
+  assert(typeof adminCommerceOrdersCsv === 'string', 'adminCommerceOrdersCsv() did not return CSV text');
   const firstAdminOrderId = adminCommerceOrders.data.records[0]?.id;
   if (firstAdminOrderId) {
     const adminCommerceOrder = await privateClient.adminCommerceOrder(firstAdminOrderId);

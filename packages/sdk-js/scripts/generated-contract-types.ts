@@ -63,15 +63,21 @@ import type {
   BackyAdminBlogPostRevisionsResponse,
   BackyAdminBlogPostsResponse,
   BackyAdminCollectionDeleteResponse,
+  BackyAdminCollectionRecordBulkResponse,
   BackyAdminCollectionRecordDeleteResponse,
+  BackyAdminCollectionRecordImportResponse,
   BackyAdminCollectionRecordResponse,
   BackyAdminCollectionRecordsResponse,
   BackyAdminCollectionResponse,
   BackyAdminCollectionsResponse,
+  BackyAdminCommerceOrderBulkResponse,
   BackyAdminCommerceOrderDeleteResponse,
+  BackyAdminCommerceOrderImportResponse,
   BackyAdminCommerceOrderResponse,
   BackyAdminCommerceOrdersResponse,
+  BackyAdminCommerceProductBulkResponse,
   BackyAdminCommerceProductDeleteResponse,
+  BackyAdminCommerceProductImportResponse,
   BackyAdminCommerceProductResponse,
   BackyAdminCommerceProductsResponse,
   BackyAdminReusableSectionDeleteResponse,
@@ -854,6 +860,21 @@ type DeleteAdminCollectionRecordMethodReturnsContract = Assert<
     BackyAdminCollectionRecordDeleteResponse
   >
 >;
+type AdminCollectionRecordsCsvMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminCollectionRecordsCsv"]>, string>
+>;
+type ImportAdminCollectionRecordsCsvMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importAdminCollectionRecordsCsv"]>,
+    BackyAdminCollectionRecordImportResponse
+  >
+>;
+type BulkAdminCollectionRecordsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["bulkAdminCollectionRecords"]>,
+    BackyAdminCollectionRecordBulkResponse
+  >
+>;
 type AdminCommerceProductsMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["adminCommerceProducts"]>,
@@ -884,6 +905,21 @@ type DeleteAdminCommerceProductMethodReturnsContract = Assert<
     BackyAdminCommerceProductDeleteResponse
   >
 >;
+type AdminCommerceProductsCsvMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminCommerceProductsCsv"]>, string>
+>;
+type ImportAdminCommerceProductsCsvMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importAdminCommerceProductsCsv"]>,
+    BackyAdminCommerceProductImportResponse
+  >
+>;
+type BulkAdminCommerceProductsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["bulkAdminCommerceProducts"]>,
+    BackyAdminCommerceProductBulkResponse
+  >
+>;
 type AdminCommerceOrdersMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["adminCommerceOrders"]>,
@@ -912,6 +948,21 @@ type DeleteAdminCommerceOrderMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["deleteAdminCommerceOrder"]>,
     BackyAdminCommerceOrderDeleteResponse
+  >
+>;
+type AdminCommerceOrdersCsvMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminCommerceOrdersCsv"]>, string>
+>;
+type ImportAdminCommerceOrdersCsvMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importAdminCommerceOrdersCsv"]>,
+    BackyAdminCommerceOrderImportResponse
+  >
+>;
+type BulkAdminCommerceOrdersMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["bulkAdminCommerceOrders"]>,
+    BackyAdminCommerceOrderBulkResponse
   >
 >;
 type AdminReusableSectionsMethodReturnsContract = Assert<
@@ -2939,6 +2990,39 @@ const sdkAdminCollectionRecordDeleteEnvelope = {
   },
 } satisfies BackyAdminCollectionRecordDeleteResponse;
 
+const sdkAdminCollectionRecordImportEnvelope = {
+  success: true,
+  requestId: "req_admin_collection_record_import",
+  data: {
+    collection: sdkAdminCollection,
+    records: [sdkAdminCollectionRecord],
+    import: {
+      created: 1,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+    },
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminCollectionRecordImportResponse;
+
+const sdkAdminCollectionRecordBulkEnvelope = {
+  success: true,
+  requestId: "req_admin_collection_record_bulk",
+  data: {
+    action: "updateStatus",
+    deleted: 0,
+    updated: 1,
+    skipped: 0,
+    records: [sdkAdminCollectionRecord],
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminCollectionRecordBulkResponse;
+
 const sdkAdminCommerceProductCollection = {
   ...sdkAdminCollection,
   id: "products",
@@ -2994,6 +3078,33 @@ const sdkAdminCommerceProductDeleteEnvelope = {
     recordId: "product_starter",
   },
 } satisfies BackyAdminCommerceProductDeleteResponse;
+
+const sdkAdminCommerceProductImportEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_product_import",
+  data: {
+    collection: sdkAdminCommerceProductCollection,
+    records: [sdkAdminCommerceProductRecord],
+    import: {
+      created: 1,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+    },
+  },
+} satisfies BackyAdminCommerceProductImportResponse;
+
+const sdkAdminCommerceProductBulkEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_product_bulk",
+  data: {
+    action: "updateStatus",
+    deleted: 0,
+    updated: 1,
+    skipped: 0,
+    records: [sdkAdminCommerceProductRecord],
+  },
+} satisfies BackyAdminCommerceProductBulkResponse;
 
 const sdkAdminCommerceOrderCollection = {
   ...sdkAdminCollection,
@@ -3057,6 +3168,33 @@ const sdkAdminCommerceOrderDeleteEnvelope = {
     recordId: "order_1001",
   },
 } satisfies BackyAdminCommerceOrderDeleteResponse;
+
+const sdkAdminCommerceOrderImportEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_order_import",
+  data: {
+    collection: sdkAdminCommerceOrderCollection,
+    records: [sdkAdminCommerceOrderRecord],
+    import: {
+      created: 0,
+      updated: 1,
+      skipped: 0,
+      errors: [],
+    },
+  },
+} satisfies BackyAdminCommerceOrderImportResponse;
+
+const sdkAdminCommerceOrderBulkEnvelope = {
+  success: true,
+  requestId: "req_admin_commerce_order_bulk",
+  data: {
+    action: "delete",
+    deleted: 1,
+    updated: 0,
+    skipped: 0,
+    records: [],
+  },
+} satisfies BackyAdminCommerceOrderBulkResponse;
 
 const sdkAdminReusableSection = {
   id: "section_hero",
