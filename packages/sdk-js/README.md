@@ -3,7 +3,7 @@
 Small TypeScript client for custom/generated frontends that consume Backy through public APIs.
 
 ```ts
-import { createBackyClient } from '@backy/sdk-js';
+import { buildBackyCommerceOrderInput, createBackyClient } from '@backy/sdk-js';
 
 const backy = createBackyClient({ baseUrl: 'https://your-backy-host.com' });
 
@@ -32,17 +32,19 @@ Commerce storefronts can read the normalized product catalog and submit a checko
 
 ```ts
 const certification = catalog.data.commerce.providerCertification;
-const order = await backy.createCommerceOrder({
-  customer: { name: 'Jane Customer', email: 'jane@example.com' },
-  items: [{ slug: 'starter-template', quantity: 1 }],
-  paymentProvider: 'manual',
+const orderInput = buildBackyCommerceOrderInput({
+  customerName: 'Jane Customer',
+  customerEmail: 'jane@example.com',
+  cart: { items: [{ productSlug: 'starter-template', qty: '1' }] },
+  payment: { provider: 'manual' },
 });
+const order = await backy.createCommerceOrder(orderInput);
 
 console.log(certification.liveCertificationGate, certification.groups.map((group) => group.family));
 console.log(order.data.order.orderNumber, order.data.order.paymentStatus);
 ```
 
-`manifest.data.modules.commerce`, `catalog.data.commerce`, and `commerceOrderContract().data.commerce` expose the same non-secret storefront contract. Its `paymentProvider` preserves the Settings handoff value (`none`, `stripe`, `paypal`, `paddle`, `square`, `adyen`, `mollie`, `razorpay`, or `manual`) while checkout execution remains constrained by the available provider adapter and server-side credentials. Its `providerCertification` block uses `backy.commerce-provider-certification-handoff.v1` so generated frontends can display the local mock gate, live provider certification gate, provider families, each group's non-secret `requiredInputs` aliases, `operatorCommandTemplate` for the guarded live-provider command, runtime provider-family readiness booleans, and server-side secret-handling expectations without calling admin APIs or receiving provider secrets. Generated OpenAPI exports include `GeneratedBackyOpenApiCommerceProviderCertification` and `GeneratedBackyOpenApiCommerceStorefrontContract`.
+`buildBackyCommerceOrderInput()` accepts the same storefront aliases documented by the manifest (`items`, `lineItems`, `cartItems`, `cart.items`, `productSlug`, `qty`, top-level customer fields, payment objects, coupon codes, and checkout session objects), then emits the canonical private-order payload with quantity bounds and normalized email/discount fields. `manifest.data.modules.commerce`, `catalog.data.commerce`, and `commerceOrderContract().data.commerce` expose the same non-secret storefront contract. Its `paymentProvider` preserves the Settings handoff value (`none`, `stripe`, `paypal`, `paddle`, `square`, `adyen`, `mollie`, `razorpay`, or `manual`) while checkout execution remains constrained by the available provider adapter and server-side credentials. Its `providerCertification` block uses `backy.commerce-provider-certification-handoff.v1` so generated frontends can display the local mock gate, live provider certification gate, provider families, each group's non-secret `requiredInputs` aliases, `operatorCommandTemplate` for the guarded live-provider command, runtime provider-family readiness booleans, and server-side secret-handling expectations without calling admin APIs or receiving provider secrets. Generated OpenAPI exports include `GeneratedBackyOpenApiCommerceProviderCertification` and `GeneratedBackyOpenApiCommerceStorefrontContract`.
 
 Conditional discovery/frontend-design/render/navigation/SEO/media/data helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
 

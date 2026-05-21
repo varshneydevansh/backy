@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  buildBackyCommerceOrderInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   createBackyClient,
   findBackyContentElement,
@@ -1249,6 +1250,35 @@ assert(Array.isArray(events.data.events), 'events() missing events array');
 
 let commerceCatalogChecked = false;
 try {
+  const canonicalOrderInput = buildBackyCommerceOrderInput({
+    customerName: 'SDK Customer',
+    customerEmail: 'SDK-CUSTOMER@EXAMPLE.COM',
+    cart: {
+      items: [
+        {
+          productSlug: 'starter-template',
+          variant_sku: 'STARTER-001-STANDARD',
+          qty: '2',
+        },
+      ],
+    },
+    couponCode: 'launch',
+    payment: {
+      provider: 'manual',
+      reference: 'manual:sdk',
+    },
+    checkoutSession: {
+      id: 'cs_sdk',
+    },
+  }, {
+    requestId: 'sdk-commerce-order-builder',
+  });
+  assert(canonicalOrderInput.customer?.email === 'sdk-customer@example.com', 'buildBackyCommerceOrderInput() did not normalize customer email');
+  assert(canonicalOrderInput.items?.[0]?.slug === 'starter-template', 'buildBackyCommerceOrderInput() did not normalize product slug');
+  assert(canonicalOrderInput.items?.[0]?.quantity === 2, 'buildBackyCommerceOrderInput() did not normalize quantity');
+  assert(canonicalOrderInput.discountCode === 'LAUNCH', 'buildBackyCommerceOrderInput() did not normalize discount code');
+  assert(canonicalOrderInput.checkoutSessionId === 'cs_sdk', 'buildBackyCommerceOrderInput() did not normalize checkout session id');
+
   const manifestCommerceRuntime = manifest.data.modules?.commerceRuntime;
   assert(manifestCommerceRuntime?.schemaVersion === 'backy.commerce-discovery.v1', 'manifest() missing commerce runtime discovery module');
   assert(manifestCommerceRuntime.endpoints?.catalog === manifest.data.endpoints.commerceCatalog, 'manifest() commerce runtime catalog endpoint drifted');
@@ -1650,6 +1680,7 @@ console.log(JSON.stringify({
     'updateLiveManagedPage',
     'liveManagedBlogPost',
     'updateLiveManagedBlogPost',
+    'buildBackyCommerceOrderInput',
     'buildBackyLiveManagedBlogPostEditableMapUpdate',
     'patchBackyContentElement',
     'patchBackyContentElements',

@@ -914,6 +914,9 @@ export interface BackyCommerceLineItemInput {
   qty?: number | string;
 }
 
+export const BACKY_DEFAULT_COMMERCE_ORDER_QUANTITY = 1;
+export const BACKY_MAX_COMMERCE_ORDER_QUANTITY = 999;
+
 export type BackyCommerceOrderInput = {
   customer?: {
     name: string;
@@ -950,6 +953,37 @@ export type BackyCommerceOrderInput = {
   checkoutSession?: string | { id?: string; [key: string]: unknown };
   requestId?: string;
 };
+
+export type BackyCommerceOrderInputSource = Omit<
+  Partial<BackyCommerceOrderInput>,
+  "cart" | "customer" | "items" | "lineItems" | "cartItems"
+> & {
+  customer?: Partial<NonNullable<BackyCommerceOrderInput["customer"]>> &
+    Record<string, unknown>;
+  cart?: {
+    items?: Array<BackyCommerceLineItemInput | Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  items?: Array<BackyCommerceLineItemInput | Record<string, unknown>>;
+  lineItems?: Array<BackyCommerceLineItemInput | Record<string, unknown>>;
+  cartItems?: Array<BackyCommerceLineItemInput | Record<string, unknown>>;
+  shipping?: {
+    address?: string;
+    line1?: string;
+    [key: string]: unknown;
+  };
+  billing?: {
+    address?: string;
+    line1?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+export interface BackyCommerceOrderInputBuildOptions {
+  defaultQuantity?: number | string;
+  requestId?: string;
+}
 
 export interface BackyCommerceOrderSummary {
   id: string;
@@ -1406,6 +1440,175 @@ export interface BackyCommerceOrderContract {
   creates: Record<string, unknown>;
   inventoryReservation?: Record<string, unknown>;
   relatedEndpoints: Record<string, string>;
+}
+
+const backyCommerceRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const backyCommerceText = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) return text;
+    }
+  }
+  return "";
+};
+
+const backyCommerceItemArray = (
+  ...values: unknown[]
+): Array<Record<string, unknown>> => {
+  const arrays = values.filter(Array.isArray) as Array<
+    Array<Record<string, unknown>>
+  >;
+  return arrays.find((items) => items.length > 0) || arrays[0] || [];
+};
+
+const normalizeBackyCommerceOrderQuantity = (
+  value: unknown,
+  defaultQuantity: number,
+): number => {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? Number(value)
+        : defaultQuantity;
+  const finite = Number.isFinite(parsed) ? parsed : defaultQuantity;
+  return Math.min(
+    BACKY_MAX_COMMERCE_ORDER_QUANTITY,
+    Math.max(1, Math.trunc(finite)),
+  );
+};
+
+const setBackyCommerceTextField = <TKey extends keyof BackyCommerceOrderInput>(
+  input: BackyCommerceOrderInput,
+  key: TKey,
+  value: string,
+) => {
+  if (value) {
+    input[key] = value as BackyCommerceOrderInput[TKey];
+  }
+};
+
+export function buildBackyCommerceOrderInput(
+  source: BackyCommerceOrderInputSource | undefined | null,
+  options: BackyCommerceOrderInputBuildOptions = {},
+): BackyCommerceOrderInput {
+  const body = backyCommerceRecord(source);
+  const cart = backyCommerceRecord(body.cart);
+  const customer = backyCommerceRecord(body.customer);
+  const shipping = backyCommerceRecord(body.shipping);
+  const billing = backyCommerceRecord(body.billing);
+  const payment = backyCommerceRecord(body.payment);
+  const checkoutSession = backyCommerceRecord(body.checkoutSession);
+  const defaultQuantity = normalizeBackyCommerceOrderQuantity(
+    options.defaultQuantity,
+    BACKY_DEFAULT_COMMERCE_ORDER_QUANTITY,
+  );
+  const rawItems = backyCommerceItemArray(
+    body.items,
+    body.lineItems,
+    body.cartItems,
+    cart.items,
+  );
+
+  const input: BackyCommerceOrderInput = {
+    items: rawItems.map((item) => {
+      const record = backyCommerceRecord(item);
+      const normalized: BackyCommerceLineItemInput = {
+        quantity: normalizeBackyCommerceOrderQuantity(
+          record.quantity ?? record.qty,
+          defaultQuantity,
+        ),
+      };
+      const productId = backyCommerceText(record.productId, record.product_id);
+      const slug = backyCommerceText(
+        record.slug,
+        record.productSlug,
+        record.product_slug,
+      );
+      const variantId = backyCommerceText(record.variantId, record.variant_id);
+      const variantSku = backyCommerceText(
+        record.variantSku,
+        record.variant_sku,
+        record.sku,
+      );
+      if (productId) normalized.productId = productId;
+      if (slug) normalized.slug = slug;
+      if (variantId) normalized.variantId = variantId;
+      if (variantSku) normalized.variantSku = variantSku;
+      return normalized;
+    }),
+  };
+
+  const customerName = backyCommerceText(
+    customer.name,
+    body.customerName,
+    body.name,
+  );
+  const customerEmail = backyCommerceText(
+    customer.email,
+    body.customerEmail,
+    body.email,
+  ).toLowerCase();
+  const customerPhone = backyCommerceText(
+    customer.phone,
+    body.customerPhone,
+    body.phone,
+  );
+  if (customerName || customerEmail || customerPhone) {
+    input.customer = {
+      name: customerName,
+      email: customerEmail,
+      ...(customerPhone ? { phone: customerPhone } : {}),
+    };
+  }
+
+  setBackyCommerceTextField(
+    input,
+    "shippingAddress",
+    backyCommerceText(body.shippingAddress, shipping.address, shipping.line1),
+  );
+  setBackyCommerceTextField(
+    input,
+    "billingAddress",
+    backyCommerceText(body.billingAddress, billing.address, billing.line1),
+  );
+  setBackyCommerceTextField(input, "notes", backyCommerceText(body.notes));
+  setBackyCommerceTextField(
+    input,
+    "discountCode",
+    backyCommerceText(body.discountCode, body.couponCode, body.promoCode).toUpperCase(),
+  );
+  setBackyCommerceTextField(
+    input,
+    "paymentProvider",
+    backyCommerceText(body.paymentProvider, payment.provider),
+  );
+  setBackyCommerceTextField(
+    input,
+    "paymentReference",
+    backyCommerceText(body.paymentReference, payment.reference),
+  );
+  setBackyCommerceTextField(
+    input,
+    "checkoutSessionId",
+    backyCommerceText(
+      body.checkoutSessionId,
+      checkoutSession.id,
+      body.checkoutSession,
+    ),
+  );
+  setBackyCommerceTextField(
+    input,
+    "requestId",
+    backyCommerceText(options.requestId, body.requestId),
+  );
+
+  return input;
 }
 
 export interface BackyFrontendDesignProvenance {

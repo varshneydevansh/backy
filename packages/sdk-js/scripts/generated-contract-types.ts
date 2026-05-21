@@ -28,6 +28,7 @@ import type {
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
+  BackyCommerceOrderInput,
   BackyContentElementDescriptor,
   BackyContentEditableFieldPatch,
   BackyContentEditableMapPatch,
@@ -211,6 +212,7 @@ import type {
   GeneratedBackyThemeTokens,
 } from "../src/index";
 import {
+  buildBackyCommerceOrderInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyLiveManagedPageEditableMapUpdate,
   findBackyContentElement,
@@ -259,6 +261,9 @@ type LiveManagedPageUpdateMethodReturnsContract = Assert<
     AwaitedReturn<BackyClient["updateLiveManagedPage"]>,
     BackyLiveManagedPageResponse
   >
+>;
+type CommerceOrderInputBuilderReturnsContract = Assert<
+  Equal<ReturnType<typeof buildBackyCommerceOrderInput>, BackyCommerceOrderInput>
 >;
 type LiveManagedBlogPostMethodReturnsContract = Assert<
   Equal<
@@ -4266,6 +4271,34 @@ const commerceOrderCreateRequest = {
   },
 } satisfies GeneratedBackyOpenApiCommerceOrderCreateRequest;
 
+const sdkCommerceOrderInput = buildBackyCommerceOrderInput(
+  {
+    customerName: "Jane Customer",
+    customerEmail: "JANE@EXAMPLE.COM",
+    customerPhone: "+15555550100",
+    cart: {
+      items: [
+        {
+          productSlug: "starter-template",
+          variant_sku: "STARTER-001-STANDARD",
+          qty: "2",
+        },
+      ],
+    },
+    couponCode: "launch",
+    payment: {
+      provider: "manual",
+      reference: "manual:demo",
+    },
+    checkoutSession: {
+      id: "cs_demo",
+    },
+  },
+  { requestId: "sdk-commerce-order-builder" },
+);
+const sdkCommerceOrderInputContract =
+  sdkCommerceOrderInput satisfies BackyCommerceOrderInput;
+
 const commerceOrderContractEnvelope = {
   success: true,
   requestId: "req_order_contract",
@@ -5599,6 +5632,8 @@ void commerceProductDesign;
 void commerceProduct;
 void commerceCatalogEnvelope;
 void commerceOrderCreateRequest;
+void sdkCommerceOrderInput;
+void sdkCommerceOrderInputContract;
 void commerceOrderContractEnvelope;
 void commerceOrderEnvelope;
 void commerceWebhookRequest;
