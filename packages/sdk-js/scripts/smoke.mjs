@@ -1299,6 +1299,12 @@ assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-s
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
 assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
 
+const adminMedia = await privateClient.adminMedia({ limit: 5 });
+assert(Array.isArray(adminMedia.data.media), 'adminMedia() missing media array');
+assert(adminMedia.data.quota, 'adminMedia() missing quota payload');
+const adminMediaFolders = await privateClient.adminMediaFolders();
+assert(Array.isArray(adminMediaFolders.data.folders), 'adminMediaFolders() missing folders array');
+
 const adminForms = await privateClient.adminForms({ limit: 5 });
 assert(Array.isArray(adminForms.data.forms), 'adminForms() missing forms array');
 assert(adminForms.data.persistenceCertification?.schemaVersion === 'backy.forms-persistence-certification.v1', 'adminForms() missing forms persistence certification handoff');

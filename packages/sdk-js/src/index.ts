@@ -2796,6 +2796,55 @@ function splitLiveManagementRequestOptions<
   };
 }
 
+function isBackyFormData(value: unknown): value is FormData {
+  return typeof FormData !== "undefined" && value instanceof FormData;
+}
+
+function appendBackyFormDataValue(
+  formData: FormData,
+  key: string,
+  value: unknown,
+) {
+  if (value === undefined) return;
+  if (value === null) {
+    formData.set(key, "");
+    return;
+  }
+  if (Array.isArray(value)) {
+    formData.set(key, value.map((item) => String(item)).join(","));
+    return;
+  }
+  if (typeof value === "object") {
+    formData.set(key, JSON.stringify(value));
+    return;
+  }
+  formData.set(key, String(value));
+}
+
+function buildBackyMediaUploadFormData(
+  input: BackyAdminMediaUploadInput | BackyAdminMediaReplaceInput,
+): FormData {
+  const formData = new FormData();
+  if (input.filename) {
+    formData.set("file", input.file, input.filename);
+  } else {
+    formData.set("file", input.file);
+  }
+
+  Object.entries(input).forEach(([key, value]) => {
+    if (key === "file" || key === "filename" || key === "requestId") return;
+    appendBackyFormDataValue(formData, key, value);
+  });
+
+  return formData;
+}
+
+function backyRequestBody(value: unknown): BodyInit | undefined {
+  if (value === undefined) return undefined;
+  if (isBackyFormData(value)) return value;
+  return JSON.stringify(value);
+}
+
 export type BackyBlogCategoriesResponse = BackyEnvelope<
   {
     categories: BackyBlogCategory[];
@@ -3091,6 +3140,132 @@ export interface BackyMediaListOptions extends BackyListOptions {
   global?: boolean;
   siteId?: string;
 }
+
+export interface BackyAdminMediaListOptions
+  extends BackyMediaListOptions,
+    BackyLiveManagementRequestOptions {
+  visibility?: "public" | "private" | "all" | string;
+}
+
+export interface BackyMediaQuota {
+  limitBytes?: number;
+  usedBytes?: number;
+  remainingBytes?: number;
+  maxUploadBytes?: number;
+  [key: string]: unknown;
+}
+
+export type BackyAdminMediaListResponse = BackyEnvelope<
+  {
+    media: BackyMediaAsset[];
+    quota?: BackyMediaQuota;
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminMediaResponse = BackyEnvelope<
+  {
+    media: BackyMediaAsset;
+    quota?: BackyMediaQuota;
+    cacheInvalidation?: Record<string, unknown>;
+    replacement?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminMediaDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    mediaId?: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminMediaUploadInput {
+  file: Blob;
+  filename?: string;
+  scope?: "global" | "page" | "post" | string;
+  scopeTargetId?: string | null;
+  folderId?: string | null;
+  visibility?: "public" | "private" | string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: "normal" | "italic" | "oblique" | string;
+  fontFallback?: string;
+  fontDisplay?: "auto" | "block" | "swap" | "fallback" | "optional" | string;
+  altText?: string;
+  caption?: string;
+  uploadedBy?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminMediaReplaceInput {
+  file: Blob;
+  filename?: string;
+  reason?: string;
+  replacedBy?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: "normal" | "italic" | "oblique" | string;
+  fontFallback?: string;
+  fontDisplay?: "auto" | "block" | "swap" | "fallback" | "optional" | string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminMediaUpdateInput {
+  originalName?: string;
+  altText?: string | null;
+  caption?: string | null;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  folderId?: string | null;
+  scope?: "global" | "page" | "post" | string;
+  scopeTargetId?: string | null;
+  visibility?: "public" | "private" | string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminMediaFolder {
+  id: string;
+  siteId?: string;
+  parentId: string | null;
+  name: string;
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminMediaFolderInput {
+  name?: string;
+  parentId?: string | null;
+  sortOrder?: number;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminMediaFoldersResponse = BackyEnvelope<
+  { folders: BackyAdminMediaFolder[] } & Record<string, unknown>
+>;
+
+export type BackyAdminMediaFolderResponse = BackyEnvelope<
+  {
+    folder: BackyAdminMediaFolder;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminMediaFolderDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    folderId?: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
 
 export type BackyMediaBindingTargetType = "page" | "post";
 export type BackyMediaBindingAction = "bind" | "unbind";
@@ -5905,6 +6080,156 @@ export class BackyClient {
     );
   }
 
+  adminMedia(
+    options: BackyAdminMediaListOptions = {},
+  ): Promise<BackyAdminMediaListResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const { q, ...queryOptions } = rest;
+    const query = normalizeListQuery({
+      ...queryOptions,
+      search: queryOptions.search ?? q,
+    } as BackyMediaListOptions & { visibility?: string });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/media`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  uploadMedia(
+    input: BackyAdminMediaUploadInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media`,
+      {
+        method: "POST",
+        body: buildBackyMediaUploadFormData(input),
+        requestId: options.requestId ?? input.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminMedia(
+    mediaId: string,
+    input: BackyAdminMediaUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  replaceMedia(
+    mediaId: string,
+    input: BackyAdminMediaReplaceInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`,
+      {
+        method: "POST",
+        body: buildBackyMediaUploadFormData(input),
+        requestId: options.requestId ?? input.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminMedia(
+    mediaId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminMediaFolders(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaFoldersResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/folders`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createMediaFolder(
+    input: BackyAdminMediaFolderInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaFolderResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/folders`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateMediaFolder(
+    folderId: string,
+    input: BackyAdminMediaFolderInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaFolderResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/folders/${encodeURIComponent(folderId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteMediaFolder(
+    folderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaFolderDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/folders/${encodeURIComponent(folderId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
   mediaFolders(
     siteId = this.requireSiteId(),
   ): Promise<BackyEnvelope<BackyMediaFolderList>> {
@@ -7242,7 +7567,12 @@ export class BackyClient {
       headers.set(key, value);
     });
     headers.set("x-request-id", options.requestId ?? this.requestIdFactory());
-    if (options.body !== undefined && !headers.has("content-type")) {
+    const isFormDataBody = isBackyFormData(options.body);
+    if (
+      options.body !== undefined &&
+      !isFormDataBody &&
+      !headers.has("content-type")
+    ) {
       headers.set("content-type", "application/json");
     }
     const credentials = options.credentials ?? this.defaultCredentials;
@@ -7251,8 +7581,7 @@ export class BackyClient {
       method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       headers,
       ...(credentials ? { credentials } : {}),
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: backyRequestBody(options.body),
     });
 
     if (!response.ok) {
@@ -7294,7 +7623,12 @@ export class BackyClient {
     if (options.ifNoneMatch) {
       headers.set("if-none-match", options.ifNoneMatch);
     }
-    if (options.body !== undefined && !headers.has("content-type")) {
+    const isFormDataBody = isBackyFormData(options.body);
+    if (
+      options.body !== undefined &&
+      !isFormDataBody &&
+      !headers.has("content-type")
+    ) {
       headers.set("content-type", "application/json");
     }
     const credentials = options.credentials ?? this.defaultCredentials;
@@ -7303,8 +7637,7 @@ export class BackyClient {
       method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       headers,
       ...(credentials ? { credentials } : {}),
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: backyRequestBody(options.body),
     });
 
     if (response.status === 304) {

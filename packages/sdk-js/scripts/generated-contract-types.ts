@@ -27,6 +27,14 @@ import type {
   BackyManifestRoutingModule,
   BackyManifestRouteFrontendDesign,
   BackyManifestRoutePattern,
+  BackyAdminMediaDeleteResponse,
+  BackyAdminMediaFolderDeleteResponse,
+  BackyAdminMediaFolderResponse,
+  BackyAdminMediaFoldersResponse,
+  BackyAdminMediaListResponse,
+  BackyAdminMediaResponse,
+  BackyAdminMediaUploadInput,
+  BackyAdminMediaUpdateInput,
   BackyMediaBindingInput,
   BackyMediaBindingResponse,
   BackyMediaSignedUrlInput,
@@ -451,6 +459,48 @@ type MediaSignedUrlMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["createMediaSignedUrl"]>,
     BackyMediaSignedUrlResponse
+  >
+>;
+type AdminMediaMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminMedia"]>, BackyAdminMediaListResponse>
+>;
+type UploadMediaMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["uploadMedia"]>, BackyAdminMediaResponse>
+>;
+type UpdateAdminMediaMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateAdminMedia"]>, BackyAdminMediaResponse>
+>;
+type ReplaceMediaMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["replaceMedia"]>, BackyAdminMediaResponse>
+>;
+type DeleteAdminMediaMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminMedia"]>,
+    BackyAdminMediaDeleteResponse
+  >
+>;
+type AdminMediaFoldersMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminMediaFolders"]>,
+    BackyAdminMediaFoldersResponse
+  >
+>;
+type CreateMediaFolderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createMediaFolder"]>,
+    BackyAdminMediaFolderResponse
+  >
+>;
+type UpdateMediaFolderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateMediaFolder"]>,
+    BackyAdminMediaFolderResponse
+  >
+>;
+type DeleteMediaFolderMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteMediaFolder"]>,
+    BackyAdminMediaFolderDeleteResponse
   >
 >;
 type InteractiveRuntimeEventInputBuilderReturnsContract = Assert<
@@ -4502,6 +4552,119 @@ const sdkGenericFileMediaListOptions = {
   limit: 20,
 } satisfies BackyMediaListOptions;
 
+const sdkAdminMediaUploadInput = {
+  file: new Blob(["brand guide"], { type: "text/plain" }),
+  filename: "brand-guide.txt",
+  scope: "global",
+  visibility: "private",
+  folderId: "folder_brand",
+  tags: ["brand", "guide"],
+  metadata: {
+    source: "sdk-fixture",
+  },
+  requestId: "sdk-media-upload",
+} satisfies BackyAdminMediaUploadInput;
+
+const sdkAdminMediaUpdateInput = {
+  originalName: "Brand guide",
+  altText: null,
+  caption: "Internal launch asset.",
+  tags: ["brand", "launch"],
+  folderId: "folder_brand",
+  visibility: "private",
+  requestId: "sdk-media-update",
+} satisfies BackyAdminMediaUpdateInput;
+
+const sdkAdminMediaListEnvelope = {
+  success: true,
+  requestId: "req_admin_media",
+  data: {
+    media: [mediaAsset],
+    quota: {
+      limitBytes: 1_000_000,
+      usedBytes: 82_000,
+      remainingBytes: 918_000,
+    },
+    pagination: {
+      total: 1,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminMediaListResponse;
+
+const sdkAdminMediaEnvelope = {
+  success: true,
+  requestId: "req_admin_media_detail",
+  data: {
+    media: mediaAsset,
+    quota: {
+      limitBytes: 1_000_000,
+      usedBytes: 82_000,
+      remainingBytes: 918_000,
+    },
+    cacheInvalidation: {
+      scope: "media",
+      entityId: "media_hero",
+    },
+  },
+} satisfies BackyAdminMediaResponse;
+
+const sdkAdminMediaDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_media_delete",
+  data: {
+    deleted: true,
+    mediaId: "media_hero",
+  },
+} satisfies BackyAdminMediaDeleteResponse;
+
+const sdkAdminMediaFoldersEnvelope = {
+  success: true,
+  requestId: "req_admin_media_folders",
+  data: {
+    folders: [
+      {
+        id: "folder_brand",
+        siteId: "site_demo",
+        parentId: null,
+        name: "Brand",
+        sortOrder: 10,
+        createdAt: "2026-05-21T00:00:00.000Z",
+      },
+    ],
+  },
+} satisfies BackyAdminMediaFoldersResponse;
+
+const sdkAdminMediaFolderEnvelope = {
+  success: true,
+  requestId: "req_admin_media_folder",
+  data: {
+    folder: {
+      id: "folder_brand",
+      siteId: "site_demo",
+      parentId: null,
+      name: "Brand",
+      sortOrder: 10,
+      createdAt: "2026-05-21T00:00:00.000Z",
+    },
+    cacheInvalidation: {
+      scope: "media",
+      entityId: "folder_brand",
+    },
+  },
+} satisfies BackyAdminMediaFolderResponse;
+
+const sdkAdminMediaFolderDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_media_folder_delete",
+  data: {
+    deleted: true,
+    folderId: "folder_brand",
+  },
+} satisfies BackyAdminMediaFolderDeleteResponse;
+
 const sdkMediaBindingInput = buildBackyMediaBindingInput({
   target: {
     type: "page",
@@ -6343,6 +6506,14 @@ void mediaAsset;
 void genericFileMediaAsset;
 void sdkGenericFileMediaAsset;
 void sdkGenericFileMediaListOptions;
+void sdkAdminMediaUploadInput;
+void sdkAdminMediaUpdateInput;
+void sdkAdminMediaListEnvelope;
+void sdkAdminMediaEnvelope;
+void sdkAdminMediaDeleteEnvelope;
+void sdkAdminMediaFoldersEnvelope;
+void sdkAdminMediaFolderEnvelope;
+void sdkAdminMediaFolderDeleteEnvelope;
 void mediaFolder;
 void mediaFolderRoot;
 void mediaFolderListEnvelope;
