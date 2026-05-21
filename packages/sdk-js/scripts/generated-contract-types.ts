@@ -25,6 +25,14 @@ import type {
   BackyAdminSiteReadinessResponse,
   BackyAdminSiteResponse,
   BackyAdminSitesResponse,
+  BackyAdminTeam,
+  BackyAdminTeamDeleteResponse,
+  BackyAdminTeamMember,
+  BackyAdminTeamMemberRemoveResponse,
+  BackyAdminTeamMemberResponse,
+  BackyAdminTeamMembersResponse,
+  BackyAdminTeamResponse,
+  BackyAdminTeamsResponse,
   BackyAdminUser,
   BackyAdminUserBulkResponse,
   BackyAdminUserDeleteResponse,
@@ -524,6 +532,48 @@ type RollbackAdminUsersImportMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["rollbackAdminUsersImport"]>,
     BackyAdminUserImportRollbackResponse
+  >
+>;
+type AdminTeamsMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminTeams"]>, BackyAdminTeamsResponse>
+>;
+type CreateAdminTeamMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["createAdminTeam"]>, BackyAdminTeamResponse>
+>;
+type AdminTeamMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminTeam"]>, BackyAdminTeamResponse>
+>;
+type UpdateAdminTeamMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateAdminTeam"]>, BackyAdminTeamResponse>
+>;
+type DeleteAdminTeamMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminTeam"]>,
+    BackyAdminTeamDeleteResponse
+  >
+>;
+type AdminTeamMembersMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminTeamMembers"]>,
+    BackyAdminTeamMembersResponse
+  >
+>;
+type InviteAdminTeamMemberMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["inviteAdminTeamMember"]>,
+    BackyAdminTeamMemberResponse
+  >
+>;
+type UpdateAdminTeamMemberMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminTeamMember"]>,
+    BackyAdminTeamMemberResponse
+  >
+>;
+type RemoveAdminTeamMemberMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["removeAdminTeamMember"]>,
+    BackyAdminTeamMemberRemoveResponse
   >
 >;
 type AdminPagesMethodReturnsContract = Assert<
@@ -1878,6 +1928,110 @@ const sdkAdminUserImportRollbackEnvelope = {
     },
   },
 } satisfies BackyAdminUserImportRollbackResponse;
+
+const sdkAdminTeamMember = {
+  id: "member_editor",
+  teamId: "team_demo",
+  userId: sdkAdminUser.id,
+  email: sdkAdminUser.email,
+  name: sdkAdminUser.fullName,
+  avatarUrl: null,
+  role: "editor",
+  joinedAt: "2026-05-16T00:00:00.000Z",
+} satisfies BackyAdminTeamMember;
+
+const sdkAdminTeam = {
+  id: "team_demo",
+  name: "Demo Team",
+  slug: "demo-team",
+  ownerId: "user_owner",
+  avatarUrl: null,
+  createdAt: "2026-05-16T00:00:00.000Z",
+  members: [sdkAdminTeamMember],
+  plan: "free",
+  settings: {
+    plan: "free",
+  },
+  workspace: {
+    siteCount: 1,
+    publishedSiteCount: 1,
+    draftSiteCount: 0,
+    archivedSiteCount: 0,
+    sites: [
+      {
+        id: "site_demo",
+        name: "Demo Site",
+        slug: "demo",
+        customDomain: null,
+        status: "published",
+        updatedAt: "2026-05-16T00:00:00.000Z",
+      },
+    ],
+  },
+} satisfies BackyAdminTeam;
+
+const sdkAdminTeamsEnvelope = {
+  success: true,
+  requestId: "req_admin_teams",
+  data: {
+    teams: [sdkAdminTeam],
+    pagination: {
+      total: 1,
+      limit: 1,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminTeamsResponse;
+
+const sdkAdminTeamEnvelope = {
+  success: true,
+  requestId: "req_admin_team",
+  data: {
+    team: sdkAdminTeam,
+  },
+} satisfies BackyAdminTeamResponse;
+
+const sdkAdminTeamDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_team_delete",
+  data: {
+    deleted: true,
+  },
+} satisfies BackyAdminTeamDeleteResponse;
+
+const sdkAdminTeamMembersEnvelope = {
+  success: true,
+  requestId: "req_admin_team_members",
+  data: {
+    members: [sdkAdminTeamMember],
+    pagination: {
+      total: 1,
+      limit: 1,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminTeamMembersResponse;
+
+const sdkAdminTeamMemberEnvelope = {
+  success: true,
+  requestId: "req_admin_team_member",
+  data: {
+    member: sdkAdminTeamMember,
+    user: sdkAdminUser,
+    invite: null,
+    inviteDelivery: null,
+  },
+} satisfies BackyAdminTeamMemberResponse;
+
+const sdkAdminTeamMemberRemoveEnvelope = {
+  success: true,
+  requestId: "req_admin_team_member_remove",
+  data: {
+    removed: true,
+  },
+} satisfies BackyAdminTeamMemberRemoveResponse;
 
 const sdkAdminPage = {
   id: "page_home",

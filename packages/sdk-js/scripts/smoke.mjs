@@ -1335,6 +1335,16 @@ if (adminSessionToken && !adminRequestApiKey) {
   assert(Array.isArray(authSessions.data.sessions), 'adminAuthSessions() missing sessions array');
 }
 
+const adminTeams = await privateClient.adminTeams();
+assert(Array.isArray(adminTeams.data.teams), 'adminTeams() missing teams array');
+const firstAdminTeamId = adminTeams.data.teams[0]?.id;
+if (firstAdminTeamId) {
+  const adminTeam = await privateClient.adminTeam(firstAdminTeamId);
+  assert(adminTeam.data.team?.id === firstAdminTeamId, 'adminTeam() returned wrong team');
+  const teamMembers = await privateClient.adminTeamMembers(firstAdminTeamId);
+  assert(Array.isArray(teamMembers.data.members), 'adminTeamMembers() missing members array');
+}
+
 const adminPages = await privateClient.adminPages({ limit: 5 });
 assert(Array.isArray(adminPages.data.pages), 'adminPages() missing pages array');
 const firstAdminPageId = adminPages.data.pages[0]?.id;

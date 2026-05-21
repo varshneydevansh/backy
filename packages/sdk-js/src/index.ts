@@ -6613,6 +6613,133 @@ export type BackyAdminUserImportRollbackResponse = BackyEnvelope<
   }
 >;
 
+export interface BackyAdminTeamMember {
+  id: string;
+  teamId: string;
+  userId: string;
+  email: string;
+  name: string;
+  avatarUrl?: string | null;
+  role: BackyAdminUserRole;
+  joinedAt: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminTeamWorkspaceSite {
+  id: string;
+  name: string;
+  slug: string;
+  customDomain?: string | null;
+  status: "draft" | "published" | "archived" | string;
+  updatedAt?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminTeamWorkspaceSummary {
+  siteCount: number;
+  publishedSiteCount: number;
+  draftSiteCount: number;
+  archivedSiteCount: number;
+  sites: BackyAdminTeamWorkspaceSite[];
+  [key: string]: unknown;
+}
+
+export interface BackyAdminTeam {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId?: string | null;
+  avatarUrl?: string | null;
+  createdAt: string;
+  members: BackyAdminTeamMember[];
+  plan?: "free" | "pro" | "enterprise" | string;
+  settings?: Record<string, unknown>;
+  workspace?: BackyAdminTeamWorkspaceSummary;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminTeamListOptions
+  extends BackyLiveManagementRequestOptions {
+  search?: string;
+  ownerId?: string;
+}
+
+export type BackyAdminTeamsResponse = BackyEnvelope<
+  {
+    teams: BackyAdminTeam[];
+    pagination?: BackyPagination;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminTeamResponse = BackyEnvelope<
+  {
+    team: BackyAdminTeam;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminTeamCreateInput = {
+  name: string;
+  slug?: string;
+  ownerId?: string | null;
+  settings?: Record<string, unknown>;
+  requestId?: string;
+};
+
+export type BackyAdminTeamUpdateInput = {
+  name?: string;
+  slug?: string;
+  ownerId?: string | null;
+  settings?: Record<string, unknown>;
+  requestId?: string;
+};
+
+export type BackyAdminTeamDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminTeamMembersResponse = BackyEnvelope<
+  {
+    members: BackyAdminTeamMember[];
+    pagination?: BackyPagination;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminTeamMemberResponse = BackyEnvelope<
+  {
+    member: BackyAdminTeamMember;
+    user?: BackyAdminUser;
+    invite?: BackyAdminInviteToken | null;
+    inviteDelivery?: BackyAdminUserDeliveryResult | null;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminTeamMemberInviteInput = {
+  userId?: string;
+  email?: string;
+  fullName?: string;
+  role?: BackyAdminUserRole;
+  requestId?: string;
+};
+
+export type BackyAdminTeamMemberUpdateInput = {
+  role: BackyAdminUserRole;
+  requestId?: string;
+};
+
+export type BackyAdminTeamMemberRemoveResponse = BackyEnvelope<
+  {
+    removed: boolean;
+    [key: string]: unknown;
+  }
+>;
+
 export interface BackyFrontendLaunchReadiness {
   schemaVersion: "backy.frontend-launch-readiness.v1";
   status: "ready" | "attention" | "blocked";
@@ -7311,6 +7438,141 @@ export class BackyClient {
       headers: liveManagementHeaders(options),
       credentials: options.credentials,
     });
+  }
+
+  adminTeams(
+    options: BackyAdminTeamListOptions = {},
+  ): Promise<BackyAdminTeamsResponse> {
+    const { requestId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request("/api/admin/teams", {
+      query: {
+        search: rest.search,
+        ownerId: rest.ownerId,
+      },
+      requestId,
+      headers,
+      credentials,
+    });
+  }
+
+  createAdminTeam(
+    input: BackyAdminTeamCreateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/teams", {
+      method: "POST",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  adminTeam(
+    teamId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamResponse> {
+    return this.request(`/api/admin/teams/${encodeURIComponent(teamId)}`, {
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  updateAdminTeam(
+    teamId: string,
+    input: BackyAdminTeamUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamResponse> {
+    const { requestId, ...body } = input;
+    return this.request(`/api/admin/teams/${encodeURIComponent(teamId)}`, {
+      method: "PATCH",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  deleteAdminTeam(
+    teamId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamDeleteResponse> {
+    return this.request(`/api/admin/teams/${encodeURIComponent(teamId)}`, {
+      method: "DELETE",
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  adminTeamMembers(
+    teamId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamMembersResponse> {
+    return this.request(
+      `/api/admin/teams/${encodeURIComponent(teamId)}/members`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  inviteAdminTeamMember(
+    teamId: string,
+    input: BackyAdminTeamMemberInviteInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamMemberResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/teams/${encodeURIComponent(teamId)}/members`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminTeamMember(
+    teamId: string,
+    memberId: string,
+    input: BackyAdminTeamMemberUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamMemberResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  removeAdminTeamMember(
+    teamId: string,
+    memberId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminTeamMemberRemoveResponse> {
+    return this.request(
+      `/api/admin/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
   }
 
   sites(): Promise<

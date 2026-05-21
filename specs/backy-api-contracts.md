@@ -798,6 +798,16 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   - Mutations enforce `users.view`, `users.create`, `users.manage`, `users.delete`, or owner-session requirements as appropriate, preserve current-user and last-active-owner/admin safeguards, and emit request-id-backed audit events.
   - The JS SDK exposes this workspace user-management surface through `adminUsers()`, `createAdminUser()`, `adminUser()`, `updateAdminUser()`, `deleteAdminUser()`, `bulkAdminUsers()`, `adminUserPermissions()`, `updateAdminUserPermissions()`, `adminUserMfa()`, `updateAdminUserMfa()`, `createAdminUserInvite()`, `createAdminUserPasswordReset()`, `transferAdminUserOwnership()`, `adminAuthSessions()`, `revokeAdminAuthSession()`, `importAdminUsersCsv()`, and `rollbackAdminUsersImport()` so custom admin consoles can manage accounts without scraping Backy's admin app. CSV import sends raw `text/csv` and keeps SDK `requestId` values in headers unless the rollback endpoint explicitly needs an import audit request id.
 
+### 3.11 Teams and workspace ownership
+
+- `GET/POST /api/admin/teams`
+- `GET/PATCH/DELETE /api/admin/teams/:teamId`
+- `GET/POST /api/admin/teams/:teamId/members`
+- `PATCH/DELETE /api/admin/teams/:teamId/members/:memberId`
+  - Team APIs return `{ success, requestId, data }` envelopes with team/member records, workspace site summaries, pagination metadata, invite delivery metadata for newly invited members, and deletion/removal confirmations.
+  - Mutations enforce `users.view`/`users.manage`, billing team/seat limits, team slug uniqueness, direct-self mutation guards, final-owner safeguards, non-owner owner-role denial, and owned-site delete blocking before persistence. Team and member mutations emit request-id-backed audit events with team/member/invite delivery metadata.
+  - The JS SDK exposes this multi-site workspace surface through `adminTeams()`, `createAdminTeam()`, `adminTeam()`, `updateAdminTeam()`, `deleteAdminTeam()`, `adminTeamMembers()`, `inviteAdminTeamMember()`, `updateAdminTeamMember()`, and `removeAdminTeamMember()` so custom admin consoles can manage team ownership and membership without scraping `/teams`.
+
 ---
 
 ## 4) Canonical contracts and bindings
