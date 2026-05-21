@@ -1460,12 +1460,29 @@ if (hasAdminOrdersCollection) {
 
 const adminReusableSections = await privateClient.adminReusableSections({ status: 'all', search: '' });
 assert(Array.isArray(adminReusableSections.data.sections), 'adminReusableSections() missing sections array');
+assert(typeof privateClient.exportAdminReusableSections === 'function', 'exportAdminReusableSections() missing SDK method');
+assert(typeof privateClient.importAdminReusableSections === 'function', 'importAdminReusableSections() missing SDK method');
+assert(typeof privateClient.adminReusableSectionInstances === 'function', 'adminReusableSectionInstances() missing SDK method');
+assert(typeof privateClient.refreshAdminReusableSectionInstances === 'function', 'refreshAdminReusableSectionInstances() missing SDK method');
+assert(typeof privateClient.adminReusableSectionMetadata === 'function', 'adminReusableSectionMetadata() missing SDK method');
+assert(typeof privateClient.updateAdminReusableSectionMetadata === 'function', 'updateAdminReusableSectionMetadata() missing SDK method');
+const exportedReusableSections = await privateClient.exportAdminReusableSections({ status: 'all' });
+assert(exportedReusableSections.data.export?.schemaVersion === 'backy.reusable-sections.export.v1', 'exportAdminReusableSections() missing export schema version');
+assert(Array.isArray(exportedReusableSections.data.sections), 'exportAdminReusableSections() missing sections array');
 const firstAdminReusableSectionId = adminReusableSections.data.sections[0]?.id;
 if (firstAdminReusableSectionId) {
   const adminReusableSection = await privateClient.adminReusableSection(firstAdminReusableSectionId);
   assert(adminReusableSection.data.section?.id === firstAdminReusableSectionId, 'adminReusableSection() returned wrong section');
   const reusableSectionVersions = await privateClient.adminReusableSectionVersions(firstAdminReusableSectionId);
   assert(Array.isArray(reusableSectionVersions.data.versions), 'adminReusableSectionVersions() missing versions array');
+  const reusableSectionMetadata = await privateClient.adminReusableSectionMetadata(firstAdminReusableSectionId);
+  assert(reusableSectionMetadata.data.sectionId === firstAdminReusableSectionId, 'adminReusableSectionMetadata() returned wrong section');
+  assert(reusableSectionMetadata.data.library && typeof reusableSectionMetadata.data.library === 'object', 'adminReusableSectionMetadata() missing library metadata');
+  const reusableSectionInstances = await privateClient.adminReusableSectionInstances(firstAdminReusableSectionId);
+  assert(Array.isArray(reusableSectionInstances.data.targets), 'adminReusableSectionInstances() missing targets array');
+  const reusableSectionRefresh = await privateClient.refreshAdminReusableSectionInstances(firstAdminReusableSectionId, { dryRun: true });
+  assert(reusableSectionRefresh.data.dryRun === true, 'refreshAdminReusableSectionInstances() did not preserve dryRun');
+  assert(Array.isArray(reusableSectionRefresh.data.refreshedTargets), 'refreshAdminReusableSectionInstances() missing refreshed targets array');
 }
 
 const adminMedia = await privateClient.adminMedia({ limit: 5 });

@@ -91,6 +91,12 @@ import type {
   BackyAdminCommerceProductResponse,
   BackyAdminCommerceProductsResponse,
   BackyAdminReusableSectionDeleteResponse,
+  BackyAdminReusableSectionExportResponse,
+  BackyAdminReusableSectionImportResponse,
+  BackyAdminReusableSectionInstancesRefreshResponse,
+  BackyAdminReusableSectionInstancesResponse,
+  BackyAdminReusableSectionMetadataResponse,
+  BackyAdminReusableSectionMetadataUpdateResponse,
   BackyAdminReusableSectionResponse,
   BackyAdminReusableSectionRestoreResponse,
   BackyAdminReusableSectionVersionsResponse,
@@ -1090,6 +1096,42 @@ type RestoreAdminReusableSectionVersionMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["restoreAdminReusableSectionVersion"]>,
     BackyAdminReusableSectionRestoreResponse
+  >
+>;
+type ExportAdminReusableSectionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["exportAdminReusableSections"]>,
+    BackyAdminReusableSectionExportResponse
+  >
+>;
+type ImportAdminReusableSectionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importAdminReusableSections"]>,
+    BackyAdminReusableSectionImportResponse
+  >
+>;
+type AdminReusableSectionInstancesMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminReusableSectionInstances"]>,
+    BackyAdminReusableSectionInstancesResponse
+  >
+>;
+type RefreshAdminReusableSectionInstancesMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["refreshAdminReusableSectionInstances"]>,
+    BackyAdminReusableSectionInstancesRefreshResponse
+  >
+>;
+type AdminReusableSectionMetadataMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminReusableSectionMetadata"]>,
+    BackyAdminReusableSectionMetadataResponse
+  >
+>;
+type UpdateAdminReusableSectionMetadataMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminReusableSectionMetadata"]>,
+    BackyAdminReusableSectionMetadataUpdateResponse
   >
 >;
 type AdminFormsMethodReturnsContract = Assert<
@@ -3533,6 +3575,142 @@ const sdkAdminReusableSectionRestoreEnvelope = {
     },
   },
 } satisfies BackyAdminReusableSectionRestoreResponse;
+
+const sdkAdminReusableSectionExportEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_export",
+  data: {
+    export: {
+      schemaVersion: "backy.reusable-sections.export.v1",
+      exportedAt: "2026-05-21T00:00:00.000Z",
+      siteId: "site_demo",
+      siteSlug: "demo",
+      sectionCount: 1,
+    },
+    sections: [
+      {
+        sourceSectionId: "section_hero",
+        name: "Hero Block",
+        slug: "hero-block",
+        description: "Reusable homepage hero",
+        category: "marketing",
+        status: "active",
+        tags: ["hero", "homepage"],
+        content: sdkAdminReusableSection.content,
+        metadata: sdkAdminReusableSection.metadata,
+        sourceElementId: null,
+      },
+    ],
+  },
+} satisfies BackyAdminReusableSectionExportResponse;
+
+const sdkAdminReusableSectionImportEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_import",
+  data: {
+    import: {
+      created: 1,
+      updated: 0,
+      total: 1,
+    },
+    sections: [sdkAdminReusableSection],
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminReusableSectionImportResponse;
+
+const sdkAdminReusableSectionInstancesEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_instances",
+  data: {
+    sectionId: "section_hero",
+    sourceUpdatedAt: "2026-05-21T00:00:00.000Z",
+    targets: [
+      {
+        type: "page",
+        id: "page_home",
+        title: "Home",
+        slug: "home",
+        status: "published",
+        updatedAt: "2026-05-21T00:00:00.000Z",
+        instances: [
+          {
+            elementId: "hero-instance",
+            elementType: "section",
+            path: "elements.0",
+            mode: "synced",
+            sourceUpdatedAt: "2026-05-21T00:00:00.000Z",
+            stale: false,
+          },
+        ],
+      },
+    ],
+    totals: {
+      targets: 1,
+      instances: 1,
+      stale: 0,
+    },
+  },
+} satisfies BackyAdminReusableSectionInstancesResponse;
+
+const sdkAdminReusableSectionInstancesRefreshEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_instances_refresh",
+  data: {
+    dryRun: true,
+    sectionId: "section_hero",
+    sourceUpdatedAt: "2026-05-21T00:00:00.000Z",
+    refreshedTargets: [
+      {
+        type: "page",
+        id: "page_home",
+        title: "Home",
+        slug: "home",
+        refreshed: 1,
+      },
+    ],
+    totals: {
+      targets: 1,
+      instances: 1,
+    },
+    cacheInvalidation: null,
+  },
+} satisfies BackyAdminReusableSectionInstancesRefreshResponse;
+
+const sdkAdminReusableSectionMetadataEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_metadata",
+  data: {
+    sectionId: "section_hero",
+    metadata: sdkAdminReusableSection.metadata,
+    library: {
+      displayName: "Homepage Hero",
+      summary: "Primary marketing hero",
+      labels: ["hero", "homepage"],
+      previewPath: "/",
+    },
+    version: 2,
+  },
+} satisfies BackyAdminReusableSectionMetadataResponse;
+
+const sdkAdminReusableSectionMetadataUpdateEnvelope = {
+  success: true,
+  requestId: "req_admin_reusable_section_metadata_update",
+  data: {
+    section: sdkAdminReusableSection,
+    metadata: sdkAdminReusableSection.metadata,
+    library: {
+      displayName: "Homepage Hero",
+      summary: "Primary marketing hero",
+      labels: ["hero", "homepage"],
+    },
+    version: 3,
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminReusableSectionMetadataUpdateResponse;
 
 const sdkCommerceProviderCertification = {
   schemaVersion: "backy.commerce-provider-certification-handoff.v1",
