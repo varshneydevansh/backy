@@ -29,6 +29,7 @@ import type {
   BackyFrontendLaunchReadiness,
   BackyClient,
   BackyContentElementDescriptor,
+  BackyContentEditableFieldPatch,
   BackyContentElementPatch,
   BackyEditableContent,
   BackyLiveManagedBlogPostResponse,
@@ -212,6 +213,8 @@ import {
   findBackyContentElement,
   generatedBackyContractTypeSources,
   listBackyContentElements,
+  patchBackyContentEditableField,
+  patchBackyContentEditableFields,
   patchBackyContentElement,
   patchBackyContentElements,
 } from "../src/index";
@@ -689,11 +692,33 @@ const bulkPatchedEditableContent = patchBackyContentElements(
 const editableElementDescriptors = listBackyContentElements(
   editableContentForHelpers,
 ) satisfies BackyContentElementDescriptor[];
+const editableMapFieldPatch = {
+  elementId: "interactive-rounds",
+  field: "props.rounds",
+  value: 6,
+} satisfies BackyContentEditableFieldPatch;
+const editableMapPatchedContent = patchBackyContentEditableField(
+  editableContentForHelpers,
+  editableMapFieldPatch,
+);
+const editableMapBulkPatchedContent = patchBackyContentEditableFields(
+  editableContentForHelpers,
+  [
+    editableMapFieldPatch,
+    {
+      elementId: "editable-helper-nested-message",
+      field: "props.content",
+      value: "Nested editable-map field update",
+    },
+  ],
+);
 
 void patchedEditableContent;
 void foundEditableElement;
 void bulkPatchedEditableContent;
 void editableElementDescriptors;
+void editableMapPatchedContent;
+void editableMapBulkPatchedContent;
 
 const renderMediaAsset = {
   id: "media_hero",

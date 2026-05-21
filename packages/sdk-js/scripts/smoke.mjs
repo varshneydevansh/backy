@@ -4,6 +4,7 @@ import {
   createBackyClient,
   findBackyContentElement,
   listBackyContentElements,
+  patchBackyContentEditableFields,
   patchBackyContentElement,
   patchBackyContentElements,
 } from '../dist/index.js';
@@ -1395,15 +1396,24 @@ if (runWriteSmoke) {
     assert(findBackyContentElement(liveManagedPost.data.post.content, 'sdk-smoke-post-heading')?.id === 'sdk-smoke-post-heading', 'findBackyContentElement() missing blog heading');
     writeChecks.push('liveManagedBlogPost');
 
-    const patchedLivePostContent = patchBackyContentElement(liveManagedPost.data.post.content, {
-      elementId: 'sdk-smoke-post-heading',
-      changes: {
-        'props.content': 'SDK live-managed blog post',
-        'styles.color': '#111827',
-        'layout.x': 96,
+    const patchedLivePostContent = patchBackyContentEditableFields(liveManagedPost.data.post.content, [
+      {
+        elementId: 'sdk-smoke-post-heading',
+        field: 'props.content',
+        value: 'SDK live-managed blog post',
       },
-    });
-    assert(patchedLivePostContent, 'patchBackyContentElement() did not patch the blog content tree');
+      {
+        elementId: 'sdk-smoke-post-heading',
+        field: 'styles.color',
+        value: '#111827',
+      },
+      {
+        elementId: 'sdk-smoke-post-heading',
+        field: 'layout.x',
+        value: 96,
+      },
+    ]);
+    assert(patchedLivePostContent, 'patchBackyContentEditableFields() did not patch the blog content tree');
     const liveManagedPostUpdate = await writeClient.updateLiveManagedBlogPost(fixture.postId, {
       title: liveManagedPost.data.post.title,
       content: patchedLivePostContent,
@@ -1637,6 +1647,7 @@ console.log(JSON.stringify({
     'updateLiveManagedBlogPost',
     'patchBackyContentElement',
     'patchBackyContentElements',
+    'patchBackyContentEditableFields',
     'findBackyContentElement',
     'listBackyContentElements',
     'blog',

@@ -1627,6 +1627,16 @@ export interface BackyContentElementDescriptor {
   element: BackyElement;
 }
 
+export interface BackyContentEditableFieldPatch {
+  elementId: string;
+  field?: string;
+  path?: string;
+  targetPath?: string;
+  value?: unknown;
+  remove?: boolean;
+  editable?: boolean;
+}
+
 const BACKY_LAYOUT_TARGET_ALIASES: Record<string, string> = {
   x: "x",
   y: "y",
@@ -1908,6 +1918,29 @@ function applyBackyContentElementPatch(
   });
 }
 
+function editableFieldPatchToElementPatch(
+  patch: BackyContentEditableFieldPatch,
+): BackyContentElementPatch | null {
+  const path = patch.path || patch.field || patch.targetPath;
+  if (!patch.elementId || !path || patch.editable === false) {
+    return null;
+  }
+
+  if (patch.remove) {
+    return {
+      elementId: patch.elementId,
+      remove: [path],
+    };
+  }
+
+  return {
+    elementId: patch.elementId,
+    changes: {
+      [path]: patch.value,
+    },
+  };
+}
+
 export function findBackyContentElement(
   content: BackyEditableContent | undefined | null,
   elementId: string,
@@ -1982,6 +2015,28 @@ export function patchBackyContentElement<TContent extends BackyEditableContent>(
   patch: BackyContentElementPatch,
 ): TContent | null {
   return patchBackyContentElements(content, [patch]);
+}
+
+export function patchBackyContentEditableField<
+  TContent extends BackyEditableContent,
+>(
+  content: TContent | undefined | null,
+  patch: BackyContentEditableFieldPatch,
+): TContent | null {
+  return patchBackyContentEditableFields(content, [patch]);
+}
+
+export function patchBackyContentEditableFields<
+  TContent extends BackyEditableContent,
+>(
+  content: TContent | undefined | null,
+  patches: readonly BackyContentEditableFieldPatch[],
+): TContent | null {
+  const elementPatches = patches
+    .map((patch) => editableFieldPatchToElementPatch(patch))
+    .filter((patch): patch is BackyContentElementPatch => Boolean(patch));
+
+  return patchBackyContentElements(content, elementPatches);
 }
 
 export function patchBackyContentElements<TContent extends BackyEditableContent>(
