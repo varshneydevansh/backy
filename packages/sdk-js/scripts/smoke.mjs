@@ -2119,6 +2119,105 @@ if (runWriteSmoke) {
     assert(reviewedSubmission.data.submission?.adminNotes === 'Reviewed through the SDK smoke.', 'reviewFormSubmission() did not preserve admin notes');
     writeChecks.push('reviewFormSubmission');
 
+    const deliveryRetryReceiver = await startSmokeWebhookReceiver('/sdk-form-delivery-retry');
+    let deliveryRetryFormId = null;
+    try {
+      const deliveryRetryForm = await writeClient.createAdminForm({
+        name: 'SDK Smoke Delivery Retry Form',
+        title: 'SDK Smoke Delivery Retry Form',
+        description: 'Temporary backend form for SDK delivery retry coverage.',
+        fields: [
+          {
+            key: 'email',
+            label: 'Email',
+            type: 'email',
+            required: true,
+          },
+          {
+            key: 'message',
+            label: 'Message',
+            type: 'textarea',
+            required: true,
+          },
+        ],
+        isActive: true,
+        enableHoneypot: false,
+        moderationMode: 'manual',
+        requestId: 'sdk-form-delivery-create',
+      });
+      deliveryRetryFormId = deliveryRetryForm.data.form?.id;
+      assert(deliveryRetryFormId, 'createAdminForm() missing delivery retry form id');
+      assert(deliveryRetryForm.data.form?.fields?.length === 2, 'createAdminForm() did not preserve delivery retry fields');
+      writeChecks.push('createAdminForm:deliveryRetry');
+
+      const deliveryDefinition = await writeClient.formDefinition(deliveryRetryFormId);
+      const deliverySubmissionInput = buildBackyFormSubmissionInput(deliveryDefinition.data.form, {
+        fields: {
+          email: 'sdk-delivery@example.com',
+          message: 'Delivery retry smoke submission.',
+        },
+        requestId: 'sdk-form-delivery-submit',
+        rateLimitBypass: true,
+      });
+      const deliverySubmittedForm = await writeClient.submitForm(deliveryRetryFormId, deliverySubmissionInput);
+      const deliverySubmissionId = deliverySubmittedForm.data.submission?.id;
+      assert(deliverySubmissionId, 'submitForm() missing delivery retry submission id');
+      writeChecks.push('submitForm:deliveryRetry');
+
+      const deliveryConfiguredForm = await writeClient.updateAdminForm(deliveryRetryFormId, {
+        notificationEmail: 'sdk-form-notify@example.com',
+        notificationWebhook: deliveryRetryReceiver.url,
+        requestId: 'sdk-form-delivery-config',
+      });
+      assert(deliveryConfiguredForm.data.form?.notificationEmail === 'sdk-form-notify@example.com', 'updateAdminForm() did not preserve notification email');
+      assert(deliveryConfiguredForm.data.form?.notificationWebhook === deliveryRetryReceiver.url, 'updateAdminForm() did not preserve notification webhook');
+      writeChecks.push('updateAdminForm:deliveryConfig');
+
+      const webhookRetry = await writeClient.retryFormSubmissionWebhook(deliveryRetryFormId, deliverySubmissionId, {
+        requestId: 'sdk-form-webhook-retry',
+      });
+      assert(webhookRetry.data.delivery?.attempted === true, 'retryFormSubmissionWebhook() did not attempt delivery');
+      assert(webhookRetry.data.delivery?.status === 'succeeded', 'retryFormSubmissionWebhook() did not report success');
+      assert(webhookRetry.data.delivery?.statusCode === 204, 'retryFormSubmissionWebhook() returned the wrong webhook status code');
+      assert(webhookRetry.data.submission?.id === deliverySubmissionId, 'retryFormSubmissionWebhook() returned wrong submission');
+      const retryRequest = deliveryRetryReceiver.requests[0];
+      assert(retryRequest?.method === 'POST', 'retryFormSubmissionWebhook() did not POST to the receiver');
+      assert(retryRequest?.url === '/sdk-form-delivery-retry', 'retryFormSubmissionWebhook() posted to the wrong webhook path');
+      assert(retryRequest?.headers?.['x-backy-webhook-retry'] === 'true', 'retryFormSubmissionWebhook() missing retry header');
+      assert(retryRequest?.headers?.['x-backy-form-id'] === deliveryRetryFormId, 'retryFormSubmissionWebhook() missing form id header');
+      assert(retryRequest?.headers?.['x-backy-submission-id'] === deliverySubmissionId, 'retryFormSubmissionWebhook() missing submission id header');
+      assert(retryRequest?.json?.retry === true, 'retryFormSubmissionWebhook() payload missing retry flag');
+      assert(retryRequest?.json?.submissionId === deliverySubmissionId, 'retryFormSubmissionWebhook() payload missing submission id');
+      assert(retryRequest?.json?.values?.message === 'Delivery retry smoke submission.', 'retryFormSubmissionWebhook() payload missing submitted values');
+      writeChecks.push('retryFormSubmissionWebhook');
+
+      const emailRetryProvider = String(adminSettings.data.settings?.runtimeNotifications?.emailProvider || 'unknown');
+      const allowExternalEmailRetry = process.env.BACKY_SDK_ALLOW_EXTERNAL_EMAIL_RETRY_SMOKE === '1';
+      if (emailRetryProvider === 'local-outbox' || allowExternalEmailRetry) {
+        const emailRetry = await writeClient.retryFormSubmissionEmail(deliveryRetryFormId, deliverySubmissionId, {
+          requestId: 'sdk-form-email-retry',
+        });
+        assert(emailRetry.data.delivery?.attempted === true, 'retryFormSubmissionEmail() did not attempt delivery');
+        assert(emailRetry.data.delivery?.status === 'succeeded', 'retryFormSubmissionEmail() did not report success');
+        assert(emailRetry.data.delivery?.target === 'mailto:sdk-form-notify@example.com', 'retryFormSubmissionEmail() returned wrong target');
+        assert(emailRetry.data.delivery?.provider === emailRetryProvider || allowExternalEmailRetry, 'retryFormSubmissionEmail() returned wrong provider');
+        if (emailRetryProvider === 'local-outbox') {
+          assert(emailRetry.data.delivery?.statusCode === 202, 'retryFormSubmissionEmail() returned wrong local-outbox status code');
+          assert(emailRetry.data.delivery?.metadata?.outboxOnly === true, 'retryFormSubmissionEmail() missing local-outbox evidence');
+        }
+        assert(emailRetry.data.submission?.id === deliverySubmissionId, 'retryFormSubmissionEmail() returned wrong submission');
+        writeChecks.push('retryFormSubmissionEmail');
+      }
+
+      const deletedDeliveryForm = await writeClient.deleteAdminForm(deliveryRetryFormId, {
+        requestId: 'sdk-form-delivery-delete',
+      });
+      assert(deletedDeliveryForm.data.deleted === true, 'deleteAdminForm() did not delete delivery retry form');
+      writeChecks.push('deleteAdminForm:deliveryRetry');
+    } finally {
+      await deliveryRetryReceiver.close();
+    }
+
     const contacts = await writeClient.formContacts('sdk-smoke-form', { requestId: 'sdk-form-submit' });
     assert(contacts.data.contacts?.some?.((contact) => contact.id === contactId), 'formContacts() missing generated contact');
     writeChecks.push('formContacts');
