@@ -1397,6 +1397,40 @@ try {
       { providerCertification: orderAnalytics.data.providerCertification },
       'commerceOrderAnalytics()',
     );
+    const orderOperationId = orderAnalytics.data.analytics.recentOrders?.[0]?.id
+      || orderAnalytics.data.analytics.recentOrders?.[0]?.slug;
+    if (orderOperationId) {
+      const orderOperationReads = [
+        ['commerceOrderQuote()', () => privateClient.commerceOrderQuote(String(orderOperationId)), 'quote'],
+        ['commerceOrderTracking()', () => privateClient.commerceOrderTracking(String(orderOperationId)), 'tracking'],
+        ['commerceOrderProviderRefund()', () => privateClient.commerceOrderProviderRefund(String(orderOperationId)), 'refund'],
+        ['commerceOrderFulfillment()', () => privateClient.commerceOrderFulfillment(String(orderOperationId)), 'fulfillment'],
+        ['commerceOrderShippingLabel()', () => privateClient.commerceOrderShippingLabel(String(orderOperationId)), 'label'],
+      ];
+      for (const [name, readOperation, payloadKey] of orderOperationReads) {
+        try {
+          const operation = await readOperation();
+          assert(operation.data.record, `${name} missing order record`);
+          assert(Object.prototype.hasOwnProperty.call(operation.data, payloadKey), `${name} missing ${payloadKey} payload`);
+        } catch (operationError) {
+          if (
+            operationError?.status !== 404 ||
+            !['ORDER_NOT_FOUND', 'ORDER_QUEUE_NOT_FOUND', 'SITE_NOT_FOUND'].includes(operationError?.code)
+          ) {
+            throw operationError;
+          }
+        }
+      }
+    }
+    try {
+      const reconciliation = await privateClient.runCommerceReconciliation({ dryRun: true, limit: 10 });
+      assert(reconciliation.data.schemaVersion === 'backy.commerce-reconciliation.v1', 'runCommerceReconciliation() missing schema version');
+      assert(reconciliation.data.dryRun === true, 'runCommerceReconciliation() dry run drifted');
+    } catch (reconciliationError) {
+      if (reconciliationError?.status !== 404 || !['ORDER_QUEUE_NOT_FOUND', 'SITE_NOT_FOUND'].includes(reconciliationError?.code)) {
+        throw reconciliationError;
+      }
+    }
   } catch (analyticsError) {
     if (analyticsError?.status !== 404 || !['ORDER_QUEUE_NOT_FOUND', 'SITE_NOT_FOUND'].includes(analyticsError?.code)) {
       throw analyticsError;
@@ -1420,6 +1454,18 @@ try {
         !['PRODUCT_CATALOG_NOT_FOUND', 'PRODUCT_NOT_FOUND', 'SITE_NOT_FOUND'].includes(syncError?.code)
       ) {
         throw syncError;
+      }
+    }
+    try {
+      const subscriptions = await privateClient.commerceProductSubscriptions(String(syncProductId));
+      assert(subscriptions.data.lifecycle, 'commerceProductSubscriptions() missing lifecycle payload');
+      assert(subscriptions.data.lifecycle.schemaVersion === 'backy.product-subscription-lifecycle.v1', 'commerceProductSubscriptions() schema drifted');
+    } catch (subscriptionsError) {
+      if (
+        subscriptionsError?.status !== 404 ||
+        !['PRODUCT_CATALOG_NOT_FOUND', 'PRODUCT_NOT_FOUND', 'ORDER_QUEUE_NOT_FOUND', 'SITE_NOT_FOUND'].includes(subscriptionsError?.code)
+      ) {
+        throw subscriptionsError;
       }
     }
   }

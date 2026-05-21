@@ -48,8 +48,16 @@ import type {
   BackyCommentReportInput,
   BackyCommerceOrderInput,
   BackyCommerceOrderAnalyticsResponse,
+  BackyCommerceOrderFulfillmentResponse,
+  BackyCommerceOrderProviderRefundResponse,
+  BackyCommerceOrderQuoteResponse,
+  BackyCommerceOrderShippingLabelResponse,
+  BackyCommerceOrderTrackingResponse,
   BackyCommerceProviderCertification,
   BackyCommerceProductProviderSyncResponse,
+  BackyCommerceProductSubscriptionActionResponse,
+  BackyCommerceProductSubscriptionsResponse,
+  BackyCommerceReconciliationResponse,
   BackyCollectionRecordWriteInput,
   BackyAdminFormContactDeleteResponse,
   BackyAdminFormContactListMutationResponse,
@@ -417,6 +425,102 @@ type SyncCommerceProductProviderMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["syncCommerceProductProvider"]>,
     BackyCommerceProductProviderSyncResponse
+  >
+>;
+type CommerceOrderQuoteMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderQuote"]>,
+    BackyCommerceOrderQuoteResponse
+  >
+>;
+type RefreshCommerceOrderQuoteMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["refreshCommerceOrderQuote"]>,
+    BackyCommerceOrderQuoteResponse
+  >
+>;
+type CommerceOrderTrackingMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderTracking"]>,
+    BackyCommerceOrderTrackingResponse
+  >
+>;
+type RefreshCommerceOrderTrackingMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["refreshCommerceOrderTracking"]>,
+    BackyCommerceOrderTrackingResponse
+  >
+>;
+type CommerceOrderProviderRefundMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderProviderRefund"]>,
+    BackyCommerceOrderProviderRefundResponse
+  >
+>;
+type CreateCommerceOrderProviderRefundMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createCommerceOrderProviderRefund"]>,
+    BackyCommerceOrderProviderRefundResponse
+  >
+>;
+type RefreshCommerceOrderProviderRefundMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["refreshCommerceOrderProviderRefund"]>,
+    BackyCommerceOrderProviderRefundResponse
+  >
+>;
+type CommerceOrderFulfillmentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderFulfillment"]>,
+    BackyCommerceOrderFulfillmentResponse
+  >
+>;
+type DispatchCommerceOrderFulfillmentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["dispatchCommerceOrderFulfillment"]>,
+    BackyCommerceOrderFulfillmentResponse
+  >
+>;
+type CommerceOrderShippingLabelMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderShippingLabel"]>,
+    BackyCommerceOrderShippingLabelResponse
+  >
+>;
+type CreateCommerceOrderShippingLabelMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createCommerceOrderShippingLabel"]>,
+    BackyCommerceOrderShippingLabelResponse
+  >
+>;
+type VoidCommerceOrderShippingLabelMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["voidCommerceOrderShippingLabel"]>,
+    BackyCommerceOrderShippingLabelResponse
+  >
+>;
+type CommerceProductSubscriptionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceProductSubscriptions"]>,
+    BackyCommerceProductSubscriptionsResponse
+  >
+>;
+type RunCommerceProductSubscriptionActionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["runCommerceProductSubscriptionAction"]>,
+    BackyCommerceProductSubscriptionActionResponse
+  >
+>;
+type RunCommerceReconciliationMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["runCommerceReconciliation"]>,
+    BackyCommerceReconciliationResponse
+  >
+>;
+type ScheduledCommerceReconciliationMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["scheduledCommerceReconciliation"]>,
+    BackyCommerceReconciliationResponse
   >
 >;
 type LiveManagedPageUpdateMethodReturnsContract = Assert<
@@ -999,6 +1103,225 @@ const sdkCommerceProductProviderSyncEnvelope = {
     },
   },
 } satisfies BackyCommerceProductProviderSyncResponse;
+
+const sdkCommerceOrderQuoteEnvelope = {
+  success: true,
+  requestId: "req_order_quote",
+  data: {
+    record: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+    order: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+    quote: {
+      schemaVersion: "backy.order-quote.v1",
+      subtotal: 100,
+      discountAmount: 10,
+      taxAmount: 7.5,
+      shippingAmount: 5,
+      total: 102.5,
+      currency: "USD",
+      providerAdjustments: [],
+      calculatedAt: "2026-05-21T00:00:00.000Z",
+    },
+  },
+} satisfies BackyCommerceOrderQuoteResponse;
+
+const sdkCommerceOrderTrackingEnvelope = {
+  success: true,
+  requestId: "req_order_tracking",
+  data: {
+    record: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+    tracking: {
+      status: "in_transit",
+      provider: "easypost",
+      trackingNumber: "EZ1000000001",
+      trackingUrl: "https://track.example.test/EZ1000000001",
+      checkedAt: "2026-05-21T00:00:00.000Z",
+    },
+  },
+} satisfies BackyCommerceOrderTrackingResponse;
+
+const sdkCommerceOrderProviderRefundEnvelope = {
+  success: true,
+  requestId: "req_order_refund",
+  data: {
+    record: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+    refund: {
+      id: "rfnd_1001",
+      status: "requested",
+      provider: "stripe",
+      reference: "pi_1001",
+      amount: 25,
+      currency: "USD",
+      reason: "customer_request",
+      requestedAt: "2026-05-21T00:00:00.000Z",
+      completedAt: null,
+      providerPayload: {
+        schemaVersion: "backy.provider-refund.v1",
+        executionMode: "stripe-api",
+      },
+    },
+  },
+} satisfies BackyCommerceOrderProviderRefundResponse;
+
+const sdkCommerceOrderFulfillmentEnvelope = {
+  success: true,
+  requestId: "req_order_fulfillment",
+  data: {
+    record: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+    fulfillment: {
+      id: "ful_1001",
+      status: "requested",
+      provider: "http",
+      orderNumber: "1001",
+      requestedAt: "2026-05-21T00:00:00.000Z",
+      completedAt: null,
+      providerPayload: {
+        schemaVersion: "backy.fulfillment-dispatch.v1",
+        executionMode: "handoff",
+      },
+    },
+  },
+} satisfies BackyCommerceOrderFulfillmentResponse;
+
+const sdkCommerceOrderShippingLabelEnvelope = {
+  success: true,
+  requestId: "req_order_label",
+  data: {
+    record: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+    label: {
+      id: "lbl_1001",
+      status: "draft",
+      provider: "shippo",
+      serviceLevel: "ground",
+      url: "https://labels.example.test/lbl_1001.pdf",
+      cost: 8.75,
+      createdAt: "2026-05-21T00:00:00.000Z",
+      providerPayload: {
+        schemaVersion: "backy.shipping-label.v1",
+        executionMode: "handoff",
+      },
+    },
+  },
+} satisfies BackyCommerceOrderShippingLabelResponse;
+
+const sdkCommerceProductSubscriptionsEnvelope = {
+  success: true,
+  requestId: "req_product_subscriptions",
+  data: {
+    collection: {
+      id: "orders",
+      slug: "orders",
+      name: "Orders",
+    },
+    lifecycle: {
+      schemaVersion: "backy.product-subscription-lifecycle.v1",
+      product: {
+        id: "product_starter",
+        slug: "starter-template",
+      },
+      summary: {
+        active: 4,
+        dunning: 1,
+      },
+      actionPlan: {
+        schemaVersion: "backy.product-subscription-action-plan-summary.v1",
+      },
+      subscriptions: [],
+      execution: {
+        schemaVersion: "backy.product-subscription-execution-readiness.v1",
+      },
+      certification: {
+        schemaVersion: "backy.product-subscription-certification.v1",
+      },
+      contract: {
+        reconciliationApi: "/api/admin/sites/:siteId/commerce/reconcile",
+      },
+    },
+  },
+} satisfies BackyCommerceProductSubscriptionsResponse;
+
+const sdkCommerceProductSubscriptionActionEnvelope = {
+  success: true,
+  requestId: "req_product_subscription_action",
+  data: {
+    action: {
+      id: "sub_action_1001",
+      schemaVersion: "backy.product-subscription-action.v1",
+      action: "pause",
+      status: "requested",
+      provider: "stripe",
+      executionMode: "handoff",
+      productId: "product_starter",
+      productSlug: "starter-template",
+      orderId: "order_1001",
+      orderSlug: "order-1001",
+      subscriptionReference: "sub_1001",
+      reason: "customer_request",
+      requestedAt: "2026-05-21T00:00:00.000Z",
+      completedAt: null,
+      providerPayload: {},
+    },
+    record: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+    order: {
+      id: "order_1001",
+      slug: "order-1001",
+      status: "draft",
+      values: {},
+    },
+  },
+} satisfies BackyCommerceProductSubscriptionActionResponse;
+
+const sdkCommerceReconciliationEnvelope = {
+  success: true,
+  requestId: "req_commerce_reconcile",
+  data: {
+    schemaVersion: "backy.commerce-reconciliation.v1",
+    runMode: "manual",
+    dryRun: true,
+    processedAt: "2026-05-21T00:00:00.000Z",
+    limit: 100,
+    eventCount: 2,
+    eligibleUpdateCount: 1,
+    updatedCount: 0,
+    unmatchedCount: 1,
+    updates: [],
+    unmatchedEvents: [],
+  },
+} satisfies BackyCommerceReconciliationResponse;
 
 const frontendLaunchReadiness = {
   generatedAt: "2026-05-21T00:00:00.000Z",

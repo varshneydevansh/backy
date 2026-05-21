@@ -1448,6 +1448,217 @@ export type BackyCommerceProductProviderSyncResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export interface BackyCommerceOrderOperationInput {
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyCommerceOrderQuoteInput = BackyCommerceOrderOperationInput;
+export type BackyCommerceOrderTrackingInput = BackyCommerceOrderOperationInput;
+export type BackyCommerceOrderProviderRefundInput =
+  BackyCommerceOrderOperationInput;
+export type BackyCommerceOrderFulfillmentInput =
+  BackyCommerceOrderOperationInput;
+export type BackyCommerceOrderShippingLabelInput =
+  BackyCommerceOrderOperationInput;
+
+export interface BackyCommerceOrderQuote {
+  schemaVersion: "backy.order-quote.v1";
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  shippingAmount: number;
+  total: number;
+  currency: string;
+  providerAdjustments?: Array<Record<string, unknown>>;
+  calculatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceOrderTracking {
+  status: string;
+  provider: string;
+  trackingNumber: string;
+  trackingUrl: string;
+  checkedAt: string;
+  providerPayload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceOrderProviderRefund {
+  id: string;
+  status: "requested" | "succeeded" | "failed" | "requires_action" | string;
+  provider: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  requestedAt: string;
+  completedAt: string | null;
+  providerPayload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceOrderFulfillment {
+  id: string;
+  status: "requested" | "succeeded" | "failed" | "requires_action" | string;
+  provider: string;
+  orderNumber: string;
+  requestedAt: string;
+  completedAt: string | null;
+  providerPayload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceOrderShippingLabel {
+  id: string;
+  status: "draft" | "purchased" | "voided" | string;
+  provider: string;
+  serviceLevel: string;
+  url: string;
+  cost: number;
+  createdAt: string;
+  providerPayload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type BackyCommerceOrderQuoteResponse = BackyEnvelope<
+  {
+    record: BackyCollectionRecord;
+    order?: BackyCollectionRecord;
+    quote: BackyCommerceOrderQuote;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyCommerceOrderTrackingResponse = BackyEnvelope<
+  {
+    record: BackyCollectionRecord;
+    order?: BackyCollectionRecord;
+    tracking: BackyCommerceOrderTracking | null;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyCommerceOrderProviderRefundResponse = BackyEnvelope<
+  {
+    record: BackyCollectionRecord;
+    order?: BackyCollectionRecord;
+    refund: BackyCommerceOrderProviderRefund | null;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyCommerceOrderFulfillmentResponse = BackyEnvelope<
+  {
+    record: BackyCollectionRecord;
+    order?: BackyCollectionRecord;
+    fulfillment: BackyCommerceOrderFulfillment | null;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyCommerceOrderShippingLabelResponse = BackyEnvelope<
+  {
+    record: BackyCollectionRecord;
+    order?: BackyCollectionRecord;
+    label: BackyCommerceOrderShippingLabel | null;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export interface BackyCommerceProductSubscriptionsLifecycle {
+  schemaVersion: "backy.product-subscription-lifecycle.v1";
+  product: Record<string, unknown>;
+  summary: Record<string, unknown>;
+  actionPlan?: Record<string, unknown>;
+  subscriptions: Array<Record<string, unknown>>;
+  execution?: Record<string, unknown>;
+  certification?: Record<string, unknown>;
+  contract?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type BackyCommerceProductSubscriptionsResponse = BackyEnvelope<
+  {
+    lifecycle: BackyCommerceProductSubscriptionsLifecycle;
+    collection?: {
+      id: string;
+      slug?: string;
+      name?: string;
+      [key: string]: unknown;
+    };
+  } & Record<string, unknown>
+>;
+
+export interface BackyCommerceProductSubscriptionActionInput {
+  action: "pause" | "resume" | "cancel";
+  reason?: string;
+  provider?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceProductSubscriptionAction {
+  id: string;
+  schemaVersion: "backy.product-subscription-action.v1";
+  action: "pause" | "resume" | "cancel";
+  status: "requested" | "succeeded" | "failed" | "requires_action" | string;
+  provider: string;
+  executionMode: string;
+  productId: string;
+  productSlug: string;
+  orderId: string;
+  orderSlug: string;
+  subscriptionReference: string;
+  reason: string;
+  requestedAt: string;
+  completedAt: string | null;
+  providerPayload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type BackyCommerceProductSubscriptionActionResponse = BackyEnvelope<
+  {
+    action: BackyCommerceProductSubscriptionAction;
+    record: BackyCollectionRecord;
+    order?: BackyCollectionRecord;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export interface BackyCommerceReconciliationInput {
+  dryRun?: boolean;
+  limit?: number;
+  runMode?: "manual" | "scheduled";
+  actor?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceScheduledReconciliationOptions
+  extends BackyLiveManagementRequestOptions {
+  dryRun?: boolean;
+  limit?: number;
+}
+
+export type BackyCommerceReconciliationResponse = BackyEnvelope<
+  {
+    schemaVersion: "backy.commerce-reconciliation.v1";
+    runMode: "manual" | "scheduled" | string;
+    dryRun: boolean;
+    processedAt: string;
+    limit: number;
+    eventCount: number;
+    eligibleUpdateCount: number;
+    updatedCount: number;
+    unmatchedCount: number;
+    updates: Array<Record<string, unknown>>;
+    unmatchedEvents: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }
+>;
+
 export interface BackyManifestCommerceRuntimeModule {
   schemaVersion: "backy.commerce-discovery.v1";
   enabled: boolean;
@@ -6610,6 +6821,267 @@ export class BackyClient {
         method: "POST",
         body,
         requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceOrderQuote(
+    orderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderQuoteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/quote`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  refreshCommerceOrderQuote(
+    orderId: string,
+    input: BackyCommerceOrderQuoteInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderQuoteResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/quote`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceOrderTracking(
+    orderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderTrackingResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/tracking`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  refreshCommerceOrderTracking(
+    orderId: string,
+    input: BackyCommerceOrderTrackingInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderTrackingResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/tracking`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceOrderProviderRefund(
+    orderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderProviderRefundResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/provider-refund`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createCommerceOrderProviderRefund(
+    orderId: string,
+    input: BackyCommerceOrderProviderRefundInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderProviderRefundResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/provider-refund`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  refreshCommerceOrderProviderRefund(
+    orderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderProviderRefundResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/provider-refund`,
+      {
+        method: "PATCH",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceOrderFulfillment(
+    orderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderFulfillmentResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/fulfillment`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  dispatchCommerceOrderFulfillment(
+    orderId: string,
+    input: BackyCommerceOrderFulfillmentInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderFulfillmentResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/fulfillment`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceOrderShippingLabel(
+    orderId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderShippingLabelResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/shipping-label`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createCommerceOrderShippingLabel(
+    orderId: string,
+    input: BackyCommerceOrderShippingLabelInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderShippingLabelResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/shipping-label`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  voidCommerceOrderShippingLabel(
+    orderId: string,
+    input: BackyCommerceOrderShippingLabelInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceOrderShippingLabelResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/shipping-label`,
+      {
+        method: "DELETE",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  commerceProductSubscriptions(
+    productId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceProductSubscriptionsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/products/${encodeURIComponent(productId)}/subscriptions`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  runCommerceProductSubscriptionAction(
+    productId: string,
+    orderId: string,
+    input: BackyCommerceProductSubscriptionActionInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceProductSubscriptionActionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/products/${encodeURIComponent(productId)}/subscriptions/${encodeURIComponent(orderId)}/action`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  runCommerceReconciliation(
+    input: BackyCommerceReconciliationInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommerceReconciliationResponse> {
+    const { requestId, limit, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/reconcile`,
+      {
+        method: "POST",
+        query: { limit },
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  scheduledCommerceReconciliation(
+    options: BackyCommerceScheduledReconciliationOptions = {},
+  ): Promise<BackyCommerceReconciliationResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/reconcile`,
+      {
+        query: {
+          dryRun: options.dryRun,
+          limit: options.limit,
+        },
+        requestId: options.requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },
