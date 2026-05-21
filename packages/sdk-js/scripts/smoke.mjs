@@ -36,6 +36,34 @@ const assert = (condition, message) => {
   }
 };
 
+const ONE_PIXEL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+  'base64',
+);
+
+const minimalPdf = (text) => {
+  const safeText = text.replace(/[()\\]/g, '');
+  return Buffer.from(`%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 1 /Kids [3 0 R] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 120] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length ${safeText.length + 54} >>
+stream
+BT /F1 12 Tf 20 80 Td (${safeText}) Tj ET
+endstream
+endobj
+trailer << /Root 1 0 R >>
+%%EOF
+`, 'utf8');
+};
+
 async function startSmokeWebhookReceiver(pathname) {
   const requests = [];
   const server = createServer(async (request, response) => {
@@ -2087,6 +2115,188 @@ if (runWriteSmoke) {
     assert(deletedLifecyclePage.data.deleted === true, 'deleteAdminPage() did not delete lifecycle page');
     assert(deletedLifecyclePage.data.pageId === lifecyclePageId, 'deleteAdminPage() returned wrong page id');
     writeChecks.push('deleteAdminPage');
+
+    const mediaLifecycleSlug = `sdk-media-${Date.now()}`;
+    const mediaFolder = await writeClient.createMediaFolder({
+      name: `SDK Media ${mediaLifecycleSlug}`,
+      sortOrder: 7,
+      requestId: 'sdk-media-folder-create',
+    });
+    const mediaFolderId = mediaFolder.data.folder?.id;
+    assert(mediaFolderId, 'createMediaFolder() missing created folder id');
+    assert(mediaFolder.data.folder.name.includes(mediaLifecycleSlug), 'createMediaFolder() returned wrong folder name');
+    writeChecks.push('createMediaFolder');
+
+    const updatedMediaFolder = await writeClient.updateMediaFolder(mediaFolderId, {
+      name: `SDK Media ${mediaLifecycleSlug} Updated`,
+      sortOrder: 9,
+      requestId: 'sdk-media-folder-update',
+    });
+    assert(updatedMediaFolder.data.folder?.id === mediaFolderId, 'updateMediaFolder() returned wrong folder');
+    assert(updatedMediaFolder.data.folder.name.endsWith('Updated'), 'updateMediaFolder() did not update the folder name');
+    writeChecks.push('updateMediaFolder');
+
+    const uploadedImage = await writeClient.uploadMedia({
+      file: new Blob([ONE_PIXEL_PNG], { type: 'image/png' }),
+      filename: `${mediaLifecycleSlug}.png`,
+      folderId: mediaFolderId,
+      visibility: 'public',
+      tags: ['sdk', 'smoke', 'image'],
+      altText: 'SDK media lifecycle image',
+      caption: 'Temporary image uploaded by SDK smoke.',
+      metadata: {
+        purpose: 'sdk-media-lifecycle-smoke',
+        source: 'packages/sdk-js/scripts/smoke.mjs',
+      },
+      uploadedBy: 'sdk-smoke',
+      requestId: 'sdk-media-upload-image',
+    }, {
+      actor: 'sdk-smoke-media',
+    });
+    const uploadedImageId = uploadedImage.data.media?.id;
+    assert(uploadedImageId, 'uploadMedia() missing image media id');
+    assert(uploadedImage.data.media.type === 'image', 'uploadMedia() did not classify PNG as image media');
+    assert(uploadedImage.data.media.folderId === mediaFolderId, 'uploadMedia() did not preserve folder id');
+    assert(uploadedImage.data.media.visibility === 'public', 'uploadMedia() did not preserve public visibility');
+    assert(uploadedImage.data.quota, 'uploadMedia() missing quota payload');
+    writeChecks.push('uploadMedia:image');
+
+    const updatedMedia = await writeClient.updateAdminMedia(uploadedImageId, {
+      altText: 'SDK media lifecycle image updated',
+      caption: 'Updated by SDK smoke.',
+      tags: ['sdk', 'smoke', 'image', 'updated'],
+      metadata: {
+        ...(uploadedImage.data.media.metadata || {}),
+        lifecycleStage: 'metadata-updated',
+      },
+      requestId: 'sdk-media-update',
+    }, {
+      actor: 'sdk-smoke-media',
+    });
+    assert(updatedMedia.data.media?.id === uploadedImageId, 'updateAdminMedia() returned wrong media id');
+    assert(updatedMedia.data.media?.altText === 'SDK media lifecycle image updated', 'updateAdminMedia() did not update alt text');
+    assert(updatedMedia.data.media?.metadata?.lifecycleStage === 'metadata-updated', 'updateAdminMedia() did not merge metadata');
+    writeChecks.push('updateAdminMedia');
+
+    const mediaBindInput = buildBackyMediaBindingInput({
+      pageId: fixture.pageId,
+      usage: 'hero',
+      actor: 'sdk-smoke-media',
+      requestId: 'sdk-media-bind-page',
+    });
+    const mediaBinding = await writeClient.bindMedia(uploadedImageId, mediaBindInput, {
+      actor: 'sdk-smoke-media',
+    });
+    assert(mediaBinding.data.media?.id === uploadedImageId, 'bindMedia() returned wrong media id');
+    assert(mediaBinding.data.target?.type === 'page', 'bindMedia() did not normalize page target');
+    assert(mediaBinding.data.target?.id === fixture.pageId, 'bindMedia() returned wrong target page');
+    assert(mediaBinding.data.target?.bound === true, 'bindMedia() did not bind the media asset');
+    writeChecks.push('bindMedia:page');
+
+    const mediaUnbinding = await writeClient.bindMedia(uploadedImageId, {
+      ...mediaBindInput,
+      action: 'unbind',
+      requestId: 'sdk-media-unbind-page',
+    }, {
+      actor: 'sdk-smoke-media',
+    });
+    assert(mediaUnbinding.data.target?.bound === false, 'bindMedia() unbind action did not detach the media asset');
+    writeChecks.push('bindMedia:unbind');
+
+    const preparedTransforms = await writeClient.prepareMediaTransforms(uploadedImageId, {
+      widths: [16],
+      quality: 80,
+      sizes: '16px',
+      preparedBy: 'sdk-smoke',
+      requestId: 'sdk-media-transforms',
+    }, {
+      actor: 'sdk-smoke-media',
+    });
+    assert(preparedTransforms.data.media?.id === uploadedImageId, 'prepareMediaTransforms() returned wrong media id');
+    assert(Array.isArray(preparedTransforms.data.responsive?.variants), 'prepareMediaTransforms() missing responsive variants');
+    assert(preparedTransforms.data.responsive.variants.length > 0, 'prepareMediaTransforms() did not generate variants');
+    writeChecks.push('prepareMediaTransforms');
+
+    const replacedMedia = await writeClient.replaceMedia(uploadedImageId, {
+      file: new Blob([ONE_PIXEL_PNG], { type: 'image/png' }),
+      filename: `${mediaLifecycleSlug}-replacement.png`,
+      reason: 'SDK smoke media replacement',
+      replacedBy: 'sdk-smoke',
+      requestId: 'sdk-media-replace',
+    }, {
+      actor: 'sdk-smoke-media',
+    });
+    assert(replacedMedia.data.media?.id === uploadedImageId, 'replaceMedia() returned wrong media id');
+    assert(replacedMedia.data.media?.originalName === `${mediaLifecycleSlug}-replacement.png`, 'replaceMedia() did not update original filename');
+    assert(replacedMedia.data.replacement, 'replaceMedia() missing replacement metadata');
+    writeChecks.push('replaceMedia');
+
+    const mediaVersions = await writeClient.adminMediaVersions(uploadedImageId, {
+      limit: 5,
+      requestId: 'sdk-media-versions',
+    });
+    assert(mediaVersions.data.mediaId === uploadedImageId, 'adminMediaVersions() returned wrong media id after replacement');
+    assert(Array.isArray(mediaVersions.data.versions), 'adminMediaVersions() missing versions array after replacement');
+    assert(mediaVersions.data.versions.length > 0, 'adminMediaVersions() did not list retained media versions after replacement');
+    writeChecks.push('adminMediaVersions:lifecycle');
+
+    const uploadedPrivateDocument = await writeClient.uploadMedia({
+      file: new Blob([minimalPdf(`SDK private media ${mediaLifecycleSlug}`)], { type: 'application/pdf' }),
+      filename: `${mediaLifecycleSlug}.pdf`,
+      folderId: mediaFolderId,
+      visibility: 'private',
+      tags: ['sdk', 'smoke', 'document'],
+      metadata: {
+        purpose: 'sdk-private-document-smoke',
+      },
+      uploadedBy: 'sdk-smoke',
+      requestId: 'sdk-media-upload-private-document',
+    }, {
+      actor: 'sdk-smoke-media',
+    });
+    const privateDocumentId = uploadedPrivateDocument.data.media?.id;
+    assert(privateDocumentId, 'uploadMedia() missing private document id');
+    assert(uploadedPrivateDocument.data.media.type === 'document', 'uploadMedia() did not classify PDF as document media');
+    assert(uploadedPrivateDocument.data.media.visibility === 'private', 'uploadMedia() did not preserve private visibility');
+    writeChecks.push('uploadMedia:privateDocument');
+
+    const privateSignedUrlInput = buildBackyMediaSignedUrlInput({
+      download: true,
+      ttl: 300,
+      requestId: 'sdk-media-private-signed-url',
+    });
+    const privateSignedUrl = await writeClient.createMediaSignedUrl(privateDocumentId, privateSignedUrlInput, {
+      actor: 'sdk-smoke-media',
+    });
+    assert(privateSignedUrl.data.media?.id === privateDocumentId, 'createMediaSignedUrl() returned wrong media id');
+    assert(privateSignedUrl.data.disposition === 'attachment', 'createMediaSignedUrl() did not preserve attachment disposition');
+    assert(privateSignedUrl.data.signedUrl?.includes('token='), 'createMediaSignedUrl() missing signed token URL');
+    assert(privateSignedUrl.data.path?.includes('expiresAt='), 'createMediaSignedUrl() missing expiry path');
+    writeChecks.push('createMediaSignedUrl:privateDocument');
+
+    const deletedPrivateDocument = await writeClient.deleteAdminMedia(privateDocumentId, {
+      actor: 'sdk-smoke-media',
+      requestId: 'sdk-media-delete-private-document',
+    });
+    assert(deletedPrivateDocument.data.deleted === true, 'deleteAdminMedia() did not delete private document');
+    assert(deletedPrivateDocument.data.mediaId === privateDocumentId, 'deleteAdminMedia() returned wrong private document id');
+    writeChecks.push('deleteAdminMedia:privateDocument');
+
+    const deletedImage = await writeClient.deleteAdminMedia(uploadedImageId, {
+      actor: 'sdk-smoke-media',
+      requestId: 'sdk-media-delete-image',
+    });
+    assert(deletedImage.data.deleted === true, 'deleteAdminMedia() did not delete image');
+    assert(deletedImage.data.mediaId === uploadedImageId, 'deleteAdminMedia() returned wrong image id');
+    writeChecks.push('deleteAdminMedia:image');
+
+    const deletedMediaFolder = await writeClient.deleteMediaFolder(mediaFolderId, {
+      actor: 'sdk-smoke-media',
+      requestId: 'sdk-media-folder-delete',
+    });
+    assert(deletedMediaFolder.data.deleted === true, 'deleteMediaFolder() did not delete folder');
+    assert(deletedMediaFolder.data.folderId === mediaFolderId, 'deleteMediaFolder() returned wrong folder id');
+    writeChecks.push('deleteMediaFolder');
 
     const liveManagedPost = await writeClient.liveManagedBlogPost(fixture.postId, {
       actor: 'sdk-smoke-live-editor',
