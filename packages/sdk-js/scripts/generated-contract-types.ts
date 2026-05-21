@@ -90,9 +90,15 @@ import type {
   BackyAdminMediaFolderResponse,
   BackyAdminMediaFoldersResponse,
   BackyAdminMediaListResponse,
+  BackyAdminMediaProviderAnalyticsResponse,
   BackyAdminMediaResponse,
+  BackyAdminMediaTransformsResponse,
   BackyAdminMediaUploadInput,
   BackyAdminMediaUpdateInput,
+  BackyAdminMediaVersion,
+  BackyAdminMediaVersionDeleteResponse,
+  BackyAdminMediaVersionRestoreResponse,
+  BackyAdminMediaVersionsResponse,
   BackyAdminPageDeleteResponse,
   BackyAdminPagePreviewResponse,
   BackyAdminPageReadinessResponse,
@@ -1161,6 +1167,36 @@ type DeleteMediaFolderMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["deleteMediaFolder"]>,
     BackyAdminMediaFolderDeleteResponse
+  >
+>;
+type AdminMediaVersionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminMediaVersions"]>,
+    BackyAdminMediaVersionsResponse
+  >
+>;
+type RestoreMediaVersionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["restoreMediaVersion"]>,
+    BackyAdminMediaVersionRestoreResponse
+  >
+>;
+type DeleteMediaVersionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteMediaVersion"]>,
+    BackyAdminMediaVersionDeleteResponse
+  >
+>;
+type PrepareMediaTransformsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["prepareMediaTransforms"]>,
+    BackyAdminMediaTransformsResponse
+  >
+>;
+type IngestMediaProviderAnalyticsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["ingestMediaProviderAnalytics"]>,
+    BackyAdminMediaProviderAnalyticsResponse
   >
 >;
 type InteractiveRuntimeEventInputBuilderReturnsContract = Assert<
@@ -6955,6 +6991,120 @@ const sdkAdminMediaFolderDeleteEnvelope = {
     folderId: "folder_brand",
   },
 } satisfies BackyAdminMediaFolderDeleteResponse;
+
+const sdkAdminMediaVersion = {
+  id: "version_hero_original",
+  filename: "hero-original.webp",
+  originalName: "Hero original",
+  mimeType: "image/webp",
+  sizeBytes: 120000,
+  type: "image",
+  url: "/media/hero-original.webp",
+  thumbnailUrl: "/media/hero-original-thumb.webp",
+  storagePath: "sites/site_demo/media/hero-original.webp",
+  storageProvider: "supabase",
+  replacedAt: "2026-05-20T00:00:00.000Z",
+  replacedBy: "designer@example.com",
+  reason: "Updated hero crop",
+} satisfies BackyAdminMediaVersion;
+
+const sdkAdminMediaVersionsEnvelope = {
+  success: true,
+  requestId: "req_admin_media_versions",
+  data: {
+    mediaId: "media_hero",
+    source: "database",
+    versions: [sdkAdminMediaVersion],
+    pagination: {
+      total: 1,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminMediaVersionsResponse;
+
+const sdkAdminMediaVersionRestoreEnvelope = {
+  success: true,
+  requestId: "req_admin_media_version_restore",
+  data: {
+    restored: true,
+    mediaId: "media_hero",
+    versionId: "version_hero_original",
+    source: "database",
+    media: mediaAsset,
+    restoredVersion: sdkAdminMediaVersion,
+    retainedVersion: {
+      ...sdkAdminMediaVersion,
+      id: "version_hero_retained",
+    },
+    cacheInvalidation: {
+      scope: "media",
+      entityId: "media_hero",
+    },
+  },
+} satisfies BackyAdminMediaVersionRestoreResponse;
+
+const sdkAdminMediaVersionDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_media_version_delete",
+  data: {
+    deleted: true,
+    mediaId: "media_hero",
+    versionId: "version_hero_original",
+    source: "database",
+    version: sdkAdminMediaVersion,
+    media: mediaAsset,
+    cacheInvalidation: {
+      scope: "media",
+      entityId: "media_hero",
+    },
+  },
+} satisfies BackyAdminMediaVersionDeleteResponse;
+
+const sdkAdminMediaTransformsEnvelope = {
+  success: true,
+  requestId: "req_admin_media_transforms",
+  data: {
+    media: mediaAsset,
+    responsive: mediaAsset.responsive,
+    quota: {
+      limitBytes: 1_000_000,
+      usedBytes: 164_000,
+      remainingBytes: 836_000,
+    },
+    cacheInvalidation: {
+      scope: "media",
+      entityId: "media_hero",
+    },
+  },
+} satisfies BackyAdminMediaTransformsResponse;
+
+const sdkAdminMediaProviderAnalyticsEnvelope = {
+  success: true,
+  requestId: "req_admin_media_provider_analytics",
+  data: {
+    source: "cloudfront",
+    reportingWindow: "2026-05",
+    mergeMode: "replace",
+    matchedCount: 1,
+    unmatchedCount: 0,
+    matched: [
+      {
+        mediaId: "media_hero",
+        matchedBy: "mediaId",
+        totalRequests: 1200,
+        bytesServed: 98400000,
+        conversions: 8,
+        conversionValue: 499,
+      },
+    ],
+    unmatched: [],
+    cacheInvalidation: {
+      scope: "media",
+    },
+  },
+} satisfies BackyAdminMediaProviderAnalyticsResponse;
 
 const sdkMediaBindingInput = buildBackyMediaBindingInput({
   target: {

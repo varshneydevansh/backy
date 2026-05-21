@@ -273,6 +273,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Stores the manifest under `media.metadata.generatedTransforms`, including variant URLs, storage paths, byte counts, format, storage provider, and preparation metadata.
   - Generated transform bytes count against the site media quota; replacing or deleting an asset removes stale generated variant files.
   - Emits `media.transforms.prepare` audit logs, and public media list/detail responses prefer the generated manifest while `/transform` remains available as an on-demand optimizer fallback.
+  - The JS SDK exposes this workflow as `prepareMediaTransforms(mediaId, { widths, quality, sizes, preparedBy })` for custom media consoles that need precomputed responsive assets without invoking admin UI code.
 - `POST /api/admin/sites/:siteId/media`
   - Enforces a 50 MB per-file limit and a per-site quota configured by `BACKY_SITE_MEDIA_QUOTA_BYTES` with a 500 MB default.
   - Runs static upload safety checks before storage, including MIME/category validation and active-content SVG rejection; clean uploads persist `metadata.safetyScan`.
@@ -571,6 +572,16 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Accepts multipart `file`, optional `replacedBy`, and optional `reason`.
   - Requires the replacement to keep the same media type, passes the same static upload safety checks as new uploads, writes the new file through the active `@backy/storage` adapter, stores the prior file under `metadata.replacementVersions`, returns updated quota metadata, and emits a `media.replace` admin audit log.
 
+- `GET /api/admin/sites/:siteId/media/:mediaId/versions`
+  - Lists retained replacement versions for a central media asset, using repository-backed version rows in database mode and metadata-backed replacement history in demo mode.
+
+- `POST /api/admin/sites/:siteId/media/:mediaId/versions/:versionId`
+  - Restores a retained media version, keeps the current file as a new retained version, clears generated transforms for the restored asset, emits `media.version.restore`, dispatches site webhooks, and invalidates media caches.
+
+- `DELETE /api/admin/sites/:siteId/media/:mediaId/versions/:versionId`
+  - Deletes a retained version, removes stored version bytes when storage metadata is available, emits `media.version.delete`, dispatches site webhooks, and invalidates media caches.
+  - The JS SDK exposes retained-version reads and mutations through `adminMediaVersions()`, `restoreMediaVersion()`, and `deleteMediaVersion()`, preserving the same per-call admin-session/API-key/bearer auth options as live management.
+
 - `DELETE /api/admin/sites/:siteId/media/:mediaId`
   - Current implementation deletes the catalog record and removes local uploaded files through the storage adapter when present.
 
@@ -580,6 +591,12 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - The SDK exports `buildBackyMediaBindingInput()` and `bindMedia()` so authenticated custom editors can normalize target aliases such as `target.type`, `target.id`, `pageId`, `postId`, `blogId`, `usage`, `context`, `actor`, and `editor` into this audited admin binding payload without importing Backy's admin UI.
   - Page/post create, update, rollback, and delete paths also sync `pageIds`/`postIds` from saved content `mediaId`/`assetId` references and featured media.
   - Media create/update/delete/replace writes emit admin audit logs with entity `media`, request id correlation, before/after snapshots where applicable, and non-secret storage metadata for traceability.
+
+- `POST /api/admin/sites/:siteId/media/provider-analytics`
+  - Ingests CDN/storage/provider delivery analytics by media id, storage path, or URL using `{ source?, reportingWindow?, mergeMode?: "replace"|"increment", entries: [...] }`.
+  - Each entry can include total requests, bytes served, conversions, conversion value, currency, attribution window, and last-delivered timestamp.
+  - Matched media records store normalized `metadata.providerDelivery`; unmatched rows are returned for operator reconciliation.
+  - The JS SDK exposes provider analytics ingestion as `ingestMediaProviderAnalytics()` so custom dashboards can attach delivery evidence to central assets without direct repository access.
 
 ### 3.4 Reusable sections/templates
 

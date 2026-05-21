@@ -1432,6 +1432,12 @@ if (firstAdminReusableSectionId) {
 const adminMedia = await privateClient.adminMedia({ limit: 5 });
 assert(Array.isArray(adminMedia.data.media), 'adminMedia() missing media array');
 assert(adminMedia.data.quota, 'adminMedia() missing quota payload');
+const firstAdminMediaId = adminMedia.data.media[0]?.id;
+if (firstAdminMediaId) {
+  const adminMediaVersions = await privateClient.adminMediaVersions(firstAdminMediaId, { limit: 5 });
+  assert(Array.isArray(adminMediaVersions.data.versions), 'adminMediaVersions() missing versions array');
+  assert(adminMediaVersions.data.mediaId === firstAdminMediaId, 'adminMediaVersions() returned wrong media id');
+}
 const adminMediaFolders = await privateClient.adminMediaFolders();
 assert(Array.isArray(adminMediaFolders.data.folders), 'adminMediaFolders() missing folders array');
 

@@ -4385,6 +4385,148 @@ export type BackyAdminMediaFolderDeleteResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export interface BackyAdminMediaVersion {
+  id?: string;
+  filename?: string;
+  originalName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  type?: BackyMediaAsset["type"] | string;
+  url?: string;
+  thumbnailUrl?: string | null;
+  storagePath?: string | null;
+  storageProvider?: string | null;
+  createdAt?: string;
+  replacedAt?: string;
+  replacedBy?: string | null;
+  reason?: string | null;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminMediaVersionsOptions
+  extends BackyLiveManagementRequestOptions,
+    BackyListOptions {}
+
+export type BackyAdminMediaVersionsResponse = BackyEnvelope<
+  {
+    mediaId: string;
+    source: "database" | "metadata" | string;
+    versions: BackyAdminMediaVersion[];
+    pagination: BackyPagination;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminMediaVersionRestoreInput {
+  restoredBy?: string;
+  reason?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminMediaVersionRestoreResponse = BackyEnvelope<
+  {
+    restored: boolean;
+    mediaId: string;
+    versionId: string;
+    source: "database" | "metadata" | string;
+    media: BackyMediaAsset;
+    restoredVersion: BackyAdminMediaVersion;
+    retainedVersion?: BackyAdminMediaVersion;
+    cacheInvalidation?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminMediaVersionDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    mediaId: string;
+    versionId: string;
+    source: "database" | "metadata" | string;
+    version: BackyAdminMediaVersion;
+    media: BackyMediaAsset;
+    cacheInvalidation?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminMediaTransformInput {
+  widths?: number[];
+  quality?: number;
+  sizes?: string;
+  preparedBy?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminMediaTransformsResponse = BackyEnvelope<
+  {
+    media: BackyMediaAsset;
+    responsive: Record<string, unknown>;
+    quota?: BackyMediaQuota;
+    cacheInvalidation?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminMediaProviderAnalyticsEntry {
+  mediaId?: string;
+  storagePath?: string;
+  url?: string;
+  totalRequests?: number;
+  requests?: number;
+  bytesServed?: number;
+  bytes?: number;
+  conversions?: number;
+  conversionCount?: number;
+  conversionValue?: number;
+  revenue?: number;
+  value?: number;
+  source?: string;
+  reportingWindow?: string;
+  currency?: string;
+  attributionWindow?: string;
+  lastDeliveredAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminMediaProviderAnalyticsInput {
+  source?: string;
+  reportingWindow?: string;
+  mergeMode?: "replace" | "increment";
+  currency?: string;
+  attributionWindow?: string;
+  entries: BackyAdminMediaProviderAnalyticsEntry[];
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminMediaProviderAnalyticsMatch {
+  mediaId: string;
+  matchedBy: string;
+  totalRequests: number;
+  bytesServed: number;
+  conversions: number;
+  conversionValue: number;
+  [key: string]: unknown;
+}
+
+export type BackyAdminMediaProviderAnalyticsResponse = BackyEnvelope<
+  {
+    source: string;
+    reportingWindow: string;
+    mergeMode: "replace" | "increment" | string;
+    matchedCount: number;
+    unmatchedCount: number;
+    matched: BackyAdminMediaProviderAnalyticsMatch[];
+    unmatched: BackyAdminMediaProviderAnalyticsEntry[];
+    cacheInvalidation?: Record<string, unknown>;
+    [key: string]: unknown;
+  }
+>;
+
 export type BackyMediaBindingTargetType = "page" | "post";
 export type BackyMediaBindingAction = "bind" | "unbind";
 
@@ -9321,6 +9463,97 @@ export class BackyClient {
       {
         method: "DELETE",
         requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminMediaVersions(
+    mediaId: string,
+    options: BackyAdminMediaVersionsOptions = {},
+  ): Promise<BackyAdminMediaVersionsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = normalizeListQuery({
+      limit: rest.limit,
+      offset: rest.offset,
+    });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/versions`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  restoreMediaVersion(
+    mediaId: string,
+    versionId: string,
+    input: BackyAdminMediaVersionRestoreInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaVersionRestoreResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/versions/${encodeURIComponent(versionId)}`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteMediaVersion(
+    mediaId: string,
+    versionId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaVersionDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/versions/${encodeURIComponent(versionId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  prepareMediaTransforms(
+    mediaId: string,
+    input: BackyAdminMediaTransformInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaTransformsResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/transforms`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  ingestMediaProviderAnalytics(
+    input: BackyAdminMediaProviderAnalyticsInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminMediaProviderAnalyticsResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/provider-analytics`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },
