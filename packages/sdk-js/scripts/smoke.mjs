@@ -1345,6 +1345,10 @@ if (firstAdminTeamId) {
   assert(Array.isArray(teamMembers.data.members), 'adminTeamMembers() missing members array');
 }
 
+const adminAuditLogs = await privateClient.adminAuditLogs({ limit: 5 });
+assert(Array.isArray(adminAuditLogs.data.logs), 'adminAuditLogs() missing logs array');
+assert(typeof adminAuditLogs.data.count === 'number', 'adminAuditLogs() missing count');
+
 const adminPages = await privateClient.adminPages({ limit: 5 });
 assert(Array.isArray(adminPages.data.pages), 'adminPages() missing pages array');
 const firstAdminPageId = adminPages.data.pages[0]?.id;

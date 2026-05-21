@@ -777,9 +777,10 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - `GET /api/admin/audit-logs`
   - Filters: `siteId`, `teamId`, `actorId`, `entity`, `entityId`, `action`, `requestId`, `limit`, and `offset`.
   - Returns `{ success, requestId, data: { logs, count, pagination } }`; legacy top-level `logs/count/pagination` remain for compatibility.
-  - Supported entity filters include site, page, post, blogCategory, blogTag, collection, collectionRecord, media, mediaFolder, form, formSubmission, reusableSection, contact, comment, user, settings, auditLog, and cacheInvalidation.
+  - Supported entity filters include site, page, post, blogCategory, blogTag, collection, collectionRecord, media, mediaFolder, form, formSubmission, reusableSection, interactiveComponent, contact, comment, team, teamMember, user, settings, auditLog, and cacheInvalidation.
   - Current local runtime persists audit logs in `data/backy/admin-content.json` with a bounded recent-log history; database mode uses the shared `auditLogs` repository backed by the activity log table.
   - Settings delivery/API-key changes emit `settings.update` and `settings.api_keys.regenerate` audit events with redacted key snapshots. Media create/update/delete emits `create`, `update`, and `delete` audit events for uploaded assets. Reusable-section create/update/delete/restore/import/instance-propagation emits `reusableSection.*` audit events with request-id correlation.
+  - The JS SDK exposes `adminAuditLogs({ siteId, teamId, actorId, entity, entityId, action, auditRequestId, limit, offset })` for custom admin consoles that need the same activity feed as the built-in Site, Media, Users, Teams, and Settings panels. `auditRequestId` maps to the API's `requestId` filter while the SDK method's `requestId` option remains the transport request id header.
 
 ### 3.10 Users and sessions
 

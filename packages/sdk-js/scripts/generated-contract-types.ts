@@ -5,6 +5,8 @@ import type {
   BackyMediaFolder,
   BackyMediaFolderList,
   BackyMediaListOptions,
+  BackyAdminAuditLog,
+  BackyAdminAuditLogsResponse,
   BackyManifestBlogAuthor,
   BackyManifestBlogCategory,
   BackyManifestBlogModule,
@@ -574,6 +576,12 @@ type RemoveAdminTeamMemberMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["removeAdminTeamMember"]>,
     BackyAdminTeamMemberRemoveResponse
+  >
+>;
+type AdminAuditLogsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminAuditLogs"]>,
+    BackyAdminAuditLogsResponse
   >
 >;
 type AdminPagesMethodReturnsContract = Assert<
@@ -2032,6 +2040,39 @@ const sdkAdminTeamMemberRemoveEnvelope = {
     removed: true,
   },
 } satisfies BackyAdminTeamMemberRemoveResponse;
+
+const sdkAdminAuditLog = {
+  id: "audit_team_create",
+  siteId: null,
+  teamId: sdkAdminTeam.id,
+  actorId: "user_owner",
+  entity: "team",
+  entityId: sdkAdminTeam.id,
+  action: "create",
+  after: {
+    team: sdkAdminTeam.name,
+  },
+  metadata: {
+    requestSource: "sdk-contract",
+  },
+  requestId: "req_admin_team",
+  createdAt: "2026-05-16T00:00:00.000Z",
+} satisfies BackyAdminAuditLog;
+
+const sdkAdminAuditLogsEnvelope = {
+  success: true,
+  requestId: "req_admin_audit_logs",
+  data: {
+    logs: [sdkAdminAuditLog],
+    count: 1,
+    pagination: {
+      total: 1,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminAuditLogsResponse;
 
 const sdkAdminPage = {
   id: "page_home",

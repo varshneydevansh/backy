@@ -6740,6 +6740,66 @@ export type BackyAdminTeamMemberRemoveResponse = BackyEnvelope<
   }
 >;
 
+export type BackyAdminAuditEntity =
+  | "site"
+  | "page"
+  | "post"
+  | "blogCategory"
+  | "blogTag"
+  | "collection"
+  | "collectionRecord"
+  | "media"
+  | "mediaFolder"
+  | "form"
+  | "formSubmission"
+  | "reusableSection"
+  | "interactiveComponent"
+  | "contact"
+  | "comment"
+  | "team"
+  | "teamMember"
+  | "user"
+  | "settings"
+  | "auditLog"
+  | "cacheInvalidation";
+
+export interface BackyAdminAuditLog {
+  id: string;
+  siteId?: string | null;
+  teamId?: string | null;
+  actorId?: string | null;
+  entity: BackyAdminAuditEntity;
+  entityId: string;
+  action: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  requestId?: string;
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminAuditLogListOptions
+  extends BackyLiveManagementRequestOptions,
+    BackyListOptions {
+  siteId?: string;
+  teamId?: string;
+  actorId?: string;
+  entity?: BackyAdminAuditEntity;
+  entityId?: string;
+  action?: string;
+  auditRequestId?: string;
+}
+
+export type BackyAdminAuditLogsResponse = BackyEnvelope<
+  {
+    logs: BackyAdminAuditLog[];
+    count: number;
+    pagination?: BackyPagination;
+    [key: string]: unknown;
+  }
+>;
+
 export interface BackyFrontendLaunchReadiness {
   schemaVersion: "backy.frontend-launch-readiness.v1";
   status: "ready" | "attention" | "blocked";
@@ -7573,6 +7633,29 @@ export class BackyClient {
         credentials: options.credentials,
       },
     );
+  }
+
+  adminAuditLogs(
+    options: BackyAdminAuditLogListOptions = {},
+  ): Promise<BackyAdminAuditLogsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request("/api/admin/audit-logs", {
+      query: {
+        siteId,
+        teamId: rest.teamId,
+        actorId: rest.actorId,
+        entity: rest.entity,
+        entityId: rest.entityId,
+        action: rest.action,
+        requestId: rest.auditRequestId,
+        limit: normalizeListLimit(rest.limit),
+        offset: normalizeListOffset(rest.offset),
+      },
+      requestId,
+      headers,
+      credentials,
+    });
   }
 
   sites(): Promise<
