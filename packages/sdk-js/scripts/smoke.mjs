@@ -1348,6 +1348,48 @@ assert(typeof privateClient.runAdminSettingsStorageCredentialRotationProbe === '
 assert(typeof privateClient.runAdminSettingsStorageSecretManager === 'function', 'runAdminSettingsStorageSecretManager() missing SDK method');
 assert(typeof privateClient.testAdminSettingsNotificationWebhook === 'function', 'testAdminSettingsNotificationWebhook() missing SDK method');
 
+const issuedSettingsApiKey = await privateClient.issueAdminSettingsApiKey({
+  label: `SDK Smoke Service Key ${Date.now()}`,
+  requestId: 'sdk-settings-service-key-issue',
+});
+const issuedServiceKey = issuedSettingsApiKey.data.issuedKey;
+assert(issuedServiceKey?.id, 'issueAdminSettingsApiKey() missing issued key id');
+assert(issuedServiceKey?.label?.startsWith('SDK Smoke Service Key'), 'issueAdminSettingsApiKey() did not preserve label');
+assert(typeof issuedServiceKey?.adminApiKey === 'string' && issuedServiceKey.adminApiKey.startsWith('sk_srv_'), 'issueAdminSettingsApiKey() missing one-time raw service key');
+assert(issuedServiceKey.keyFingerprint, 'issueAdminSettingsApiKey() missing key fingerprint');
+assert(!JSON.stringify(issuedSettingsApiKey.data.settings || {}).includes(issuedServiceKey.adminApiKey), 'issueAdminSettingsApiKey() leaked raw service key into settings payload');
+assert(!JSON.stringify(issuedSettingsApiKey.data.settings || {}).includes('"keyHash"'), 'issueAdminSettingsApiKey() leaked service key hash into settings payload');
+
+const serviceKeyClient = createBackyClient({
+  baseUrl,
+  siteId: client.getSiteId(),
+  requestIdFactory: () => 'sdk-settings-service-key-request',
+  defaultHeaders: {
+    'x-backy-admin-key': issuedServiceKey.adminApiKey,
+  },
+});
+const serviceKeySettings = await serviceKeyClient.adminSettings();
+assert(serviceKeySettings.data.settings?.schemaVersion === 'backy.admin-settings.v1', 'issued service key could not read settings through SDK');
+assert(serviceKeySettings.data.settings?.apiKeys?.adminApiKey === '', 'issued service key should not expose owner admin key');
+assert(!JSON.stringify(serviceKeySettings.data.settings || {}).includes(issuedServiceKey.adminApiKey), 'issued service key leaked raw key on authenticated read');
+
+const revokedSettingsApiKey = await privateClient.revokeAdminSettingsApiKey({
+  keyId: issuedServiceKey.id,
+  requestId: 'sdk-settings-service-key-revoke',
+});
+const revokedServiceKeyGrant = revokedSettingsApiKey.data.settings?.auth?.apiKeyServiceKeys?.find?.((grant) => grant.id === issuedServiceKey.id);
+assert(revokedServiceKeyGrant?.status === 'revoked', 'revokeAdminSettingsApiKey() did not mark service key revoked');
+assert(revokedServiceKeyGrant?.revokedAt, 'revokeAdminSettingsApiKey() missing revoked timestamp');
+assert(!JSON.stringify(revokedSettingsApiKey.data.settings || {}).includes(issuedServiceKey.adminApiKey), 'revokeAdminSettingsApiKey() leaked raw service key into settings payload');
+assert(!JSON.stringify(revokedSettingsApiKey.data.settings || {}).includes('"keyHash"'), 'revokeAdminSettingsApiKey() leaked service key hash into settings payload');
+let revokedServiceKeyRejected = false;
+try {
+  await serviceKeyClient.adminSettings();
+} catch (error) {
+  revokedServiceKeyRejected = error?.status === 401 || error?.code === 'UNAUTHORIZED';
+}
+assert(revokedServiceKeyRejected, 'revoked service key should stop authenticating through SDK');
+
 const settingsInfrastructure = await privateClient.validateAdminSettingsInfrastructure({
   deliveryMode: adminSettings.data.settings?.deliveryMode || 'managed-hosting',
   integrations: adminSettings.data.settings?.integrations || {},
@@ -2653,6 +2695,8 @@ console.log(JSON.stringify({
     'commentAnalytics',
     'retryCommentDelivery',
     'events',
+    'issueAdminSettingsApiKey',
+    'revokeAdminSettingsApiKey',
     'validateAdminSettingsInfrastructure',
     'runAdminSettingsStorageProvisioningProbe',
     'runAdminSettingsStorageCredentialRotationProbe',
