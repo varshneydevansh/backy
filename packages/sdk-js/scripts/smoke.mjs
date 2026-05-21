@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { createServer } from 'node:http';
+
 import {
   buildBackyCommentInput,
   buildBackyCommentReportInput,
@@ -33,6 +35,47 @@ const assert = (condition, message) => {
     throw new Error(message);
   }
 };
+
+async function startSmokeWebhookReceiver(pathname) {
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const body = Buffer.concat(chunks).toString('utf8');
+    let json = null;
+    try {
+      json = body ? JSON.parse(body) : null;
+    } catch {
+      json = null;
+    }
+
+    requests.push({
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      body,
+      json,
+    });
+    response.writeHead(204).end();
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  assert(address && typeof address === 'object' && address.port, 'smoke webhook receiver did not bind a local port');
+
+  return {
+    requests,
+    url: `http://127.0.0.1:${address.port}${pathname}`,
+    close: () => new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    }),
+  };
+}
 
 function endpointPath(endpoint) {
   if (typeof endpoint !== 'string' || endpoint.includes('#')) {
@@ -2150,6 +2193,32 @@ if (runWriteSmoke) {
     assert(promotedCustomer.data.collection?.slug === 'customers', 'promoteFormContactToCustomer() did not use the customer collection');
     assert(promotedCustomer.data.record?.values?.email === 'sdk-manual-contact@example.com', 'promoteFormContactToCustomer() did not create a customer email value');
     writeChecks.push('promoteFormContactToCustomer');
+
+    const contactSyncReceiver = await startSmokeWebhookReceiver('/sdk-contact-sync');
+    try {
+      const syncedContacts = await writeClient.syncFormContacts('sdk-smoke-form', {
+        contactIds: [manualContactId],
+        targetUrl: contactSyncReceiver.url,
+        includeSourceValues: false,
+        reason: 'sdk-smoke-contact-sync',
+        requestId: 'sdk-contact-sync',
+      });
+      assert(syncedContacts.data.delivery?.status === 'succeeded', 'syncFormContacts() did not report a successful delivery');
+      assert(syncedContacts.data.delivery?.statusCode === 204, 'syncFormContacts() returned the wrong webhook status code');
+      assert(syncedContacts.data.delivery?.count === 1, 'syncFormContacts() returned the wrong contact count');
+      assert(syncedContacts.data.delivery?.contactIds?.includes?.(manualContactId), 'syncFormContacts() missing synced contact id');
+      const syncRequest = contactSyncReceiver.requests[0];
+      assert(syncRequest?.method === 'POST', 'syncFormContacts() did not POST to the webhook receiver');
+      assert(syncRequest?.url === '/sdk-contact-sync', 'syncFormContacts() posted to the wrong webhook path');
+      assert(syncRequest?.headers?.['x-backy-contact-sync'] === 'true', 'syncFormContacts() missing contact sync header');
+      assert(syncRequest?.json?.kind === 'contact-sync', 'syncFormContacts() missing contact-sync payload kind');
+      assert(syncRequest?.json?.contactIds?.includes?.(manualContactId), 'syncFormContacts() payload missing contact id');
+      assert(syncRequest?.json?.contacts?.[0]?.id === manualContactId, 'syncFormContacts() payload missing contact detail');
+      assert(syncRequest?.json?.contacts?.[0]?.sourceValues === undefined, 'syncFormContacts() should omit sourceValues when includeSourceValues is false');
+      writeChecks.push('syncFormContacts');
+    } finally {
+      await contactSyncReceiver.close();
+    }
 
     const contactRetention = await writeClient.applyFormContactConsentRetention('sdk-smoke-form', {
       contactIds: [manualContactId],
