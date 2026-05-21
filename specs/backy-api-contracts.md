@@ -100,11 +100,13 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Admin-only usage inventory for registry-backed `interactiveFigure` and `codeComponent` versions before delete, rollback, review approval, or migration.
   - Scans draft, scheduled, published, and archived page/blog content for matching `componentKey@version` records, including nested grouped elements.
   - Returns target type/id/title/slug/status, element id/type/path, render mode, fallback presence, updated timestamp, and scanned page/post counts.
+  - The JS SDK exposes the authenticated admin registry surface through `adminInteractiveComponents()`, `createAdminInteractiveComponent()`, `adminInteractiveComponent()`, `updateAdminInteractiveComponent()`, `deleteAdminInteractiveComponent()`, and `adminInteractiveComponentUsage()` so external builder shells can manage component definitions and inspect usage before destructive or review operations.
 
 - `GET /api/admin/sites/:siteId/interactive-components/:componentKey/:version/export`
   - Admin-only portable export package for moving a reviewed component version between Backy sites or environments.
   - Returns `backy.interactive-component-export.v1` with component definition, runtime/sandbox URLs, bundle/integrity metadata, dependency metadata, import target, conflict behavior, and a usage-inventory endpoint link.
   - `POST /api/admin/sites/:siteId/interactive-components` also accepts `{ exportPackage }` and imports the package as a disabled draft, optionally overriding `componentKey`, `version`, or `displayName`, while preserving source/import metadata under `dependencyMetadata.importExport`.
+  - The JS SDK wraps this as `exportAdminInteractiveComponent()`, returning the typed component plus portable export package for custom migration tooling.
 
 - `POST /api/admin/sites/:siteId/interactive-components/:componentKey/:version/bundle`
   - Admin-only signed bundle storage for custom interactive component versions.
@@ -125,6 +127,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Submit keeps the component disabled and moves it to `in_review`; approve moves it to `approved`/`active`; reject moves it to `rejected`/`disabled`.
   - Create/update/review approval validates runtime URLs, iframe sandbox flags, allowed permissions, signed integrity metadata for custom code, dependency names/versions, blocked runtime modules, and lifecycle script fields before a sandbox component can become active.
   - Review actions emit `interactiveComponent.review.*` audit rows and settings cache invalidations.
+  - The JS SDK exposes the submit/approve/reject workflow as `reviewAdminInteractiveComponent()` with the same admin-session/API-key/bearer auth options as live management.
 
 - `GET /api/sites/:siteId/openapi`
   - Site-scoped OpenAPI 3.1 document for public frontend integrations.

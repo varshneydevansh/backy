@@ -1309,6 +1309,27 @@ assert(adminTemplates.data.registry?.schemaVersion === 'backy.template-registry.
 assert(Array.isArray(adminTemplates.data.templates), 'adminTemplates() missing templates array');
 assert(adminTemplates.data.registry?.cloneField === 'frontendDesignTemplateId', 'adminTemplates() missing clone field');
 
+const adminInteractiveComponents = await privateClient.adminInteractiveComponents({ status: 'all' });
+assert(Array.isArray(adminInteractiveComponents.data.components), 'adminInteractiveComponents() missing components array');
+const firstAdminInteractiveComponent = adminInteractiveComponents.data.components[0];
+if (firstAdminInteractiveComponent?.componentKey && firstAdminInteractiveComponent?.version) {
+  const adminInteractiveComponent = await privateClient.adminInteractiveComponent(
+    firstAdminInteractiveComponent.componentKey,
+    firstAdminInteractiveComponent.version,
+  );
+  assert(adminInteractiveComponent.data.component?.componentKey === firstAdminInteractiveComponent.componentKey, 'adminInteractiveComponent() returned wrong component');
+  const adminInteractiveComponentUsage = await privateClient.adminInteractiveComponentUsage(
+    firstAdminInteractiveComponent.componentKey,
+    firstAdminInteractiveComponent.version,
+  );
+  assert(Array.isArray(adminInteractiveComponentUsage.data.usage), 'adminInteractiveComponentUsage() missing usage array');
+  const adminInteractiveComponentExport = await privateClient.exportAdminInteractiveComponent(
+    firstAdminInteractiveComponent.componentKey,
+    firstAdminInteractiveComponent.version,
+  );
+  assert(adminInteractiveComponentExport.data.exportPackage?.schemaVersion === 'backy.interactive-component-export.v1', 'exportAdminInteractiveComponent() missing export package schema');
+}
+
 const adminNavigation = await privateClient.adminNavigation();
 assert(Array.isArray(adminNavigation.data.navigation?.settings?.primary), 'adminNavigation() missing editable primary settings');
 assert(Array.isArray(adminNavigation.data.navigation?.resolved?.primary), 'adminNavigation() missing resolved public primary navigation');

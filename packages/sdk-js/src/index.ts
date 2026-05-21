@@ -2301,6 +2301,206 @@ export interface BackyInteractiveComponentRegistry {
   [key: string]: unknown;
 }
 
+export type BackyAdminInteractiveComponentStatus =
+  | "active"
+  | "disabled"
+  | "archived"
+  | "all";
+
+export type BackyAdminInteractiveComponentReviewStatus =
+  | "draft"
+  | "in_review"
+  | "approved"
+  | "rejected"
+  | "all";
+
+export type BackyAdminInteractiveComponentType =
+  | "interactiveFigure"
+  | "codeComponent"
+  | "all";
+
+export interface BackyAdminInteractiveComponent
+  extends BackyInteractiveComponentRegistryEntry {
+  id: string;
+  siteId?: string;
+  reviewStatus:
+    | "draft"
+    | "in_review"
+    | "approved"
+    | "rejected"
+    | string;
+  ownerId?: string | null;
+  dependencyMetadata?: Record<string, unknown>;
+  changelog?: string | null;
+  rollbackFromVersion?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackyAdminInteractiveComponentListOptions
+  extends BackyLiveManagementRequestOptions {
+  status?: BackyAdminInteractiveComponentStatus | string;
+  reviewStatus?: BackyAdminInteractiveComponentReviewStatus | string;
+  type?: BackyAdminInteractiveComponentType | string;
+  search?: string;
+}
+
+export type BackyAdminInteractiveComponentsResponse = BackyEnvelope<
+  {
+    components: BackyAdminInteractiveComponent[];
+    pagination: BackyPagination;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminInteractiveComponentResponse = BackyEnvelope<
+  {
+    component: BackyAdminInteractiveComponent;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminInteractiveComponentInput {
+  componentKey?: string;
+  version?: string;
+  displayName?: string;
+  type?: "interactiveFigure" | "codeComponent" | string;
+  status?: "active" | "disabled" | "archived" | string;
+  reviewStatus?:
+    | "draft"
+    | "in_review"
+    | "approved"
+    | "rejected"
+    | string;
+  renderMode?:
+    | "trusted-component"
+    | "sandbox-iframe"
+    | "static-fallback"
+    | string;
+  source?: "registry" | "custom" | string;
+  description?: string;
+  allowedDataScopes?: string[];
+  requiredFields?: string[];
+  controls?: Array<Record<string, unknown>>;
+  fallback?: Record<string, unknown>;
+  security?: Record<string, unknown>;
+  integrity?: Record<string, unknown>;
+  runtime?: Record<string, unknown>;
+  ownerId?: string | null;
+  dependencyMetadata?: Record<string, unknown>;
+  dependencyPolicy?: Record<string, unknown>;
+  compatibility?: Record<string, unknown>;
+  dataBindingPresets?: Array<Record<string, unknown>>;
+  exportPackage?: Record<string, unknown>;
+  changelog?: string | null;
+  rollbackFromVersion?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminInteractiveComponentUpdateInput =
+  Omit<BackyAdminInteractiveComponentInput, "componentKey" | "version"> & {
+    componentKey?: never;
+    version?: never;
+  };
+
+export type BackyAdminInteractiveComponentDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    componentId: string;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminInteractiveComponentUsageRecord {
+  targetType: "page" | "post" | string;
+  targetId: string;
+  title: string;
+  slug: string;
+  status: string;
+  elementId: string | null;
+  elementType: string | null;
+  elementPath: string;
+  version: string | null;
+  renderMode: string | null;
+  fallbackConfigured: boolean;
+  updatedAt: string | null;
+  [key: string]: unknown;
+}
+
+export type BackyAdminInteractiveComponentUsageResponse = BackyEnvelope<
+  {
+    componentKey: string;
+    version: string | null;
+    usage: BackyAdminInteractiveComponentUsageRecord[];
+    summary: {
+      total: number;
+      pages: number;
+      posts: number;
+      scanned: {
+        pages: number;
+        posts: number;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminInteractiveComponentExportPackage {
+  schemaVersion: "backy.interactive-component-export.v1" | string;
+  component?: BackyAdminInteractiveComponent | Record<string, unknown>;
+  importTarget?: Record<string, unknown>;
+  conflictPolicy?: Record<string, unknown>;
+  usageInventoryEndpoint?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminInteractiveComponentExportResponse = BackyEnvelope<
+  {
+    component: BackyAdminInteractiveComponent;
+    exportPackage: BackyAdminInteractiveComponentExportPackage;
+    [key: string]: unknown;
+  }
+>;
+
+export type BackyAdminInteractiveComponentReviewAction =
+  | "submit"
+  | "approve"
+  | "reject";
+
+export interface BackyAdminInteractiveComponentReviewInput {
+  action: BackyAdminInteractiveComponentReviewAction;
+  reviewedBy?: string;
+  updatedBy?: string;
+  runtime?: Record<string, unknown>;
+  integrity?: Record<string, unknown>;
+  dependencyMetadata?: Record<string, unknown>;
+  notes?: string;
+  reviewNotes?: string;
+  checklist?: Record<string, unknown>;
+  changelog?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminInteractiveComponentReviewResponse = BackyEnvelope<
+  {
+    action: BackyAdminInteractiveComponentReviewAction;
+    component: BackyAdminInteractiveComponent;
+    [key: string]: unknown;
+  }
+>;
+
 export interface BackyCommerceOrderContract {
   schemaVersion: "backy.commerce-orders.v1";
   accepts: Record<string, unknown>;
@@ -7406,6 +7606,144 @@ export class BackyClient {
         requestId,
         headers,
         credentials,
+      },
+    );
+  }
+
+  adminInteractiveComponents(
+    options: BackyAdminInteractiveComponentListOptions = {},
+  ): Promise<BackyAdminInteractiveComponentsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/interactive-components`,
+      {
+        query: {
+          status: rest.status,
+          reviewStatus: rest.reviewStatus,
+          type: rest.type,
+          search: rest.search,
+        },
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  createAdminInteractiveComponent(
+    input: BackyAdminInteractiveComponentInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminInteractiveComponent(
+    componentKey: string,
+    version: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminInteractiveComponent(
+    componentKey: string,
+    version: string,
+    input: BackyAdminInteractiveComponentUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentResponse> {
+    const { requestId, ...body } = input;
+    const inputRequestId = typeof requestId === "string" ? requestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? inputRequestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminInteractiveComponent(
+    componentKey: string,
+    version: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminInteractiveComponentUsage(
+    componentKey: string,
+    version: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentUsageResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}/usage`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  exportAdminInteractiveComponent(
+    componentKey: string,
+    version: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentExportResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}/export`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  reviewAdminInteractiveComponent(
+    componentKey: string,
+    version: string,
+    input: BackyAdminInteractiveComponentReviewInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentReviewResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}/review`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }

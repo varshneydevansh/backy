@@ -8,6 +8,13 @@ import type {
   BackyAdminAuditLog,
   BackyAdminAuditLogsResponse,
   BackyAdminFrontendDesignResponse,
+  BackyAdminInteractiveComponent,
+  BackyAdminInteractiveComponentDeleteResponse,
+  BackyAdminInteractiveComponentExportResponse,
+  BackyAdminInteractiveComponentResponse,
+  BackyAdminInteractiveComponentReviewResponse,
+  BackyAdminInteractiveComponentUsageResponse,
+  BackyAdminInteractiveComponentsResponse,
   BackyManifestBlogAuthor,
   BackyManifestBlogCategory,
   BackyManifestBlogModule,
@@ -449,6 +456,54 @@ type AdminTemplatesMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["adminTemplates"]>,
     BackyAdminTemplateRegistryResponse
+  >
+>;
+type AdminInteractiveComponentsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminInteractiveComponents"]>,
+    BackyAdminInteractiveComponentsResponse
+  >
+>;
+type CreateAdminInteractiveComponentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminInteractiveComponent"]>,
+    BackyAdminInteractiveComponentResponse
+  >
+>;
+type AdminInteractiveComponentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminInteractiveComponent"]>,
+    BackyAdminInteractiveComponentResponse
+  >
+>;
+type UpdateAdminInteractiveComponentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminInteractiveComponent"]>,
+    BackyAdminInteractiveComponentResponse
+  >
+>;
+type DeleteAdminInteractiveComponentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminInteractiveComponent"]>,
+    BackyAdminInteractiveComponentDeleteResponse
+  >
+>;
+type AdminInteractiveComponentUsageMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminInteractiveComponentUsage"]>,
+    BackyAdminInteractiveComponentUsageResponse
+  >
+>;
+type ExportAdminInteractiveComponentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["exportAdminInteractiveComponent"]>,
+    BackyAdminInteractiveComponentExportResponse
+  >
+>;
+type ReviewAdminInteractiveComponentMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["reviewAdminInteractiveComponent"]>,
+    BackyAdminInteractiveComponentReviewResponse
   >
 >;
 type AdminNavigationMethodReturnsContract = Assert<
@@ -1659,6 +1714,140 @@ const sdkAdminTemplateRegistryEnvelope = {
     },
   },
 } satisfies BackyAdminTemplateRegistryResponse;
+
+const sdkAdminInteractiveComponent = {
+  id: "component_rounds",
+  siteId: "site_demo",
+  componentKey: "backy.figure.rounds",
+  displayName: "Communication Rounds",
+  type: "interactiveFigure",
+  status: "active",
+  reviewStatus: "approved",
+  version: "1.0.0",
+  renderMode: "trusted-component",
+  source: "registry",
+  description: "Step-through communication round diagram.",
+  allowedDataScopes: ["content"],
+  requiredFields: ["rounds"],
+  controls: [
+    {
+      key: "rounds",
+      label: "Rounds",
+      type: "number",
+    },
+  ],
+  fallback: {
+    required: true,
+    supported: ["image", "text"],
+  },
+  security: {
+    adminApiAccess: false,
+    parentDomAccess: false,
+    parentCookieAccess: false,
+    secretsInPayload: false,
+  },
+  integrity: {
+    signed: true,
+    signatureRequiredForCustomCode: true,
+  },
+  runtime: {
+    postMessageProtocol: "backy.interactive-component.v1",
+  },
+  dependencyMetadata: {
+    policy: "trusted-registry",
+  },
+  ownerId: null,
+  createdAt: "2026-05-21T00:00:00.000Z",
+  updatedAt: "2026-05-21T00:00:00.000Z",
+} satisfies BackyAdminInteractiveComponent;
+
+const sdkAdminInteractiveComponentsEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_components",
+  data: {
+    components: [sdkAdminInteractiveComponent],
+    pagination: {
+      total: 1,
+      limit: 100,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminInteractiveComponentsResponse;
+
+const sdkAdminInteractiveComponentEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component",
+  data: {
+    component: sdkAdminInteractiveComponent,
+  },
+} satisfies BackyAdminInteractiveComponentResponse;
+
+const sdkAdminInteractiveComponentDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component_delete",
+  data: {
+    deleted: true,
+    componentId: sdkAdminInteractiveComponent.id,
+  },
+} satisfies BackyAdminInteractiveComponentDeleteResponse;
+
+const sdkAdminInteractiveComponentUsageEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component_usage",
+  data: {
+    componentKey: sdkAdminInteractiveComponent.componentKey,
+    version: sdkAdminInteractiveComponent.version,
+    usage: [
+      {
+        targetType: "page",
+        targetId: "page_home",
+        title: "Home",
+        slug: "home",
+        status: "published",
+        elementId: "figure_rounds",
+        elementType: "interactiveFigure",
+        elementPath: "elements[0]",
+        version: "1.0.0",
+        renderMode: "trusted-component",
+        fallbackConfigured: true,
+        updatedAt: "2026-05-21T00:00:00.000Z",
+      },
+    ],
+    summary: {
+      total: 1,
+      pages: 1,
+      posts: 0,
+      scanned: {
+        pages: 3,
+        posts: 2,
+      },
+    },
+  },
+} satisfies BackyAdminInteractiveComponentUsageResponse;
+
+const sdkAdminInteractiveComponentExportEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component_export",
+  data: {
+    component: sdkAdminInteractiveComponent,
+    exportPackage: {
+      schemaVersion: "backy.interactive-component-export.v1",
+      component: sdkAdminInteractiveComponent,
+      usageInventoryEndpoint:
+        "/api/admin/sites/site_demo/interactive-components/backy.figure.rounds/1.0.0/usage",
+    },
+  },
+} satisfies BackyAdminInteractiveComponentExportResponse;
+
+const sdkAdminInteractiveComponentReviewEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component_review",
+  data: {
+    action: "approve",
+    component: sdkAdminInteractiveComponent,
+  },
+} satisfies BackyAdminInteractiveComponentReviewResponse;
 
 const sdkAdminSettings = {
   schemaVersion: "backy.admin-settings.v1",
