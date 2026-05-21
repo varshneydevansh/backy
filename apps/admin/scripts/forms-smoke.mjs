@@ -2464,62 +2464,69 @@ const approveSubmissionInUi = async (client, formId, submissionId) => {
 };
 
 const assertLayout = async (client) => {
-  const layout = await evaluate(client, `(() => ({
+  const layout = await evaluate(client, `(() => {
+    const bodyText = document.body?.innerText || '';
+    const persistenceCertification = {
+      panel: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')),
+      runtimeEvidence: Boolean(document.querySelector('[data-testid="forms-persistence-runtime-evidence"]')),
+      scenarioEvidence: Boolean(document.querySelector('[data-testid="forms-persistence-scenario-evidence"]')),
+      commandBuilder: Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder"]')),
+      envCopyButton: Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-copy-button"]')),
+      envTemplate: Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-template"]')),
+      envTemplateBody: Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-template-body"]')),
+      commandCopyButton: Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder-copy-button"]')),
+      requiredInputs: Boolean(document.querySelector('[data-testid="forms-postgres-certification-required-inputs"]')),
+      title: bodyText.includes('Persistence certification'),
+      runtimeEvidenceText: bodyText.includes('Runtime evidence'),
+      scenarioEvidenceText: bodyText.includes('Persistence scenario evidence'),
+      scenarioSchema: bodyText.includes('backy.forms-persistence-scenario-evidence.v1'),
+      envTemplateSchema: bodyText.includes('backy.forms-postgres-certification-env-template.v1'),
+      publicSubmissionScenario: bodyText.includes('Public submission intake'),
+      collectionRoutingScenario: bodyText.includes('Collection routing'),
+      commandBuilderText: bodyText.includes('Postgres certification command builder'),
+      envTemplateText: bodyText.includes('Env template') || bodyText.includes('ENV TEMPLATE'),
+      copyEnvTemplateText: bodyText.includes('Copy env template'),
+      databaseUrlPlaceholder: bodyText.includes('BACKY_DATABASE_URL=<disposable-postgres-url>'),
+      disposableConfirmation: bodyText.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'),
+      releaseDoctorEnv: bodyText.includes('BACKY_RELEASE_CERTIFY_DATABASE'),
+      targetGuardHost: bodyText.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'),
+      secretBoundary: bodyText.includes('Database URLs and credentials are never returned'),
+      formsPostgresGate: bodyText.includes('test:forms-postgres'),
+      downloadButton: Boolean(document.querySelector('[data-testid="forms-persistence-certification-download-button"]')),
+      copyButton: Boolean(document.querySelector('[data-testid="forms-persistence-certification-copy-button"]')),
+      downloadButtonText: bodyText.includes('Download DB JSON'),
+    };
+    return {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
     hasAnalytics: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')) &&
-      document.body?.innerText?.includes('Submission analytics'),
+      bodyText.includes('Submission analytics'),
     hasAudit: Boolean(document.querySelector('[data-testid="forms-audit-panel"]')) &&
-      document.body?.innerText?.includes('Forms activity'),
+      bodyText.includes('Forms activity'),
     hasAccountContract: Boolean(document.querySelector('[data-testid="forms-account-contract"]')) &&
-      document.body?.innerText?.includes('Registration/account handoff') &&
-      document.body?.innerText?.includes('Create registration form'),
-    hasPersistenceCertification: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-persistence-runtime-evidence"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-persistence-scenario-evidence"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-copy-button"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-template"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-template-body"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder-copy-button"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-postgres-certification-required-inputs"]')) &&
-      document.body?.innerText?.includes('Persistence certification') &&
-      document.body?.innerText?.includes('Runtime evidence') &&
-      document.body?.innerText?.includes('Persistence scenario evidence') &&
-      document.body?.innerText?.includes('backy.forms-persistence-scenario-evidence.v1') &&
-      document.body?.innerText?.includes('backy.forms-postgres-certification-env-template.v1') &&
-      document.body?.innerText?.includes('Public submission intake') &&
-      document.body?.innerText?.includes('Collection routing') &&
-      document.body?.innerText?.includes('Postgres certification command builder') &&
-      document.body?.innerText?.includes('Env template') &&
-      document.body?.innerText?.includes('Copy env template') &&
-      document.body?.innerText?.includes('BACKY_DATABASE_URL=<disposable-postgres-url>') &&
-      document.body?.innerText?.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true') &&
-      document.body?.innerText?.includes('BACKY_RELEASE_CERTIFY_DATABASE') &&
-      document.body?.innerText?.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST') &&
-      document.body?.innerText?.includes('Database URLs and credentials are never returned') &&
-      document.body?.innerText?.includes('test:forms-postgres') &&
-      Boolean(document.querySelector('[data-testid="forms-persistence-certification-download-button"]')) &&
-      Boolean(document.querySelector('[data-testid="forms-persistence-certification-copy-button"]')) &&
-      document.body?.innerText?.includes('Download DB JSON'),
+      bodyText.includes('Registration/account handoff') &&
+      bodyText.includes('Create registration form'),
+    persistenceCertification,
+    hasPersistenceCertification: Object.values(persistenceCertification).every(Boolean),
     hasLaunchReadiness: Boolean(document.querySelector('[data-testid="forms-launch-readiness"]')) &&
       Boolean(document.querySelector('[data-testid="forms-launch-readiness-copy-button"]')) &&
       Boolean(document.querySelector('[data-testid="forms-launch-readiness-action-plan"]')) &&
-      document.body?.innerText?.includes('Form launch readiness') &&
-      document.body?.innerText?.includes('backy.form-launch-readiness.v1') &&
-      document.body?.innerText?.includes('Copy launch JSON') &&
-      document.body?.innerText?.includes('Selected form') &&
-      document.body?.innerText?.includes('Public API') &&
-      document.body?.innerText?.includes('Next action'),
+      bodyText.includes('Form launch readiness') &&
+      bodyText.includes('backy.form-launch-readiness.v1') &&
+      bodyText.includes('Copy launch JSON') &&
+      bodyText.includes('Selected form') &&
+      bodyText.includes('Public API') &&
+      bodyText.includes('Next action'),
     hasDeliveryPanel: Boolean(document.querySelector('[data-testid="forms-webhook-delivery-panel"]')) &&
       Boolean(document.querySelector('[data-testid="forms-delivery-handoff-copy-button"]')) &&
-      document.body?.innerText?.includes('Webhook delivery') &&
-      document.body?.innerText?.includes('backy.form-delivery-handoff.v1') &&
-      document.body?.innerText?.includes('Copy delivery JSON'),
-    hasTemplates: document.body?.innerText?.includes('Form templates') || false,
-    hasInbox: document.body?.innerText?.includes('Submission inbox') || false,
-  }))()`);
+      bodyText.includes('Webhook delivery') &&
+      bodyText.includes('backy.form-delivery-handoff.v1') &&
+      bodyText.includes('Copy delivery JSON'),
+    hasTemplates: bodyText.includes('Form templates') || false,
+    hasInbox: bodyText.includes('Submission inbox') || false,
+  };
+  })()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasLaunchReadiness && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
