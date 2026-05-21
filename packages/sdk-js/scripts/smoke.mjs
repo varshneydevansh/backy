@@ -1316,6 +1316,10 @@ const adminTemplates = await privateClient.adminTemplates({ type: 'page' });
 assert(adminTemplates.data.registry?.schemaVersion === 'backy.template-registry.v1', 'adminTemplates() missing registry schema');
 assert(Array.isArray(adminTemplates.data.templates), 'adminTemplates() missing templates array');
 assert(adminTemplates.data.registry?.cloneField === 'frontendDesignTemplateId', 'adminTemplates() missing clone field');
+assert(typeof privateClient.updateAdminCollectionBindingPresets === 'function', 'updateAdminCollectionBindingPresets() missing SDK method');
+const adminBindingPresets = await privateClient.adminCollectionBindingPresets();
+assert(Array.isArray(adminBindingPresets.data.presets), 'adminCollectionBindingPresets() missing presets array');
+assert(adminBindingPresets.data.site?.id === privateClient.getSiteId(), 'adminCollectionBindingPresets() returned wrong site');
 
 const adminInteractiveComponents = await privateClient.adminInteractiveComponents({ status: 'all' });
 assert(Array.isArray(adminInteractiveComponents.data.components), 'adminInteractiveComponents() missing components array');

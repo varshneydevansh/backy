@@ -7,6 +7,7 @@ import type {
   BackyMediaListOptions,
   BackyAdminAuditLog,
   BackyAdminAuditLogsResponse,
+  BackyAdminCollectionBindingPresetsResponse,
   BackyAdminFrontendDesignResponse,
   BackyAdminInteractiveComponent,
   BackyAdminInteractiveComponentDeleteResponse,
@@ -553,6 +554,18 @@ type AdminTemplatesMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["adminTemplates"]>,
     BackyAdminTemplateRegistryResponse
+  >
+>;
+type AdminCollectionBindingPresetsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCollectionBindingPresets"]>,
+    BackyAdminCollectionBindingPresetsResponse
+  >
+>;
+type UpdateAdminCollectionBindingPresetsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminCollectionBindingPresets"]>,
+    BackyAdminCollectionBindingPresetsResponse
   >
 >;
 type AdminInteractiveComponentsMethodReturnsContract = Assert<
@@ -2081,6 +2094,39 @@ const sdkAdminTemplateRegistryEnvelope = {
     },
   },
 } satisfies BackyAdminTemplateRegistryResponse;
+
+const sdkAdminCollectionBindingPresetsEnvelope = {
+  success: true,
+  requestId: "req_admin_collection_binding_presets",
+  data: {
+    site: {
+      id: "site_demo",
+      slug: "demo",
+      name: "Demo Site",
+    },
+    presets: [
+      {
+        id: "binding-preset-title",
+        name: "Article title",
+        collectionId: "collection_articles",
+        fieldKey: "title",
+        targetPath: "props.content",
+        sourcePath: "title",
+        search: "launch",
+        filterField: "status",
+        filterValue: "published",
+        sortBy: "publishedAt",
+        sortDirection: "desc",
+        limit: "10",
+        offset: "0",
+        createdAt: "2026-05-21T00:00:00.000Z",
+        updatedAt: "2026-05-21T00:00:00.000Z",
+        createdBy: "user-admin",
+        updatedBy: "user-admin",
+      },
+    ],
+  },
+} satisfies BackyAdminCollectionBindingPresetsResponse;
 
 const sdkAdminInteractiveComponent = {
   id: "component_rounds",

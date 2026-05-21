@@ -663,6 +663,51 @@ export type BackyAdminTemplateRegistryResponse = BackyEnvelope<
   }
 >;
 
+export interface BackyAdminCollectionBindingPreset {
+  id: string;
+  name: string;
+  collectionId: string;
+  fieldKey: string;
+  targetPath: string;
+  sourcePath?: string;
+  search?: string;
+  filterField?: string;
+  filterValue?: string;
+  sortBy?: string;
+  sortDirection?: "asc" | "desc" | string;
+  limit?: string;
+  offset?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminCollectionBindingPresetInput
+  extends Partial<BackyAdminCollectionBindingPreset> {
+  collectionId: string;
+  fieldKey: string;
+}
+
+export type BackyAdminCollectionBindingPresetsResponse = BackyEnvelope<
+  {
+    site: {
+      id: string;
+      slug: string;
+      name: string;
+      [key: string]: unknown;
+    };
+    presets: BackyAdminCollectionBindingPreset[];
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminCollectionBindingPresetsUpdateInput {
+  presets: BackyAdminCollectionBindingPresetInput[];
+  requestId?: string;
+  [key: string]: unknown;
+}
+
 export type BackyAdminFrontendDesignUpdateInput = {
   requestId?: string;
   frontendDesign?: BackyFrontendDesignContract | Record<string, unknown>;
@@ -8774,6 +8819,36 @@ export class BackyClient {
         requestId,
         headers,
         credentials,
+      },
+    );
+  }
+
+  adminCollectionBindingPresets(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionBindingPresetsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/editor/collection-binding-presets`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminCollectionBindingPresets(
+    input: BackyAdminCollectionBindingPresetsUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionBindingPresetsResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/editor/collection-binding-presets`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
