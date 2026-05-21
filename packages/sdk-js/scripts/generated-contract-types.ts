@@ -27,6 +27,12 @@ import type {
   BackyManifestDeliveryDiscovery,
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
+  BackyClient,
+  BackyLiveManagedBlogPostResponse,
+  BackyLiveManagedBlogPostUpdateInput,
+  BackyLiveManagedPageResponse,
+  BackyLiveManagedPageUpdateInput,
+  BackyLiveManagementRequestOptions,
   BackyManifestFormDefinition,
   BackyManifestFormsRuntimeModule,
   BackyManifestLiveManagementModule,
@@ -69,6 +75,7 @@ import type {
   GeneratedBackyOpenApiBlogPostEnvelope,
   GeneratedBackyOpenApiBlogPostListEnvelope,
   GeneratedBackyOpenApiBlogPostResource,
+  GeneratedBackyOpenApiBlogPostUpdateRequest,
   GeneratedBackyOpenApiBlogTagListEnvelope,
   GeneratedBackyOpenApiBlogTagResource,
   GeneratedBackyOpenApiComment,
@@ -169,6 +176,7 @@ import type {
   GeneratedBackyOpenApiPageResource,
   GeneratedBackyOpenApiPageRouteResource,
   GeneratedBackyOpenApiPageSeoMetadata,
+  GeneratedBackyOpenApiPageUpdateRequest,
   GeneratedBackyOpenApiPostRoute,
   GeneratedBackyOpenApiPostRouteResource,
   GeneratedBackyOpenApiPublicDeleteEnvelope,
@@ -206,6 +214,9 @@ type Equal<Left, Right> =
     ? true
     : false;
 type Assert<Condition extends true> = Condition;
+type AwaitedReturn<T> = T extends (...args: any[]) => infer Return
+  ? Awaited<Return>
+  : never;
 
 type ManifestEnvelopeDataIsManifest = Assert<
   Equal<
@@ -219,7 +230,55 @@ type RenderEnvelopeDataIsPayload = Assert<
     GeneratedBackyPublicRenderPayload
   >
 >;
+type LiveManagedPageMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["liveManagedPage"]>,
+    BackyLiveManagedPageResponse
+  >
+>;
+type LiveManagedPageUpdateMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateLiveManagedPage"]>,
+    BackyLiveManagedPageResponse
+  >
+>;
+type LiveManagedBlogPostMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["liveManagedBlogPost"]>,
+    BackyLiveManagedBlogPostResponse
+  >
+>;
+type LiveManagedBlogPostUpdateMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateLiveManagedBlogPost"]>,
+    BackyLiveManagedBlogPostResponse
+  >
+>;
+type LiveManagedPageUpdateExtendsOpenApiRequest = Assert<
+  BackyLiveManagedPageUpdateInput extends GeneratedBackyOpenApiPageUpdateRequest
+    ? true
+    : false
+>;
+type LiveManagedBlogPostUpdateExtendsOpenApiRequest = Assert<
+  BackyLiveManagedBlogPostUpdateInput extends GeneratedBackyOpenApiBlogPostUpdateRequest
+    ? true
+    : false
+>;
 type EditableMapEntry = GeneratedBackyEditableMap[string];
+
+const liveManagementRequestOptions = {
+  adminKey: "admin-secret",
+  apiKey: "site-secret",
+  adminSession: "session-token",
+  bearerToken: "bearer-token",
+  actor: "custom-frontend-editor",
+  credentials: "include",
+  headers: {
+    "x-custom-editor": "sdk-type-smoke",
+  },
+} satisfies BackyLiveManagementRequestOptions;
+
+void liveManagementRequestOptions;
 
 const theme = {
   schemaVersion: "backy.theme.v1",

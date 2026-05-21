@@ -1303,6 +1303,24 @@ if (runWriteSmoke) {
       'fixture OpenAPI missing redirect route vendor metadata',
     );
 
+    const liveManagedPage = await writeClient.liveManagedPage(fixture.pageId, {
+      actor: 'sdk-smoke-live-editor',
+      requestId: 'sdk-live-managed-page-read',
+    });
+    assert(liveManagedPage.data.page?.id === fixture.pageId, 'liveManagedPage() returned wrong page');
+    writeChecks.push('liveManagedPage');
+
+    const liveManagedPageUpdate = await writeClient.updateLiveManagedPage(fixture.pageId, {
+      title: liveManagedPage.data.page.title,
+      expectedUpdatedAt: liveManagedPage.data.page.updatedAt,
+      requestId: 'sdk-live-managed-page-update',
+    }, {
+      actor: 'sdk-smoke-live-editor',
+    });
+    assert(liveManagedPageUpdate.data.page?.id === fixture.pageId, 'updateLiveManagedPage() returned wrong page');
+    assert(liveManagedPageUpdate.data.cacheInvalidation, 'updateLiveManagedPage() missing cache invalidation handoff');
+    writeChecks.push('updateLiveManagedPage');
+
     const redirected = await writeClient.resolve(fixture.redirectPath);
     assert(redirected.data.route?.type === 'redirect', 'resolve() did not return a redirect route');
     assert(redirected.data.route?.resource?.to === `/${fixture.pageSlug}`, 'resolve() returned the wrong redirect target');

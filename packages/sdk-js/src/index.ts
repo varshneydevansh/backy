@@ -2,6 +2,10 @@ import type {
   BackyContentDocument as CoreBackyContentDocument,
   BackyContentElement,
 } from "@backy-cms/core/content-contract";
+import type {
+  GeneratedBackyOpenApiBlogPostUpdateRequest,
+  GeneratedBackyOpenApiPageUpdateRequest,
+} from "./generated-contract-types";
 
 export type {
   GeneratedBackyContentStatus,
@@ -41,6 +45,7 @@ export type {
   GeneratedBackyOpenApiBlogPostEnvelope,
   GeneratedBackyOpenApiBlogPostListEnvelope,
   GeneratedBackyOpenApiBlogPostResource,
+  GeneratedBackyOpenApiBlogPostUpdateRequest,
   GeneratedBackyOpenApiBlogTagListEnvelope,
   GeneratedBackyOpenApiBlogTagResource,
   GeneratedBackyOpenApiComment,
@@ -143,6 +148,7 @@ export type {
   GeneratedBackyOpenApiPageResource,
   GeneratedBackyOpenApiPageRouteResource,
   GeneratedBackyOpenApiPageSeoMetadata,
+  GeneratedBackyOpenApiPageUpdateRequest,
   GeneratedBackyOpenApiPostRoute,
   GeneratedBackyOpenApiPostRouteResource,
   GeneratedBackyOpenApiPublicDeleteEnvelope,
@@ -181,6 +187,7 @@ export interface BackyClientOptions {
   fetch?: typeof fetch;
   requestIdFactory?: () => string;
   defaultHeaders?: HeadersInit;
+  credentials?: RequestCredentials;
 }
 
 export interface BackyEnvelope<TData> {
@@ -235,6 +242,7 @@ export interface BackyConditionalRequestOptions {
   etag?: string;
   requestId?: string;
   siteId?: string;
+  credentials?: RequestCredentials;
 }
 
 export type BackyConditionalOptions = BackyConditionalRequestOptions;
@@ -1527,6 +1535,72 @@ export type BackyBlogResponse = BackyEnvelope<
 
 export type BackyBlogConditionalResult =
   BackyConditionalResult<BackyBlogResponse>;
+
+export interface BackyLiveManagementRequestOptions {
+  requestId?: string;
+  siteId?: string;
+  adminKey?: string;
+  apiKey?: string;
+  adminSession?: string;
+  authorization?: string;
+  bearerToken?: string;
+  actor?: string;
+  headers?: HeadersInit;
+  credentials?: RequestCredentials;
+}
+
+export type BackyLiveManagedPageUpdateInput =
+  GeneratedBackyOpenApiPageUpdateRequest & {
+    requestId?: string;
+  };
+
+export type BackyLiveManagedBlogPostUpdateInput =
+  GeneratedBackyOpenApiBlogPostUpdateRequest & {
+    requestId?: string;
+  };
+
+export type BackyLiveManagedPageResponse = BackyEnvelope<
+  {
+    page: BackyPageResource;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyLiveManagedBlogPostResponse = BackyEnvelope<
+  {
+    post: BackyPostResource;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+function liveManagementHeaders(
+  options: BackyLiveManagementRequestOptions,
+): HeadersInit | undefined {
+  const headers = new Headers(options.headers);
+  if (options.authorization) {
+    headers.set("authorization", options.authorization);
+  }
+  if (options.bearerToken) {
+    headers.set("authorization", `Bearer ${options.bearerToken}`);
+  }
+  if (options.adminSession) {
+    headers.set("x-backy-admin-session", options.adminSession);
+  }
+  if (options.adminKey) {
+    headers.set("x-backy-admin-key", options.adminKey);
+  }
+  if (options.apiKey) {
+    headers.set("x-api-key", options.apiKey);
+  }
+  if (options.actor) {
+    headers.set("x-backy-actor", options.actor);
+  }
+  let hasHeaders = false;
+  headers.forEach(() => {
+    hasHeaders = true;
+  });
+  return hasHeaders ? headers : undefined;
+}
 
 export type BackyBlogCategoriesResponse = BackyEnvelope<
   {
@@ -2869,6 +2943,7 @@ export class BackyClient {
   private readonly fetchImpl: typeof fetch;
   private readonly requestIdFactory: () => string;
   private readonly defaultHeaders?: HeadersInit;
+  private readonly defaultCredentials?: RequestCredentials;
   private siteId?: string;
 
   constructor(options: BackyClientOptions) {
@@ -2884,6 +2959,7 @@ export class BackyClient {
       (() =>
         `sdk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`);
     this.defaultHeaders = options.defaultHeaders;
+    this.defaultCredentials = options.credentials;
 
     if (!this.fetchImpl) {
       throw new Error("BackyClient requires a fetch implementation.");
@@ -3294,6 +3370,71 @@ export class BackyClient {
       {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  liveManagedPage(
+    pageId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyLiveManagedPageResponse> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/manage/pages/${encodeURIComponent(pageId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateLiveManagedPage(
+    pageId: string,
+    input: BackyLiveManagedPageUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyLiveManagedPageResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/manage/pages/${encodeURIComponent(pageId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  liveManagedBlogPost(
+    postId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyLiveManagedBlogPostResponse> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/manage/blog/${encodeURIComponent(postId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateLiveManagedBlogPost(
+    postId: string,
+    input: BackyLiveManagedBlogPostUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyLiveManagedBlogPostResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/manage/blog/${encodeURIComponent(postId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
@@ -4258,6 +4399,8 @@ export class BackyClient {
       query?: Record<string, string | number | boolean | undefined>;
       body?: unknown;
       requestId?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
     } = {},
   ): Promise<BackyEnvelope<TData>> {
     const json = await this.requestRawJson(path, options);
@@ -4309,6 +4452,8 @@ export class BackyClient {
       query?: Record<string, string | number | boolean | undefined>;
       body?: unknown;
       requestId?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
     } = {},
   ): Promise<Record<string, unknown>> {
     const { response, json } = await this.fetchJson(path, options);
@@ -4340,6 +4485,8 @@ export class BackyClient {
       body?: unknown;
       requestId?: string;
       ifNoneMatch?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
     } = {},
   ): Promise<BackyConditionalResult<TBody>> {
     const { response, json } = await this.fetchJson(path, options);
@@ -4385,6 +4532,8 @@ export class BackyClient {
       query?: Record<string, string | number | boolean | undefined>;
       body?: unknown;
       requestId?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
     } = {},
   ): Promise<string> {
     const url = new URL(
@@ -4397,14 +4546,19 @@ export class BackyClient {
     }
 
     const headers = new Headers(this.defaultHeaders);
+    new Headers(options.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
     headers.set("x-request-id", options.requestId ?? this.requestIdFactory());
     if (options.body !== undefined && !headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
+    const credentials = options.credentials ?? this.defaultCredentials;
 
     const response = await this.fetchImpl(url, {
       method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       headers,
+      ...(credentials ? { credentials } : {}),
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
     });
@@ -4426,6 +4580,8 @@ export class BackyClient {
       body?: unknown;
       requestId?: string;
       ifNoneMatch?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
     } = {},
   ): Promise<{ response: Response; json: unknown }> {
     const url = new URL(
@@ -4438,6 +4594,9 @@ export class BackyClient {
     }
 
     const headers = new Headers(this.defaultHeaders);
+    new Headers(options.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
     const requestId = options.requestId ?? this.requestIdFactory();
     headers.set("x-request-id", requestId);
     if (options.ifNoneMatch) {
@@ -4446,10 +4605,12 @@ export class BackyClient {
     if (options.body !== undefined && !headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
+    const credentials = options.credentials ?? this.defaultCredentials;
 
     const response = await this.fetchImpl(url, {
       method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       headers,
+      ...(credentials ? { credentials } : {}),
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
     });
