@@ -32,6 +32,7 @@ const assertFormsPersistenceCertificationSource = () => {
   const source = fs.readFileSync(new URL('../src/routes/forms.tsx', import.meta.url), 'utf8');
   const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   const embedBlockRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/forms/[formId]/embed-block/route.ts', import.meta.url), 'utf8');
+  const reviewRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/forms/[formId]/submissions/[submissionId]/review/route.ts', import.meta.url), 'utf8');
   const publicStoreSource = fs.readFileSync(new URL('../../public/src/lib/backyStore.ts', import.meta.url), 'utf8');
   const publicFormDefinitionRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/definition/route.ts', import.meta.url), 'utf8');
   const publicFormDetailRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/route.ts', import.meta.url), 'utf8');
@@ -115,6 +116,7 @@ const assertFormsPersistenceCertificationSource = () => {
   );
   assert(source.includes('cloneForm,') && source.includes('handleCloneSelectedForm') && source.includes('data-testid="form-clone-button"'), 'Forms page must expose a selected-form clone action');
   assert(source.includes('setIsCloningForm(true)') && source.includes("isActive: false") && source.includes('cloned as an inactive form.'), 'Forms clone action must create inactive clones with busy and notice states');
+  assert(reviewRouteSource.includes("import { PATCH } from '../route'") && reviewRouteSource.includes('export async function POST'), 'Forms review POST route must delegate to the audited submission review implementation');
   assert(
     source.includes('duplicateFormDraftField') &&
       source.includes('getUniqueFormDraftFieldKey') &&

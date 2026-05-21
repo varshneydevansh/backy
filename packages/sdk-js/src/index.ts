@@ -4362,6 +4362,42 @@ export type BackyAdminFormDeleteResponse = BackyEnvelope<
   { deleted: boolean } & Record<string, unknown>
 >;
 
+export type BackyAdminFormCloneInput = {
+  name?: string;
+  title?: string;
+  isActive?: boolean;
+  requestId?: string;
+  [key: string]: unknown;
+};
+
+export type BackyAdminFormCloneResponse = BackyEnvelope<
+  {
+    form: BackyFormDefinition;
+    sourceFormId?: string;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminFormEmbedBlockInput = {
+  name?: string;
+  slug?: string;
+  actor?: string;
+  publicBaseUrl?: string;
+  requestId?: string;
+  [key: string]: unknown;
+};
+
+export type BackyAdminFormEmbedBlockResponse = BackyEnvelope<
+  {
+    section: BackyReusableSection;
+    embed?: {
+      definitionUrl?: string;
+      submitUrl?: string;
+      [key: string]: unknown;
+    };
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
 export type BackyAdminFormSubmissionsResponse = BackyEnvelope<
   {
     form?: BackyFormDefinition;
@@ -4372,6 +4408,98 @@ export type BackyAdminFormSubmissionsResponse = BackyEnvelope<
 
 export type BackyAdminFormSubmissionResponse = BackyEnvelope<
   { submission: BackyFormSubmission } & Record<string, unknown>
+>;
+
+export type BackyAdminFormSubmissionStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "spam"
+  | string;
+
+export interface BackyAdminFormSubmissionReviewInput {
+  status: BackyAdminFormSubmissionStatus;
+  reviewedBy?: string | null;
+  adminNotes?: string | null;
+  contactShareOverride?: {
+    enabled?: boolean;
+    nameField?: string;
+    emailField?: string;
+    phoneField?: string;
+    notesField?: string;
+    dedupeByEmail?: boolean;
+    [key: string]: unknown;
+  };
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminFormDeliveryRetryInput {
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminFormDeliveryRetryResult {
+  attempted: boolean;
+  target?: string;
+  status: "queued" | "succeeded" | "failed" | string;
+  statusCode?: number;
+  provider?: string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormDeliveryRetryResponse = BackyEnvelope<
+  {
+    delivery: BackyAdminFormDeliveryRetryResult;
+    submission: BackyFormSubmission;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminFormConsentRetentionInput {
+  dryRun?: boolean;
+  now?: string;
+  actor?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminFormConsentRetentionResult {
+  formId: string;
+  formName?: string;
+  dryRun?: boolean;
+  policy: {
+    deleteAfterDays?: number;
+    now?: string;
+    [key: string]: unknown;
+  };
+  consentFieldKeys: string[];
+  scanned: number;
+  due: number;
+  anonymized: number;
+  submissions: BackyFormSubmission[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminFormConsentRetentionResponse = BackyEnvelope<
+  BackyAdminFormConsentRetentionResult
+>;
+
+export type BackyAdminFormsConsentRetentionResponse = BackyEnvelope<
+  {
+    dryRun: boolean;
+    policy: {
+      now: string;
+      [key: string]: unknown;
+    };
+    scannedForms: number;
+    formsWithConsent: number;
+    scannedSubmissions: number;
+    due: number;
+    anonymized: number;
+    results: BackyAdminFormConsentRetentionResult[];
+  } & Record<string, unknown>
 >;
 
 export type BackyAdminFormContactsResponse = BackyEnvelope<
@@ -11377,6 +11505,42 @@ export class BackyClient {
     );
   }
 
+  cloneAdminForm(
+    formId: string,
+    input: BackyAdminFormCloneInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormCloneResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/clone`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createAdminFormEmbedBlock(
+    formId: string,
+    input: BackyAdminFormEmbedBlockInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormEmbedBlockResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/embed-block`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
   formsAnalytics(
     options: BackyAdminFormsAnalyticsOptions = {},
   ): Promise<BackyAdminFormsAnalyticsResponse> {
@@ -11527,6 +11691,98 @@ export class BackyClient {
         method: "PATCH",
         body,
         requestId: options.requestId ?? (requestId as string | undefined),
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  reviewFormSubmission(
+    formId: string,
+    submissionId: string,
+    input: BackyAdminFormSubmissionReviewInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormSubmissionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}/review`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  retryFormSubmissionWebhook(
+    formId: string,
+    submissionId: string,
+    input: BackyAdminFormDeliveryRetryInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormDeliveryRetryResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}/webhook-retry`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  retryFormSubmissionEmail(
+    formId: string,
+    submissionId: string,
+    input: BackyAdminFormDeliveryRetryInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormDeliveryRetryResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}/email-retry`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  applyAdminFormConsentRetention(
+    formId: string,
+    input: BackyAdminFormConsentRetentionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormConsentRetentionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/consent-retention`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  applyAdminFormsConsentRetention(
+    input: BackyAdminFormConsentRetentionInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFormsConsentRetentionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/consent-retention`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },

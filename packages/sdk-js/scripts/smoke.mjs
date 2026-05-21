@@ -1485,6 +1485,13 @@ const formContactSegments = await privateClient.formContactSegments();
 assert(formContactSegments.data.analytics, 'formContactSegments() missing analytics payload');
 const formContactLists = await privateClient.formContactLists();
 assert(Array.isArray(formContactLists.data.lists), 'formContactLists() missing saved lists array');
+assert(typeof privateClient.cloneAdminForm === 'function', 'cloneAdminForm() missing SDK method');
+assert(typeof privateClient.createAdminFormEmbedBlock === 'function', 'createAdminFormEmbedBlock() missing SDK method');
+assert(typeof privateClient.reviewFormSubmission === 'function', 'reviewFormSubmission() missing SDK method');
+assert(typeof privateClient.retryFormSubmissionWebhook === 'function', 'retryFormSubmissionWebhook() missing SDK method');
+assert(typeof privateClient.retryFormSubmissionEmail === 'function', 'retryFormSubmissionEmail() missing SDK method');
+assert(typeof privateClient.applyAdminFormConsentRetention === 'function', 'applyAdminFormConsentRetention() missing SDK method');
+assert(typeof privateClient.applyAdminFormsConsentRetention === 'function', 'applyAdminFormsConsentRetention() missing SDK method');
 
 let commerceCatalogChecked = false;
 try {

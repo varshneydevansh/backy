@@ -144,14 +144,19 @@ import type {
   BackyCommerceProductSubscriptionsResponse,
   BackyCommerceReconciliationResponse,
   BackyCollectionRecordWriteInput,
+  BackyAdminFormCloneResponse,
+  BackyAdminFormConsentRetentionResponse,
   BackyAdminFormContactDeleteResponse,
   BackyAdminFormContactListMutationResponse,
   BackyAdminFormContactListsResponse,
   BackyAdminFormContactResponse,
   BackyAdminFormContactsResponse,
   BackyAdminFormDeleteResponse,
+  BackyAdminFormDeliveryRetryResponse,
+  BackyAdminFormEmbedBlockResponse,
   BackyAdminFormResponse,
   BackyAdminFormsAnalyticsResponse,
+  BackyAdminFormsConsentRetentionResponse,
   BackyAdminFormsResponse,
   BackyAdminFormContactSegmentsResponse,
   BackyAdminFormSubmissionResponse,
@@ -1040,6 +1045,15 @@ type DeleteAdminFormMethodReturnsContract = Assert<
     BackyAdminFormDeleteResponse
   >
 >;
+type CloneAdminFormMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["cloneAdminForm"]>, BackyAdminFormCloneResponse>
+>;
+type CreateAdminFormEmbedBlockMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminFormEmbedBlock"]>,
+    BackyAdminFormEmbedBlockResponse
+  >
+>;
 type FormsAnalyticsMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["formsAnalytics"]>,
@@ -1086,6 +1100,36 @@ type UpdateFormSubmissionMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateFormSubmission"]>,
     BackyAdminFormSubmissionResponse
+  >
+>;
+type ReviewFormSubmissionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["reviewFormSubmission"]>,
+    BackyAdminFormSubmissionResponse
+  >
+>;
+type RetryFormSubmissionWebhookMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["retryFormSubmissionWebhook"]>,
+    BackyAdminFormDeliveryRetryResponse
+  >
+>;
+type RetryFormSubmissionEmailMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["retryFormSubmissionEmail"]>,
+    BackyAdminFormDeliveryRetryResponse
+  >
+>;
+type ApplyAdminFormConsentRetentionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["applyAdminFormConsentRetention"]>,
+    BackyAdminFormConsentRetentionResponse
+  >
+>;
+type ApplyAdminFormsConsentRetentionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["applyAdminFormsConsentRetention"]>,
+    BackyAdminFormsConsentRetentionResponse
   >
 >;
 type FormContactsMethodReturnsContract = Assert<
@@ -7035,6 +7079,30 @@ const sdkAdminFormDeleteEnvelope = {
   },
 } satisfies BackyAdminFormDeleteResponse;
 
+const sdkAdminFormCloneEnvelope = {
+  success: true,
+  requestId: "req_admin_form_clone",
+  data: {
+    form: formDefinition,
+    sourceFormId: "form_source",
+  },
+} satisfies BackyAdminFormCloneResponse;
+
+const sdkAdminFormEmbedBlockEnvelope = {
+  success: true,
+  requestId: "req_admin_form_embed_block",
+  data: {
+    section: sdkAdminReusableSection,
+    embed: {
+      definitionUrl: "/api/sites/site_demo/forms/form_contact/definition",
+      submitUrl: "/api/sites/site_demo/forms/form_contact/submissions",
+    },
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminFormEmbedBlockResponse;
+
 const sdkAdminFormsAnalyticsEnvelope = {
   success: true,
   requestId: "req_forms_analytics",
@@ -7140,6 +7208,60 @@ const sdkAdminFormSubmissionEnvelope = {
     submission: formSubmission,
   },
 } satisfies BackyAdminFormSubmissionResponse;
+
+const sdkAdminFormDeliveryRetryEnvelope = {
+  success: true,
+  requestId: "req_admin_form_delivery_retry",
+  data: {
+    delivery: {
+      attempted: true,
+      target: "https://example.com/form-webhook",
+      status: "succeeded",
+      statusCode: 200,
+      provider: "webhook",
+      metadata: {
+        retry: true,
+      },
+    },
+    submission: formSubmission,
+  },
+} satisfies BackyAdminFormDeliveryRetryResponse;
+
+const sdkAdminFormConsentRetentionEnvelope = {
+  success: true,
+  requestId: "req_admin_form_consent_retention",
+  data: {
+    formId: formDefinition.id,
+    formName: formDefinition.name,
+    dryRun: true,
+    policy: {
+      deleteAfterDays: 730,
+      now: "2026-05-21T00:00:00.000Z",
+    },
+    consentFieldKeys: ["privacyConsent"],
+    scanned: 1,
+    due: 1,
+    anonymized: 0,
+    submissions: [formSubmission],
+  },
+} satisfies BackyAdminFormConsentRetentionResponse;
+
+const sdkAdminFormsConsentRetentionEnvelope = {
+  success: true,
+  requestId: "req_admin_forms_consent_retention",
+  data: {
+    dryRun: true,
+    policy: {
+      now: "2026-05-21T00:00:00.000Z",
+    },
+    scannedForms: 1,
+    formsWithConsent: 1,
+    scannedSubmissions: 1,
+    due: 1,
+    anonymized: 0,
+    results: [sdkAdminFormConsentRetentionEnvelope.data],
+  },
+} satisfies BackyAdminFormsConsentRetentionResponse;
 
 const sdkAdminFormContactsEnvelope = {
   success: true,
@@ -9332,12 +9454,17 @@ void formContactsEnvelope;
 void sdkAdminFormsEnvelope;
 void sdkAdminFormEnvelope;
 void sdkAdminFormDeleteEnvelope;
+void sdkAdminFormCloneEnvelope;
+void sdkAdminFormEmbedBlockEnvelope;
 void sdkAdminFormsAnalyticsEnvelope;
 void sdkAdminFormContactSegmentsEnvelope;
 void sdkAdminFormContactListsEnvelope;
 void sdkAdminFormContactListMutationEnvelope;
 void sdkAdminFormSubmissionsEnvelope;
 void sdkAdminFormSubmissionEnvelope;
+void sdkAdminFormDeliveryRetryEnvelope;
+void sdkAdminFormConsentRetentionEnvelope;
+void sdkAdminFormsConsentRetentionEnvelope;
 void sdkAdminFormContactsEnvelope;
 void sdkAdminFormContactEnvelope;
 void sdkAdminFormContactDeleteEnvelope;
