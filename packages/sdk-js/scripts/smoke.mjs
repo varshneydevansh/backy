@@ -1289,6 +1289,16 @@ assert(Array.isArray(comments.data.comments), 'siteComments() missing comments a
 const events = await privateClient.events({ limit: 5 });
 assert(Array.isArray(events.data.events), 'events() missing events array');
 
+const adminSettings = await privateClient.adminSettings();
+assert(adminSettings.data.settings?.schemaVersion === 'backy.admin-settings.v1', 'adminSettings() missing settings schema version');
+assert(adminSettings.data.settings?.providerCertification?.schemaVersion === 'backy.settings-provider-certification-handoff.v1', 'adminSettings() missing provider certification handoff');
+assert(adminSettings.data.settings?.frontendDatabaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', 'adminSettings() missing frontend database certification handoff');
+
+const adminSiteSettings = await privateClient.adminSiteSettings();
+assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-scope.v1', 'adminSiteSettings() missing site settings schema version');
+assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
+assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
+
 let commerceCatalogChecked = false;
 try {
   const canonicalOrderInput = buildBackyCommerceOrderInput({

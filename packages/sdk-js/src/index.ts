@@ -4842,6 +4842,122 @@ export interface BackyFrontendDatabaseCertification {
   [key: string]: unknown;
 }
 
+export interface BackySettingsProviderCertification {
+  schemaVersion: "backy.settings-provider-certification-handoff.v1";
+  status: "external-live-provider-gate" | string;
+  settingsGate?: string;
+  commerceGate?: string;
+  localPreflight?: string;
+  releasePreflight?: string;
+  secretHandling?: string;
+  runtimeEvidence?: Record<string, unknown>;
+  scenarioEvidence?: {
+    schemaVersion: "backy.settings-provider-certification-evidence.v1" | string;
+    status?: "ready" | "attention" | "blocked" | string;
+    requiredGate?: string;
+    coverage?: {
+      covered?: number;
+      total?: number;
+      missing?: string[];
+      [key: string]: unknown;
+    };
+    scenarios?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  operatorCommandTemplate?: Record<string, unknown>;
+  operatorEnvTemplate?: {
+    schemaVersion: "backy.settings-provider-certification-env-template.v1" | string;
+    format?: "shell-env" | string;
+    fileName?: string;
+    body?: string;
+    secretHandling?: string;
+    [key: string]: unknown;
+  };
+  groups?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSettings {
+  schemaVersion: "backy.admin-settings.v1" | string;
+  scope?: {
+    workspaceSettingsScope?: "global" | string;
+    siteSettingsScope?: "site" | string;
+    siteSettingsEndpointTemplate?: string;
+    [key: string]: unknown;
+  };
+  endpoints?: {
+    workspaceSettings?: string;
+    siteSettings?: string;
+    [key: string]: unknown;
+  };
+  deliveryMode?: "managed-hosting" | "custom-frontend" | string;
+  apiKeys?: {
+    publicApiKey?: string;
+    adminApiKey?: string;
+    [key: string]: unknown;
+  };
+  storage?: Record<string, unknown>;
+  auth?: Record<string, unknown>;
+  integrations?: Record<string, unknown>;
+  runtimeStorage?: Record<string, unknown>;
+  runtimeDatabase?: Record<string, unknown>;
+  runtimeSupabase?: Record<string, unknown>;
+  runtimeMediaScanner?: Record<string, unknown>;
+  runtimeVercel?: Record<string, unknown>;
+  runtimeNotifications?: Record<string, unknown>;
+  runtimeCommerce?: Record<string, unknown>;
+  runtimeInteractiveComponents?: Record<string, unknown>;
+  runtimePublicApi?: Record<string, unknown>;
+  providerCertification?: BackySettingsProviderCertification;
+  frontendDatabaseCertification?: BackyFrontendDatabaseCertification;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackySiteSettingsScope {
+  schemaVersion: "backy.site-settings-scope.v1" | string;
+  scope: {
+    level: "site" | string;
+    siteId: string;
+    siteSlug?: string;
+    teamId?: string | null;
+    workspaceSettingsScope?: "global" | string;
+    siteSettingsScope?: "site" | string;
+    [key: string]: unknown;
+  };
+  siteSettings: Record<string, unknown>;
+  workspaceSettings: Record<string, unknown>;
+  effectiveSettings: {
+    workspace?: Record<string, unknown>;
+    site?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  frontendDatabaseCertification?: BackyFrontendDatabaseCertification;
+  endpoints?: {
+    workspaceSettings?: string;
+    siteSettings?: string;
+    siteDetail?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export type BackyAdminSettingsResponse = BackyEnvelope<{
+  settings: BackyAdminSettings;
+}>;
+
+export type BackySiteSettingsResponse = BackyEnvelope<{
+  settings: BackySiteSettingsScope;
+}>;
+
+export type BackyAdminSettingsUpdateInput = Record<string, unknown> & {
+  requestId?: string;
+};
+
+export type BackySiteSettingsUpdateInput = Record<string, unknown> & {
+  requestId?: string;
+};
+
 export interface BackyFrontendLaunchReadiness {
   schemaVersion: "backy.frontend-launch-readiness.v1";
   status: "ready" | "attention" | "blocked";
@@ -5009,6 +5125,60 @@ export class BackyClient {
 
   getSiteId(): string | undefined {
     return this.siteId;
+  }
+
+  adminSettings(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsResponse> {
+    return this.request("/api/admin/settings", {
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  updateAdminSettings(
+    input: BackyAdminSettingsUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSettingsResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/settings", {
+      method: "PATCH",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  adminSiteSettings(
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackySiteSettingsResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminSiteSettings(
+    input: BackySiteSettingsUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackySiteSettingsResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
   }
 
   sites(): Promise<

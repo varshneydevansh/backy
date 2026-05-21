@@ -13,6 +13,9 @@ import type {
   BackyManifestCommerceRuntimeModule,
   BackyManifestCollectionSchema,
   BackyManifestCollectionsRuntimeModule,
+  BackyAdminSettings,
+  BackyAdminSettingsResponse,
+  BackySiteSettingsScope,
   BackyManifestLocalizedRoutePatternGroup,
   BackyManifestPageResource,
   BackyManifestPagesRuntimeModule,
@@ -28,6 +31,7 @@ import type {
   BackyMediaBindingResponse,
   BackyMediaSignedUrlInput,
   BackyMediaSignedUrlResponse,
+  BackySiteSettingsResponse,
   BackyManifestDeliveryDiscovery,
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
@@ -270,6 +274,27 @@ type LiveManagedPageMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["liveManagedPage"]>,
     BackyLiveManagedPageResponse
+  >
+>;
+type AdminSettingsMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminSettings"]>, BackyAdminSettingsResponse>
+>;
+type AdminSettingsUpdateMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminSettings"]>,
+    BackyAdminSettingsResponse
+  >
+>;
+type AdminSiteSettingsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminSiteSettings"]>,
+    BackySiteSettingsResponse
+  >
+>;
+type AdminSiteSettingsUpdateMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminSiteSettings"]>,
+    BackySiteSettingsResponse
   >
 >;
 type LiveManagedPageUpdateMethodReturnsContract = Assert<
@@ -589,6 +614,95 @@ const frontendDatabaseCertification = {
 } satisfies GeneratedBackyFrontendManifestDatabaseCertification;
 
 const convenienceFrontendDatabaseCertification = frontendDatabaseCertification satisfies BackyFrontendDatabaseCertification;
+
+const sdkAdminSettings = {
+  schemaVersion: "backy.admin-settings.v1",
+  scope: {
+    workspaceSettingsScope: "global",
+    siteSettingsScope: "site",
+    siteSettingsEndpointTemplate: "/api/admin/sites/:siteId/settings",
+  },
+  endpoints: {
+    workspaceSettings: "/api/admin/settings",
+    siteSettings: "/api/admin/sites/:siteId/settings",
+  },
+  deliveryMode: "custom-frontend",
+  apiKeys: {
+    publicApiKey: "pk_demo",
+    adminApiKey: "",
+  },
+  runtimeDatabase: {
+    mode: "database",
+    provider: "postgres",
+  },
+  providerCertification: {
+    schemaVersion: "backy.settings-provider-certification-handoff.v1",
+    status: "external-live-provider-gate",
+    settingsGate: "npm run ci:settings-provider-certification",
+    scenarioEvidence: {
+      schemaVersion: "backy.settings-provider-certification-evidence.v1",
+      status: "attention",
+      coverage: {
+        covered: 4,
+        total: 8,
+        missing: ["storage-media"],
+      },
+      scenarios: [],
+    },
+  },
+  frontendDatabaseCertification,
+} satisfies BackyAdminSettings;
+
+const sdkAdminSettingsEnvelope = {
+  success: true,
+  requestId: "req_admin_settings",
+  data: {
+    settings: sdkAdminSettings,
+  },
+} satisfies BackyAdminSettingsResponse;
+
+const sdkSiteSettings = {
+  schemaVersion: "backy.site-settings-scope.v1",
+  scope: {
+    level: "site",
+    siteId: "site_demo",
+    siteSlug: "demo",
+    workspaceSettingsScope: "global",
+    siteSettingsScope: "site",
+  },
+  siteSettings: {
+    localization: {
+      defaultLocale: "en",
+    },
+  },
+  workspaceSettings: {
+    deliveryMode: "custom-frontend",
+  },
+  effectiveSettings: {
+    workspace: {
+      deliveryMode: "custom-frontend",
+    },
+    site: {
+      localization: {
+        defaultLocale: "en",
+      },
+    },
+  },
+  frontendDatabaseCertification,
+  endpoints: {
+    workspaceSettings: "/api/admin/settings",
+    siteSettings: "/api/admin/sites/site_demo/settings",
+    siteDetail: "/api/admin/sites/site_demo",
+  },
+} satisfies BackySiteSettingsScope;
+
+const sdkSiteSettingsEnvelope = {
+  success: true,
+  requestId: "req_site_settings",
+  data: {
+    settings: sdkSiteSettings,
+  },
+} satisfies BackySiteSettingsResponse;
 
 const frontendLaunchReadiness = {
   generatedAt: "2026-05-21T00:00:00.000Z",
