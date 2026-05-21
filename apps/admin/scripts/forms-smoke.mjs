@@ -128,7 +128,13 @@ const assertFormsPersistenceCertificationSource = () => {
   );
   assert(source.includes('cloneForm,') && source.includes('handleCloneSelectedForm') && source.includes('data-testid="form-clone-button"'), 'Forms page must expose a selected-form clone action');
   assert(source.includes('setIsCloningForm(true)') && source.includes("isActive: false") && source.includes('cloned as an inactive form.'), 'Forms clone action must create inactive clones with busy and notice states');
-  assert(reviewRouteSource.includes("import { PATCH } from '../route'") && reviewRouteSource.includes('export async function POST'), 'Forms review POST route must delegate to the audited submission review implementation');
+  assert(
+    reviewRouteSource.includes("import { PATCH } from '../route'") &&
+      reviewRouteSource.includes('export async function POST') &&
+      reviewRouteSource.includes('requireAdminAccess') &&
+      reviewRouteSource.includes("permission: 'forms.manage'"),
+    'Forms review POST route must explicitly require forms.manage before delegating to the audited submission review implementation',
+  );
   assert(
     source.includes('duplicateFormDraftField') &&
       source.includes('getUniqueFormDraftFieldKey') &&
