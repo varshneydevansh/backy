@@ -9,6 +9,7 @@ import {
   buildBackyInteractiveRuntimeEventInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyMediaBindingInput,
+  buildBackyMediaSignedUrlInput,
   createBackyClient,
   findBackyContentElement,
   listBackyContentElements,
@@ -785,6 +786,16 @@ assert(mediaBindingInput.targetType === 'post', 'buildBackyMediaBindingInput() d
 assert(mediaBindingInput.targetId === 'sdk-smoke-post', 'buildBackyMediaBindingInput() did not normalize target id');
 assert(mediaBindingInput.usageType === 'featured', 'buildBackyMediaBindingInput() did not normalize usage alias');
 assert(mediaBindingInput.attachedBy === 'sdk-smoke', 'buildBackyMediaBindingInput() did not normalize attachedBy alias');
+const mediaSignedUrlInput = buildBackyMediaSignedUrlInput({
+  access: {
+    disposition: 'download',
+    ttl: '900',
+  },
+  requestId: 'sdk-media-signed-url',
+});
+assert(mediaSignedUrlInput.disposition === 'attachment', 'buildBackyMediaSignedUrlInput() did not normalize download disposition');
+assert(mediaSignedUrlInput.expiresInSeconds === 900, 'buildBackyMediaSignedUrlInput() did not normalize ttl seconds');
+assert(mediaSignedUrlInput.requestId === 'sdk-media-signed-url', 'buildBackyMediaSignedUrlInput() did not preserve request id');
 const manifestTheme = manifest.data.modules?.theme;
 assert(manifestTheme?.schemaVersion === 'backy.theme-discovery.v1', 'manifest() missing theme discovery module');
 assert(manifestTheme.tokenSchemaVersion === 'backy.theme.v1', 'manifest() theme discovery missing token schema marker');

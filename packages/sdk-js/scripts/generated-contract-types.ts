@@ -26,6 +26,8 @@ import type {
   BackyManifestRoutePattern,
   BackyMediaBindingInput,
   BackyMediaBindingResponse,
+  BackyMediaSignedUrlInput,
+  BackyMediaSignedUrlResponse,
   BackyManifestDeliveryDiscovery,
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
@@ -226,6 +228,7 @@ import {
   buildBackyFormSubmissionInput,
   buildBackyInteractiveRuntimeEventInput,
   buildBackyMediaBindingInput,
+  buildBackyMediaSignedUrlInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyLiveManagedPageEditableMapUpdate,
   findBackyContentElement,
@@ -298,6 +301,18 @@ type MediaBindingInputBuilderReturnsContract = Assert<
 >;
 type MediaBindingMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["bindMedia"]>, BackyMediaBindingResponse>
+>;
+type MediaSignedUrlInputBuilderReturnsContract = Assert<
+  Equal<
+    ReturnType<typeof buildBackyMediaSignedUrlInput>,
+    BackyMediaSignedUrlInput
+  >
+>;
+type MediaSignedUrlMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createMediaSignedUrl"]>,
+    BackyMediaSignedUrlResponse
+  >
 >;
 type InteractiveRuntimeEventInputBuilderReturnsContract = Assert<
   Equal<
@@ -3964,6 +3979,16 @@ const sdkMediaBindingInput = buildBackyMediaBindingInput({
 });
 const sdkMediaBindingInputContract =
   sdkMediaBindingInput satisfies BackyMediaBindingInput;
+
+const sdkMediaSignedUrlInput = buildBackyMediaSignedUrlInput({
+  access: {
+    disposition: "download",
+    ttl: "900",
+  },
+  requestId: "sdk-media-signed-url",
+});
+const sdkMediaSignedUrlInputContract =
+  sdkMediaSignedUrlInput satisfies BackyMediaSignedUrlInput;
 
 const mediaFolder = {
   id: "folder_brand",

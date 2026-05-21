@@ -2925,6 +2925,42 @@ export type BackyMediaBindingResponse = BackyEnvelope<{
   };
 }>;
 
+export type BackyMediaSignedUrlDisposition = "inline" | "attachment";
+
+export interface BackyMediaSignedUrlInput {
+  disposition?: BackyMediaSignedUrlDisposition;
+  expiresInSeconds?: number;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyMediaSignedUrlInputSource =
+  Partial<BackyMediaSignedUrlInput> & Record<string, unknown>;
+
+export interface BackyMediaSignedUrlInputBuildOptions {
+  disposition?: BackyMediaSignedUrlDisposition | string;
+  expiresInSeconds?: number | string;
+  requestId?: string;
+}
+
+export type BackyMediaSignedUrlRequestOptions = BackyLiveManagementRequestOptions;
+
+export type BackyMediaSignedUrlResponse = BackyEnvelope<{
+  media: {
+    id: string;
+    siteId?: string;
+    filename?: string;
+    originalName?: string;
+    mimeType?: string;
+    visibility?: string;
+    [key: string]: unknown;
+  };
+  signedUrl: string;
+  path: string;
+  expiresAt: number;
+  disposition: BackyMediaSignedUrlDisposition;
+}>;
+
 const backyMediaBindingRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -3061,6 +3097,77 @@ export function buildBackyMediaBindingInput(
     usageType: usageType || "content",
   };
   if (attachedBy) input.attachedBy = attachedBy;
+  if (requestId) input.requestId = requestId;
+  return input;
+}
+
+const normalizeBackyMediaSignedUrlDisposition = (
+  value: unknown,
+): BackyMediaSignedUrlDisposition | undefined => {
+  const text = backyMediaBindingText(value).toLowerCase();
+  if (text === "inline" || text === "preview" || text === "view") {
+    return "inline";
+  }
+  if (text === "attachment" || text === "download") {
+    return "attachment";
+  }
+  return undefined;
+};
+
+const normalizeBackyMediaSignedUrlExpiresIn = (
+  value: unknown,
+): number | undefined => {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value;
+  }
+  const text = backyMediaBindingText(value);
+  if (!text) return undefined;
+  const parsed = Number(text);
+  return Number.isInteger(parsed) ? parsed : undefined;
+};
+
+export function buildBackyMediaSignedUrlInput(
+  source: BackyMediaSignedUrlInputSource | undefined | null,
+  options: BackyMediaSignedUrlInputBuildOptions = {},
+): BackyMediaSignedUrlInput {
+  const body = backyMediaBindingRecord(source);
+  const access = backyMediaBindingRecord(body.access);
+  const delivery = backyMediaBindingRecord(body.delivery);
+  const disposition =
+    normalizeBackyMediaSignedUrlDisposition(options.disposition) ??
+    normalizeBackyMediaSignedUrlDisposition(body.disposition) ??
+    normalizeBackyMediaSignedUrlDisposition(body.contentDisposition) ??
+    normalizeBackyMediaSignedUrlDisposition(body.deliveryMode) ??
+    normalizeBackyMediaSignedUrlDisposition(access.disposition) ??
+    normalizeBackyMediaSignedUrlDisposition(delivery.disposition) ??
+    (body.download === true || access.download === true
+      ? "attachment"
+      : body.inline === true || access.inline === true
+        ? "inline"
+        : undefined);
+  const expiresInSeconds = normalizeBackyMediaSignedUrlExpiresIn(
+    options.expiresInSeconds ??
+      body.expiresInSeconds ??
+      body.expiresIn ??
+      body.ttlSeconds ??
+      body.ttl ??
+      body.maxAge ??
+      access.expiresInSeconds ??
+      access.expiresIn ??
+      delivery.expiresInSeconds,
+  );
+  const requestId = backyMediaBindingText(
+    options.requestId,
+    body.requestId,
+    access.requestId,
+    delivery.requestId,
+  );
+
+  const input: BackyMediaSignedUrlInput = {};
+  if (disposition) input.disposition = disposition;
+  if (expiresInSeconds !== undefined) {
+    input.expiresInSeconds = expiresInSeconds;
+  }
   if (requestId) input.requestId = requestId;
   return input;
 }
@@ -5456,6 +5563,24 @@ export class BackyClient {
     const body = buildBackyMediaBindingInput(input);
     return this.request(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/bind`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? body.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  createMediaSignedUrl(
+    mediaId: string,
+    input: BackyMediaSignedUrlInputSource = {},
+    options: BackyMediaSignedUrlRequestOptions = {},
+  ): Promise<BackyMediaSignedUrlResponse> {
+    const body = buildBackyMediaSignedUrlInput(input);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/signed-url`,
       {
         method: "POST",
         body,
