@@ -2194,6 +2194,47 @@ if (runWriteSmoke) {
     assert(promotedCustomer.data.record?.values?.email === 'sdk-manual-contact@example.com', 'promoteFormContactToCustomer() did not create a customer email value');
     writeChecks.push('promoteFormContactToCustomer');
 
+    const promotionEmailDomain = await getCleanupOwnerEmailDomain();
+    const promotionEmail = `sdk-promoted-contact-${Date.now()}@${promotionEmailDomain}`;
+    const userPromotionContact = await writeClient.createFormContact('sdk-smoke-form', {
+      name: 'SDK User Promotion Contact',
+      email: promotionEmail,
+      status: 'qualified',
+      notes: 'Created for SDK contact-to-user promotion coverage.',
+      sourceValues: {
+        company: 'Backy SDK',
+      },
+      requestId: 'sdk-contact-user-promotion-create',
+    });
+    const userPromotionContactId = userPromotionContact.data.contact?.id;
+    assert(userPromotionContactId, 'createFormContact() missing user-promotion contact id');
+    let promotedUserId = null;
+    try {
+      const promotedUser = await writeClient.promoteFormContactToUser('sdk-smoke-form', userPromotionContactId, {
+        role: 'viewer',
+        status: 'invited',
+        createInvite: false,
+        requestId: 'sdk-contact-promote-user',
+      });
+      promotedUserId = promotedUser.data.user?.id;
+      assert(promotedUserId, 'promoteFormContactToUser() missing promoted user id');
+      assert(promotedUser.data.existingUser === false, 'promoteFormContactToUser() should create a new smoke user');
+      assert(promotedUser.data.user?.email === promotionEmail, 'promoteFormContactToUser() returned wrong user email');
+      assert(promotedUser.data.user?.role === 'viewer', 'promoteFormContactToUser() returned wrong user role');
+      assert(promotedUser.data.user?.status === 'invited', 'promoteFormContactToUser() returned wrong user status');
+      assert(!promotedUser.data.invite, 'promoteFormContactToUser() should not create an invite when createInvite is false');
+      assert(promotedUser.data.contact?.id === userPromotionContactId, 'promoteFormContactToUser() returned wrong contact');
+      assert(promotedUser.data.contact?.sourceValues?.__backyPromotion?.userId === promotedUserId, 'promoteFormContactToUser() missing contact promotion metadata');
+      writeChecks.push('promoteFormContactToUser');
+    } finally {
+      if (promotedUserId) {
+        const deletedPromotedUser = await writeClient.deleteAdminUser(promotedUserId, {
+          requestId: 'sdk-contact-promote-user-cleanup',
+        });
+        assert(deletedPromotedUser.data.deleted === true, 'deleteAdminUser() did not clean up promoted smoke user');
+      }
+    }
+
     const contactSyncReceiver = await startSmokeWebhookReceiver('/sdk-contact-sync');
     try {
       const syncedContacts = await writeClient.syncFormContacts('sdk-smoke-form', {
