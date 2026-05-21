@@ -75,6 +75,7 @@ export type {
   GeneratedBackyOpenApiCommerceOrderEnvelope,
   GeneratedBackyOpenApiCommerceProduct,
   GeneratedBackyOpenApiCommerceProductDesign,
+  GeneratedBackyOpenApiCommerceManagementPolicy,
   GeneratedBackyOpenApiCommerceProviderCertification,
   GeneratedBackyOpenApiCommerceStorefrontContract,
   GeneratedBackyOpenApiCommerceWebhookEnvelope,
@@ -2400,6 +2401,116 @@ export type BackyCommerceReconciliationBatchResponse = BackyEnvelope<
   }
 >;
 
+export interface BackyManifestCommerceManagementPolicy {
+  schemaVersion: "backy.commerce-management.v1";
+  endpoints: {
+    products: string;
+    product: string;
+    productsCsv: string;
+    importProducts: string;
+    bulkProducts: string;
+    orders: string;
+    order: string;
+    ordersCsv: string;
+    importOrders: string;
+    bulkOrders: string;
+    orderAnalytics: string;
+    orderStatusHandoff: string;
+    orderQuote: string;
+    orderTracking: string;
+    orderFulfillment: string;
+    orderShippingLabel: string;
+    orderProviderRefund: string;
+    productProviderSync: string;
+    productSubscriptions: string;
+    productSubscriptionAction: string;
+    siteReconciliation: string;
+    platformReconciliation: string;
+    reconciliationReadiness: string;
+    orderEvents: string;
+    productEvents: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    listProducts: "GET";
+    createProduct: "POST";
+    readProduct: "GET";
+    updateProduct: "PATCH";
+    deleteProduct: "DELETE";
+    exportProductsCsv: "GET";
+    importProductsCsv: "POST";
+    bulkProducts: "POST";
+    listOrders: "GET";
+    createOrderRecord: "POST";
+    readOrder: "GET";
+    updateOrder: "PATCH";
+    deleteOrder: "DELETE";
+    exportOrdersCsv: "GET";
+    importOrdersCsv: "POST";
+    bulkOrders: "POST";
+    orderAnalytics: "GET";
+    orderStatusHandoff: "GET";
+    orderQuote: "GET";
+    refreshOrderQuote: "POST";
+    orderTracking: "GET";
+    refreshOrderTracking: "POST";
+    orderFulfillment: "GET";
+    dispatchOrderFulfillment: "POST";
+    orderShippingLabel: "GET";
+    createOrderShippingLabel: "POST";
+    voidOrderShippingLabel: "DELETE";
+    orderProviderRefund: "GET";
+    createOrderProviderRefund: "POST";
+    refreshOrderProviderRefund: "PATCH";
+    productProviderSync: "GET";
+    syncProductProvider: "POST";
+    productSubscriptions: "GET";
+    productSubscriptionAction: "POST";
+    scheduledSiteReconciliation: "GET";
+    runSiteReconciliation: "POST";
+    platformReconciliation: "GET";
+    reconciliationReadiness: "GET";
+    orderEvents: "GET";
+    productEvents: "GET";
+    [key: string]: unknown;
+  };
+  auth: {
+    modes: Array<"session" | "api-key">;
+    headers: string[];
+    requiredPermissions: {
+      read: "commerce.view";
+      write: "commerce.edit";
+      configure: "commerce.configure";
+      delete: "commerce.delete";
+      collectionRead: "collections.view";
+      collectionWrite: "collections.edit";
+      collectionExport: "collections.export";
+      collectionDelete: "collections.delete";
+      pageTemplates: "pages.edit";
+      mediaRead: "media.view";
+      mediaCreate: "media.create";
+      activity: "activity.export";
+      [key: string]: unknown;
+    };
+    siteScope: true;
+    platformEndpoints: string[];
+    [key: string]: unknown;
+  };
+  sdkHelpers: Record<string, string>;
+  responseContracts: Record<string, string>;
+  privacy: {
+    productCatalogCanBePublic: true;
+    ordersRemainPrivate: true;
+    orderStatusHandoffMasksCustomerContact: true;
+    providerOperationPayloadsMayContainCustomerData: true;
+    providerSecretsNeverReturned: true;
+    rawProviderResponsesStayPrivate: true;
+    [key: string]: unknown;
+  };
+  secretHandling: string;
+  [key: string]: unknown;
+}
+
 export interface BackyManifestCommerceRuntimeModule {
   schemaVersion: "backy.commerce-discovery.v1";
   enabled: boolean;
@@ -2452,6 +2563,13 @@ export interface BackyManifestCommerceRuntimeModule {
     providerCertification: boolean;
     conditionalRequests: boolean;
     cacheableCatalog: boolean;
+    authenticatedManagement: boolean;
+    productAdmin: boolean;
+    orderAdmin: boolean;
+    providerOperations: boolean;
+    fulfillmentOperations: boolean;
+    reconciliation: boolean;
+    customerStatusHandoff: boolean;
     [key: string]: unknown;
   };
   orderRequest: {
@@ -2497,6 +2615,7 @@ export interface BackyManifestCommerceRuntimeModule {
     providerSecretsNeverReturned: boolean;
     [key: string]: unknown;
   };
+  managementPolicy: BackyManifestCommerceManagementPolicy;
   filters: {
     queryParams: string[];
     maxLimit: number;

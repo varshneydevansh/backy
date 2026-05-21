@@ -1101,6 +1101,10 @@ assert(openapi.components?.schemas?.MediaManagementPolicy, 'openapi() missing me
 assert(openapi['x-backy-forms-management']?.schemaVersion === 'backy.forms-management.v1', 'openapi() missing forms management policy');
 assert(openapi['x-backy-forms-management']?.sdkHelpers?.clone === 'cloneAdminForm', 'openapi() forms management missing clone helper metadata');
 assert(openapi.components?.schemas?.FormsManagementPolicy, 'openapi() missing forms management policy schema');
+assert(openapi['x-backy-commerce-management']?.schemaVersion === 'backy.commerce-management.v1', 'openapi() missing commerce management policy');
+assert(openapi['x-backy-commerce-management']?.sdkHelpers?.orderStatusHandoff === 'commerceOrderStatusHandoff', 'openapi() commerce management missing order status handoff helper metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.providerCertification === 'backy.commerce-provider-certification-handoff.v1', 'openapi() commerce management missing provider certification contract metadata');
+assert(openapi.components?.schemas?.CommerceManagementPolicy, 'openapi() missing commerce management policy schema');
 assert(openapi['x-backy-database-certification']?.schemaVersion === manifest.data.contract.databaseCertification.schemaVersion, 'openapi() missing database certification schema extension');
 assert(openapi['x-backy-database-certification']?.gate?.command === manifest.data.contract.databaseCertification.gate.command, 'openapi() database certification command drifted from manifest');
 assert(openapi['x-backy-database-certification']?.operatorCommandTemplate?.command === manifest.data.contract.databaseCertification.operatorCommandTemplate.command, 'openapi() database certification operator command drifted from manifest');
@@ -1845,6 +1849,18 @@ try {
   assert(manifestCommerceRuntime.orderRequest?.checkoutSessionStatuses?.includes?.('provider_created'), 'manifest() commerce runtime missing provider-created checkout status');
   assert(manifestCommerceRuntime.cache?.createOrder === 'private-no-store', 'manifest() commerce runtime create order cache policy drifted');
   assert(manifestCommerceRuntime.privacy?.ordersCollectionMustRemainPrivate === true, 'manifest() commerce runtime missing private order queue boundary');
+  assert(manifestCommerceRuntime.capabilities?.authenticatedManagement === true, 'manifest() commerce runtime missing authenticated management capability');
+  assert(manifestCommerceRuntime.capabilities?.providerOperations === true, 'manifest() commerce runtime missing provider operations capability');
+  assert(manifestCommerceRuntime.managementPolicy?.schemaVersion === 'backy.commerce-management.v1', 'manifest() commerce management missing schema version');
+  assert(manifestCommerceRuntime.managementPolicy?.endpoints?.products?.includes?.('/collections/products/records'), 'manifest() commerce management missing products endpoint');
+  assert(manifestCommerceRuntime.managementPolicy?.endpoints?.orderQuote?.includes?.('/quote'), 'manifest() commerce management missing order quote endpoint');
+  assert(manifestCommerceRuntime.managementPolicy?.methods?.refreshOrderQuote === 'POST', 'manifest() commerce management missing quote refresh method');
+  assert(manifestCommerceRuntime.managementPolicy?.auth?.requiredPermissions?.write === 'commerce.edit', 'manifest() commerce management write permission drifted');
+  assert(manifestCommerceRuntime.managementPolicy?.auth?.requiredPermissions?.collectionExport === 'collections.export', 'manifest() commerce management collection export permission drifted');
+  assert(manifestCommerceRuntime.managementPolicy?.sdkHelpers?.syncProductProvider === 'syncCommerceProductProvider', 'manifest() commerce management missing product provider sync helper');
+  assert(manifestCommerceRuntime.managementPolicy?.sdkHelpers?.orderStatusHandoff === 'commerceOrderStatusHandoff', 'manifest() commerce management missing order status handoff helper');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.providerCertification === 'backy.commerce-provider-certification-handoff.v1', 'manifest() commerce management missing provider certification contract');
+  assert(manifestCommerceRuntime.managementPolicy?.privacy?.providerSecretsNeverReturned === true, 'manifest() commerce management must not expose provider secrets');
   assert(manifestCommerceRuntime.filters?.queryParams?.includes?.('productType'), 'manifest() commerce runtime missing productType filter metadata');
   assert(manifestCommerceRuntime.schemas?.orderQueueNotPrivate === 'ORDER_QUEUE_NOT_PRIVATE', 'manifest() commerce runtime order queue privacy schema drifted');
 

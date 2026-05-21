@@ -2449,9 +2449,16 @@
                     "providerWebhooks": { "type": "boolean" },
                     "providerCertification": { "type": "boolean" },
                     "conditionalRequests": { "type": "boolean" },
-                    "cacheableCatalog": { "type": "boolean" }
+                    "cacheableCatalog": { "type": "boolean" },
+                    "authenticatedManagement": { "type": "boolean" },
+                    "productAdmin": { "type": "boolean" },
+                    "orderAdmin": { "type": "boolean" },
+                    "providerOperations": { "type": "boolean" },
+                    "fulfillmentOperations": { "type": "boolean" },
+                    "reconciliation": { "type": "boolean" },
+                    "customerStatusHandoff": { "type": "boolean" }
                   },
-                  "required": ["catalog", "orderIntake", "providerCheckout", "productFilters", "productFacets", "inventoryReservations", "pricingRules", "guestCheckout", "providerWebhooks", "providerCertification", "conditionalRequests", "cacheableCatalog"]
+                  "required": ["catalog", "orderIntake", "providerCheckout", "productFilters", "productFacets", "inventoryReservations", "pricingRules", "guestCheckout", "providerWebhooks", "providerCertification", "conditionalRequests", "cacheableCatalog", "authenticatedManagement", "productAdmin", "orderAdmin", "providerOperations", "fulfillmentOperations", "reconciliation", "customerStatusHandoff"]
                 },
                 "orderRequest": {
                   "type": "object",
@@ -2522,6 +2529,139 @@
                   },
                   "required": ["publicCatalogExcludesPrivateOrderQueue", "ordersCollectionMustRemainPrivate", "publicOrderPayloadContainsCustomerData", "providerSecretsNeverReturned"]
                 },
+                "managementPolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.commerce-management.v1" },
+                    "endpoints": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "products": { "type": "string", "minLength": 1 },
+                        "product": { "type": "string", "minLength": 1 },
+                        "productsCsv": { "type": "string", "minLength": 1 },
+                        "importProducts": { "type": "string", "minLength": 1 },
+                        "bulkProducts": { "type": "string", "minLength": 1 },
+                        "orders": { "type": "string", "minLength": 1 },
+                        "order": { "type": "string", "minLength": 1 },
+                        "ordersCsv": { "type": "string", "minLength": 1 },
+                        "importOrders": { "type": "string", "minLength": 1 },
+                        "bulkOrders": { "type": "string", "minLength": 1 },
+                        "orderAnalytics": { "type": "string", "minLength": 1 },
+                        "orderStatusHandoff": { "type": "string", "minLength": 1 },
+                        "orderQuote": { "type": "string", "minLength": 1 },
+                        "orderTracking": { "type": "string", "minLength": 1 },
+                        "orderFulfillment": { "type": "string", "minLength": 1 },
+                        "orderShippingLabel": { "type": "string", "minLength": 1 },
+                        "orderProviderRefund": { "type": "string", "minLength": 1 },
+                        "productProviderSync": { "type": "string", "minLength": 1 },
+                        "productSubscriptions": { "type": "string", "minLength": 1 },
+                        "productSubscriptionAction": { "type": "string", "minLength": 1 },
+                        "siteReconciliation": { "type": "string", "minLength": 1 },
+                        "platformReconciliation": { "type": "string", "minLength": 1 },
+                        "reconciliationReadiness": { "type": "string", "minLength": 1 },
+                        "orderEvents": { "type": "string", "minLength": 1 },
+                        "productEvents": { "type": "string", "minLength": 1 }
+                      },
+                      "required": ["products", "product", "productsCsv", "importProducts", "bulkProducts", "orders", "order", "ordersCsv", "importOrders", "bulkOrders", "orderAnalytics", "orderStatusHandoff", "orderQuote", "orderTracking", "orderFulfillment", "orderShippingLabel", "orderProviderRefund", "productProviderSync", "productSubscriptions", "productSubscriptionAction", "siteReconciliation", "platformReconciliation", "reconciliationReadiness", "orderEvents", "productEvents"]
+                    },
+                    "methods": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "listProducts": { "const": "GET" },
+                        "createProduct": { "const": "POST" },
+                        "readProduct": { "const": "GET" },
+                        "updateProduct": { "const": "PATCH" },
+                        "deleteProduct": { "const": "DELETE" },
+                        "exportProductsCsv": { "const": "GET" },
+                        "importProductsCsv": { "const": "POST" },
+                        "bulkProducts": { "const": "POST" },
+                        "listOrders": { "const": "GET" },
+                        "createOrderRecord": { "const": "POST" },
+                        "readOrder": { "const": "GET" },
+                        "updateOrder": { "const": "PATCH" },
+                        "deleteOrder": { "const": "DELETE" },
+                        "exportOrdersCsv": { "const": "GET" },
+                        "importOrdersCsv": { "const": "POST" },
+                        "bulkOrders": { "const": "POST" },
+                        "orderAnalytics": { "const": "GET" },
+                        "orderStatusHandoff": { "const": "GET" },
+                        "orderQuote": { "const": "GET" },
+                        "refreshOrderQuote": { "const": "POST" },
+                        "orderTracking": { "const": "GET" },
+                        "refreshOrderTracking": { "const": "POST" },
+                        "orderFulfillment": { "const": "GET" },
+                        "dispatchOrderFulfillment": { "const": "POST" },
+                        "orderShippingLabel": { "const": "GET" },
+                        "createOrderShippingLabel": { "const": "POST" },
+                        "voidOrderShippingLabel": { "const": "DELETE" },
+                        "orderProviderRefund": { "const": "GET" },
+                        "createOrderProviderRefund": { "const": "POST" },
+                        "refreshOrderProviderRefund": { "const": "PATCH" },
+                        "productProviderSync": { "const": "GET" },
+                        "syncProductProvider": { "const": "POST" },
+                        "productSubscriptions": { "const": "GET" },
+                        "productSubscriptionAction": { "const": "POST" },
+                        "scheduledSiteReconciliation": { "const": "GET" },
+                        "runSiteReconciliation": { "const": "POST" },
+                        "platformReconciliation": { "const": "GET" },
+                        "reconciliationReadiness": { "const": "GET" },
+                        "orderEvents": { "const": "GET" },
+                        "productEvents": { "const": "GET" }
+                      },
+                      "required": ["listProducts", "createProduct", "readProduct", "updateProduct", "deleteProduct", "exportProductsCsv", "importProductsCsv", "bulkProducts", "listOrders", "createOrderRecord", "readOrder", "updateOrder", "deleteOrder", "exportOrdersCsv", "importOrdersCsv", "bulkOrders", "orderAnalytics", "orderStatusHandoff", "orderQuote", "refreshOrderQuote", "orderTracking", "refreshOrderTracking", "orderFulfillment", "dispatchOrderFulfillment", "orderShippingLabel", "createOrderShippingLabel", "voidOrderShippingLabel", "orderProviderRefund", "createOrderProviderRefund", "refreshOrderProviderRefund", "productProviderSync", "syncProductProvider", "productSubscriptions", "productSubscriptionAction", "scheduledSiteReconciliation", "runSiteReconciliation", "platformReconciliation", "reconciliationReadiness", "orderEvents", "productEvents"]
+                    },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "modes": { "type": "array", "items": { "enum": ["session", "api-key"] } },
+                        "headers": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                        "requiredPermissions": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "read": { "const": "commerce.view" },
+                            "write": { "const": "commerce.edit" },
+                            "configure": { "const": "commerce.configure" },
+                            "delete": { "const": "commerce.delete" },
+                            "collectionRead": { "const": "collections.view" },
+                            "collectionWrite": { "const": "collections.edit" },
+                            "collectionExport": { "const": "collections.export" },
+                            "collectionDelete": { "const": "collections.delete" },
+                            "pageTemplates": { "const": "pages.edit" },
+                            "mediaRead": { "const": "media.view" },
+                            "mediaCreate": { "const": "media.create" },
+                            "activity": { "const": "activity.export" }
+                          },
+                          "required": ["read", "write", "configure", "delete", "collectionRead", "collectionWrite", "collectionExport", "collectionDelete", "pageTemplates", "mediaRead", "mediaCreate", "activity"]
+                        },
+                        "siteScope": { "const": true },
+                        "platformEndpoints": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+                      },
+                      "required": ["modes", "headers", "requiredPermissions", "siteScope", "platformEndpoints"]
+                    },
+                    "sdkHelpers": { "type": "object", "additionalProperties": true },
+                    "responseContracts": { "type": "object", "additionalProperties": true },
+                    "privacy": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "productCatalogCanBePublic": { "const": true },
+                        "ordersRemainPrivate": { "const": true },
+                        "orderStatusHandoffMasksCustomerContact": { "const": true },
+                        "providerOperationPayloadsMayContainCustomerData": { "const": true },
+                        "providerSecretsNeverReturned": { "const": true },
+                        "rawProviderResponsesStayPrivate": { "const": true }
+                      },
+                      "required": ["productCatalogCanBePublic", "ordersRemainPrivate", "orderStatusHandoffMasksCustomerContact", "providerOperationPayloadsMayContainCustomerData", "providerSecretsNeverReturned", "rawProviderResponsesStayPrivate"]
+                    },
+                    "secretHandling": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["schemaVersion", "endpoints", "methods", "auth", "sdkHelpers", "responseContracts", "privacy", "secretHandling"]
+                },
                 "filters": {
                   "type": "object",
                   "additionalProperties": true,
@@ -2552,7 +2692,7 @@
                   "required": ["catalog", "settings", "orderContract", "product", "providerCertification", "productCatalogNotFound", "productNotFound", "orderQueueNotFound", "orderQueueNotPrivate", "validationError", "productOutOfStock"]
                 }
               },
-              "required": ["schemaVersion", "enabled", "mode", "currency", "paymentProvider", "catalogCollection", "ordersCollection", "endpoints", "methods", "capabilities", "orderRequest", "cache", "privacy", "filters", "schemas"]
+              "required": ["schemaVersion", "enabled", "mode", "currency", "paymentProvider", "catalogCollection", "ordersCollection", "endpoints", "methods", "capabilities", "orderRequest", "cache", "privacy", "managementPolicy", "filters", "schemas"]
             },
             "interactiveComponents": {
               "type": "object",

@@ -330,6 +330,7 @@ const sourceLines = [
   '  "x-backy-frontend-launch-readiness"?: GeneratedBackyFrontendManifestLaunchReadiness;',
   '  "x-backy-media-file-categories"?: GeneratedBackyOpenApiMediaFileCategoryDiscovery;',
   '  "x-backy-forms-management"?: GeneratedBackyOpenApiFormsManagementPolicy;',
+  '  "x-backy-commerce-management"?: GeneratedBackyOpenApiCommerceManagementPolicy;',
   '  "x-backy-live-management"?: GeneratedBackyOpenApiLiveManagementDiscovery;',
   '  info: { title: string; version: string; description?: string; [key: string]: unknown };',
   '  servers?: Array<{ url: string; [key: string]: unknown }>;',

@@ -351,9 +351,16 @@ assert(
     manifestRoute.includes("'provider_created'") &&
     manifestRoute.includes("ordersCollectionMustRemainPrivate: true") &&
     manifestRoute.includes("orderQueueNotPrivate: 'ORDER_QUEUE_NOT_PRIVATE'") &&
+    manifestRoute.includes("schemaVersion: 'backy.commerce-management.v1'") &&
+    manifestRoute.includes("authenticatedManagement: true") &&
+    manifestRoute.includes("orderStatusHandoff: 'commerceOrderStatusHandoff'") &&
+    manifestRoute.includes("syncProductProvider: 'syncCommerceProductProvider'") &&
+    manifestRoute.includes("providerSecretsNeverReturned: true") &&
     manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(input.site.id, commerce, productCollection, ordersCollection)') &&
     manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(site.id, commerce, productCollection, ordersCollection)') &&
     frontendManifestSchema.includes('"backy.commerce-discovery.v1"') &&
+    frontendManifestSchema.includes('"backy.commerce-management.v1"') &&
+    frontendManifestSchema.includes('"authenticatedManagement"') &&
     frontendManifestSchema.includes('"backy.commerce-order-request.v1"') &&
     frontendManifestSchema.includes('"commerceProviderCertification"') &&
     frontendManifestSchema.includes('"providerCertification": { "$ref": "#/$defs/commerceProviderCertification" }') &&
@@ -364,15 +371,24 @@ assert(
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCommerceProviderCertification') &&
     generatedSdkTypes.includes('providerCertification: GeneratedBackyFrontendManifestCommerceProviderCertification') &&
     sdkSource.includes('BackyManifestCommerceRuntimeModule') &&
+    sdkSource.includes('BackyManifestCommerceManagementPolicy') &&
     sdkSource.includes('GeneratedBackyFrontendManifestCommerceProviderCertification') &&
     sdkSource.includes('lineItems?: BackyCommerceLineItemInput[]') &&
     sdkSource.includes('checkoutSession?: string | { id?: string; [key: string]: unknown }') &&
     openApiRoute.includes('"provider_created"') &&
+    openApiRoute.includes('commerceManagementDiscovery') &&
+    openApiRoute.includes('"x-backy-commerce-management"') &&
+    openApiRoute.includes('CommerceManagementPolicy') &&
+    openApiRoute.includes('"backy.commerce-management.v1"') &&
     openApiRoute.includes('lineItems: {') &&
     openApiRoute.includes('customerName: { type: "string" }') &&
     sdkSmoke.includes('manifest() missing commerce runtime discovery module') &&
     sdkSmoke.includes('manifest() commerce runtime missing lineItems order alias') &&
+    sdkSmoke.includes('manifest() commerce management missing product provider sync helper') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceManagementPolicy') &&
+    generatedSdkTypes.includes('"x-backy-commerce-management"?: GeneratedBackyOpenApiCommerceManagementPolicy') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceProviderCertification') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestCommerceManagement') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceRuntimeDiscovery'),
   'Frontend manifest and SDK must expose structured commerce runtime discovery for custom frontend product catalog and checkout UIs.',
 );
