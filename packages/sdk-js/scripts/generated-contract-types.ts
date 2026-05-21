@@ -149,9 +149,10 @@ import type {
   BackyMediaBindingResponse,
   BackyMediaSignedUrlInput,
   BackyMediaSignedUrlResponse,
-  BackySiteSettingsResponse,
-  BackyManifestDeliveryDiscovery,
-  BackyFrontendDatabaseCertification,
+    BackySiteSettingsResponse,
+    BackyManifestDeliveryDiscovery,
+    BackyCompletionStatus,
+    BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
   BackyCommentBlocklistDeleteResponse,
@@ -231,9 +232,10 @@ import type {
   GeneratedBackyElementActions,
   GeneratedBackyPublicRenderPayloadBindingSlot,
   GeneratedBackyFrontendDesignContract,
-  GeneratedBackyFrontendDesignProvenance,
-  GeneratedBackyFrontendManifest,
-  GeneratedBackyFrontendManifestCommerceProviderCertification,
+    GeneratedBackyFrontendDesignProvenance,
+    GeneratedBackyFrontendManifest,
+    GeneratedBackyFrontendManifestCompletionStatus,
+    GeneratedBackyFrontendManifestCommerceProviderCertification,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
   GeneratedBackyFrontendManifestLaunchReadiness,
@@ -241,8 +243,9 @@ import type {
   GeneratedBackyInteractiveControl,
   GeneratedBackyInteractiveFallback,
   GeneratedBackyInteractiveRenderCapabilities,
-  GeneratedBackyOpenApiBackyContentAssetRef,
-  GeneratedBackyOpenApiBackyContentDocument,
+    GeneratedBackyOpenApiBackyContentAssetRef,
+    GeneratedBackyOpenApiBackyCompletionStatus,
+    GeneratedBackyOpenApiBackyContentDocument,
   GeneratedBackyOpenApiBackyContentElement,
   GeneratedBackyOpenApiBackyContentElementAccessibility,
   GeneratedBackyOpenApiBackyDataBinding,
@@ -4553,6 +4556,159 @@ const frontendLaunchReadiness = {
 
 const convenienceFrontendLaunchReadiness = frontendLaunchReadiness satisfies BackyFrontendLaunchReadiness;
 
+const completionStatus = {
+  schemaVersion: "backy.completion-status.v1",
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  status: "external-gates-required",
+  summary:
+    "Backy core backend/editor/API parity is implemented for the audited local scope; the remaining Partial rows require disposable database or live provider certification evidence.",
+  audit: {
+    source: "specs/page-completion-audit/backy-page-surface-audit.md",
+    ready: 39,
+    partial: 6,
+    prototype: 0,
+    missing: 0,
+    total: 45,
+    readyPercent: 87,
+  },
+  surfaces: [
+    {
+      key: "products",
+      label: "/products",
+      status: "partial",
+      blocker: "commerce-provider-certification",
+      gate: "npm run ci:commerce-provider-certification",
+    },
+    {
+      key: "orders",
+      label: "/orders",
+      status: "partial",
+      blocker: "commerce-provider-certification",
+      gate: "npm run ci:commerce-provider-certification",
+    },
+    {
+      key: "forms",
+      label: "/forms",
+      status: "partial",
+      blocker: "forms-postgres",
+      gate: "npm run ci:forms-postgres",
+    },
+    {
+      key: "settings",
+      label: "/settings",
+      status: "partial",
+      blocker: "settings-provider-certification",
+      gate: "npm run ci:settings-provider-certification",
+    },
+    {
+      key: "settings-admin-apis",
+      label: "Settings admin APIs",
+      status: "partial",
+      blocker: "settings-provider-certification",
+      gate: "npm run ci:settings-provider-certification",
+    },
+    {
+      key: "frontend-contracts",
+      label: "Frontend manifest/OpenAPI/SDK APIs",
+      status: "partial",
+      blocker: "sdk-postgres",
+      gate: "npm run ci:sdk-postgres-smoke",
+    },
+  ],
+  gates: [
+    {
+      key: "forms-postgres",
+      label: "Forms Supabase/Postgres persistence",
+      status: "blocked-missing-inputs",
+      command: "npm run ci:forms-postgres",
+      preflight: "npm run test:forms-postgres-preflight-contract",
+      disposableGuard: "npm run test:forms-postgres-disposable-guard",
+      workflow: ".github/workflows/forms-postgres-contract.yml",
+      affectedSurfaces: ["/forms"],
+      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
+      runtime: {
+        databaseUrlConfigured: false,
+        disposableDatabaseConfirmed: false,
+        missing: ["BACKY_DATABASE_URL or DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
+      },
+    },
+    {
+      key: "sdk-postgres",
+      label: "Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke",
+      status: "blocked-missing-inputs",
+      command: "npm run ci:sdk-postgres-smoke",
+      preflight: "npm run test:sdk-postgres-preflight-contract",
+      disposableGuard: "npm run test:sdk-postgres-disposable-guard",
+      workflow: ".github/workflows/sdk-postgres-smoke.yml",
+      affectedSurfaces: ["Frontend manifest/OpenAPI/SDK APIs"],
+      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true", "BACKY_SDK_REQUIRE_DATABASE=1"],
+      runtime: {
+        databaseUrlConfigured: false,
+        disposableDatabaseConfirmed: false,
+        missing: ["BACKY_DATABASE_URL or DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
+      },
+    },
+    {
+      key: "settings-provider-certification",
+      label: "Settings live provider certification",
+      status: "blocked-missing-inputs",
+      command: "npm run ci:settings-provider-certification",
+      preflight: "npm run test:settings-provider-certification-preflight-contract",
+      workflow: ".github/workflows/settings-provider-certification.yml",
+      affectedSurfaces: ["/settings", "Settings admin APIs"],
+      requiredEnvAliases: [
+        "BACKY_DATABASE_URL or DATABASE_URL",
+        "BACKY_SUPABASE_URL or SUPABASE_URL",
+        "BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY",
+        "BACKY_VERCEL_TOKEN or VERCEL_TOKEN",
+        "notification provider aliases",
+        "commerce provider aliases",
+      ],
+      runtime: {
+        configuredFamilies: [],
+        missingFamilies: ["database", "supabase", "storage", "vercel", "notifications", "commerce"],
+      },
+    },
+    {
+      key: "commerce-provider-certification",
+      label: "Commerce live provider certification",
+      status: "blocked-missing-inputs",
+      command: "npm run ci:commerce-provider-certification",
+      preflight: "npm run test:commerce-provider-certification-preflight-contract",
+      workflow: ".github/workflows/commerce-provider-certification.yml",
+      affectedSurfaces: ["/products", "/orders"],
+      requiredEnvAliases: [
+        "payment provider aliases",
+        "tax provider aliases",
+        "shipping provider aliases",
+        "discount provider aliases",
+        "catalog provider aliases",
+        "subscription provider aliases",
+        "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
+      ],
+      runtime: {
+        configuredFamilies: [],
+        missingFamilies: ["payment", "tax", "shipping", "discount", "catalog", "subscription", "webhook"],
+      },
+    },
+  ],
+  nextAction:
+    "Configure BACKY_DATABASE_URL or DATABASE_URL, BACKY_DATABASE_DISPOSABLE_CONFIRMED=true and run npm run ci:forms-postgres.",
+  recommendedCommands: [
+    "npm run ci:forms-postgres",
+    "npm run ci:sdk-postgres-smoke",
+    "npm run ci:settings-provider-certification",
+    "npm run ci:commerce-provider-certification",
+  ],
+  localPreflight: "npm run test:partial-gate-preflights",
+  privacy: {
+    includesSecretValues: false,
+    exposesOnlyAliasPresence: true,
+    secretHandling:
+      "Completion status exposes audited counts, gate names, workflow paths, env alias presence, and missing provider families only; database URLs, provider keys, admin keys, and customer/order/submission payloads are never returned.",
+  },
+} satisfies BackyCompletionStatus & GeneratedBackyFrontendManifestCompletionStatus & GeneratedBackyOpenApiBackyCompletionStatus;
+
 const interactiveControl = {
   key: "rounds",
   label: "Rounds",
@@ -5407,10 +5563,11 @@ const manifest = {
   },
   contract: {
     version: "backy.ai-frontend.v1",
-    docs: "/specs/ai-frontend-contract/README.md",
-    databaseCertification: frontendDatabaseCertification,
-    frontendLaunchReadiness,
-    schemas: {
+      docs: "/specs/ai-frontend-contract/README.md",
+      databaseCertification: frontendDatabaseCertification,
+      frontendLaunchReadiness,
+      completionStatus,
+      schemas: {
       manifest: "frontend-manifest.schema.json",
       renderPayload: "content-payload.schema.json",
       themeTokens: "theme-tokens.schema.json",
@@ -7709,6 +7866,7 @@ const siteListEnvelope = {
 const openApi = {
   openapi: "3.1.0",
   "x-backy-database-certification": frontendDatabaseCertification,
+  "x-backy-completion-status": completionStatus,
   "x-backy-media-file-categories": openApiMediaFileCategories,
   "x-backy-forms-management": sdkManifestFormsManagementPolicy,
   "x-backy-commerce-management": sdkManifestCommerceManagementPolicy,
@@ -7742,6 +7900,7 @@ const openApi = {
         },
       },
       SiteSummary: siteSummary,
+      BackyCompletionStatus: completionStatus,
       MediaFileCategoryDiscovery: openApiMediaFileCategories,
       FormsManagementPolicy: sdkManifestFormsManagementPolicy,
       CommerceManagementPolicy: sdkManifestCommerceManagementPolicy,
@@ -7779,6 +7938,7 @@ const openApiOperationId =
 const openApiComponentName =
   "ErrorEnvelope" satisfies GeneratedBackyOpenApiComponentName;
 const openApiComponents = {
+  BackyCompletionStatus: completionStatus,
   MediaFileCategoryDiscovery: openApiMediaFileCategories,
   FormsManagementPolicy: sdkManifestFormsManagementPolicy,
   CommerceManagementPolicy: sdkManifestCommerceManagementPolicy,
@@ -10484,6 +10644,18 @@ const invalidGeneratedManifestDatabaseCertification = {
   },
 } satisfies GeneratedBackyFrontendManifest;
 
+const invalidGeneratedManifestCompletionStatus = {
+  ...manifest,
+  contract: {
+    ...manifest.contract,
+    completionStatus: {
+      ...manifest.contract.completionStatus,
+      // @ts-expect-error generated manifest completion status has a stable schema version.
+      schemaVersion: "backy.completion-status.v0",
+    },
+  },
+} satisfies GeneratedBackyFrontendManifest;
+
 const invalidGeneratedManifestCapability = {
   ...manifest,
   capabilities: {
@@ -11174,6 +11346,7 @@ void invalidManifestLocaleStrategy;
 void invalidGeneratedManifestCommentPolicy;
 void invalidGeneratedManifestCommentsDiscovery;
 void invalidGeneratedManifestSchemas;
+void invalidGeneratedManifestCompletionStatus;
 void invalidGeneratedManifestCapability;
 void invalidGeneratedManifestEndpoint;
 void invalidGeneratedManifestNavigationItem;

@@ -488,6 +488,165 @@ const buildFrontendLaunchReadiness = ({
   };
 };
 
+const buildBackyCompletionStatus = () => {
+  const databaseUrlConfigured = Boolean(envValue(["BACKY_DATABASE_URL", "DATABASE_URL"]));
+  const disposableDatabaseConfirmed = booleanEnvEnabled("BACKY_DATABASE_DISPOSABLE_CONFIRMED");
+  const settingsProviderFamilies = {
+    database: databaseUrlConfigured,
+    supabase: Boolean(envValue(["BACKY_SUPABASE_URL", "SUPABASE_URL"])) && Boolean(envValue(["BACKY_SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE_KEY"])),
+    storage: Boolean(envValue(["BACKY_MEDIA_STORAGE_PROVIDER", "BACKY_STORAGE_PROVIDER", "AWS_ACCESS_KEY_ID", "SUPABASE_SERVICE_ROLE_KEY"])),
+    vercel: Boolean(envValue(["BACKY_VERCEL_TOKEN", "VERCEL_TOKEN"])),
+    notifications: Boolean(envValue(["BACKY_EMAIL_DELIVERY_ENDPOINT", "BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL", "BACKY_RESEND_API_KEY", "RESEND_API_KEY", "SMTP_HOST"])),
+    commerce: Boolean(envValue(["BACKY_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY", "BACKY_PAYPAL_ACCESS_TOKEN", "PAYPAL_ACCESS_TOKEN", "BACKY_COMMERCE_WEBHOOK_SECRET", "COMMERCE_WEBHOOK_SECRET"])),
+  };
+  const commerceProviderFamilies = {
+    payment: Boolean(envValue(["BACKY_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY", "BACKY_PAYPAL_ACCESS_TOKEN", "PAYPAL_ACCESS_TOKEN", "BACKY_PADDLE_API_KEY", "PADDLE_API_KEY", "BACKY_SQUARE_ACCESS_TOKEN", "SQUARE_ACCESS_TOKEN", "BACKY_ADYEN_API_KEY", "ADYEN_API_KEY", "BACKY_MOLLIE_API_KEY", "MOLLIE_API_KEY", "BACKY_RAZORPAY_KEY_ID", "RAZORPAY_KEY_ID"])),
+    tax: Boolean(envValue(["BACKY_TAXJAR_API_KEY", "TAXJAR_API_KEY", "BACKY_AVALARA_ACCOUNT_ID", "AVALARA_ACCOUNT_ID", "BACKY_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY"])),
+    shipping: Boolean(envValue(["BACKY_EASYPOST_API_KEY", "EASYPOST_API_KEY", "BACKY_SHIPPO_API_KEY", "SHIPPO_API_KEY"])),
+    discount: Boolean(envValue(["BACKY_COMMERCE_DISCOUNT_PROVIDER_URL", "COMMERCE_DISCOUNT_PROVIDER_URL", "BACKY_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY"])),
+    catalog: Boolean(envValue(["BACKY_COMMERCE_PRODUCT_SYNC_URL", "COMMERCE_PRODUCT_SYNC_URL", "BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN", "SHOPIFY_ADMIN_ACCESS_TOKEN", "BACKY_BIGCOMMERCE_ACCESS_TOKEN", "BIGCOMMERCE_ACCESS_TOKEN", "BACKY_WOOCOMMERCE_CONSUMER_KEY", "WOOCOMMERCE_CONSUMER_KEY", "BACKY_ETSY_ACCESS_TOKEN", "ETSY_ACCESS_TOKEN"])),
+    subscription: Boolean(envValue(["BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL", "COMMERCE_SUBSCRIPTION_ACTION_URL", "BACKY_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY", "BACKY_PAYPAL_ACCESS_TOKEN", "PAYPAL_ACCESS_TOKEN", "BACKY_PADDLE_API_KEY", "PADDLE_API_KEY"])),
+    webhook: Boolean(envValue(["BACKY_COMMERCE_WEBHOOK_SECRET", "COMMERCE_WEBHOOK_SECRET"])),
+  };
+  const configuredSettingsFamilies = Object.entries(settingsProviderFamilies)
+    .filter(([, configured]) => configured)
+    .map(([family]) => family);
+  const missingSettingsFamilies = Object.entries(settingsProviderFamilies)
+    .filter(([, configured]) => !configured)
+    .map(([family]) => family);
+  const configuredCommerceFamilies = Object.entries(commerceProviderFamilies)
+    .filter(([, configured]) => configured)
+    .map(([family]) => family);
+  const missingCommerceFamilies = Object.entries(commerceProviderFamilies)
+    .filter(([, configured]) => !configured)
+    .map(([family]) => family);
+  const databaseGateReady = databaseUrlConfigured && disposableDatabaseConfirmed;
+
+  const gates = [
+    {
+      key: "forms-postgres",
+      label: "Forms Supabase/Postgres persistence",
+      status: databaseGateReady ? "ready-to-run" : "blocked-missing-inputs",
+      command: "npm run ci:forms-postgres",
+      preflight: "npm run test:forms-postgres-preflight-contract",
+      disposableGuard: "npm run test:forms-postgres-disposable-guard",
+      workflow: ".github/workflows/forms-postgres-contract.yml",
+      affectedSurfaces: ["/forms"],
+      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
+      runtime: {
+        databaseUrlConfigured,
+        disposableDatabaseConfirmed,
+        missing: [
+          ...(!databaseUrlConfigured ? ["BACKY_DATABASE_URL or DATABASE_URL"] : []),
+          ...(!disposableDatabaseConfirmed ? ["BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"] : []),
+        ],
+      },
+    },
+    {
+      key: "sdk-postgres",
+      label: "Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke",
+      status: databaseGateReady ? "ready-to-run" : "blocked-missing-inputs",
+      command: "npm run ci:sdk-postgres-smoke",
+      preflight: "npm run test:sdk-postgres-preflight-contract",
+      disposableGuard: "npm run test:sdk-postgres-disposable-guard",
+      workflow: ".github/workflows/sdk-postgres-smoke.yml",
+      affectedSurfaces: ["Frontend manifest/OpenAPI/SDK APIs"],
+      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true", "BACKY_SDK_REQUIRE_DATABASE=1"],
+      runtime: {
+        databaseUrlConfigured,
+        disposableDatabaseConfirmed,
+        missing: [
+          ...(!databaseUrlConfigured ? ["BACKY_DATABASE_URL or DATABASE_URL"] : []),
+          ...(!disposableDatabaseConfirmed ? ["BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"] : []),
+        ],
+      },
+    },
+    {
+      key: "settings-provider-certification",
+      label: "Settings live provider certification",
+      status: missingSettingsFamilies.length === 0 ? "ready-to-run" : "blocked-missing-inputs",
+      command: "npm run ci:settings-provider-certification",
+      preflight: "npm run test:settings-provider-certification-preflight-contract",
+      workflow: ".github/workflows/settings-provider-certification.yml",
+      affectedSurfaces: ["/settings", "Settings admin APIs"],
+      requiredEnvAliases: [
+        "BACKY_DATABASE_URL or DATABASE_URL",
+        "BACKY_SUPABASE_URL or SUPABASE_URL",
+        "BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY",
+        "BACKY_VERCEL_TOKEN or VERCEL_TOKEN",
+        "notification provider aliases",
+        "commerce provider aliases",
+      ],
+      runtime: {
+        configuredFamilies: configuredSettingsFamilies,
+        missingFamilies: missingSettingsFamilies,
+      },
+    },
+    {
+      key: "commerce-provider-certification",
+      label: "Commerce live provider certification",
+      status: missingCommerceFamilies.length === 0 ? "ready-to-run" : "blocked-missing-inputs",
+      command: "npm run ci:commerce-provider-certification",
+      preflight: "npm run test:commerce-provider-certification-preflight-contract",
+      workflow: ".github/workflows/commerce-provider-certification.yml",
+      affectedSurfaces: ["/products", "/orders"],
+      requiredEnvAliases: [
+        "payment provider aliases",
+        "tax provider aliases",
+        "shipping provider aliases",
+        "discount provider aliases",
+        "catalog provider aliases",
+        "subscription provider aliases",
+        "BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET",
+      ],
+      runtime: {
+        configuredFamilies: configuredCommerceFamilies,
+        missingFamilies: missingCommerceFamilies,
+      },
+    },
+  ] as const;
+  const blockedGates = gates.filter((gate) => gate.status !== "ready-to-run");
+  const firstBlockedGate = blockedGates[0];
+  const missingInputs = firstBlockedGate?.runtime && "missing" in firstBlockedGate.runtime && Array.isArray(firstBlockedGate.runtime.missing)
+    ? firstBlockedGate.runtime.missing
+    : [];
+
+  return {
+    schemaVersion: "backy.completion-status.v1",
+    generatedAt: new Date().toISOString(),
+    status: blockedGates.length === 0 ? "certification-ready" : "external-gates-required",
+    summary: "Backy core backend/editor/API parity is implemented for the audited local scope; the remaining Partial rows require disposable database or live provider certification evidence.",
+    audit: {
+      source: "specs/page-completion-audit/backy-page-surface-audit.md",
+      ready: 39,
+      partial: 6,
+      prototype: 0,
+      missing: 0,
+      total: 45,
+      readyPercent: 87,
+    },
+    surfaces: [
+      { key: "products", label: "/products", status: "partial", blocker: "commerce-provider-certification", gate: "npm run ci:commerce-provider-certification" },
+      { key: "orders", label: "/orders", status: "partial", blocker: "commerce-provider-certification", gate: "npm run ci:commerce-provider-certification" },
+      { key: "forms", label: "/forms", status: "partial", blocker: "forms-postgres", gate: "npm run ci:forms-postgres" },
+      { key: "settings", label: "/settings", status: "partial", blocker: "settings-provider-certification", gate: "npm run ci:settings-provider-certification" },
+      { key: "settings-admin-apis", label: "Settings admin APIs", status: "partial", blocker: "settings-provider-certification", gate: "npm run ci:settings-provider-certification" },
+      { key: "frontend-contracts", label: "Frontend manifest/OpenAPI/SDK APIs", status: "partial", blocker: "sdk-postgres", gate: "npm run ci:sdk-postgres-smoke" },
+    ],
+    gates,
+    nextAction: missingInputs.length > 0
+      ? `Configure ${missingInputs.join(", ")} and run ${firstBlockedGate?.command}.`
+      : `Configure the missing provider families and run ${firstBlockedGate?.command || "npm run test:partial-gate-preflights"}.`,
+    recommendedCommands: gates.map((gate) => gate.command),
+    localPreflight: "npm run test:partial-gate-preflights",
+    privacy: {
+      includesSecretValues: false,
+      exposesOnlyAliasPresence: true,
+      secretHandling: "Completion status exposes audited counts, gate names, workflow paths, env alias presence, and missing provider families only; database URLs, provider keys, admin keys, and customer/order/submission payloads are never returned.",
+    },
+  };
+};
+
 const pathParameter = (
   name: string,
   description?: string,
@@ -1444,6 +1603,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const formsManagementDiscoveryContract = formsManagementDiscovery(site.id);
     const commerceManagementDiscoveryContract = commerceManagementDiscovery(site.id);
     const liveManagementDiscoveryContract = liveManagementDiscovery(site.id);
+    const completionStatusContract = buildBackyCompletionStatus();
     const delivery = deliveryDiscovery(origin, site);
     const frontendLaunchReadiness = buildFrontendLaunchReadiness({
       siteId: site.id,
@@ -1466,6 +1626,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         openapi: "3.1.0",
         "x-backy-database-certification": frontendDatabaseCertification,
         "x-backy-frontend-launch-readiness": frontendLaunchReadiness,
+        "x-backy-completion-status": completionStatusContract,
         "x-backy-media-file-categories": mediaFileCategoryDiscoveryContract,
         "x-backy-forms-management": formsManagementDiscoveryContract,
         "x-backy-commerce-management": commerceManagementDiscoveryContract,
@@ -4025,6 +4186,96 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 site: { $ref: "#/components/schemas/SiteSummary" },
               },
             }),
+            BackyCompletionStatus: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "status",
+                "audit",
+                "surfaces",
+                "gates",
+                "nextAction",
+                "recommendedCommands",
+                "localPreflight",
+                "privacy",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.completion-status.v1" },
+                generatedAt: { type: "string" },
+                status: { enum: ["certification-ready", "external-gates-required"] },
+                summary: { type: "string" },
+                audit: {
+                  type: "object",
+                  required: ["source", "ready", "partial", "prototype", "missing", "total", "readyPercent"],
+                  additionalProperties: true,
+                  properties: {
+                    source: { const: "specs/page-completion-audit/backy-page-surface-audit.md" },
+                    ready: { const: 39 },
+                    partial: { const: 6 },
+                    prototype: { const: 0 },
+                    missing: { const: 0 },
+                    total: { const: 45 },
+                    readyPercent: { const: 87 },
+                  },
+                },
+                surfaces: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["key", "label", "status", "blocker", "gate"],
+                    additionalProperties: true,
+                    properties: {
+                      key: { type: "string" },
+                      label: { type: "string" },
+                      status: { const: "partial" },
+                      blocker: { type: "string" },
+                      gate: { type: "string" },
+                    },
+                  },
+                },
+                gates: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["key", "label", "status", "command", "workflow", "affectedSurfaces", "requiredEnvAliases", "runtime"],
+                    additionalProperties: true,
+                    properties: {
+                      key: {
+                        enum: [
+                          "forms-postgres",
+                          "sdk-postgres",
+                          "settings-provider-certification",
+                          "commerce-provider-certification",
+                        ],
+                      },
+                      label: { type: "string" },
+                      status: { enum: ["ready-to-run", "blocked-missing-inputs"] },
+                      command: { type: "string" },
+                      preflight: { type: "string" },
+                      disposableGuard: { type: "string" },
+                      workflow: { type: "string" },
+                      affectedSurfaces: { type: "array", items: { type: "string" } },
+                      requiredEnvAliases: { type: "array", items: { type: "string" } },
+                      runtime: { type: "object", additionalProperties: true },
+                    },
+                  },
+                },
+                nextAction: { type: "string" },
+                recommendedCommands: { type: "array", items: { type: "string" } },
+                localPreflight: { const: "npm run test:partial-gate-preflights" },
+                privacy: {
+                  type: "object",
+                  required: ["includesSecretValues", "exposesOnlyAliasPresence", "secretHandling"],
+                  additionalProperties: true,
+                  properties: {
+                    includesSecretValues: { const: false },
+                    exposesOnlyAliasPresence: { const: true },
+                    secretHandling: { type: "string" },
+                  },
+                },
+              },
+            },
             RouteResolveEnvelope: envelopeSchema({
               type: "object",
               required: ["site", "route"],

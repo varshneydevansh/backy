@@ -302,7 +302,7 @@
       },
       "required": ["schemaVersion", "status", "localMockGate", "liveCertificationGate", "requiredFor", "secretHandling", "operatorCommandTemplate", "operatorEnvTemplate", "runtime", "groups"]
     },
-    "launchReadiness": {
+      "launchReadiness": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
@@ -365,9 +365,91 @@
           "required": ["includesSecretValues", "publicManifestExcludesPrivateQueues", "adminEndpointsRequireAuth", "submissionAndOrderPayloadsPrivate", "secretHandling"]
         }
       },
-      "required": ["schemaVersion", "status", "score", "siteId", "endpointCount", "routePatternCount", "moduleCounts", "checks", "actionPlan", "privacy"]
-    },
-    "navigationItem": {
+        "required": ["schemaVersion", "status", "score", "siteId", "endpointCount", "routePatternCount", "moduleCounts", "checks", "actionPlan", "privacy"]
+      },
+      "completionStatus": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "schemaVersion": { "const": "backy.completion-status.v1" },
+          "generatedAt": { "type": "string" },
+          "status": { "enum": ["certification-ready", "external-gates-required"] },
+          "summary": { "type": "string", "minLength": 1 },
+          "audit": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "source": { "const": "specs/page-completion-audit/backy-page-surface-audit.md" },
+              "ready": { "const": 39 },
+              "partial": { "const": 6 },
+              "prototype": { "const": 0 },
+              "missing": { "const": 0 },
+              "total": { "const": 45 },
+              "readyPercent": { "const": 87 }
+            },
+            "required": ["source", "ready", "partial", "prototype", "missing", "total", "readyPercent"]
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "key": { "type": "string", "minLength": 1 },
+                "label": { "type": "string", "minLength": 1 },
+                "status": { "const": "partial" },
+                "blocker": { "type": "string", "minLength": 1 },
+                "gate": { "type": "string", "minLength": 1 }
+              },
+              "required": ["key", "label", "status", "blocker", "gate"]
+            },
+            "minItems": 6
+          },
+          "gates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "key": {
+                  "enum": [
+                    "forms-postgres",
+                    "sdk-postgres",
+                    "settings-provider-certification",
+                    "commerce-provider-certification"
+                  ]
+                },
+                "label": { "type": "string", "minLength": 1 },
+                "status": { "enum": ["ready-to-run", "blocked-missing-inputs"] },
+                "command": { "type": "string", "minLength": 1 },
+                "preflight": { "type": "string", "minLength": 1 },
+                "disposableGuard": { "type": "string", "minLength": 1 },
+                "workflow": { "type": "string", "minLength": 1 },
+                "affectedSurfaces": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                "requiredEnvAliases": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                "runtime": { "type": "object", "additionalProperties": true }
+              },
+              "required": ["key", "label", "status", "command", "workflow", "affectedSurfaces", "requiredEnvAliases", "runtime"]
+            },
+            "minItems": 4
+          },
+          "nextAction": { "type": "string", "minLength": 1 },
+          "recommendedCommands": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 4 },
+          "localPreflight": { "const": "npm run test:partial-gate-preflights" },
+          "privacy": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "includesSecretValues": { "const": false },
+              "exposesOnlyAliasPresence": { "const": true },
+              "secretHandling": { "type": "string", "minLength": 1 }
+            },
+            "required": ["includesSecretValues", "exposesOnlyAliasPresence", "secretHandling"]
+          }
+        },
+        "required": ["schemaVersion", "status", "audit", "surfaces", "gates", "nextAction", "recommendedCommands", "localPreflight", "privacy"]
+      },
+      "navigationItem": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
@@ -528,9 +610,10 @@
           "properties": {
             "version": { "const": "backy.ai-frontend.v1" },
             "docs": { "type": "string", "minLength": 1 },
-            "databaseCertification": { "$ref": "#/$defs/databaseCertification" },
-            "frontendLaunchReadiness": { "$ref": "#/$defs/launchReadiness" },
-            "schemas": {
+              "databaseCertification": { "$ref": "#/$defs/databaseCertification" },
+              "frontendLaunchReadiness": { "$ref": "#/$defs/launchReadiness" },
+              "completionStatus": { "$ref": "#/$defs/completionStatus" },
+              "schemas": {
               "type": "object",
               "additionalProperties": { "type": "string" },
               "properties": {
@@ -544,8 +627,8 @@
               "required": ["manifest", "renderPayload", "themeTokens", "elementActions", "dataBindings", "editableMap"]
             }
           },
-          "required": ["version", "schemas", "databaseCertification", "frontendLaunchReadiness"]
-        },
+            "required": ["version", "schemas", "databaseCertification", "frontendLaunchReadiness", "completionStatus"]
+          },
         "capabilities": {
           "type": "object",
           "additionalProperties": { "type": "boolean" },

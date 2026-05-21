@@ -87,6 +87,29 @@ assert(
 );
 
 assert(
+  manifestRoute.includes('buildBackyCompletionStatus') &&
+    manifestRoute.includes("schemaVersion: 'backy.completion-status.v1'") &&
+    manifestRoute.includes("ready: 39") &&
+    manifestRoute.includes("partial: 6") &&
+    manifestRoute.includes("gate: 'npm run ci:forms-postgres'") &&
+    manifestRoute.includes("gate: 'npm run ci:sdk-postgres-smoke'") &&
+    manifestRoute.includes("gate: 'npm run ci:settings-provider-certification'") &&
+    manifestRoute.includes("gate: 'npm run ci:commerce-provider-certification'") &&
+    manifestRoute.includes('completionStatus: buildBackyCompletionStatus()') &&
+    openApiRoute.includes('buildBackyCompletionStatus') &&
+    openApiRoute.includes('"x-backy-completion-status"') &&
+    openApiRoute.includes('BackyCompletionStatus') &&
+    frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
+    frontendManifestSchema.includes('"backy.completion-status.v1"') &&
+    sdkSource.includes('BackyCompletionStatus') &&
+    sdkSmoke.includes('manifest() completion status audit counts drifted') &&
+    generatedSdkTypes.includes('GeneratedBackyFrontendManifestCompletionStatus') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiBackyCompletionStatus') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestCompletionStatus'),
+  'Frontend manifest/OpenAPI/SDK must expose structured Backy completion status and remaining partial-gate handoff for custom admin clients.',
+);
+
+assert(
   manifestRoute.includes('getCommentReportReasons') &&
     manifestRoute.includes('buildManifestCommentDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.comments-discovery.v1'") &&

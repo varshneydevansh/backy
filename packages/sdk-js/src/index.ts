@@ -20,6 +20,7 @@ export type {
   GeneratedBackyFrontendDesignContract,
   GeneratedBackyFrontendDesignProvenance,
   GeneratedBackyFrontendManifest,
+  GeneratedBackyFrontendManifestCompletionStatus,
   GeneratedBackyFrontendManifestCommerceProviderCertification,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
@@ -29,6 +30,7 @@ export type {
   GeneratedBackyInteractiveFallback,
   GeneratedBackyInteractiveRenderCapabilities,
   GeneratedBackyOpenApiBackyContentDocument,
+  GeneratedBackyOpenApiBackyCompletionStatus,
   GeneratedBackyOpenApiBackyContentAssetRef,
   GeneratedBackyOpenApiBackyContentElement,
   GeneratedBackyOpenApiBackyContentElementAccessibility,
@@ -9629,11 +9631,59 @@ export interface BackyFrontendLaunchReadiness {
   [key: string]: unknown;
 }
 
+export interface BackyCompletionStatus {
+  schemaVersion: "backy.completion-status.v1";
+  status: "certification-ready" | "external-gates-required";
+  summary?: string;
+  audit: {
+    source: string;
+    ready: 39;
+    partial: 6;
+    prototype: 0;
+    missing: 0;
+    total: 45;
+    readyPercent: 87;
+    [key: string]: unknown;
+  };
+  surfaces: Array<{
+    key: string;
+    label: string;
+    status: "partial";
+    blocker: string;
+    gate: string;
+    [key: string]: unknown;
+  }>;
+  gates: Array<{
+    key: "forms-postgres" | "sdk-postgres" | "settings-provider-certification" | "commerce-provider-certification";
+    label: string;
+    status: "ready-to-run" | "blocked-missing-inputs";
+    command: string;
+    preflight?: string;
+    disposableGuard?: string;
+    workflow: string;
+    affectedSurfaces: string[];
+    requiredEnvAliases: string[];
+    runtime: Record<string, unknown>;
+    [key: string]: unknown;
+  }>;
+  nextAction: string;
+  recommendedCommands: string[];
+  localPreflight: "npm run test:partial-gate-preflights";
+  privacy: {
+    includesSecretValues: false;
+    exposesOnlyAliasPresence: true;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifestContract {
   version?: string;
   schemas?: Record<string, string>;
   databaseCertification: BackyFrontendDatabaseCertification;
   frontendLaunchReadiness: BackyFrontendLaunchReadiness;
+  completionStatus: BackyCompletionStatus;
   [key: string]: unknown;
 }
 
