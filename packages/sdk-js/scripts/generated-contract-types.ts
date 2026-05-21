@@ -10,10 +10,13 @@ import type {
   BackyAdminCollectionBindingPresetsResponse,
   BackyAdminFrontendDesignResponse,
   BackyAdminInteractiveComponent,
+  BackyAdminInteractiveComponentBundleResponse,
   BackyAdminInteractiveComponentDeleteResponse,
   BackyAdminInteractiveComponentExportResponse,
+  BackyAdminInteractiveComponentMigrationResponse,
   BackyAdminInteractiveComponentResponse,
   BackyAdminInteractiveComponentReviewResponse,
+  BackyAdminInteractiveComponentRollbackResponse,
   BackyAdminInteractiveComponentUsageResponse,
   BackyAdminInteractiveComponentsResponse,
   BackyManifestBlogAuthor,
@@ -623,6 +626,24 @@ type ReviewAdminInteractiveComponentMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["reviewAdminInteractiveComponent"]>,
     BackyAdminInteractiveComponentReviewResponse
+  >
+>;
+type UploadAdminInteractiveComponentBundleMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["uploadAdminInteractiveComponentBundle"]>,
+    BackyAdminInteractiveComponentBundleResponse
+  >
+>;
+type MigrateAdminInteractiveComponentVersionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["migrateAdminInteractiveComponentVersion"]>,
+    BackyAdminInteractiveComponentMigrationResponse
+  >
+>;
+type RollbackAdminInteractiveComponentVersionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["rollbackAdminInteractiveComponentVersion"]>,
+    BackyAdminInteractiveComponentRollbackResponse
   >
 >;
 type AdminNavigationMethodReturnsContract = Assert<
@@ -2360,6 +2381,81 @@ const sdkAdminInteractiveComponentReviewEnvelope = {
     component: sdkAdminInteractiveComponent,
   },
 } satisfies BackyAdminInteractiveComponentReviewResponse;
+
+const sdkAdminInteractiveComponentBundleEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component_bundle",
+  data: {
+    component: sdkAdminInteractiveComponent,
+    bundle: {
+      schemaVersion: "backy.interactive-component-bundle.v1",
+      filename: "index.js",
+      contentType: "application/javascript",
+      sizeBytes: 512,
+      storageProvider: "local",
+      storagePath:
+        "sites/site_demo/interactive-components/backy.figure.rounds/1.0.0/index.js",
+      bundleUrl:
+        "/media/sites/site_demo/interactive-components/backy.figure.rounds/1.0.0/index.js",
+      sha256:
+        "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+      signed: true,
+      signedBy: "user-admin",
+      signedAt: "2026-05-21T00:00:00.000Z",
+    },
+  },
+} satisfies BackyAdminInteractiveComponentBundleResponse;
+
+const sdkAdminInteractiveComponentMigrationEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component_migration",
+  data: {
+    dryRun: true,
+    source: {
+      componentKey: "backy.figure.rounds",
+      version: "1.0.0",
+    },
+    target: {
+      componentKey: "backy.figure.rounds",
+      version: "1.1.0",
+    },
+    migratedTargets: [
+      {
+        targetType: "page",
+        targetId: "page_home",
+        title: "Home",
+        slug: "home",
+        status: "published",
+        updatedAt: "2026-05-21T00:00:00.000Z",
+        migrated: 1,
+        elementPaths: ["elements[0]"],
+      },
+    ],
+    summary: {
+      targets: 1,
+      elements: 1,
+      scanned: {
+        pages: 3,
+        posts: 2,
+      },
+    },
+  },
+} satisfies BackyAdminInteractiveComponentMigrationResponse;
+
+const sdkAdminInteractiveComponentRollbackEnvelope = {
+  success: true,
+  requestId: "req_admin_interactive_component_rollback",
+  data: {
+    rolledBack: true,
+    restoredFromVersion: "1.0.0",
+    component: {
+      ...sdkAdminInteractiveComponent,
+      version: "1.1.0",
+      rollbackFromVersion: "1.0.0",
+    },
+    disabledVersions: [sdkAdminInteractiveComponent],
+  },
+} satisfies BackyAdminInteractiveComponentRollbackResponse;
 
 const sdkAdminSettings = {
   schemaVersion: "backy.admin-settings.v1",

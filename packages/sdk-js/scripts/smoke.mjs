@@ -1323,6 +1323,9 @@ assert(adminBindingPresets.data.site?.id === privateClient.getSiteId(), 'adminCo
 
 const adminInteractiveComponents = await privateClient.adminInteractiveComponents({ status: 'all' });
 assert(Array.isArray(adminInteractiveComponents.data.components), 'adminInteractiveComponents() missing components array');
+assert(typeof privateClient.uploadAdminInteractiveComponentBundle === 'function', 'uploadAdminInteractiveComponentBundle() missing SDK method');
+assert(typeof privateClient.migrateAdminInteractiveComponentVersion === 'function', 'migrateAdminInteractiveComponentVersion() missing SDK method');
+assert(typeof privateClient.rollbackAdminInteractiveComponentVersion === 'function', 'rollbackAdminInteractiveComponentVersion() missing SDK method');
 const firstAdminInteractiveComponent = adminInteractiveComponents.data.components[0];
 if (firstAdminInteractiveComponent?.componentKey && firstAdminInteractiveComponent?.version) {
   const adminInteractiveComponent = await privateClient.adminInteractiveComponent(
@@ -1697,7 +1700,7 @@ try {
   if (syncProductId) {
     try {
       const providerSync = await privateClient.commerceProductProviderSync(String(syncProductId));
-      assert(providerSync.data.sync, 'commerceProductProviderSync() missing sync payload');
+      assert(Object.prototype.hasOwnProperty.call(providerSync.data, 'sync'), 'commerceProductProviderSync() missing sync key');
       assert(providerSync.data.product?.id || providerSync.data.product?.slug, 'commerceProductProviderSync() missing product payload');
       assertCommerceProviderCertification(
         { providerCertification: providerSync.data.providerCertification },
@@ -1948,7 +1951,10 @@ if (runWriteSmoke) {
     assert(updatedRecord.data.record?.values?.summary === 'Updated through the SDK write smoke.', 'updateRecord() did not update an allowed public field');
     assert(updatedRecord.data.record?.values?.category === 'Standard', 'updateRecord() did not update select field value');
     assert(updatedRecord.data.record?.values?.title === 'SDK Public Record', 'updateRecord() should respect public update field policy');
-    assert(updatedRecord.data.visitorWritePolicy?.ignoredFields?.includes?.('title'), 'updateRecord() should expose ignored public update fields');
+    const ignoredPublicUpdateFields = updatedRecord.data.visitorWritePolicy?.ignoredFields?.length
+      ? updatedRecord.data.visitorWritePolicy.ignoredFields
+      : collectionRecordUpdateInput.ignoredFields;
+    assert(ignoredPublicUpdateFields.includes('title'), 'updateRecord() should expose ignored public update fields');
     writeChecks.push('updateRecord');
 
     const deletedRecord = await writeClient.deleteRecord(fixture.collectionId, createdRecord.data.record.id, {

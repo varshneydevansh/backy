@@ -2121,7 +2121,7 @@ export interface BackyCommerceProductProviderSyncInput {
 
 export type BackyCommerceProductProviderSyncResponse = BackyEnvelope<
   {
-    sync: Record<string, unknown>;
+    sync: Record<string, unknown> | null;
     product: BackyCollectionRecord;
     cacheInvalidation?: Record<string, unknown>;
     providerCertification?: BackyCommerceProviderCertification;
@@ -2855,6 +2855,110 @@ export type BackyAdminInteractiveComponentReviewResponse = BackyEnvelope<
   {
     action: BackyAdminInteractiveComponentReviewAction;
     component: BackyAdminInteractiveComponent;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminInteractiveComponentBundleInput {
+  contentBase64: string;
+  filename?: string;
+  contentType?: string;
+  signature?: string;
+  signedBy?: string;
+  updatedBy?: string;
+  changelog?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminInteractiveComponentBundleMetadata {
+  schemaVersion: "backy.interactive-component-bundle.v1" | string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  storageProvider: string;
+  storagePath: string;
+  bundleUrl: string;
+  sha256: string;
+  signed: boolean;
+  signedBy: string;
+  signedAt: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminInteractiveComponentBundleResponse = BackyEnvelope<
+  {
+    component: BackyAdminInteractiveComponent;
+    bundle: BackyAdminInteractiveComponentBundleMetadata;
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminInteractiveComponentMigrationInput {
+  targetComponentKey?: string;
+  componentKey?: string;
+  targetVersion?: string;
+  version?: string;
+  dryRun?: boolean;
+  updatedBy?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminInteractiveComponentMigrationTarget {
+  targetType: "page" | "post" | string;
+  targetId: string;
+  title: string;
+  slug: string;
+  status: string;
+  updatedAt?: string | null;
+  migrated: number;
+  elementPaths: string[];
+  [key: string]: unknown;
+}
+
+export type BackyAdminInteractiveComponentMigrationResponse = BackyEnvelope<
+  {
+    dryRun: boolean;
+    source: {
+      componentKey: string;
+      version: string;
+      [key: string]: unknown;
+    };
+    target: {
+      componentKey: string;
+      version: string;
+      [key: string]: unknown;
+    };
+    migratedTargets: BackyAdminInteractiveComponentMigrationTarget[];
+    summary: {
+      targets: number;
+      elements: number;
+      scanned: {
+        pages: number;
+        posts: number;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }
+>;
+
+export interface BackyAdminInteractiveComponentRollbackInput {
+  rollbackBy?: string;
+  updatedBy?: string;
+  changelog?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminInteractiveComponentRollbackResponse = BackyEnvelope<
+  {
+    rolledBack: boolean;
+    restoredFromVersion: string | null;
+    component: BackyAdminInteractiveComponent;
+    disabledVersions: BackyAdminInteractiveComponent[];
     [key: string]: unknown;
   }
 >;
@@ -5520,6 +5624,10 @@ export type BackyMediaSignedUrlInputSource =
 export interface BackyMediaSignedUrlInputBuildOptions {
   disposition?: BackyMediaSignedUrlDisposition | string;
   expiresInSeconds?: number | string;
+  expiresIn?: number | string;
+  ttlSeconds?: number | string;
+  ttl?: number | string;
+  maxAge?: number | string;
   requestId?: string;
 }
 
@@ -5727,6 +5835,10 @@ export function buildBackyMediaSignedUrlInput(
         : undefined);
   const expiresInSeconds = normalizeBackyMediaSignedUrlExpiresIn(
     options.expiresInSeconds ??
+      options.expiresIn ??
+      options.ttlSeconds ??
+      options.ttl ??
+      options.maxAge ??
       body.expiresInSeconds ??
       body.expiresIn ??
       body.ttlSeconds ??
@@ -5734,7 +5846,14 @@ export function buildBackyMediaSignedUrlInput(
       body.maxAge ??
       access.expiresInSeconds ??
       access.expiresIn ??
-      delivery.expiresInSeconds,
+      access.ttlSeconds ??
+      access.ttl ??
+      access.maxAge ??
+      delivery.expiresInSeconds ??
+      delivery.expiresIn ??
+      delivery.ttlSeconds ??
+      delivery.ttl ??
+      delivery.maxAge,
   );
   const requestId = backyMediaBindingText(
     options.requestId,
@@ -9153,6 +9272,63 @@ export class BackyClient {
     const { requestId, ...body } = input;
     return this.request(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}/review`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  uploadAdminInteractiveComponentBundle(
+    componentKey: string,
+    version: string,
+    input: BackyAdminInteractiveComponentBundleInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentBundleResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}/bundle`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  migrateAdminInteractiveComponentVersion(
+    componentKey: string,
+    version: string,
+    input: BackyAdminInteractiveComponentMigrationInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentMigrationResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}/migrate`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  rollbackAdminInteractiveComponentVersion(
+    componentKey: string,
+    version: string,
+    input: BackyAdminInteractiveComponentRollbackInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminInteractiveComponentRollbackResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}/rollback`,
       {
         method: "POST",
         body,
