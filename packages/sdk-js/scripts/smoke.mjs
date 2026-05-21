@@ -816,6 +816,12 @@ assert(manifestMedia.capabilities?.signedPrivateFiles === true, 'manifest() medi
 assert(manifestMedia.capabilities?.responsiveImages === true, 'manifest() media discovery missing responsive image capability');
 assert(manifestMedia.capabilities?.publicFolderDiscovery === true, 'manifest() media discovery missing public folder capability');
 assert(manifestMedia.capabilities?.editableMetadata === true, 'manifest() media discovery missing editable metadata capability');
+assert(manifestMedia.capabilities?.authenticatedUpload === true, 'manifest() media discovery missing authenticated upload capability');
+assert(manifestMedia.capabilities?.folderManagement === true, 'manifest() media discovery missing folder management capability');
+assert(manifestMedia.capabilities?.retainedVersions === true, 'manifest() media discovery missing retained version capability');
+assert(manifestMedia.capabilities?.responsiveTransformPreparation === true, 'manifest() media discovery missing responsive transform preparation capability');
+assert(manifestMedia.capabilities?.bindingMetadata === true, 'manifest() media discovery missing binding metadata capability');
+assert(manifestMedia.capabilities?.providerAnalyticsIngestion === true, 'manifest() media discovery missing provider analytics ingestion capability');
 assert(manifestMedia.fileCategories?.some?.((category) => (
   category.type === 'document' &&
   category.aliases?.includes?.('file') &&
@@ -844,6 +850,24 @@ assert(manifestMedia.deliveryPolicy?.privateFiles === 'signed-url-required', 'ma
 assert(manifestMedia.deliveryPolicy?.signedUrlEndpoint === `/api/admin/sites/${client.getSiteId()}/media/{mediaId}/signed-url`, 'manifest() media discovery signed URL endpoint drifted');
 assert(manifestMedia.deliveryPolicy?.acceptedDispositions?.includes?.('attachment'), 'manifest() media discovery missing attachment disposition');
 assert(manifestMedia.deliveryPolicy?.downloadableTypes?.includes?.('document'), 'manifest() media discovery missing document downloadable type');
+assert(manifestMedia.managementPolicy?.schemaVersion === 'backy.media-management.v1', 'manifest() missing media management policy');
+assert(manifestMedia.managementPolicy?.endpoints?.upload === `/api/admin/sites/${client.getSiteId()}/media`, 'manifest() media management upload endpoint drifted');
+assert(manifestMedia.managementPolicy?.endpoints?.signedUrl === `/api/admin/sites/${client.getSiteId()}/media/{mediaId}/signed-url`, 'manifest() media management signed URL endpoint drifted');
+assert(manifestMedia.managementPolicy?.methods?.upload === 'POST', 'manifest() media management upload method drifted');
+assert(manifestMedia.managementPolicy?.methods?.replace === 'POST', 'manifest() media management replace method drifted');
+assert(manifestMedia.managementPolicy?.methods?.delete === 'DELETE', 'manifest() media management delete method drifted');
+assert(manifestMedia.managementPolicy?.auth?.requiredPermissions?.create === 'media.create', 'manifest() media management create permission drifted');
+assert(manifestMedia.managementPolicy?.auth?.requiredPermissions?.update === 'media.edit', 'manifest() media management update permission drifted');
+assert(manifestMedia.managementPolicy?.auth?.requiredPermissions?.delete === 'media.delete', 'manifest() media management delete permission drifted');
+assert(manifestMedia.managementPolicy?.auth?.requiredPermissions?.privateDelivery === 'media.view', 'manifest() media management private delivery permission drifted');
+assert(manifestMedia.managementPolicy?.uploadFields?.includes?.('file'), 'manifest() media management missing file upload field');
+assert(manifestMedia.managementPolicy?.uploadFields?.includes?.('folderId'), 'manifest() media management missing folderId upload field');
+assert(manifestMedia.managementPolicy?.uploadFields?.includes?.('fontFamily'), 'manifest() media management missing fontFamily upload field');
+assert(manifestMedia.managementPolicy?.sdkHelpers?.upload === 'uploadMedia', 'manifest() media management missing upload helper');
+assert(manifestMedia.managementPolicy?.sdkHelpers?.signedUrl === 'createMediaSignedUrl', 'manifest() media management missing signed URL helper');
+assert(manifestMedia.managementPolicy?.sdkHelpers?.bind === 'bindMedia', 'manifest() media management missing bind helper');
+assert(manifestMedia.managementPolicy?.sdkHelpers?.transforms === 'prepareMediaTransforms', 'manifest() media management missing transforms helper');
+assert(manifestMedia.managementPolicy?.responseContracts?.signedUrl === 'backy.media-signed-url.v1', 'manifest() media management missing signed URL response contract');
 assert(manifestMedia.schemas?.folders === 'backy.media-folders.v1', 'manifest() media discovery missing folder schema');
 assert(manifestMedia.schemas?.fileCategories === 'backy.media-file-categories.v1', 'manifest() media discovery missing file category schema');
 const mediaBindingInput = buildBackyMediaBindingInput({
@@ -1057,6 +1081,9 @@ assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'open
 assert(openapi.components?.schemas?.LiveManagementDiscovery?.properties?.editorComposition, 'openapi() missing editor composition discovery schema');
 assert(openapi['x-backy-live-management']?.editorComposition?.sdkHelpers?.group === 'groupBackyContentElements', 'openapi() missing live-management group helper metadata');
 assert(openapi['x-backy-live-management']?.editorComposition?.commands?.some?.((command) => command.id === 'ungroup' && command.shortcut === 'Shift+Cmd/Ctrl+G'), 'openapi() missing live-management ungroup command metadata');
+assert(openapi['x-backy-media-file-categories']?.managementPolicy?.schemaVersion === 'backy.media-management.v1', 'openapi() missing media management policy');
+assert(openapi['x-backy-media-file-categories']?.managementPolicy?.sdkHelpers?.upload === 'uploadMedia', 'openapi() media management missing upload helper metadata');
+assert(openapi.components?.schemas?.MediaManagementPolicy, 'openapi() missing media management policy schema');
 assert(openapi['x-backy-database-certification']?.schemaVersion === manifest.data.contract.databaseCertification.schemaVersion, 'openapi() missing database certification schema extension');
 assert(openapi['x-backy-database-certification']?.gate?.command === manifest.data.contract.databaseCertification.gate.command, 'openapi() database certification command drifted from manifest');
 assert(openapi['x-backy-database-certification']?.operatorCommandTemplate?.command === manifest.data.contract.databaseCertification.operatorCommandTemplate.command, 'openapi() database certification operator command drifted from manifest');

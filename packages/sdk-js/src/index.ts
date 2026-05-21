@@ -7918,6 +7918,98 @@ export interface BackyManifestFormsRuntimeModule {
   [key: string]: unknown;
 }
 
+export interface BackyManifestMediaManagementPolicy {
+  schemaVersion: "backy.media-management.v1";
+  endpoints: {
+    adminList: string;
+    upload: string;
+    detail: string;
+    folders: string;
+    folderDetail: string;
+    versions: string;
+    version: string;
+    signedUrl: string;
+    bind: string;
+    transforms: string;
+    providerAnalytics: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    upload: "POST";
+    update: "PATCH";
+    replace: "POST";
+    delete: "DELETE";
+    folders: "GET";
+    createFolder: "POST";
+    updateFolder: "PATCH";
+    deleteFolder: "DELETE";
+    versions: "GET";
+    restoreVersion: "POST";
+    deleteVersion: "DELETE";
+    signedUrl: "POST";
+    bind: "POST";
+    transforms: "POST";
+    providerAnalytics: "POST";
+    [key: string]: unknown;
+  };
+  auth: {
+    modes: Array<"session" | "api-key">;
+    headers: string[];
+    requiredPermissions: {
+      read: "media.view";
+      create: "media.create";
+      update: "media.edit";
+      delete: "media.delete";
+      privateDelivery: "media.view";
+      [key: string]: unknown;
+    };
+    siteScope: true;
+    [key: string]: unknown;
+  };
+  uploadFields: string[];
+  sdkHelpers: {
+    list: "adminMedia";
+    upload: "uploadMedia";
+    update: "updateAdminMedia";
+    replace: "replaceMedia";
+    delete: "deleteAdminMedia";
+    folders: "adminMediaFolders";
+    createFolder: "createMediaFolder";
+    updateFolder: "updateMediaFolder";
+    deleteFolder: "deleteMediaFolder";
+    versions: "adminMediaVersions";
+    restoreVersion: "restoreMediaVersion";
+    deleteVersion: "deleteMediaVersion";
+    signedUrl: "createMediaSignedUrl";
+    bind: "bindMedia";
+    transforms: "prepareMediaTransforms";
+    providerAnalytics: "ingestMediaProviderAnalytics";
+    [key: string]: unknown;
+  };
+  responseContracts: {
+    list: "backy.admin-media-list.v1";
+    item: "backy.admin-media.v1";
+    folders: "backy.media-folders.v1";
+    versions: "backy.media-versions.v1";
+    signedUrl: "backy.media-signed-url.v1";
+    binding: "backy.media-binding.v1";
+    transforms: "backy.media-transforms.v1";
+    [key: string]: unknown;
+  };
+  auditing: {
+    create: "media.created";
+    update: "media.updated";
+    replace: "media.replaced";
+    delete: "media.deleted";
+    bind: "media.bound";
+    unbind: "media.unbound";
+    [key: string]: unknown;
+  };
+  secretHandling: string;
+  [key: string]: unknown;
+}
+
 export interface BackyManifestMediaModule {
   schemaVersion: "backy.media-discovery.v1";
   count: number;
@@ -7955,6 +8047,12 @@ export interface BackyManifestMediaModule {
     fontManifest: boolean;
     references: boolean;
     editableMetadata: boolean;
+    authenticatedUpload: boolean;
+    folderManagement: boolean;
+    retainedVersions: boolean;
+    responsiveTransformPreparation: boolean;
+    bindingMetadata: boolean;
+    providerAnalyticsIngestion: boolean;
     [key: string]: unknown;
   };
   filters: {
@@ -8010,6 +8108,7 @@ export interface BackyManifestMediaModule {
     secretHandling: string;
     [key: string]: unknown;
   };
+  managementPolicy: BackyManifestMediaManagementPolicy;
   schemas: {
     list: "backy.media-discovery.v1";
     fileCategories: "backy.media-file-categories.v1";

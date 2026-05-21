@@ -1920,9 +1920,15 @@
                     "imageTransforms": { "type": "boolean" },
                     "fontManifest": { "type": "boolean" },
                     "references": { "type": "boolean" },
-                    "editableMetadata": { "type": "boolean" }
+                    "editableMetadata": { "type": "boolean" },
+                    "authenticatedUpload": { "type": "boolean" },
+                    "folderManagement": { "type": "boolean" },
+                    "retainedVersions": { "type": "boolean" },
+                    "responsiveTransformPreparation": { "type": "boolean" },
+                    "bindingMetadata": { "type": "boolean" },
+                    "providerAnalyticsIngestion": { "type": "boolean" }
                   },
-                  "required": ["publicAssets", "publicFolderDiscovery", "signedPrivateFiles", "responsiveImages", "imageTransforms", "fontManifest", "references", "editableMetadata"]
+                  "required": ["publicAssets", "publicFolderDiscovery", "signedPrivateFiles", "responsiveImages", "imageTransforms", "fontManifest", "references", "editableMetadata", "authenticatedUpload", "folderManagement", "retainedVersions", "responsiveTransformPreparation", "bindingMetadata", "providerAnalyticsIngestion"]
                 },
                 "filters": {
                   "type": "object",
@@ -2003,6 +2009,108 @@
                   },
                   "required": ["publicFiles", "privateFiles", "signedUrlEndpoint", "signedUrlMethod", "signedUrlPermission", "acceptedDispositions", "defaultDisposition", "maxSignedUrlSeconds", "transformableTypes", "responsiveTypes", "fontManifestTypes", "downloadableTypes", "secretHandling"]
                 },
+                "managementPolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.media-management.v1" },
+                    "endpoints": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "adminList": { "type": "string", "minLength": 1 },
+                        "upload": { "type": "string", "minLength": 1 },
+                        "detail": { "type": "string", "minLength": 1 },
+                        "folders": { "type": "string", "minLength": 1 },
+                        "folderDetail": { "type": "string", "minLength": 1 },
+                        "versions": { "type": "string", "minLength": 1 },
+                        "version": { "type": "string", "minLength": 1 },
+                        "signedUrl": { "type": "string", "minLength": 1 },
+                        "bind": { "type": "string", "minLength": 1 },
+                        "transforms": { "type": "string", "minLength": 1 },
+                        "providerAnalytics": { "type": "string", "minLength": 1 }
+                      },
+                      "required": ["adminList", "upload", "detail", "folders", "folderDetail", "versions", "version", "signedUrl", "bind", "transforms", "providerAnalytics"]
+                    },
+                    "methods": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "list": { "const": "GET" },
+                        "upload": { "const": "POST" },
+                        "update": { "const": "PATCH" },
+                        "replace": { "const": "POST" },
+                        "delete": { "const": "DELETE" },
+                        "folders": { "const": "GET" },
+                        "createFolder": { "const": "POST" },
+                        "updateFolder": { "const": "PATCH" },
+                        "deleteFolder": { "const": "DELETE" },
+                        "versions": { "const": "GET" },
+                        "restoreVersion": { "const": "POST" },
+                        "deleteVersion": { "const": "DELETE" },
+                        "signedUrl": { "const": "POST" },
+                        "bind": { "const": "POST" },
+                        "transforms": { "const": "POST" },
+                        "providerAnalytics": { "const": "POST" }
+                      },
+                      "required": ["list", "upload", "update", "replace", "delete", "folders", "createFolder", "updateFolder", "deleteFolder", "versions", "restoreVersion", "deleteVersion", "signedUrl", "bind", "transforms", "providerAnalytics"]
+                    },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "modes": { "type": "array", "items": { "enum": ["session", "api-key"] } },
+                        "headers": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                        "requiredPermissions": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "read": { "const": "media.view" },
+                            "create": { "const": "media.create" },
+                            "update": { "const": "media.edit" },
+                            "delete": { "const": "media.delete" },
+                            "privateDelivery": { "const": "media.view" }
+                          },
+                          "required": ["read", "create", "update", "delete", "privateDelivery"]
+                        },
+                        "siteScope": { "const": true }
+                      },
+                      "required": ["modes", "headers", "requiredPermissions", "siteScope"]
+                    },
+                    "uploadFields": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "file" }
+                    },
+                    "sdkHelpers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "list": { "const": "adminMedia" },
+                        "upload": { "const": "uploadMedia" },
+                        "update": { "const": "updateAdminMedia" },
+                        "replace": { "const": "replaceMedia" },
+                        "delete": { "const": "deleteAdminMedia" },
+                        "folders": { "const": "adminMediaFolders" },
+                        "createFolder": { "const": "createMediaFolder" },
+                        "updateFolder": { "const": "updateMediaFolder" },
+                        "deleteFolder": { "const": "deleteMediaFolder" },
+                        "versions": { "const": "adminMediaVersions" },
+                        "restoreVersion": { "const": "restoreMediaVersion" },
+                        "deleteVersion": { "const": "deleteMediaVersion" },
+                        "signedUrl": { "const": "createMediaSignedUrl" },
+                        "bind": { "const": "bindMedia" },
+                        "transforms": { "const": "prepareMediaTransforms" },
+                        "providerAnalytics": { "const": "ingestMediaProviderAnalytics" }
+                      },
+                      "required": ["list", "upload", "update", "replace", "delete", "folders", "createFolder", "updateFolder", "deleteFolder", "versions", "restoreVersion", "deleteVersion", "signedUrl", "bind", "transforms", "providerAnalytics"]
+                    },
+                    "responseContracts": { "type": "object", "additionalProperties": true },
+                    "auditing": { "type": "object", "additionalProperties": true },
+                    "secretHandling": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["schemaVersion", "endpoints", "methods", "auth", "uploadFields", "sdkHelpers", "responseContracts", "auditing", "secretHandling"]
+                },
                 "schemas": {
                   "type": "object",
                   "additionalProperties": true,
@@ -2018,7 +2126,7 @@
                   "required": ["list", "fileCategories", "folders", "fonts", "references", "editableMetadata", "notFound"]
                 }
               },
-              "required": ["schemaVersion", "count", "publicCount", "fontCount", "types", "fileCategories", "listUrl", "endpoints", "capabilities", "filters", "methods", "cache", "deliveryPolicy", "schemas"]
+              "required": ["schemaVersion", "count", "publicCount", "fontCount", "types", "fileCategories", "listUrl", "endpoints", "capabilities", "filters", "methods", "cache", "deliveryPolicy", "managementPolicy", "schemas"]
             },
             "commerce": {
               "type": "object",

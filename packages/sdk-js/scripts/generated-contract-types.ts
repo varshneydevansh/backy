@@ -5149,6 +5149,108 @@ const commerceProviderCertification = {
   ],
 } satisfies GeneratedBackyFrontendManifestCommerceProviderCertification & GeneratedBackyOpenApiCommerceProviderCertification;
 
+const sdkManifestMediaManagementPolicy = {
+  schemaVersion: "backy.media-management.v1",
+  endpoints: {
+    adminList: "/api/admin/sites/site_demo/media",
+    upload: "/api/admin/sites/site_demo/media",
+    detail: "/api/admin/sites/site_demo/media/{mediaId}",
+    folders: "/api/admin/sites/site_demo/media/folders",
+    folderDetail: "/api/admin/sites/site_demo/media/folders/{folderId}",
+    versions: "/api/admin/sites/site_demo/media/{mediaId}/versions",
+    version: "/api/admin/sites/site_demo/media/{mediaId}/versions/{versionId}",
+    signedUrl: "/api/admin/sites/site_demo/media/{mediaId}/signed-url",
+    bind: "/api/admin/sites/site_demo/media/{mediaId}/bind",
+    transforms: "/api/admin/sites/site_demo/media/{mediaId}/transforms",
+    providerAnalytics: "/api/admin/sites/site_demo/media/provider-analytics",
+  },
+  methods: {
+    list: "GET",
+    upload: "POST",
+    update: "PATCH",
+    replace: "POST",
+    delete: "DELETE",
+    folders: "GET",
+    createFolder: "POST",
+    updateFolder: "PATCH",
+    deleteFolder: "DELETE",
+    versions: "GET",
+    restoreVersion: "POST",
+    deleteVersion: "DELETE",
+    signedUrl: "POST",
+    bind: "POST",
+    transforms: "POST",
+    providerAnalytics: "POST",
+  },
+  auth: {
+    modes: ["session", "api-key"],
+    headers: ["Authorization", "x-backy-admin-session", "x-backy-admin-key", "x-api-key"],
+    requiredPermissions: {
+      read: "media.view",
+      create: "media.create",
+      update: "media.edit",
+      delete: "media.delete",
+      privateDelivery: "media.view",
+    },
+    siteScope: true,
+  },
+  uploadFields: [
+    "file",
+    "filename",
+    "folderId",
+    "scope",
+    "scopeTargetId",
+    "visibility",
+    "tags",
+    "metadata",
+    "altText",
+    "caption",
+    "fontFamily",
+    "fontWeight",
+    "fontStyle",
+    "fontFallback",
+    "fontDisplay",
+    "uploadedBy",
+  ],
+  sdkHelpers: {
+    list: "adminMedia",
+    upload: "uploadMedia",
+    update: "updateAdminMedia",
+    replace: "replaceMedia",
+    delete: "deleteAdminMedia",
+    folders: "adminMediaFolders",
+    createFolder: "createMediaFolder",
+    updateFolder: "updateMediaFolder",
+    deleteFolder: "deleteMediaFolder",
+    versions: "adminMediaVersions",
+    restoreVersion: "restoreMediaVersion",
+    deleteVersion: "deleteMediaVersion",
+    signedUrl: "createMediaSignedUrl",
+    bind: "bindMedia",
+    transforms: "prepareMediaTransforms",
+    providerAnalytics: "ingestMediaProviderAnalytics",
+  },
+  responseContracts: {
+    list: "backy.admin-media-list.v1",
+    item: "backy.admin-media.v1",
+    folders: "backy.media-folders.v1",
+    versions: "backy.media-versions.v1",
+    signedUrl: "backy.media-signed-url.v1",
+    binding: "backy.media-binding.v1",
+    transforms: "backy.media-transforms.v1",
+  },
+  auditing: {
+    create: "media.created",
+    update: "media.updated",
+    replace: "media.replaced",
+    delete: "media.deleted",
+    bind: "media.bound",
+    unbind: "media.unbound",
+  },
+  secretHandling:
+    "Upload requests are authenticated admin multipart requests; private delivery uses short-lived signed URLs and never publishes private file tokens in manifest responses.",
+} satisfies BackyManifestMediaModule["managementPolicy"];
+
 const manifest = {
   schemaVersion: "backy.frontend-manifest.v1",
   site: {
@@ -5923,6 +6025,12 @@ const manifest = {
         fontManifest: true,
         references: true,
         editableMetadata: true,
+        authenticatedUpload: true,
+        folderManagement: true,
+        retainedVersions: true,
+        responsiveTransformPreparation: true,
+        bindingMetadata: true,
+        providerAnalyticsIngestion: true,
       },
       filters: {
         types: ["image", "font"],
@@ -5971,6 +6079,7 @@ const manifest = {
         downloadableTypes: ["document", "other", "audio", "video"],
         secretHandling: "Private file bytes require short-lived signed URLs minted through authenticated admin media APIs.",
       },
+      managementPolicy: sdkManifestMediaManagementPolicy,
       schemas: {
         list: "backy.media-discovery.v1",
         fileCategories: "backy.media-file-categories.v1",
@@ -6776,6 +6885,12 @@ const sdkManifestMedia = {
     fontManifest: true,
     references: true,
     editableMetadata: true,
+    authenticatedUpload: true,
+    folderManagement: true,
+    retainedVersions: true,
+    responsiveTransformPreparation: true,
+    bindingMetadata: true,
+    providerAnalyticsIngestion: true,
   },
   filters: {
     types: ["font", "image"],
@@ -6824,6 +6939,7 @@ const sdkManifestMedia = {
     downloadableTypes: ["document", "other", "audio", "video"],
     secretHandling: "Private file bytes require short-lived signed URLs minted through authenticated admin media APIs.",
   },
+  managementPolicy: sdkManifestMediaManagementPolicy,
   schemas: {
     list: "backy.media-discovery.v1",
     fileCategories: "backy.media-file-categories.v1",
@@ -6839,6 +6955,7 @@ const openApiMediaFileCategories = {
   schemaVersion: "backy.media-file-categories.v1",
   fileCategories: sdkManifestMedia.fileCategories,
   deliveryPolicy: sdkManifestMedia.deliveryPolicy,
+  managementPolicy: sdkManifestMedia.managementPolicy,
 } satisfies GeneratedBackyOpenApiMediaFileCategoryDiscovery;
 
 const sdkManifestCommerceRuntime = {
@@ -10143,6 +10260,15 @@ const invalidGeneratedManifestMediaTypes = { ...manifest.modules.media, types: [
 // @ts-expect-error generated manifest media discovery uses a versioned schema marker.
 const invalidGeneratedManifestMediaDiscovery = { ...manifest.modules.media, schemaVersion: "backy.media-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["media"];
 
+const invalidGeneratedManifestMediaManagement = {
+  ...manifest.modules.media,
+  managementPolicy: {
+    ...manifest.modules.media.managementPolicy,
+    // @ts-expect-error generated manifest media management policy uses a versioned schema marker.
+    schemaVersion: "backy.media-management.v0",
+  },
+} satisfies GeneratedBackyFrontendManifest["modules"]["media"];
+
 // @ts-expect-error generated manifest theme discovery uses a versioned schema marker.
 const invalidGeneratedManifestThemeDiscovery = { ...manifest.modules.theme, schemaVersion: "backy.theme-discovery.v0", } satisfies GeneratedBackyFrontendManifest["modules"]["theme"];
 
@@ -10726,6 +10852,7 @@ void invalidGeneratedReusableSectionItem;
 void invalidGeneratedReusableSectionsRuntimeDiscovery;
 void invalidGeneratedManifestMediaTypes;
 void invalidGeneratedManifestMediaDiscovery;
+void invalidGeneratedManifestMediaManagement;
 void invalidGeneratedManifestThemeDiscovery;
 void invalidGeneratedManifestLiveManagementDiscovery;
 void invalidGeneratedManifestFormsRuntimeDiscovery;

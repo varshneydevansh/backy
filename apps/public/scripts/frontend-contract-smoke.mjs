@@ -122,8 +122,12 @@ assert(
     manifestRoute.includes("signedUrlEndpoint: `/api/admin/sites/${siteId}/media/{mediaId}/signed-url`") &&
     manifestRoute.includes("acceptedDispositions: ['inline', 'attachment']") &&
     manifestRoute.includes("downloadableTypes: ['document', 'other', 'audio', 'video']") &&
+    manifestRoute.includes("schemaVersion: 'backy.media-management.v1'") &&
+    manifestRoute.includes("upload: 'uploadMedia'") &&
+    manifestRoute.includes("privateDelivery: 'media.view'") &&
     manifestRoute.includes("folders: `/api/sites/${siteId}/media/folders`") &&
     manifestRoute.includes("'folderId'") &&
+    manifestRoute.includes("'fontFamily'") &&
     manifestRoute.includes("'scope'") &&
     manifestRoute.includes("'tag'") &&
     manifestRoute.includes("file: 'document'") &&
@@ -133,7 +137,12 @@ assert(
     openApiRoute.includes('"x-backy-media-file-categories"') &&
     openApiRoute.includes('MediaFileCategoryDiscovery') &&
     openApiRoute.includes('MediaDeliveryPolicy') &&
+    openApiRoute.includes('MediaManagementPolicy') &&
+    openApiRoute.includes('"backy.media-management.v1"') &&
+    openApiRoute.includes('"ingestMediaProviderAnalytics"') &&
     frontendManifestSchema.includes('"backy.media-discovery.v1"') &&
+    frontendManifestSchema.includes('"managementPolicy"') &&
+    frontendManifestSchema.includes('"backy.media-management.v1"') &&
     frontendManifestSchema.includes('"signedPrivateFiles"') &&
     frontendManifestSchema.includes('"fileCategories"') &&
     frontendManifestSchema.includes('"backy.media-file-categories.v1"') &&
@@ -146,6 +155,7 @@ assert(
     frontendManifestSchema.includes('"backy.media-folders.v1"') &&
     frontendManifestSchema.includes('"maxLimit"') &&
     sdkSource.includes('schemaVersion: "backy.media-discovery.v1";') &&
+    sdkSource.includes('BackyManifestMediaManagementPolicy') &&
     sdkSource.includes('fileCategories: Array<') &&
     sdkSource.includes('deliveryPolicy:') &&
     sdkSource.includes('privateFiles: "signed-url-required";') &&
@@ -159,9 +169,12 @@ assert(
     sdkSmoke.includes('manifest() media discovery missing folderId filter') &&
     sdkSmoke.includes('manifest() media discovery missing document category') &&
     sdkSmoke.includes('manifest() media discovery missing signed URL policy') &&
+    sdkSmoke.includes('manifest() media management missing upload helper') &&
     sdkSmoke.includes('mediaFolders() missing folder array') &&
     generatedSdkSmoke.includes('openApiMediaFileCategories') &&
-    generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery'),
+    generatedSdkSmoke.includes('managementPolicy') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery') &&
+    generatedSdkSmoke.includes('invalidGeneratedManifestMediaManagement'),
   'Frontend manifest, OpenAPI, and SDK must expose structured media discovery for custom frontend asset browsers.',
 );
 

@@ -4,7 +4,7 @@
 
 export type GeneratedBackyOpenApiOperationId = "bulkUpdateBackySiteComments" | "createBackyCollectionRecord" | "createBackyCommerceOrder" | "deleteBackyCollectionRecord" | "deleteBackyCommentBlocklistEntries" | "discoverBackySite" | "getBackyBlogComment" | "getBackyBlogRssFeed" | "getBackyCollection" | "getBackyCommentAnalytics" | "getBackyCommentReportReasons" | "getBackyCommerceCatalog" | "getBackyCommerceOrderContract" | "getBackyFontManifest" | "getBackyForm" | "getBackyFormContact" | "getBackyFormDefinition" | "getBackyFormSubmission" | "getBackyFrontendDesignContract" | "getBackyFrontendManifest" | "getBackyInteractiveComponentRegistry" | "getBackyInteractiveComponentSandbox" | "getBackyLiveManagedBlogPost" | "getBackyLiveManagedPage" | "getBackyMedia" | "getBackyMediaFile" | "getBackyNavigation" | "getBackyOpenApiDocument" | "getBackyPageComment" | "getBackyRenderPayload" | "getBackyReusableSection" | "getBackySeoDiscovery" | "getBackySiteComment" | "listBackyBlogAuthors" | "listBackyBlogCategories" | "listBackyBlogComments" | "listBackyBlogPosts" | "listBackyBlogTags" | "listBackyCollectionRecords" | "listBackyCollections" | "listBackyCommentBlocklist" | "listBackyCommentReportReasons" | "listBackyFormContacts" | "listBackyFormSubmissions" | "listBackyForms" | "listBackyInteractionEvents" | "listBackyMedia" | "listBackyMediaFolders" | "listBackyPageComments" | "listBackyPages" | "listBackyReusableSections" | "listBackySiteComments" | "receiveBackyCommerceWebhook" | "recordBackyInteractiveRuntimeEvent" | "reportBackyComment" | "resolveBackyRoute" | "retryBackyCommentDelivery" | "reviewBackyFormSubmission" | "submitBackyBlogComment" | "submitBackyForm" | "submitBackyPageComment" | "transformBackyMediaImage" | "updateBackyBlogComment" | "updateBackyCollectionRecord" | "updateBackyFormContact" | "updateBackyLiveManagedBlogPost" | "updateBackyLiveManagedPage" | "updateBackyPageComment" | "updateBackySiteComment";
 
-export type GeneratedBackyOpenApiComponentName = "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProviderCertification" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
+export type GeneratedBackyOpenApiComponentName = "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProviderCertification" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaManagementPolicy" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
 
 export interface GeneratedBackyOpenApiOperation {
   operationId?: GeneratedBackyOpenApiOperationId;
@@ -521,6 +521,82 @@ export type GeneratedBackyOpenApiMediaFileCategoryDiscovery = {
   schemaVersion: "backy.media-file-categories.v1";
   fileCategories: Array<GeneratedBackyOpenApiMediaFileCategory>;
   deliveryPolicy: GeneratedBackyOpenApiMediaDeliveryPolicy;
+  managementPolicy: GeneratedBackyOpenApiMediaManagementPolicy;
+  [key: string]: unknown;
+};
+
+export type GeneratedBackyOpenApiMediaManagementPolicy = {
+  schemaVersion: "backy.media-management.v1";
+  endpoints: {
+    adminList: string;
+    upload: string;
+    detail: string;
+    folders: string;
+    folderDetail: string;
+    versions: string;
+    version: string;
+    signedUrl: string;
+    bind: string;
+    transforms: string;
+    providerAnalytics: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    upload: "POST";
+    update: "PATCH";
+    replace: "POST";
+    delete: "DELETE";
+    folders: "GET";
+    createFolder: "POST";
+    updateFolder: "PATCH";
+    deleteFolder: "DELETE";
+    versions: "GET";
+    restoreVersion: "POST";
+    deleteVersion: "DELETE";
+    signedUrl: "POST";
+    bind: "POST";
+    transforms: "POST";
+    providerAnalytics: "POST";
+    [key: string]: unknown;
+  };
+  auth: {
+    modes: Array<"session" | "api-key">;
+    headers: Array<string>;
+    requiredPermissions: {
+      read: "media.view";
+      create: "media.create";
+      update: "media.edit";
+      delete: "media.delete";
+      privateDelivery: "media.view";
+      [key: string]: unknown;
+    };
+    siteScope: true;
+    [key: string]: unknown;
+  };
+  uploadFields: Array<string>;
+  sdkHelpers: {
+    list: "adminMedia";
+    upload: "uploadMedia";
+    update: "updateAdminMedia";
+    replace: "replaceMedia";
+    delete: "deleteAdminMedia";
+    folders: "adminMediaFolders";
+    createFolder: "createMediaFolder";
+    updateFolder: "updateMediaFolder";
+    deleteFolder: "deleteMediaFolder";
+    versions: "adminMediaVersions";
+    restoreVersion: "restoreMediaVersion";
+    deleteVersion: "deleteMediaVersion";
+    signedUrl: "createMediaSignedUrl";
+    bind: "bindMedia";
+    transforms: "prepareMediaTransforms";
+    providerAnalytics: "ingestMediaProviderAnalytics";
+    [key: string]: unknown;
+  };
+  responseContracts: Record<string, unknown>;
+  auditing: Record<string, unknown>;
+  secretHandling: string;
   [key: string]: unknown;
 };
 
@@ -2339,6 +2415,7 @@ export interface GeneratedBackyOpenApiComponentSchemas {
   MediaFolderListEnvelope?: GeneratedBackyOpenApiMediaFolderListEnvelope;
   MediaFolderRoot?: GeneratedBackyOpenApiMediaFolderRoot;
   MediaList?: GeneratedBackyOpenApiMediaList;
+  MediaManagementPolicy?: GeneratedBackyOpenApiMediaManagementPolicy;
   MediaReferenceTarget?: GeneratedBackyOpenApiMediaReferenceTarget;
   MediaReferences?: GeneratedBackyOpenApiMediaReferences;
   NavigationEnvelope?: GeneratedBackyOpenApiNavigationEnvelope;
@@ -3965,6 +4042,12 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           fontManifest: boolean;
           references: boolean;
           editableMetadata: boolean;
+          authenticatedUpload: boolean;
+          folderManagement: boolean;
+          retainedVersions: boolean;
+          responsiveTransformPreparation: boolean;
+          bindingMetadata: boolean;
+          providerAnalyticsIngestion: boolean;
           [key: string]: unknown;
         };
         filters: {
@@ -4017,6 +4100,80 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           responsiveTypes: Array<"image">;
           fontManifestTypes: Array<"font">;
           downloadableTypes: Array<"document" | "other" | "audio" | "video">;
+          secretHandling: string;
+          [key: string]: unknown;
+        };
+        managementPolicy: {
+          schemaVersion: "backy.media-management.v1";
+          endpoints: {
+            adminList: string;
+            upload: string;
+            detail: string;
+            folders: string;
+            folderDetail: string;
+            versions: string;
+            version: string;
+            signedUrl: string;
+            bind: string;
+            transforms: string;
+            providerAnalytics: string;
+            [key: string]: unknown;
+          };
+          methods: {
+            list: "GET";
+            upload: "POST";
+            update: "PATCH";
+            replace: "POST";
+            delete: "DELETE";
+            folders: "GET";
+            createFolder: "POST";
+            updateFolder: "PATCH";
+            deleteFolder: "DELETE";
+            versions: "GET";
+            restoreVersion: "POST";
+            deleteVersion: "DELETE";
+            signedUrl: "POST";
+            bind: "POST";
+            transforms: "POST";
+            providerAnalytics: "POST";
+            [key: string]: unknown;
+          };
+          auth: {
+            modes: Array<"session" | "api-key">;
+            headers: Array<string>;
+            requiredPermissions: {
+              read: "media.view";
+              create: "media.create";
+              update: "media.edit";
+              delete: "media.delete";
+              privateDelivery: "media.view";
+              [key: string]: unknown;
+            };
+            siteScope: true;
+            [key: string]: unknown;
+          };
+          uploadFields: Array<string>;
+          sdkHelpers: {
+            list: "adminMedia";
+            upload: "uploadMedia";
+            update: "updateAdminMedia";
+            replace: "replaceMedia";
+            delete: "deleteAdminMedia";
+            folders: "adminMediaFolders";
+            createFolder: "createMediaFolder";
+            updateFolder: "updateMediaFolder";
+            deleteFolder: "deleteMediaFolder";
+            versions: "adminMediaVersions";
+            restoreVersion: "restoreMediaVersion";
+            deleteVersion: "deleteMediaVersion";
+            signedUrl: "createMediaSignedUrl";
+            bind: "bindMedia";
+            transforms: "prepareMediaTransforms";
+            providerAnalytics: "ingestMediaProviderAnalytics";
+            [key: string]: unknown;
+          };
+          responseContracts: Record<string, unknown>;
+          auditing: Record<string, unknown>;
           secretHandling: string;
           [key: string]: unknown;
         };
