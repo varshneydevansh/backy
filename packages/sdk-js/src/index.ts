@@ -1747,6 +1747,33 @@ function applyEditablePath(
   setNestedEditableValue(element, path, value);
 }
 
+function applyBackyContentElementPatch(
+  element: Record<string, unknown>,
+  patch: BackyContentElementPatch,
+): void {
+  if (patch.props) {
+    mergeElementRecord(element, "props", patch.props);
+  }
+  if (patch.styles) {
+    mergeElementRecord(element, "styles", patch.styles);
+  }
+  if (patch.fields) {
+    Object.entries(patch.fields).forEach(([key, value]) => {
+      if (value === undefined) {
+        delete element[key];
+      } else {
+        element[key] = value;
+      }
+    });
+  }
+  Object.entries(patch.changes || {}).forEach(([path, value]) => {
+    applyEditablePath(element, path, value);
+  });
+  (patch.remove || []).forEach((path) => {
+    applyEditablePath(element, path, undefined);
+  });
+}
+
 export function findBackyContentElement(
   content: BackyEditableContent | undefined | null,
   elementId: string,
@@ -1769,36 +1796,37 @@ export function patchBackyContentElement<TContent extends BackyEditableContent>(
   content: TContent | undefined | null,
   patch: BackyContentElementPatch,
 ): TContent | null {
-  if (!content || !patch.elementId) {
+  return patchBackyContentElements(content, [patch]);
+}
+
+export function patchBackyContentElements<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  patches: readonly BackyContentElementPatch[],
+): TContent | null {
+  if (!content || patches.length === 0) {
+    return null;
+  }
+
+  const patchesByElementId = new Map<string, BackyContentElementPatch[]>();
+  patches.forEach((patch) => {
+    if (!patch.elementId) return;
+    const existing = patchesByElementId.get(patch.elementId) || [];
+    existing.push(patch);
+    patchesByElementId.set(patch.elementId, existing);
+  });
+
+  if (patchesByElementId.size === 0) {
     return null;
   }
 
   const nextContent = cloneBackyContent(content);
   let changed = false;
   visitBackyContentElements(contentElementRoots(nextContent), (element) => {
-    if (element.id !== patch.elementId) return;
+    if (typeof element.id !== "string") return;
+    const elementPatches = patchesByElementId.get(element.id);
+    if (!elementPatches) return;
 
-    if (patch.props) {
-      mergeElementRecord(element, "props", patch.props);
-    }
-    if (patch.styles) {
-      mergeElementRecord(element, "styles", patch.styles);
-    }
-    if (patch.fields) {
-      Object.entries(patch.fields).forEach(([key, value]) => {
-        if (value === undefined) {
-          delete element[key];
-        } else {
-          element[key] = value;
-        }
-      });
-    }
-    Object.entries(patch.changes || {}).forEach(([path, value]) => {
-      applyEditablePath(element, path, value);
-    });
-    (patch.remove || []).forEach((path) => {
-      applyEditablePath(element, path, undefined);
-    });
+    elementPatches.forEach((patch) => applyBackyContentElementPatch(element, patch));
     changed = true;
   });
 

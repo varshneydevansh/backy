@@ -211,6 +211,7 @@ import {
   findBackyContentElement,
   generatedBackyContractTypeSources,
   patchBackyContentElement,
+  patchBackyContentElements,
 } from "../src/index";
 
 type Equal<Left, Right> =
@@ -627,6 +628,21 @@ const element = {
 
 const editableContentForHelpers = {
   elements: [element],
+  contentDocument: {
+    schemaVersion: "backy.content.v1",
+    id: "editable-helper-document",
+    kind: "page",
+    version: "draft",
+    elements: [
+      {
+        id: "editable-helper-nested-message",
+        type: "text",
+        children: [],
+        props: { content: "Nested message" },
+      },
+    ],
+    editableMap: {},
+  },
   canvasSize: { width: 1200, height: 760 },
 } satisfies BackyEditableContent;
 
@@ -655,9 +671,23 @@ const foundEditableElement = findBackyContentElement(
   editableContentForHelpers,
   "interactive-rounds",
 );
+const bulkPatchedEditableContent = patchBackyContentElements(
+  editableContentForHelpers,
+  [
+    editableElementPatch,
+    {
+      elementId: "editable-helper-nested-message",
+      changes: {
+        "props.content": "Nested message edited from a custom frontend",
+        "layout.y": 120,
+      },
+    },
+  ],
+);
 
 void patchedEditableContent;
 void foundEditableElement;
+void bulkPatchedEditableContent;
 
 const renderMediaAsset = {
   id: "media_hero",

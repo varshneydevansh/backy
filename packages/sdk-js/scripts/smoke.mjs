@@ -4,6 +4,7 @@ import {
   createBackyClient,
   findBackyContentElement,
   patchBackyContentElement,
+  patchBackyContentElements,
 } from '../dist/index.js';
 
 const baseUrl = (process.env.BACKY_SDK_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
@@ -1346,14 +1347,23 @@ if (runWriteSmoke) {
     assert(findBackyContentElement(liveManagedPage.data.page.content, 'sdk-smoke-form-title')?.id === 'sdk-smoke-form-title', 'findBackyContentElement() missing nested page form input');
     writeChecks.push('liveManagedPage');
 
-    const patchedLivePageContent = patchBackyContentElement(liveManagedPage.data.page.content, {
-      elementId: 'sdk-smoke-form-title',
-      changes: {
-        'props.placeholder': 'Live-managed title',
-        'visibility.locked': false,
+    const patchedLivePageContent = patchBackyContentElements(liveManagedPage.data.page.content, [
+      {
+        elementId: 'sdk-smoke-form-title',
+        changes: {
+          'props.placeholder': 'Live-managed title',
+          'visibility.locked': false,
+        },
       },
-    });
-    assert(patchedLivePageContent, 'patchBackyContentElement() did not patch the page content tree');
+      {
+        elementId: 'sdk-smoke-form-message',
+        changes: {
+          'props.placeholder': 'Message edited through SDK bulk helper',
+          'layout.y': 72,
+        },
+      },
+    ]);
+    assert(patchedLivePageContent, 'patchBackyContentElements() did not patch the page content tree');
     const liveManagedPageUpdate = await writeClient.updateLiveManagedPage(fixture.pageId, {
       title: liveManagedPage.data.page.title,
       content: patchedLivePageContent,
@@ -1614,6 +1624,7 @@ console.log(JSON.stringify({
     'liveManagedBlogPost',
     'updateLiveManagedBlogPost',
     'patchBackyContentElement',
+    'patchBackyContentElements',
     'findBackyContentElement',
     'blog',
     'blogFeeds',
