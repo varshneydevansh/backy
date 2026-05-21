@@ -393,7 +393,7 @@ Public page payload should include:
 
 - `POST /api/sites/:siteId/pages/:pageId/comments`
 - `POST /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
-  - Body: comment + optional parentId + optional identity fields.
+  - Body: comment + optional parentId + optional identity fields. Custom frontends may send content aliases such as `body`, `comment`, `message`, or `text`, author aliases such as `name`/`email`/`website`, reply/thread aliases such as `replyToId` and `threadId`, plus transport metadata such as `requestId`, `honeypot`, `startedAt`, captcha token aliases, `userId`, `commentUserId`, and `moderationMode`. The SDK exports `buildBackyCommentInput()` so generated/custom page and blog comment forms can normalize those aliases into the canonical public comment payload before calling `submitPageComment()` or `submitBlogComment()`.
   - Response uses `{ success, requestId, data: { comment, message } }`; legacy top-level `comment` and `message` remain for compatibility.
   - Validation and spam rejections return structured `422` envelopes with `error.code: "VALIDATION_ERROR"`, `details`, and `validation` field errors instead of legacy string errors.
 

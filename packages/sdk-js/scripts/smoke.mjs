@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  buildBackyCommentInput,
   buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
@@ -1639,13 +1640,26 @@ if (runWriteSmoke) {
     assert(updatedContact.data.contact?.status === 'qualified', 'updateFormContact() did not update contact status');
     writeChecks.push('updateFormContact');
 
-    const comment = await writeClient.submitPageComment(fixture.pageId, {
-      content: 'SDK comment body',
-      authorName: 'SDK Commenter',
-      moderationMode: 'auto-approve',
+    const commentInput = buildBackyCommentInput({
+      message: 'SDK comment body',
+      name: 'SDK Commenter',
+      email: 'SDK-COMMENTER@EXAMPLE.COM',
+      threadId: 'sdk-smoke-thread',
       requestId: 'sdk-page-comment',
+      startedAt: Date.now() - 1000,
+      captcha: {
+        token: 'sdk-comment-captcha',
+      },
       rateLimitBypass: true,
+    }, {
+      moderationMode: 'auto-approve',
     });
+    assert(commentInput.content === 'SDK comment body', 'buildBackyCommentInput() did not normalize message content');
+    assert(commentInput.authorEmail === 'sdk-commenter@example.com', 'buildBackyCommentInput() did not normalize email');
+    assert(commentInput.commentThreadId === 'sdk-smoke-thread', 'buildBackyCommentInput() did not normalize thread id');
+    assert(commentInput.captchaToken === 'sdk-comment-captcha', 'buildBackyCommentInput() did not normalize captcha token');
+    assert(commentInput.rateLimitBypass === true, 'buildBackyCommentInput() dropped rate-limit bypass metadata');
+    const comment = await writeClient.submitPageComment(fixture.pageId, commentInput);
     const commentId = comment.data.comment?.id;
     assert(commentId, 'submitPageComment() missing comment id');
     assert(comment.data.comment?.status === 'approved', 'submitPageComment() did not auto-approve comment');

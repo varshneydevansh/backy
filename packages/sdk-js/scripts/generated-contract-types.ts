@@ -28,6 +28,7 @@ import type {
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
+  BackyCommentInput,
   BackyCommerceOrderInput,
   BackyCollectionRecordWriteInput,
   BackyFormSubmissionInput,
@@ -214,6 +215,7 @@ import type {
   GeneratedBackyThemeTokens,
 } from "../src/index";
 import {
+  buildBackyCommentInput,
   buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
@@ -277,6 +279,9 @@ type CollectionRecordWriteInputBuilderReturnsContract = Assert<
 >;
 type FormSubmissionInputBuilderReturnsContract = Assert<
   Equal<ReturnType<typeof buildBackyFormSubmissionInput>, BackyFormSubmissionInput>
+>;
+type CommentInputBuilderReturnsContract = Assert<
+  Equal<ReturnType<typeof buildBackyCommentInput>, BackyCommentInput>
 >;
 type LiveManagedBlogPostMethodReturnsContract = Assert<
   Equal<
@@ -4084,6 +4089,23 @@ const commentSubmitRequest = {
   moderationMode: "manual",
 } satisfies GeneratedBackyOpenApiCommentSubmitRequest;
 
+const sdkCommentInput = buildBackyCommentInput({
+  message: "This page helped me understand the product.",
+  name: "Reader",
+  email: "READER@EXAMPLE.COM",
+  website: "https://example.com",
+  replyToId: "comment_parent",
+  threadId: "thread_home",
+  requestId: "sdk-comment-submit",
+  startedAt: "2026-05-16T00:00:00.000Z",
+  honeypot: "",
+  captcha: {
+    token: "captcha-token",
+  },
+});
+const sdkCommentInputContract =
+  sdkCommentInput satisfies BackyCommentInput;
+
 const commentUpdateRequest = {
   status: "approved",
   moderationNote: "Looks useful.",
@@ -5696,6 +5718,8 @@ void fontVariant;
 void fontManifestEnvelope;
 void comment;
 void commentSubmitRequest;
+void sdkCommentInput;
+void sdkCommentInputContract;
 void commentUpdateRequest;
 void commentBulkUpdateRequest;
 void commentBlocklistEntry;

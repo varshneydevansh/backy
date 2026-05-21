@@ -3171,14 +3171,164 @@ export interface BackyFormSubmissionValidationDetail {
 export interface BackyCommentInput {
   content?: string;
   body?: string;
-  authorName: string;
+  comment?: string;
+  message?: string;
+  text?: string;
+  authorName?: string;
+  name?: string;
   authorEmail?: string;
+  email?: string;
   authorWebsite?: string;
+  website?: string;
+  url?: string;
   requestId?: string;
   parentId?: string;
+  replyToId?: string;
   threadId?: string;
   commentThreadId?: string;
+  userId?: string;
+  commentUserId?: string;
+  honeypot?: string;
+  startedAt?: string | number;
+  captchaToken?: string;
+  captchaResponse?: string;
+  turnstileToken?: string;
+  hcaptchaToken?: string;
+  recaptchaToken?: string;
   moderationMode?: "manual" | "auto-approve";
+  rateLimitBypass?: boolean;
+  [key: string]: unknown;
+}
+
+export type BackyCommentInputSource = Partial<BackyCommentInput> &
+  Record<string, unknown>;
+
+export interface BackyCommentInputBuildOptions {
+  requestId?: string;
+  parentId?: string;
+  commentThreadId?: string;
+  userId?: string;
+  honeypot?: string;
+  startedAt?: string | number;
+  captchaToken?: string;
+  moderationMode?: "manual" | "auto-approve";
+  rateLimitBypass?: boolean;
+}
+
+const backyCommentRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const backyCommentText = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) return text;
+    }
+  }
+  return "";
+};
+
+const normalizeBackyCommentModerationMode = (
+  value: unknown,
+): BackyCommentInput["moderationMode"] =>
+  value === "manual" || value === "auto-approve" ? value : undefined;
+
+export function buildBackyCommentInput(
+  source: BackyCommentInputSource | undefined | null,
+  options: BackyCommentInputBuildOptions = {},
+): BackyCommentInput {
+  const body = backyCommentRecord(source);
+  const author = backyCommentRecord(body.author);
+  const user = backyCommentRecord(body.user);
+  const captcha = backyCommentRecord(body.captcha);
+  const content = backyCommentText(
+    body.content,
+    body.body,
+    body.comment,
+    body.message,
+    body.text,
+  );
+  const authorName = backyCommentText(
+    body.authorName,
+    body.name,
+    author.name,
+    user.name,
+  );
+  const authorEmail = backyCommentText(
+    body.authorEmail,
+    body.email,
+    author.email,
+    user.email,
+  ).toLowerCase();
+  const authorWebsite = backyCommentText(
+    body.authorWebsite,
+    body.website,
+    body.url,
+    author.website,
+    author.url,
+  );
+  const requestId = backyCommentText(options.requestId, body.requestId);
+  const parentId = backyCommentText(
+    options.parentId,
+    body.parentId,
+    body.replyToId,
+  );
+  const commentThreadId = backyCommentText(
+    options.commentThreadId,
+    body.commentThreadId,
+    body.threadId,
+  );
+  const userId = backyCommentText(
+    options.userId,
+    body.userId,
+    body.commentUserId,
+    user.id,
+  );
+  const honeypot = backyCommentText(options.honeypot, body.honeypot);
+  const startedAt = options.startedAt ?? body.startedAt;
+  const captchaToken = backyCommentText(
+    options.captchaToken,
+    body.captchaToken,
+    body.captchaResponse,
+    body.turnstileToken,
+    body["cf-turnstile-response"],
+    body.hcaptchaToken,
+    body["h-captcha-response"],
+    body.recaptchaToken,
+    body["g-recaptcha-response"],
+    captcha.token,
+    captcha.response,
+  );
+  const moderationMode =
+    options.moderationMode ??
+    normalizeBackyCommentModerationMode(body.moderationMode);
+  const rateLimitBypass =
+    typeof options.rateLimitBypass === "boolean"
+      ? options.rateLimitBypass
+      : typeof body.rateLimitBypass === "boolean"
+        ? body.rateLimitBypass
+        : undefined;
+
+  const input: BackyCommentInput = { content };
+  if (authorName) input.authorName = authorName;
+  if (authorEmail) input.authorEmail = authorEmail;
+  if (authorWebsite) input.authorWebsite = authorWebsite;
+  if (requestId) input.requestId = requestId;
+  if (parentId) input.parentId = parentId;
+  if (commentThreadId) input.commentThreadId = commentThreadId;
+  if (userId) input.userId = userId;
+  if (honeypot) input.honeypot = honeypot;
+  if (typeof startedAt === "string" || typeof startedAt === "number") {
+    input.startedAt = startedAt;
+  }
+  if (captchaToken) input.captchaToken = captchaToken;
+  if (moderationMode) input.moderationMode = moderationMode;
+  if (typeof rateLimitBypass === "boolean") {
+    input.rateLimitBypass = rateLimitBypass;
+  }
+  return input;
 }
 
 export interface BackyCommentListOptions extends BackyListOptions {
@@ -6023,11 +6173,7 @@ function isBackyGoneRouteResolveEnvelope(
 function normalizeCommentInput(
   input: BackyCommentInput,
 ): Record<string, unknown> {
-  const { body, content, ...rest } = input;
-  return {
-    ...rest,
-    content: content ?? body ?? "",
-  };
+  return buildBackyCommentInput(input);
 }
 
 function extractResponseMeta(response: Response): BackyResponseMeta {
