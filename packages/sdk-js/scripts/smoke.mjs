@@ -1994,6 +1994,27 @@ if (runWriteSmoke) {
     assert(revalidatedFormDefinition.notModified === true, 'formDefinitionCached() SDK smoke revalidation failed');
     writeChecks.push('formDefinitionCached');
 
+    const embeddedFormBlock = await writeClient.createAdminFormEmbedBlock('sdk-smoke-form', {
+      name: 'SDK Smoke Form Embed',
+      slug: `sdk-smoke-form-embed-${Date.now()}`,
+      actor: 'sdk-smoke',
+      publicBaseUrl: baseUrl,
+      requestId: 'sdk-form-embed-block',
+    });
+    assert(embeddedFormBlock.data.section?.sourceElementId === 'sdk-smoke-form', 'createAdminFormEmbedBlock() did not bind the source form');
+    assert(embeddedFormBlock.data.embed?.definitionUrl?.includes('/forms/sdk-smoke-form/definition'), 'createAdminFormEmbedBlock() missing form definition URL');
+    writeChecks.push('createAdminFormEmbedBlock');
+
+    const clonedAdminForm = await writeClient.cloneAdminForm('sdk-smoke-form', {
+      name: 'SDK Smoke Form Clone',
+      title: 'SDK Smoke Form Clone',
+      isActive: false,
+      requestId: 'sdk-form-clone',
+    });
+    assert(clonedAdminForm.data.form?.id && clonedAdminForm.data.form.id !== 'sdk-smoke-form', 'cloneAdminForm() did not create a distinct form');
+    assert(clonedAdminForm.data.sourceFormId === 'sdk-smoke-form', 'cloneAdminForm() returned the wrong source form id');
+    writeChecks.push('cloneAdminForm');
+
     const formSubmissionInput = buildBackyFormSubmissionInput(formDefinition.body.data.form, {
       fields: {
         title: 'SDK Form Record',
@@ -2044,6 +2065,17 @@ if (runWriteSmoke) {
     assert(updatedSubmission.data.submission?.status === 'approved', 'updateFormSubmission() did not keep approved status');
     writeChecks.push('updateFormSubmission');
 
+    const reviewedSubmission = await writeClient.reviewFormSubmission('sdk-smoke-form', submissionId, {
+      status: 'approved',
+      reviewedBy: 'sdk-reviewer',
+      adminNotes: 'Reviewed through the SDK smoke.',
+      requestId: 'sdk-form-review',
+    });
+    assert(reviewedSubmission.data.submission?.id === submissionId, 'reviewFormSubmission() returned wrong submission');
+    assert(reviewedSubmission.data.submission?.reviewedBy === 'sdk-reviewer', 'reviewFormSubmission() did not preserve reviewer');
+    assert(reviewedSubmission.data.submission?.adminNotes === 'Reviewed through the SDK smoke.', 'reviewFormSubmission() did not preserve admin notes');
+    writeChecks.push('reviewFormSubmission');
+
     const contacts = await writeClient.formContacts('sdk-smoke-form', { requestId: 'sdk-form-submit' });
     assert(contacts.data.contacts?.some?.((contact) => contact.id === contactId), 'formContacts() missing generated contact');
     writeChecks.push('formContacts');
@@ -2051,6 +2083,107 @@ if (runWriteSmoke) {
     const updatedContact = await writeClient.updateFormContact('sdk-smoke-form', contactId, { status: 'qualified' });
     assert(updatedContact.data.contact?.status === 'qualified', 'updateFormContact() did not update contact status');
     writeChecks.push('updateFormContact');
+
+    const createdContact = await writeClient.createFormContact('sdk-smoke-form', {
+      name: 'SDK Manual Contact',
+      email: 'sdk-manual-contact@example.com',
+      status: 'qualified',
+      notes: 'Created through the SDK contact helper.',
+      sourceValues: {
+        company: 'Backy SDK',
+      },
+      upsertByEmail: true,
+      requestId: 'sdk-contact-create',
+    });
+    const manualContactId = createdContact.data.contact?.id;
+    assert(manualContactId, 'createFormContact() missing contact id');
+    assert(createdContact.data.contact?.email === 'sdk-manual-contact@example.com', 'createFormContact() did not preserve contact email');
+    assert(createdContact.data.contact?.status === 'qualified', 'createFormContact() did not preserve contact status');
+    writeChecks.push('createFormContact');
+
+    const importedContacts = await writeClient.importFormContactsCsv(
+      'sdk-smoke-form',
+      [
+        'name,email,status,notes,requestId,sourceCompany',
+        'SDK Imported Contact,sdk-imported-contact@example.com,qualified,Imported through SDK smoke,sdk-contact-import-row,Backy SDK',
+      ].join('\n'),
+      {
+        upsertByEmail: true,
+        requestId: 'sdk-contact-import',
+      },
+    );
+    const importedContactCount = (importedContacts.data.import?.created ?? 0) + (importedContacts.data.import?.updated ?? 0);
+    assert(importedContactCount >= 1, 'importFormContactsCsv() did not import or update a contact');
+    assert(importedContacts.data.contacts?.some?.((contact) => contact.email === 'sdk-imported-contact@example.com'), 'importFormContactsCsv() missing imported contact');
+    writeChecks.push('importFormContactsCsv');
+
+    const savedContactList = await writeClient.saveFormContactList({
+      name: 'SDK Qualified Contacts',
+      description: 'Temporary saved list created by the SDK smoke.',
+      filters: {
+        formId: 'sdk-smoke-form',
+        status: 'qualified',
+        quality: 'all',
+      },
+      requestId: 'sdk-contact-list-save',
+    });
+    const savedContactListId = savedContactList.data.list?.id;
+    assert(savedContactListId, 'saveFormContactList() missing saved list id');
+    assert(savedContactList.data.created === true, 'saveFormContactList() did not report creation');
+    assert(savedContactList.data.lists?.some?.((list) => list.id === savedContactListId), 'saveFormContactList() missing saved list in response');
+    writeChecks.push('saveFormContactList');
+
+    const deletedContactList = await writeClient.deleteFormContactList({
+      listId: savedContactListId,
+      requestId: 'sdk-contact-list-delete',
+    });
+    assert(deletedContactList.data.deleted === true, 'deleteFormContactList() did not report deletion');
+    assert(deletedContactList.data.listId === savedContactListId, 'deleteFormContactList() returned wrong list id');
+    writeChecks.push('deleteFormContactList');
+
+    const promotedCustomer = await writeClient.promoteFormContactToCustomer('sdk-smoke-form', manualContactId, {
+      customerStatus: 'lead',
+      notes: 'SDK smoke customer promotion.',
+      requestId: 'sdk-contact-promote-customer',
+    });
+    assert(promotedCustomer.data.contact?.id === manualContactId, 'promoteFormContactToCustomer() returned wrong contact');
+    assert(promotedCustomer.data.collection?.slug === 'customers', 'promoteFormContactToCustomer() did not use the customer collection');
+    assert(promotedCustomer.data.record?.values?.email === 'sdk-manual-contact@example.com', 'promoteFormContactToCustomer() did not create a customer email value');
+    writeChecks.push('promoteFormContactToCustomer');
+
+    const contactRetention = await writeClient.applyFormContactConsentRetention('sdk-smoke-form', {
+      contactIds: [manualContactId],
+      dryRun: true,
+      retentionDays: 0,
+      now: '2035-01-01T00:00:00.000Z',
+      actor: 'sdk-smoke',
+      requestId: 'sdk-contact-retention',
+    });
+    assert(contactRetention.data.dryRun === true, 'applyFormContactConsentRetention() did not preserve dryRun');
+    assert(contactRetention.data.scanned === 1, 'applyFormContactConsentRetention() did not scan the selected contact');
+    assert(contactRetention.data.contacts?.[0]?.id === manualContactId, 'applyFormContactConsentRetention() returned wrong contact evidence');
+    writeChecks.push('applyFormContactConsentRetention');
+
+    const formRetention = await writeClient.applyAdminFormConsentRetention('sdk-smoke-form', {
+      dryRun: true,
+      now: '2035-01-01T00:00:00.000Z',
+      actor: 'sdk-smoke',
+      requestId: 'sdk-form-retention',
+    });
+    assert(formRetention.data.dryRun === true, 'applyAdminFormConsentRetention() did not preserve dryRun');
+    assert(formRetention.data.formId === 'sdk-smoke-form', 'applyAdminFormConsentRetention() returned wrong form id');
+    writeChecks.push('applyAdminFormConsentRetention');
+
+    const formsRetention = await writeClient.applyAdminFormsConsentRetention({
+      dryRun: true,
+      now: '2035-01-01T00:00:00.000Z',
+      actor: 'sdk-smoke',
+      requestId: 'sdk-forms-retention',
+    });
+    assert(formsRetention.data.dryRun === true, 'applyAdminFormsConsentRetention() did not preserve dryRun');
+    assert(formsRetention.data.scannedForms >= 1, 'applyAdminFormsConsentRetention() did not scan fixture forms');
+    assert(formsRetention.data.results?.some?.((result) => result.formId === 'sdk-smoke-form'), 'applyAdminFormsConsentRetention() missing fixture form result');
+    writeChecks.push('applyAdminFormsConsentRetention');
 
     const commentInput = buildBackyCommentInput({
       message: 'SDK comment body',
