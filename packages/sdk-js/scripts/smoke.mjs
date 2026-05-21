@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
-import { createBackyClient } from '../dist/index.js';
+import {
+  createBackyClient,
+  findBackyContentElement,
+  patchBackyContentElement,
+} from '../dist/index.js';
 
 const baseUrl = (process.env.BACKY_SDK_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 const configuredIdentifier = process.env.BACKY_SDK_SITE_IDENTIFIER || '';
@@ -1339,10 +1343,20 @@ if (runWriteSmoke) {
       requestId: 'sdk-live-managed-page-read',
     });
     assert(liveManagedPage.data.page?.id === fixture.pageId, 'liveManagedPage() returned wrong page');
+    assert(findBackyContentElement(liveManagedPage.data.page.content, 'sdk-smoke-form-title')?.id === 'sdk-smoke-form-title', 'findBackyContentElement() missing nested page form input');
     writeChecks.push('liveManagedPage');
 
+    const patchedLivePageContent = patchBackyContentElement(liveManagedPage.data.page.content, {
+      elementId: 'sdk-smoke-form-title',
+      changes: {
+        'props.placeholder': 'Live-managed title',
+        'visibility.locked': false,
+      },
+    });
+    assert(patchedLivePageContent, 'patchBackyContentElement() did not patch the page content tree');
     const liveManagedPageUpdate = await writeClient.updateLiveManagedPage(fixture.pageId, {
       title: liveManagedPage.data.page.title,
+      content: patchedLivePageContent,
       expectedUpdatedAt: liveManagedPage.data.page.updatedAt,
       requestId: 'sdk-live-managed-page-update',
     }, {
@@ -1356,10 +1370,21 @@ if (runWriteSmoke) {
       requestId: 'sdk-live-managed-blog-read',
     });
     assert(liveManagedPost.data.post?.id === fixture.postId, 'liveManagedBlogPost() returned wrong post');
+    assert(findBackyContentElement(liveManagedPost.data.post.content, 'sdk-smoke-post-heading')?.id === 'sdk-smoke-post-heading', 'findBackyContentElement() missing blog heading');
     writeChecks.push('liveManagedBlogPost');
 
+    const patchedLivePostContent = patchBackyContentElement(liveManagedPost.data.post.content, {
+      elementId: 'sdk-smoke-post-heading',
+      changes: {
+        'props.content': 'SDK live-managed blog post',
+        'styles.color': '#111827',
+        'layout.x': 96,
+      },
+    });
+    assert(patchedLivePostContent, 'patchBackyContentElement() did not patch the blog content tree');
     const liveManagedPostUpdate = await writeClient.updateLiveManagedBlogPost(fixture.postId, {
       title: liveManagedPost.data.post.title,
+      content: patchedLivePostContent,
       expectedUpdatedAt: liveManagedPost.data.post.updatedAt,
       requestId: 'sdk-live-managed-blog-update',
     }, {
@@ -1588,6 +1613,8 @@ console.log(JSON.stringify({
     'updateLiveManagedPage',
     'liveManagedBlogPost',
     'updateLiveManagedBlogPost',
+    'patchBackyContentElement',
+    'findBackyContentElement',
     'blog',
     'blogFeeds',
     'blogRss',

@@ -1573,6 +1573,238 @@ export type BackyLiveManagedBlogPostResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export type BackyEditableContent =
+  | BackyContentDocument
+  | (Record<string, unknown> & {
+      elements?: BackyElement[];
+      contentDocument?: BackyContentDocument | Record<string, unknown>;
+    });
+
+export interface BackyContentElementPatch {
+  elementId: string;
+  changes?: Record<string, unknown>;
+  props?: Record<string, unknown>;
+  styles?: Record<string, unknown>;
+  fields?: Record<string, unknown>;
+  remove?: string[];
+}
+
+const BACKY_LAYOUT_TARGET_ALIASES: Record<string, string> = {
+  x: "x",
+  y: "y",
+  width: "width",
+  height: "height",
+  zIndex: "zIndex",
+  rotation: "rotation",
+  visible: "visible",
+  locked: "locked",
+  name: "name",
+};
+
+function isBackyRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneBackyContent<TContent extends BackyEditableContent>(
+  content: TContent,
+): TContent {
+  if (typeof structuredClone === "function") {
+    return structuredClone(content);
+  }
+
+  return JSON.parse(JSON.stringify(content)) as TContent;
+}
+
+function contentElementRoots(content: unknown): unknown[][] {
+  if (!isBackyRecord(content)) {
+    return [];
+  }
+
+  const roots: unknown[][] = [];
+  if (Array.isArray(content.elements)) {
+    roots.push(content.elements);
+  }
+  if (
+    isBackyRecord(content.contentDocument) &&
+    Array.isArray(content.contentDocument.elements)
+  ) {
+    roots.push(content.contentDocument.elements);
+  }
+  return roots;
+}
+
+function visitBackyContentElements(
+  roots: unknown[][],
+  visitor: (element: Record<string, unknown>) => void,
+): void {
+  const visit = (items: unknown[]) => {
+    items.forEach((item) => {
+      if (!isBackyRecord(item)) return;
+      visitor(item);
+      if (Array.isArray(item.children)) {
+        visit(item.children);
+      }
+    });
+  };
+
+  roots.forEach(visit);
+}
+
+function mergeElementRecord(
+  element: Record<string, unknown>,
+  key: string,
+  patch: Record<string, unknown>,
+): void {
+  element[key] = {
+    ...(isBackyRecord(element[key]) ? element[key] : {}),
+    ...patch,
+  };
+}
+
+function setNestedEditableValue(
+  root: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): void {
+  const segments = path.split(".").filter(Boolean);
+  if (segments.length === 0) return;
+
+  let current = root;
+  segments.slice(0, -1).forEach((segment) => {
+    if (!isBackyRecord(current[segment])) {
+      current[segment] = {};
+    }
+    current = current[segment] as Record<string, unknown>;
+  });
+
+  const leaf = segments[segments.length - 1];
+  if (value === undefined) {
+    delete current[leaf];
+  } else {
+    current[leaf] = value;
+  }
+}
+
+function applyEditablePath(
+  element: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): void {
+  if (path.startsWith("props.")) {
+    if (!isBackyRecord(element.props)) {
+      element.props = {};
+    }
+    setNestedEditableValue(
+      element.props as Record<string, unknown>,
+      path.slice("props.".length),
+      value,
+    );
+    return;
+  }
+
+  if (path.startsWith("styles.")) {
+    if (!isBackyRecord(element.styles)) {
+      element.styles = {};
+    }
+    setNestedEditableValue(
+      element.styles as Record<string, unknown>,
+      path.slice("styles.".length),
+      value,
+    );
+    return;
+  }
+
+  if (path.startsWith("layout.")) {
+    const field = BACKY_LAYOUT_TARGET_ALIASES[path.slice("layout.".length)];
+    if (field) {
+      if (value === undefined) {
+        delete element[field];
+      } else {
+        element[field] = value;
+      }
+    }
+    return;
+  }
+
+  if (path === "visibility.hidden") {
+    if (value === undefined) {
+      delete element.visible;
+    } else {
+      element.visible = !Boolean(value);
+    }
+    return;
+  }
+
+  if (path === "visibility.locked") {
+    if (value === undefined) {
+      delete element.locked;
+    } else {
+      element.locked = Boolean(value);
+    }
+    return;
+  }
+
+  setNestedEditableValue(element, path, value);
+}
+
+export function findBackyContentElement(
+  content: BackyEditableContent | undefined | null,
+  elementId: string,
+): BackyElement | null {
+  if (!content || !elementId) {
+    return null;
+  }
+
+  let found: Record<string, unknown> | null = null;
+  visitBackyContentElements(contentElementRoots(content), (element) => {
+    if (!found && element.id === elementId) {
+      found = element;
+    }
+  });
+
+  return found as BackyElement | null;
+}
+
+export function patchBackyContentElement<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  patch: BackyContentElementPatch,
+): TContent | null {
+  if (!content || !patch.elementId) {
+    return null;
+  }
+
+  const nextContent = cloneBackyContent(content);
+  let changed = false;
+  visitBackyContentElements(contentElementRoots(nextContent), (element) => {
+    if (element.id !== patch.elementId) return;
+
+    if (patch.props) {
+      mergeElementRecord(element, "props", patch.props);
+    }
+    if (patch.styles) {
+      mergeElementRecord(element, "styles", patch.styles);
+    }
+    if (patch.fields) {
+      Object.entries(patch.fields).forEach(([key, value]) => {
+        if (value === undefined) {
+          delete element[key];
+        } else {
+          element[key] = value;
+        }
+      });
+    }
+    Object.entries(patch.changes || {}).forEach(([path, value]) => {
+      applyEditablePath(element, path, value);
+    });
+    (patch.remove || []).forEach((path) => {
+      applyEditablePath(element, path, undefined);
+    });
+    changed = true;
+  });
+
+  return changed ? nextContent : null;
+}
+
 function liveManagementHeaders(
   options: BackyLiveManagementRequestOptions,
 ): HeadersInit | undefined {

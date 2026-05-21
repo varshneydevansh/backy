@@ -28,6 +28,8 @@ import type {
   BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
   BackyClient,
+  BackyContentElementPatch,
+  BackyEditableContent,
   BackyLiveManagedBlogPostResponse,
   BackyLiveManagedBlogPostUpdateInput,
   BackyLiveManagedPageResponse,
@@ -205,7 +207,11 @@ import type {
   GeneratedBackyPublicRenderPayloadEnvelope,
   GeneratedBackyThemeTokens,
 } from "../src/index";
-import { generatedBackyContractTypeSources } from "../src/index";
+import {
+  findBackyContentElement,
+  generatedBackyContractTypeSources,
+  patchBackyContentElement,
+} from "../src/index";
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <
@@ -618,6 +624,40 @@ const element = {
   bindingSlots: [bindingSlot],
   renderCapabilities: interactiveRenderCapabilities,
 } satisfies GeneratedBackyContentElement;
+
+const editableContentForHelpers = {
+  elements: [element],
+  canvasSize: { width: 1200, height: 760 },
+} satisfies BackyEditableContent;
+
+const editableElementPatch = {
+  elementId: "interactive-rounds",
+  changes: {
+    "props.rounds": 5,
+    "styles.color": "#111827",
+    "layout.x": 48,
+    "visibility.locked": true,
+  },
+  props: {
+    label: "Live editable rounds",
+  },
+  fields: {
+    name: "Interactive rounds",
+  },
+  remove: ["props.legacyValue"],
+} satisfies BackyContentElementPatch;
+
+const patchedEditableContent = patchBackyContentElement(
+  editableContentForHelpers,
+  editableElementPatch,
+);
+const foundEditableElement = findBackyContentElement(
+  editableContentForHelpers,
+  "interactive-rounds",
+);
+
+void patchedEditableContent;
+void foundEditableElement;
 
 const renderMediaAsset = {
   id: "media_hero",
