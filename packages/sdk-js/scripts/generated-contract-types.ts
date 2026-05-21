@@ -30,6 +30,7 @@ import type {
   BackyClient,
   BackyContentElementDescriptor,
   BackyContentEditableFieldPatch,
+  BackyContentEditableMapPatch,
   BackyContentElementPatch,
   BackyEditableContent,
   BackyLiveManagedBlogPostResponse,
@@ -215,6 +216,8 @@ import {
   listBackyContentElements,
   patchBackyContentEditableField,
   patchBackyContentEditableFields,
+  patchBackyContentEditableMapEntry,
+  patchBackyContentEditableMapEntries,
   patchBackyContentElement,
   patchBackyContentElements,
 } from "../src/index";
@@ -712,6 +715,36 @@ const editableMapBulkPatchedContent = patchBackyContentEditableFields(
     },
   ],
 );
+const editableMapForContentHelpers = {
+  "interactive.rounds": {
+    elementId: "interactive-rounds",
+    field: "props.rounds",
+    editable: true,
+    valueType: "number",
+  },
+  "nested.message": {
+    elementId: "editable-helper-nested-message",
+    field: "props.content",
+    editable: true,
+    valueType: "string",
+  },
+} satisfies GeneratedBackyEditableMap;
+const keyedEditableMapPatchedContent = patchBackyContentEditableMapEntry(
+  editableContentForHelpers,
+  editableMapForContentHelpers,
+  {
+    key: "interactive.rounds",
+    value: 7,
+  } satisfies BackyContentEditableMapPatch,
+);
+const keyedEditableMapBulkPatchedContent = patchBackyContentEditableMapEntries(
+  editableContentForHelpers,
+  editableMapForContentHelpers,
+  [
+    { key: "interactive.rounds", value: 8 },
+    { key: "nested.message", value: "Nested keyed editable-map update" },
+  ],
+);
 
 void patchedEditableContent;
 void foundEditableElement;
@@ -719,6 +752,8 @@ void bulkPatchedEditableContent;
 void editableElementDescriptors;
 void editableMapPatchedContent;
 void editableMapBulkPatchedContent;
+void keyedEditableMapPatchedContent;
+void keyedEditableMapBulkPatchedContent;
 
 const renderMediaAsset = {
   id: "media_hero",

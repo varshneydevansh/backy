@@ -1637,6 +1637,25 @@ export interface BackyContentEditableFieldPatch {
   editable?: boolean;
 }
 
+export interface BackyContentEditableMapEntry {
+  elementId?: string;
+  field?: string;
+  targetPath?: string;
+  editable?: boolean;
+  [key: string]: unknown;
+}
+
+export type BackyContentEditableMap = Record<
+  string,
+  BackyContentEditableMapEntry
+>;
+
+export interface BackyContentEditableMapPatch {
+  key: string;
+  value?: unknown;
+  remove?: boolean;
+}
+
 const BACKY_LAYOUT_TARGET_ALIASES: Record<string, string> = {
   x: "x",
   y: "y",
@@ -1941,6 +1960,42 @@ function editableFieldPatchToElementPatch(
   };
 }
 
+function editableMapPatchToFieldPatch(
+  editableMap: BackyContentEditableMap | Record<string, unknown>,
+  patch: BackyContentEditableMapPatch,
+): BackyContentEditableFieldPatch | null {
+  if (!patch.key) {
+    return null;
+  }
+
+  const entry = editableMap[patch.key];
+  if (!isBackyRecord(entry)) {
+    return null;
+  }
+
+  const elementId =
+    typeof entry.elementId === "string" ? entry.elementId : "";
+  const field =
+    typeof entry.field === "string"
+      ? entry.field
+      : typeof entry.targetPath === "string"
+        ? entry.targetPath
+        : "";
+
+  if (!elementId || !field || entry.editable === false) {
+    return null;
+  }
+
+  return {
+    elementId,
+    field,
+    value: patch.value,
+    remove: patch.remove,
+    editable:
+      typeof entry.editable === "boolean" ? entry.editable : undefined,
+  };
+}
+
 export function findBackyContentElement(
   content: BackyEditableContent | undefined | null,
   elementId: string,
@@ -2024,6 +2079,36 @@ export function patchBackyContentEditableField<
   patch: BackyContentEditableFieldPatch,
 ): TContent | null {
   return patchBackyContentEditableFields(content, [patch]);
+}
+
+export function patchBackyContentEditableMapEntry<
+  TContent extends BackyEditableContent,
+>(
+  content: TContent | undefined | null,
+  editableMap: BackyContentEditableMap | Record<string, unknown> | undefined | null,
+  patch: BackyContentEditableMapPatch,
+): TContent | null {
+  return patchBackyContentEditableMapEntries(content, editableMap, [patch]);
+}
+
+export function patchBackyContentEditableMapEntries<
+  TContent extends BackyEditableContent,
+>(
+  content: TContent | undefined | null,
+  editableMap: BackyContentEditableMap | Record<string, unknown> | undefined | null,
+  patches: readonly BackyContentEditableMapPatch[],
+): TContent | null {
+  if (!editableMap) {
+    return null;
+  }
+
+  const fieldPatches = patches
+    .map((patch) => editableMapPatchToFieldPatch(editableMap, patch))
+    .filter((patch): patch is BackyContentEditableFieldPatch =>
+      Boolean(patch),
+    );
+
+  return patchBackyContentEditableFields(content, fieldPatches);
 }
 
 export function patchBackyContentEditableFields<

@@ -5,6 +5,7 @@ import {
   findBackyContentElement,
   listBackyContentElements,
   patchBackyContentEditableFields,
+  patchBackyContentEditableMapEntries,
   patchBackyContentElement,
   patchBackyContentElements,
 } from '../dist/index.js';
@@ -1396,24 +1397,38 @@ if (runWriteSmoke) {
     assert(findBackyContentElement(liveManagedPost.data.post.content, 'sdk-smoke-post-heading')?.id === 'sdk-smoke-post-heading', 'findBackyContentElement() missing blog heading');
     writeChecks.push('liveManagedBlogPost');
 
-    const patchedLivePostContent = patchBackyContentEditableFields(liveManagedPost.data.post.content, [
-      {
+    const liveManagedPostEditableMap = {
+      'sdk-smoke-post-heading.content': {
         elementId: 'sdk-smoke-post-heading',
         field: 'props.content',
+        editable: true,
+      },
+      'sdk-smoke-post-heading.color': {
+        elementId: 'sdk-smoke-post-heading',
+        field: 'styles.color',
+        editable: true,
+      },
+      'sdk-smoke-post-heading.x': {
+        elementId: 'sdk-smoke-post-heading',
+        field: 'layout.x',
+        editable: true,
+      },
+    };
+    const patchedLivePostContent = patchBackyContentEditableMapEntries(liveManagedPost.data.post.content, liveManagedPostEditableMap, [
+      {
+        key: 'sdk-smoke-post-heading.content',
         value: 'SDK live-managed blog post',
       },
       {
-        elementId: 'sdk-smoke-post-heading',
-        field: 'styles.color',
+        key: 'sdk-smoke-post-heading.color',
         value: '#111827',
       },
       {
-        elementId: 'sdk-smoke-post-heading',
-        field: 'layout.x',
+        key: 'sdk-smoke-post-heading.x',
         value: 96,
       },
     ]);
-    assert(patchedLivePostContent, 'patchBackyContentEditableFields() did not patch the blog content tree');
+    assert(patchedLivePostContent, 'patchBackyContentEditableMapEntries() did not patch the blog content tree');
     const liveManagedPostUpdate = await writeClient.updateLiveManagedBlogPost(fixture.postId, {
       title: liveManagedPost.data.post.title,
       content: patchedLivePostContent,
@@ -1648,6 +1663,7 @@ console.log(JSON.stringify({
     'patchBackyContentElement',
     'patchBackyContentElements',
     'patchBackyContentEditableFields',
+    'patchBackyContentEditableMapEntries',
     'findBackyContentElement',
     'listBackyContentElements',
     'blog',
