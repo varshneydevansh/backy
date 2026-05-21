@@ -1406,6 +1406,9 @@ if (firstAdminBlogPostId) {
 
 const adminCollections = await privateClient.adminCollections({ limit: 50 });
 assert(Array.isArray(adminCollections.data.collections), 'adminCollections() missing collections array');
+const adminCollectionsBackup = await privateClient.exportAdminCollectionsBackup({ includeRecords: false });
+assert(adminCollectionsBackup.data.backup?.schemaVersion === 'backy.collections.backup.v1', 'exportAdminCollectionsBackup() missing backup schema');
+assert(Array.isArray(adminCollectionsBackup.data.collections), 'exportAdminCollectionsBackup() missing collections array');
 const firstAdminCollectionId = adminCollections.data.collections[0]?.id;
 if (firstAdminCollectionId) {
   const adminCollection = await privateClient.adminCollection(firstAdminCollectionId);

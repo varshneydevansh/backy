@@ -1073,6 +1073,87 @@ export type BackyAdminCollectionDeleteResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export interface BackyAdminCollectionsBackupOptions
+  extends BackyLiveManagementRequestOptions {
+  collectionIds?: string[];
+  includeRecords?: boolean;
+}
+
+export interface BackyAdminCollectionBackupRecord<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> {
+  sourceRecordId?: string;
+  slug: string;
+  status: BackyAdminCollectionStatus | "scheduled" | string;
+  values: TValues;
+  publishedAt?: string | null;
+  scheduledAt?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminCollectionBackupCollection<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> {
+  sourceCollectionId?: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  status: BackyAdminCollectionStatus;
+  routePattern?: string | null;
+  listRoutePattern?: string | null;
+  fields: BackyFieldSchema[];
+  permissions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  records: Array<BackyAdminCollectionBackupRecord<TValues>>;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminCollectionsBackup<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> {
+  backup: {
+    schemaVersion: "backy.collections.backup.v1";
+    exportedAt: string;
+    siteId: string;
+    siteSlug?: string;
+    collectionCount: number;
+    recordCount: number;
+    [key: string]: unknown;
+  };
+  collections: Array<BackyAdminCollectionBackupCollection<TValues>>;
+  [key: string]: unknown;
+}
+
+export type BackyAdminCollectionsBackupResponse<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> = BackyEnvelope<BackyAdminCollectionsBackup<TValues>>;
+
+export interface BackyAdminCollectionsBackupImportOptions
+  extends BackyLiveManagementRequestOptions {
+  upsert?: boolean;
+}
+
+export interface BackyAdminCollectionsBackupImportSummary {
+  createdCollections: number;
+  updatedCollections: number;
+  createdRecords: number;
+  updatedRecords: number;
+  totalCollections: number;
+  totalRecords: number;
+  [key: string]: unknown;
+}
+
+export type BackyAdminCollectionsBackupImportResponse<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> = BackyEnvelope<
+  {
+    import: BackyAdminCollectionsBackupImportSummary;
+    collections: BackyCollectionSchema[];
+    records: Array<BackyCollectionRecord<TValues>>;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
 export interface BackyAdminCollectionRecordListOptions
   extends BackyLiveManagementRequestOptions {
   status?: string;
@@ -9953,6 +10034,51 @@ export class BackyClient {
         requestId: options.requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
+      },
+    );
+  }
+
+  exportAdminCollectionsBackup<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    options: BackyAdminCollectionsBackupOptions = {},
+  ): Promise<BackyAdminCollectionsBackupResponse<TValues>> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/export`,
+      {
+        query: {
+          ids: rest.collectionIds?.join(","),
+          records:
+            rest.includeRecords === undefined ? undefined : rest.includeRecords,
+        },
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  importAdminCollectionsBackup<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    backup: BackyAdminCollectionsBackup<TValues> | { collections?: unknown[] },
+    options: BackyAdminCollectionsBackupImportOptions = {},
+  ): Promise<BackyAdminCollectionsBackupImportResponse<TValues>> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/import`,
+      {
+        method: "POST",
+        query: {
+          upsert: rest.upsert,
+        },
+        body: backup,
+        requestId,
+        headers,
+        credentials,
       },
     );
   }

@@ -62,6 +62,9 @@ import type {
   BackyAdminBlogPostResponse,
   BackyAdminBlogPostRevisionsResponse,
   BackyAdminBlogPostsResponse,
+  BackyAdminCollectionsBackup,
+  BackyAdminCollectionsBackupImportResponse,
+  BackyAdminCollectionsBackupResponse,
   BackyAdminCollectionDeleteResponse,
   BackyAdminCollectionRecordBulkResponse,
   BackyAdminCollectionRecordDeleteResponse,
@@ -828,6 +831,18 @@ type DeleteAdminCollectionMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["deleteAdminCollection"]>,
     BackyAdminCollectionDeleteResponse
+  >
+>;
+type ExportAdminCollectionsBackupMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["exportAdminCollectionsBackup"]>,
+    BackyAdminCollectionsBackupResponse
+  >
+>;
+type ImportAdminCollectionsBackupMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["importAdminCollectionsBackup"]>,
+    BackyAdminCollectionsBackupImportResponse
   >
 >;
 type AdminCollectionRecordsMethodReturnsContract = Assert<
@@ -2953,6 +2968,69 @@ const sdkAdminCollectionRecord = {
   },
   updatedAt: "2026-05-21T00:00:00.000Z",
 };
+
+const sdkAdminCollectionsBackup = {
+  backup: {
+    schemaVersion: "backy.collections.backup.v1",
+    exportedAt: "2026-05-21T00:00:00.000Z",
+    siteId: "site_demo",
+    siteSlug: "demo",
+    collectionCount: 1,
+    recordCount: 1,
+  },
+  collections: [
+    {
+      sourceCollectionId: sdkAdminCollection.id,
+      name: sdkAdminCollection.name,
+      slug: sdkAdminCollection.slug,
+      description: "Project records",
+      status: "published",
+      routePattern: sdkAdminCollection.routePattern,
+      listRoutePattern: sdkAdminCollection.listRoutePattern,
+      fields: sdkAdminCollection.fields,
+      permissions: sdkAdminCollection.permissions,
+      metadata: {
+        source: "sdk-fixture",
+      },
+      records: [
+        {
+          sourceRecordId: sdkAdminCollectionRecord.id,
+          slug: sdkAdminCollectionRecord.slug,
+          status: sdkAdminCollectionRecord.status,
+          values: sdkAdminCollectionRecord.values,
+          publishedAt: "2026-05-21T00:00:00.000Z",
+          scheduledAt: null,
+        },
+      ],
+    },
+  ],
+} satisfies BackyAdminCollectionsBackup;
+
+const sdkAdminCollectionsBackupEnvelope = {
+  success: true,
+  requestId: "req_admin_collections_backup",
+  data: sdkAdminCollectionsBackup,
+} satisfies BackyAdminCollectionsBackupResponse;
+
+const sdkAdminCollectionsBackupImportEnvelope = {
+  success: true,
+  requestId: "req_admin_collections_backup_import",
+  data: {
+    import: {
+      createdCollections: 1,
+      updatedCollections: 0,
+      createdRecords: 1,
+      updatedRecords: 0,
+      totalCollections: 1,
+      totalRecords: 1,
+    },
+    collections: [sdkAdminCollection],
+    records: [sdkAdminCollectionRecord],
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminCollectionsBackupImportResponse;
 
 const sdkAdminCollectionRecordsEnvelope = {
   success: true,
