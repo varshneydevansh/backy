@@ -416,7 +416,7 @@ Public page payload should include:
 - `GET/PATCH /api/sites/:siteId/comments/:commentId`
 - `GET /api/sites/:siteId/comments/report-reasons`
 - `GET/POST /api/sites/:siteId/comments/:commentId/report`
-  - Site-wide comment moderation/read/report endpoints return `{ success, requestId, data }` while preserving legacy top-level `comments`, `comment`, `updated`, `reasons`, and related count fields.
+  - Site-wide comment moderation/read/report endpoints return `{ success, requestId, data }` while preserving legacy top-level `comments`, `comment`, `updated`, `reasons`, `report`, and related count fields. Public report submissions accept canonical `reason`, `actor`, `details`, and `requestId` fields plus aliases such as `reportReason`, `category`, `reporter`, `reporterEmail`, `email`, `message`, and `note`; the SDK exports `buildBackyCommentReportInput()` so generated/custom frontends can normalize report forms before calling `reportComment()`.
   - Invalid site-wide comment list filters return explicit `400` errors instead of silently widening or clamping the moderation feed: `INVALID_SITE_COMMENT_STATUS`, `INVALID_SITE_COMMENT_TARGET_TYPE`, `INVALID_SITE_COMMENT_SORT`, `INVALID_SITE_COMMENT_LIMIT`, or `INVALID_SITE_COMMENT_OFFSET`.
   - Site-wide comment bulk moderation updates reject invalid status values with `400 INVALID_SITE_COMMENT_STATUS` instead of collapsing them into generic payload errors.
   - Direct site-wide comment moderation updates reject invalid status values with `400 INVALID_SITE_COMMENT_STATUS` before applying status or thread changes.

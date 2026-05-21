@@ -64,14 +64,31 @@ function parseReason(raw: unknown): string {
 function parseBody(raw: unknown): {
   reason: string;
   actor?: string;
+  details?: string;
   requestId?: string;
 } | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
 
-  const reason = parseReason((raw as { reason?: unknown }).reason);
-  const actor = parseTextInput((raw as { actor?: unknown }).actor);
+  const body = raw as {
+    reason?: unknown;
+    reportReason?: unknown;
+    category?: unknown;
+    actor?: unknown;
+    reporter?: unknown;
+    reporterEmail?: unknown;
+    email?: unknown;
+    details?: unknown;
+    message?: unknown;
+    note?: unknown;
+    requestId?: unknown;
+  };
+  const reason = parseReason(body.reason || body.reportReason || body.category);
+  const actor = parseTextInput(
+    body.actor || body.reporter || body.reporterEmail || body.email,
+  );
+  const details = parseTextInput(body.details || body.message || body.note);
   const requestId = parseTextInput((raw as { requestId?: unknown }).requestId);
 
   if (!reason) {
@@ -81,9 +98,20 @@ function parseBody(raw: unknown): {
   return {
     reason,
     actor: actor || undefined,
+    details: details || undefined,
     requestId: requestId || undefined,
   };
 }
+
+const reportPayload = (payload: {
+  reason: string;
+  actor?: string;
+  details?: string;
+}) => ({
+  reason: payload.reason,
+  ...(payload.actor ? { actor: payload.actor } : {}),
+  ...(payload.details ? { details: payload.details } : {}),
+});
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const requestId = _request.headers.get('x-request-id') || makeRequestId();
@@ -163,13 +191,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const payload = parseBody(await request.json().catch(() => null));
       if (!payload) {
-        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. reason is required.', baseRequestId);
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. reason, reportReason, or category is required.', baseRequestId);
       }
       const requestId = payload.requestId || baseRequestId;
 
       const updated = await reportRepositoryComment(repositories, site.id, comment, {
         reason: payload.reason,
         actor: payload.actor,
+        details: payload.details,
         requestId: payload.requestId,
       });
       await notifyCommentDelivery({
@@ -187,8 +216,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         data: {
           comment: updated,
+          report: reportPayload(payload),
         },
         comment: updated,
+        report: reportPayload(payload),
       }, requestId, 201);
     }
 
@@ -208,7 +239,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const payload = parseBody(await request.json().catch(() => null));
     if (!payload) {
-      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. reason is required.', baseRequestId);
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. reason, reportReason, or category is required.', baseRequestId);
     }
     const requestId = payload.requestId || baseRequestId;
 
@@ -217,6 +248,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
       reason: payload.reason,
       actor: payload.actor,
+      details: payload.details,
       requestId: payload.requestId,
     });
 
@@ -237,8 +269,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
       data: {
         comment: updated,
+        report: reportPayload(payload),
       },
       comment: updated,
+      report: reportPayload(payload),
     }, requestId, 201);
   } catch (error) {
     console.error('API Error:', error);

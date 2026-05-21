@@ -11111,6 +11111,7 @@ export function reportComment(params: {
   siteId: string;
   reason?: string | null;
   actor?: string;
+  details?: string;
   requestId?: string;
 }): Comment | undefined {
   refreshPersistedInteractionStore();
@@ -11162,6 +11163,7 @@ export function reportComment(params: {
       targetId: comment.targetId,
       reportCount: comment.reportCount,
       reportReasons: comment.reportReasons,
+      ...(params.details ? { details: params.details } : {}),
     },
   });
 

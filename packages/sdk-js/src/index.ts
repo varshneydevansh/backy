@@ -3331,6 +3331,79 @@ export function buildBackyCommentInput(
   return input;
 }
 
+export interface BackyCommentReportInput {
+  reason: string;
+  reportReason?: string;
+  category?: string;
+  actor?: string;
+  reporter?: string;
+  reporterEmail?: string;
+  email?: string;
+  details?: string;
+  message?: string;
+  note?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyCommentReportInputSource = Partial<BackyCommentReportInput> &
+  Record<string, unknown>;
+
+export interface BackyCommentReportInputBuildOptions {
+  reason?: string;
+  actor?: string;
+  details?: string;
+  requestId?: string;
+}
+
+export function buildBackyCommentReportInput(
+  source: BackyCommentReportInputSource | undefined | null,
+  options: BackyCommentReportInputBuildOptions = {},
+): BackyCommentReportInput {
+  const body = backyCommentRecord(source);
+  const report = backyCommentRecord(body.report);
+  const reason = backyCommentText(
+    options.reason,
+    body.reason,
+    body.reportReason,
+    body.category,
+    report.reason,
+    report.reportReason,
+    report.category,
+  );
+  const actor = backyCommentText(
+    options.actor,
+    body.actor,
+    body.reporter,
+    body.reporterEmail,
+    body.email,
+    report.actor,
+    report.reporter,
+    report.reporterEmail,
+    report.email,
+  );
+  const details = backyCommentText(
+    options.details,
+    body.details,
+    body.message,
+    body.note,
+    report.details,
+    report.message,
+    report.note,
+  );
+  const requestId = backyCommentText(
+    options.requestId,
+    body.requestId,
+    report.requestId,
+  );
+
+  const input: BackyCommentReportInput = { reason };
+  if (actor) input.actor = actor;
+  if (details) input.details = details;
+  if (requestId) input.requestId = requestId;
+  return input;
+}
+
 export interface BackyCommentListOptions extends BackyListOptions {
   targetType?: "page" | "post";
   targetId?: string;
@@ -6005,21 +6078,17 @@ export class BackyClient {
 
   reportComment(
     commentId: string,
-    input: {
-      reason: string;
-      details?: string;
-      reporterEmail?: string;
-      requestId?: string;
-    },
+    input: BackyCommentReportInputSource,
   ): Promise<
-    BackyEnvelope<{ comment: BackyComment; report?: Record<string, unknown> }>
+    BackyEnvelope<{ comment: BackyComment; report: Record<string, unknown> }>
   > {
+    const body = buildBackyCommentReportInput(input);
     return this.request(
       `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/report`,
       {
         method: "POST",
-        body: input,
-        requestId: input.requestId,
+        body,
+        requestId: body.requestId,
       },
     );
   }

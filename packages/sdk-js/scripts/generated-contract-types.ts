@@ -29,6 +29,7 @@ import type {
   BackyFrontendLaunchReadiness,
   BackyClient,
   BackyCommentInput,
+  BackyCommentReportInput,
   BackyCommerceOrderInput,
   BackyCollectionRecordWriteInput,
   BackyFormSubmissionInput,
@@ -217,6 +218,7 @@ import type {
 } from "../src/index";
 import {
   buildBackyCommentInput,
+  buildBackyCommentReportInput,
   buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
@@ -284,6 +286,9 @@ type FormSubmissionInputBuilderReturnsContract = Assert<
 >;
 type CommentInputBuilderReturnsContract = Assert<
   Equal<ReturnType<typeof buildBackyCommentInput>, BackyCommentInput>
+>;
+type CommentReportInputBuilderReturnsContract = Assert<
+  Equal<ReturnType<typeof buildBackyCommentReportInput>, BackyCommentReportInput>
 >;
 type InteractiveRuntimeEventInputBuilderReturnsContract = Assert<
   Equal<
@@ -4216,10 +4221,22 @@ const commentReportEnvelope = {
     comment,
     report: {
       reason: "spam",
-      reporterEmail: "reader@example.com",
+      actor: "reader@example.com",
+      details: "This reply looks automated.",
     },
   },
 } satisfies GeneratedBackyOpenApiCommentReportEnvelope;
+
+const sdkCommentReportInput = buildBackyCommentReportInput({
+  report: {
+    category: "spam",
+    reporterEmail: "READER@EXAMPLE.COM",
+    message: "This reply looks automated.",
+  },
+  requestId: "sdk-comment-report",
+});
+const sdkCommentReportInputContract =
+  sdkCommentReportInput satisfies BackyCommentReportInput;
 
 const eventsEnvelope = {
   success: true,
@@ -5758,6 +5775,8 @@ void commentBlocklistDeleteRequest;
 void commentBlocklistDeleteEnvelope;
 void commentReportReasonsEnvelope;
 void commentReportEnvelope;
+void sdkCommentReportInput;
+void sdkCommentReportInputContract;
 void eventsEnvelope;
 void runtimeEventRecordEnvelope;
 void sdkInteractiveRuntimeEventInput;

@@ -2,6 +2,7 @@
 
 import {
   buildBackyCommentInput,
+  buildBackyCommentReportInput,
   buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
   buildBackyFormSubmissionInput,
@@ -1712,18 +1713,26 @@ if (runWriteSmoke) {
     assert(reasons.data.reasons?.includes?.('spam'), 'reportReasons() missing spam reason');
     writeChecks.push('reportReasons');
 
-    const report = await writeClient.reportComment(commentId, {
-      reason: 'spam',
+    const commentReportInput = buildBackyCommentReportInput({
+      reportReason: 'spam',
+      reporterEmail: 'SDK-REPORTER@EXAMPLE.COM',
+      message: 'SDK smoke report detail',
       requestId: 'sdk-comment-report',
     });
+    assert(commentReportInput.reason === 'spam', 'buildBackyCommentReportInput() did not normalize reason');
+    assert(commentReportInput.actor === 'SDK-REPORTER@EXAMPLE.COM', 'buildBackyCommentReportInput() did not normalize reporter actor');
+    assert(commentReportInput.details === 'SDK smoke report detail', 'buildBackyCommentReportInput() did not normalize report details');
+    const report = await writeClient.reportComment(commentId, commentReportInput);
     assert(report.data.comment?.id === commentId, 'reportComment() returned wrong comment');
+    assert(report.data.report?.reason === 'spam', 'reportComment() missing normalized report reason');
+    assert(report.data.report?.actor === 'SDK-REPORTER@EXAMPLE.COM', 'reportComment() missing normalized report actor');
     writeChecks.push('reportComment');
 
     const reportEvents = await writeClient.events({
       kind: 'comment-reported',
       requestId: 'sdk-comment-report',
     });
-    assert(reportEvents.data.events?.some?.((event) => event.commentId === commentId), 'events() missing comment report event');
+    assert(reportEvents.data.events?.some?.((event) => event.commentId === commentId && event.metadata?.details === 'SDK smoke report detail'), 'events() missing comment report event details');
     writeChecks.push('events:write');
   } finally {
     await deleteFixture(fixture.siteId);

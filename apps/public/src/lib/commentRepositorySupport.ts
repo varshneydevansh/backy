@@ -283,6 +283,7 @@ export async function reportRepositoryComment(
   input: {
     reason?: string | null;
     actor?: string;
+    details?: string;
     requestId?: string;
   },
 ): Promise<Comment> {
@@ -326,6 +327,7 @@ export async function reportRepositoryComment(
       targetId: nextComment.targetId,
       reportCount: nextComment.reportCount,
       reportReasons: nextComment.reportReasons,
+      ...(input.details ? { details: input.details } : {}),
     },
   });
   return nextComment;
