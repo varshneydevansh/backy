@@ -426,6 +426,89 @@ export interface BackySiteSummary {
   [key: string]: unknown;
 }
 
+export type BackyAdminSiteStatus =
+  | "draft"
+  | "published"
+  | "archived"
+  | string;
+
+export interface BackyAdminSiteResource extends BackySiteSummary {
+  teamId?: string | null;
+  settings?: Record<string, unknown>;
+  pages?: BackyPageResource[];
+  pageCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackyAdminSiteListOptions
+  extends BackyLiveManagementRequestOptions {
+  includeUnpublished?: boolean;
+}
+
+export interface BackyAdminSiteCreateInput {
+  name: string;
+  slug?: string;
+  description?: string | null;
+  customDomain?: string | null;
+  status?: BackyAdminSiteStatus;
+  teamId?: string | null;
+  isPublished?: boolean;
+  theme?: BackyThemeTokens | Record<string, unknown>;
+  settings?: Record<string, unknown>;
+  frontendDesignTemplateId?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminSiteUpdateInput
+  extends Partial<Omit<BackyAdminSiteCreateInput, "name">> {
+  name?: string;
+}
+
+export interface BackyAdminSiteDuplicateInput {
+  name?: string;
+  slug?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyAdminSitesResponse = BackyEnvelope<
+  {
+    sites: BackyAdminSiteResource[];
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminSiteResponse = BackyEnvelope<
+  {
+    site: BackyAdminSiteResource;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminSiteDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    siteId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminSiteReadinessResponse = BackyEnvelope<
+  {
+    readiness: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminSiteDuplicateResponse = BackyEnvelope<
+  {
+    site: BackyAdminSiteResource;
+    pagesCopied: number;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
 export interface BackyFrontendDesignResponse {
   schemaVersion: "backy.frontend-design-response.v1" | string;
   site: BackySiteSummary;
@@ -5854,6 +5937,107 @@ export class BackyClient {
 
   getSiteId(): string | undefined {
     return this.siteId;
+  }
+
+  adminSites(
+    options: BackyAdminSiteListOptions = {},
+  ): Promise<BackyAdminSitesResponse> {
+    const { requestId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    return this.request("/api/admin/sites", {
+      query: {
+        includeUnpublished: rest.includeUnpublished,
+      },
+      requestId,
+      headers,
+      credentials,
+    });
+  }
+
+  createAdminSite(
+    input: BackyAdminSiteCreateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSiteResponse> {
+    const { requestId, ...body } = input;
+    return this.request("/api/admin/sites", {
+      method: "POST",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  adminSite(
+    siteId = this.requireSiteId(),
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSiteResponse> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(siteId)}`, {
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  updateAdminSite(
+    siteId: string,
+    input: BackyAdminSiteUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSiteResponse> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(`/api/admin/sites/${encodeURIComponent(siteId)}`, {
+      method: "PATCH",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  deleteAdminSite(
+    siteId = this.requireSiteId(),
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSiteDeleteResponse> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(siteId)}`, {
+      method: "DELETE",
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  adminSiteReadiness(
+    siteId = this.requireSiteId(),
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSiteReadinessResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId)}/readiness`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  duplicateAdminSite(
+    siteId: string,
+    input: BackyAdminSiteDuplicateInput = {},
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminSiteDuplicateResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId)}/duplicate`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
   }
 
   adminSettings(

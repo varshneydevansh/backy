@@ -1299,6 +1299,14 @@ assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-s
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
 assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
 
+const adminSites = await privateClient.adminSites({ includeUnpublished: true });
+assert(Array.isArray(adminSites.data.sites), 'adminSites() missing sites array');
+assert(adminSites.data.sites.some((site) => site.id === privateClient.getSiteId()), 'adminSites() missing active site');
+const adminSite = await privateClient.adminSite();
+assert(adminSite.data.site?.id === privateClient.getSiteId(), 'adminSite() returned wrong site');
+const adminSiteReadiness = await privateClient.adminSiteReadiness();
+assert(adminSiteReadiness.data.readiness, 'adminSiteReadiness() missing readiness payload');
+
 const adminPages = await privateClient.adminPages({ limit: 5 });
 assert(Array.isArray(adminPages.data.pages), 'adminPages() missing pages array');
 const firstAdminPageId = adminPages.data.pages[0]?.id;

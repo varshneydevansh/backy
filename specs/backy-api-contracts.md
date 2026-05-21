@@ -461,6 +461,9 @@ Public page payload should include:
 - `PATCH /api/admin/sites/:siteId`
   - Body supports partial site settings updates: `name`, `slug`, `description`, `customDomain`, `status`, `isPublished`, `theme`.
 
+- SDK site lifecycle bridge
+  - The SDK exposes authenticated multi-site helpers for custom builders: `adminSites()`, `createAdminSite()`, `adminSite()`, `updateAdminSite()`, `deleteAdminSite()`, `adminSiteReadiness()`, and `duplicateAdminSite()`. They use the same per-call admin auth options as live management and pair with page lifecycle helpers so an external builder can create or duplicate a site, inspect publish readiness, then manage pages without scraping the Backy admin app.
+
 - `GET/PATCH /api/admin/sites/:siteId/settings`
   - Provides a dedicated site-scoped Settings contract using `backy.site-settings-scope.v1`.
   - Success and error responses expose admin/no-store Backy contract headers, including `x-backy-admin-contract-version: backy.admin.v1`, `x-backy-schema-version: backy.site-settings-scope.v1`, `x-backy-cache-scope: admin`, `cache-control: no-store`, `x-backy-request-id`, and `x-backy-site-id` on success.

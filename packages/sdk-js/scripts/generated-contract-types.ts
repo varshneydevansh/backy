@@ -15,6 +15,11 @@ import type {
   BackyManifestCollectionsRuntimeModule,
   BackyAdminSettings,
   BackyAdminSettingsResponse,
+  BackyAdminSiteDeleteResponse,
+  BackyAdminSiteDuplicateResponse,
+  BackyAdminSiteReadinessResponse,
+  BackyAdminSiteResponse,
+  BackyAdminSitesResponse,
   BackySiteSettingsScope,
   BackyManifestLocalizedRoutePatternGroup,
   BackyManifestPageResource,
@@ -311,6 +316,36 @@ type LiveManagedPageMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["liveManagedPage"]>,
     BackyLiveManagedPageResponse
+  >
+>;
+type AdminSitesMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminSites"]>, BackyAdminSitesResponse>
+>;
+type CreateAdminSiteMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["createAdminSite"]>, BackyAdminSiteResponse>
+>;
+type AdminSiteMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["adminSite"]>, BackyAdminSiteResponse>
+>;
+type UpdateAdminSiteMethodReturnsContract = Assert<
+  Equal<AwaitedReturn<BackyClient["updateAdminSite"]>, BackyAdminSiteResponse>
+>;
+type DeleteAdminSiteMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminSite"]>,
+    BackyAdminSiteDeleteResponse
+  >
+>;
+type AdminSiteReadinessMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminSiteReadiness"]>,
+    BackyAdminSiteReadinessResponse
+  >
+>;
+type DuplicateAdminSiteMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["duplicateAdminSite"]>,
+    BackyAdminSiteDuplicateResponse
   >
 >;
 type AdminSettingsMethodReturnsContract = Assert<
@@ -933,6 +968,88 @@ const frontendDatabaseCertification = {
 } satisfies GeneratedBackyFrontendManifestDatabaseCertification;
 
 const convenienceFrontendDatabaseCertification = frontendDatabaseCertification satisfies BackyFrontendDatabaseCertification;
+
+const sdkAdminSite = {
+  id: "site_demo",
+  slug: "demo",
+  name: "Demo Site",
+  description: "A Backy-powered site",
+  customDomain: "demo.example.test",
+  status: "draft",
+  isPublished: false,
+  teamId: "team_demo",
+  settings: {
+    localization: {
+      defaultLocale: "en",
+    },
+  },
+  theme: {
+    colors: {
+      primary: "#2563eb",
+    },
+  },
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminSitesEnvelope = {
+  success: true,
+  requestId: "req_admin_sites",
+  data: {
+    sites: [sdkAdminSite],
+    pagination: {
+      total: 1,
+      limit: 1,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminSitesResponse;
+
+const sdkAdminSiteEnvelope = {
+  success: true,
+  requestId: "req_admin_site",
+  data: {
+    site: sdkAdminSite,
+    cacheInvalidation: {
+      scope: "discovery",
+    },
+  },
+} satisfies BackyAdminSiteResponse;
+
+const sdkAdminSiteDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_site_delete",
+  data: {
+    deleted: true,
+    siteId: "site_demo",
+  },
+} satisfies BackyAdminSiteDeleteResponse;
+
+const sdkAdminSiteReadinessEnvelope = {
+  success: true,
+  requestId: "req_admin_site_readiness",
+  data: {
+    readiness: {
+      id: "site_demo",
+      status: "attention",
+      checks: [],
+    },
+  },
+} satisfies BackyAdminSiteReadinessResponse;
+
+const sdkAdminSiteDuplicateEnvelope = {
+  success: true,
+  requestId: "req_admin_site_duplicate",
+  data: {
+    site: {
+      ...sdkAdminSite,
+      id: "site_demo_copy",
+      slug: "demo-copy",
+      name: "Demo Site Copy",
+    },
+    pagesCopied: 3,
+  },
+} satisfies BackyAdminSiteDuplicateResponse;
 
 const sdkAdminSettings = {
   schemaVersion: "backy.admin-settings.v1",
