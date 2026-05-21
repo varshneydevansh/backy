@@ -172,8 +172,19 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-testid="orders-status-handoff-action-plan"') &&
       source.includes('Order status handoff copied.') &&
       source.includes('customerSafeFieldsOnly') &&
+      source.includes('includesRawCustomerContact: false') &&
+      source.includes('includesProviderExecutionIds: false') &&
+      source.includes('includesPaymentReferences: false') &&
+      source.includes('includesAddresses: false') &&
+      source.includes('includesInternalNotes: false') &&
+      source.includes('customerProfileLinked') &&
+      source.includes('shippingLabelReferencePresent') &&
+      source.includes('providerRefundReferencePresent') &&
+      source.includes("'providerrefundid'") &&
+      source.includes("'shippinglabelid'") &&
+      source.includes("'checkoutsessionid'") &&
       source.includes('excludedFields'),
-    'Orders page must expose a copyable customer-safe order status handoff manifest',
+    'Orders page must expose a copyable customer-safe order status handoff manifest without raw contact, payment, provider execution, address, or internal note fields',
   );
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
@@ -2103,7 +2114,7 @@ const assertOrdersLayout = async (client) => {
         Boolean(document.querySelector('[data-testid="orders-provider-certification-runbook"]')) &&
         document.body?.innerText?.includes('Live provider certification') &&
         document.body?.innerText?.includes('Order certification command builder') &&
-        document.body?.innerText?.includes('Env template') &&
+        (document.body?.innerText?.includes('Env template') || document.body?.innerText?.includes('ENV TEMPLATE')) &&
         document.body?.innerText?.includes('backy.order-provider-certification-env-template.v1') &&
         document.body?.innerText?.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1') &&
         document.body?.innerText?.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&

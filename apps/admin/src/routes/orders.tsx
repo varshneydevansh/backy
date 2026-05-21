@@ -180,7 +180,7 @@ interface OrderStatusHandoff {
     displayName: string;
     maskedEmail: string;
     maskedPhone: string;
-    customerProfileId: string;
+    customerProfileLinked: boolean;
     customerProfileSlug: string;
     customerProfileStatus: string;
   } | null;
@@ -193,14 +193,14 @@ interface OrderStatusHandoff {
     fulfilledAt: string;
     shippingLabelStatus: ShippingLabelStatus;
     shippingLabelProvider: string;
-    shippingLabelId: string;
+    shippingLabelReferencePresent: boolean;
   } | null;
   refund: {
     refundAmount: number | null;
     refundReasonPresent: boolean;
     providerRefundStatus: ProviderRefundStatus;
     providerRefundProvider: string;
-    providerRefundId: string;
+    providerRefundReferencePresent: boolean;
     providerRefundRequestedAt: string;
     providerRefundCompletedAt: string;
   } | null;
@@ -213,6 +213,11 @@ interface OrderStatusHandoff {
   privacy: {
     publicCollectionReadBlocked: boolean;
     customerSafeFieldsOnly: boolean;
+    includesRawCustomerContact: boolean;
+    includesProviderExecutionIds: boolean;
+    includesPaymentReferences: boolean;
+    includesAddresses: boolean;
+    includesInternalNotes: boolean;
     excludedFields: string[];
   };
   actionPlan: OrderOperationActionPlan | null;
@@ -6974,7 +6979,28 @@ const buildOrderStatusHandoff = ({
       privacy: {
         publicCollectionReadBlocked: ordersApiReady,
         customerSafeFieldsOnly: true,
-        excludedFields: ['email', 'phone', 'shippingaddress', 'billingaddress', 'notes', 'paymentreference', 'providerrefundpayload', 'fulfillmentpayload'],
+        includesRawCustomerContact: false,
+        includesProviderExecutionIds: false,
+        includesPaymentReferences: false,
+        includesAddresses: false,
+        includesInternalNotes: false,
+        excludedFields: [
+          'email',
+          'phone',
+          'customerid',
+          'checkoutsessionid',
+          'shippingaddress',
+          'billingaddress',
+          'notes',
+          'paymentreference',
+          'shippinglabelid',
+          'shippinglabelurl',
+          'fulfillmentid',
+          'fulfillmentpayload',
+          'providerrefundid',
+          'providerrefundreference',
+          'providerrefundpayload',
+        ],
       },
       actionPlan: null,
       checks,
@@ -7116,7 +7142,7 @@ const buildOrderStatusHandoff = ({
       displayName: customerName,
       maskedEmail: maskCustomerEmail(email),
       maskedPhone: maskCustomerPhone(phone),
-      customerProfileId: customerProfile?.id || String(readOrderValue(values, 'customerid', '') || ''),
+      customerProfileLinked: Boolean(customerProfile || readOrderValue(values, 'customerid', '')),
       customerProfileSlug: customerProfile?.slug || '',
       customerProfileStatus: String(customerProfile?.values?.status || ''),
     },
@@ -7129,14 +7155,14 @@ const buildOrderStatusHandoff = ({
       fulfilledAt,
       shippingLabelStatus,
       shippingLabelProvider,
-      shippingLabelId,
+      shippingLabelReferencePresent: Boolean(shippingLabelId || readOrderValue(values, 'shippinglabelurl', '')),
     },
     refund: {
       refundAmount,
       refundReasonPresent: Boolean(readOrderValue(values, 'refundreason', '')),
       providerRefundStatus,
       providerRefundProvider: String(readOrderValue(values, 'providerrefundprovider', '') || ''),
-      providerRefundId,
+      providerRefundReferencePresent: Boolean(providerRefundId || readOrderValue(values, 'providerrefundreference', '')),
       providerRefundRequestedAt: String(readOrderValue(values, 'providerrefundrequestedat', '') || ''),
       providerRefundCompletedAt: String(readOrderValue(values, 'providerrefundcompletedat', '') || ''),
     },
@@ -7144,7 +7170,28 @@ const buildOrderStatusHandoff = ({
     privacy: {
       publicCollectionReadBlocked: ordersApiReady,
       customerSafeFieldsOnly: true,
-      excludedFields: ['email', 'phone', 'shippingaddress', 'billingaddress', 'notes', 'paymentreference', 'providerrefundpayload', 'fulfillmentpayload'],
+      includesRawCustomerContact: false,
+      includesProviderExecutionIds: false,
+      includesPaymentReferences: false,
+      includesAddresses: false,
+      includesInternalNotes: false,
+      excludedFields: [
+        'email',
+        'phone',
+        'customerid',
+        'checkoutsessionid',
+        'shippingaddress',
+        'billingaddress',
+        'notes',
+        'paymentreference',
+        'shippinglabelid',
+        'shippinglabelurl',
+        'fulfillmentid',
+        'fulfillmentpayload',
+        'providerrefundid',
+        'providerrefundreference',
+        'providerrefundpayload',
+      ],
     },
     actionPlan: orderOperationPlan,
     checks,
