@@ -329,6 +329,7 @@ const sourceLines = [
   '  "x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification;',
   '  "x-backy-frontend-launch-readiness"?: GeneratedBackyFrontendManifestLaunchReadiness;',
   '  "x-backy-media-file-categories"?: GeneratedBackyOpenApiMediaFileCategoryDiscovery;',
+  '  "x-backy-live-management"?: GeneratedBackyOpenApiLiveManagementDiscovery;',
   '  info: { title: string; version: string; description?: string; [key: string]: unknown };',
   '  servers?: Array<{ url: string; [key: string]: unknown }>;',
   '  paths: Record<string, Partial<Record<"get" | "post" | "put" | "patch" | "delete", GeneratedBackyOpenApiOperation>> & Record<string, unknown>>;',

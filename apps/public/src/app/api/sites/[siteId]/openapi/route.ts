@@ -689,6 +689,113 @@ const mediaFileCategoryDiscovery = (siteId: string) => ({
   },
 });
 
+const liveManagementEditableTargets = [
+  "props.content",
+  "props.href",
+  "props.src",
+  "props.alt",
+  "props.title",
+  "props.formId",
+  "props.formTitle",
+  "props.submitLabel",
+  "props.action",
+  "props.successMessage",
+  "props.formActive",
+  "props.label",
+  "props.name",
+  "props.placeholder",
+  "props.helpText",
+  "props.defaultValue",
+  "props.value",
+  "props.options",
+  "props.inputType",
+  "props.rows",
+  "props.required",
+  "props.disabled",
+  "styles.color",
+  "styles.backgroundColor",
+  "styles.borderColor",
+  "styles.borderRadius",
+  "styles.padding",
+  "styles.margin",
+  "styles.opacity",
+  "layout.x",
+  "layout.y",
+  "layout.width",
+  "layout.height",
+  "visibility.hidden",
+  "visibility.locked",
+] as const;
+
+const liveManagementDiscovery = (siteId: string) => ({
+  schemaVersion: "backy.live-management.v1",
+  enabled: true,
+  endpoints: {
+    page: `/api/sites/${siteId}/manage/pages/{pageId}`,
+    post: `/api/sites/${siteId}/manage/blog/{postId}`,
+    render: `/api/sites/${siteId}/render?path={path}`,
+    editableMapSchema:
+      "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
+  },
+  methods: {
+    read: "GET",
+    update: "PATCH",
+  },
+  auth: {
+    modes: ["session", "api-key"],
+    headers: [
+      "Authorization",
+      "x-backy-admin-session",
+      "x-backy-admin-key",
+      "x-api-key",
+    ],
+    requiredPermissions: {
+      read: "pages.view",
+      update: "pages.edit",
+    },
+    siteScope: true,
+  },
+  capabilities: {
+    pageMetadata: true,
+    postMetadata: true,
+    contentDocument: true,
+    canvasElements: true,
+    editableMap: true,
+    optimisticConcurrency: true,
+    cacheInvalidation: true,
+    auditTrail: true,
+    webhookDelivery: true,
+    inlineText: true,
+    inlineLinks: true,
+    inlineImages: true,
+    inlineMedia: true,
+    inlineFormControls: true,
+    inlineLayout: true,
+    inlineAppearance: true,
+  },
+  editableTargets: liveManagementEditableTargets,
+  inlineElementTypes: {
+    text: ["text", "heading", "paragraph", "quote", "button", "link"],
+    link: ["button", "link"],
+    image: ["image"],
+    media: ["video", "embed", "map"],
+    formControls: ["form", "input", "textarea", "select", "checkbox", "radio"],
+  },
+  updateBody: {
+    expectedUpdatedAt:
+      "Use the current page or post updatedAt value for optimistic conflict protection.",
+    content:
+      "Send the full Backy content document or canvas content object after applying editable-map changes.",
+  },
+  errors: {
+    conflict: "PAGE_VERSION_CONFLICT",
+    postConflict: "BLOG_VERSION_CONFLICT",
+    forbidden: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE",
+    postForbidden: "FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE",
+    validation: "VALIDATION_ERROR",
+  },
+});
+
 const blogFeedDiscovery = (site: { id: string; name: string }) => ({
   id: "blog-rss",
   title: `${site.name} Blog RSS`,
@@ -881,6 +988,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     ).filter((rule) => rule.enabled);
     const blogFeed = blogFeedDiscovery(site);
     const mediaFileCategoryDiscoveryContract = mediaFileCategoryDiscovery(site.id);
+    const liveManagementDiscoveryContract = liveManagementDiscovery(site.id);
     const delivery = deliveryDiscovery(origin, site);
     const frontendLaunchReadiness = buildFrontendLaunchReadiness({
       siteId: site.id,
@@ -904,6 +1012,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "x-backy-database-certification": frontendDatabaseCertification,
         "x-backy-frontend-launch-readiness": frontendLaunchReadiness,
         "x-backy-media-file-categories": mediaFileCategoryDiscoveryContract,
+        "x-backy-live-management": liveManagementDiscoveryContract,
         info: {
           title: `${site.name} Backy Public API`,
           version: "backy-public.v1",
@@ -1316,6 +1425,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               tags: ["Live Management"],
               summary: "Read one page for authenticated live-site management",
               operationId: "getBackyLiveManagedPage",
+              "x-backy-live-management": liveManagementDiscoveryContract,
               description:
                 "Requires an admin session or admin API key with pages.view and site team-scope access.",
               parameters: [
@@ -1355,6 +1465,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               tags: ["Live Management"],
               summary: "Update one page from an authenticated live-site management client",
               operationId: "updateBackyLiveManagedPage",
+              "x-backy-live-management": liveManagementDiscoveryContract,
               description:
                 "Requires an admin session or admin API key with pages.edit and site team-scope access. Uses the same validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery as the admin page detail endpoint.",
               parameters: [
@@ -1417,6 +1528,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               tags: ["Live Management"],
               summary: "Read one blog post for authenticated live-site management",
               operationId: "getBackyLiveManagedBlogPost",
+              "x-backy-live-management": liveManagementDiscoveryContract,
               description:
                 "Requires an admin session or admin API key with pages.view and site team-scope access.",
               parameters: [
@@ -1456,6 +1568,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               tags: ["Live Management"],
               summary: "Update one blog post from an authenticated live-site management client",
               operationId: "updateBackyLiveManagedBlogPost",
+              "x-backy-live-management": liveManagementDiscoveryContract,
               description:
                 "Requires an admin session or admin API key with pages.edit and site team-scope access. Uses the same validation, optimistic conflict handling, readiness checks, audit logging, cache invalidation, and webhook delivery as the admin blog post detail endpoint.",
               parameters: [
@@ -4859,6 +4972,149 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
               },
             },
+            LiveManagementDiscovery: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "schemaVersion",
+                "enabled",
+                "endpoints",
+                "methods",
+                "auth",
+                "capabilities",
+                "editableTargets",
+                "inlineElementTypes",
+                "updateBody",
+                "errors",
+              ],
+              properties: {
+                schemaVersion: { const: "backy.live-management.v1" },
+                enabled: { type: "boolean" },
+                endpoints: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: ["page", "post", "render", "editableMapSchema"],
+                  properties: {
+                    page: { type: "string" },
+                    post: { type: "string" },
+                    render: { type: "string" },
+                    editableMapSchema: { type: "string" },
+                  },
+                },
+                methods: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["read", "update"],
+                  properties: {
+                    read: { const: "GET" },
+                    update: { const: "PATCH" },
+                  },
+                },
+                auth: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: ["modes", "headers", "requiredPermissions", "siteScope"],
+                  properties: {
+                    modes: {
+                      type: "array",
+                      items: { type: "string", enum: ["session", "api-key"] },
+                    },
+                    headers: { type: "array", items: { type: "string" } },
+                    requiredPermissions: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["read", "update"],
+                      properties: {
+                        read: { const: "pages.view" },
+                        update: { const: "pages.edit" },
+                      },
+                    },
+                    siteScope: { const: true },
+                  },
+                },
+                capabilities: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: [
+                    "pageMetadata",
+                    "postMetadata",
+                    "contentDocument",
+                    "canvasElements",
+                    "editableMap",
+                    "optimisticConcurrency",
+                    "cacheInvalidation",
+                    "auditTrail",
+                    "webhookDelivery",
+                    "inlineFormControls",
+                  ],
+                  properties: {
+                    pageMetadata: { type: "boolean" },
+                    postMetadata: { type: "boolean" },
+                    contentDocument: { type: "boolean" },
+                    canvasElements: { type: "boolean" },
+                    editableMap: { type: "boolean" },
+                    optimisticConcurrency: { type: "boolean" },
+                    cacheInvalidation: { type: "boolean" },
+                    auditTrail: { type: "boolean" },
+                    webhookDelivery: { type: "boolean" },
+                    inlineText: { type: "boolean" },
+                    inlineLinks: { type: "boolean" },
+                    inlineImages: { type: "boolean" },
+                    inlineMedia: { type: "boolean" },
+                    inlineFormControls: { type: "boolean" },
+                    inlineLayout: { type: "boolean" },
+                    inlineAppearance: { type: "boolean" },
+                  },
+                },
+                editableTargets: {
+                  type: "array",
+                  items: { type: "string" },
+                  contains: { const: "props.formId" },
+                },
+                inlineElementTypes: {
+                  type: "object",
+                  additionalProperties: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                  required: ["text", "link", "image", "media", "formControls"],
+                  properties: {
+                    text: { type: "array", items: { type: "string" } },
+                    link: { type: "array", items: { type: "string" } },
+                    image: { type: "array", items: { type: "string" } },
+                    media: { type: "array", items: { type: "string" } },
+                    formControls: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        enum: ["form", "input", "textarea", "select", "checkbox", "radio"],
+                      },
+                    },
+                  },
+                },
+                updateBody: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: ["expectedUpdatedAt", "content"],
+                  properties: {
+                    expectedUpdatedAt: { type: "string" },
+                    content: { type: "string" },
+                  },
+                },
+                errors: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: ["conflict", "postConflict", "forbidden", "postForbidden", "validation"],
+                  properties: {
+                    conflict: { const: "PAGE_VERSION_CONFLICT" },
+                    postConflict: { const: "BLOG_VERSION_CONFLICT" },
+                    forbidden: { const: "FORBIDDEN_LIVE_MANAGE_SITE_SCOPE" },
+                    postForbidden: { const: "FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE" },
+                    validation: { const: "VALIDATION_ERROR" },
+                  },
+                },
+              },
+            },
             PageResource: {
               type: "object",
               additionalProperties: true,
@@ -7129,6 +7385,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           reusableSectionIds,
           blogFeeds: [blogFeed],
           mediaFileCategories: mediaFileCategoryDiscoveryContract,
+          liveManagement: liveManagementDiscoveryContract,
           delivery,
           localeRouting: {
             defaultLocale: delivery.defaultLocale,

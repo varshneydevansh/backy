@@ -120,6 +120,7 @@ export type {
   GeneratedBackyOpenApiInteractiveComponentRuntime,
   GeneratedBackyOpenApiInteractiveComponentSecurity,
   GeneratedBackyOpenApiInteractiveRuntimeEventRequest,
+  GeneratedBackyOpenApiLiveManagementDiscovery,
   GeneratedBackyOpenApiMediaAsset,
   GeneratedBackyOpenApiMediaDeliveryPolicy,
   GeneratedBackyOpenApiMediaDetailEnvelope,

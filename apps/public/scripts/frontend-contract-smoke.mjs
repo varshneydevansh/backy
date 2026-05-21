@@ -193,6 +193,11 @@ assert(
     manifestRoute.includes("'props.required'") &&
     manifestRoute.includes("conflict: 'PAGE_VERSION_CONFLICT'") &&
     manifestRoute.includes("postConflict: 'BLOG_VERSION_CONFLICT'") &&
+    openApiRoute.includes('"x-backy-live-management"') &&
+    openApiRoute.includes('liveManagementDiscovery') &&
+    openApiRoute.includes('LiveManagementDiscovery') &&
+    openApiRoute.includes('inlineFormControls') &&
+    openApiRoute.includes('formControls: ["form", "input", "textarea", "select", "checkbox", "radio"]') &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(input.site.id)') &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(site.id)') &&
     frontendManifestSchema.includes('"backy.live-management.v1"') &&
@@ -202,6 +207,8 @@ assert(
     frontendManifestSchema.includes('"BLOG_VERSION_CONFLICT"') &&
     sdkSource.includes('BackyManifestLiveManagementModule') &&
     sdkSource.includes('post: string;') &&
+    sdkSource.includes('GeneratedBackyOpenApiLiveManagementDiscovery') &&
+    generatedSdkTypes.includes('"x-backy-live-management"?: GeneratedBackyOpenApiLiveManagementDiscovery') &&
     sdkSmoke.includes('manifest() missing live-management discovery module') &&
     sdkSmoke.includes('manifest() live-management missing form id editable target') &&
     generatedSdkSmoke.includes('props.formId') &&

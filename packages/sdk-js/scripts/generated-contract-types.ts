@@ -148,6 +148,7 @@ import type {
   GeneratedBackyOpenApiInteractiveComponentRuntime,
   GeneratedBackyOpenApiInteractiveComponentSecurity,
   GeneratedBackyOpenApiInteractiveRuntimeEventRequest,
+  GeneratedBackyOpenApiLiveManagementDiscovery,
   GeneratedBackyOpenApiMediaAsset,
   GeneratedBackyOpenApiMediaDetailEnvelope,
   GeneratedBackyOpenApiMediaEditableMetadata,
@@ -2727,6 +2728,21 @@ const sdkManifestLiveManagement = {
   },
 } satisfies BackyManifestLiveManagementModule;
 
+const openApiLiveManagement = {
+  ...sdkManifestLiveManagement,
+  capabilities: {
+    ...sdkManifestLiveManagement.capabilities,
+    inlineFormControls: true,
+  },
+  inlineElementTypes: {
+    text: ["text", "heading", "paragraph", "quote", "button", "link"],
+    link: ["button", "link"],
+    image: ["image"],
+    media: ["video", "embed", "map"],
+    formControls: ["form", "input", "textarea", "select", "checkbox", "radio"],
+  },
+} satisfies GeneratedBackyOpenApiLiveManagementDiscovery;
+
 const sdkManifestCollection = {
   id: "collection_products",
   slug: "products",
@@ -2901,6 +2917,7 @@ const openApi = {
   openapi: "3.1.0",
   "x-backy-database-certification": frontendDatabaseCertification,
   "x-backy-media-file-categories": openApiMediaFileCategories,
+  "x-backy-live-management": openApiLiveManagement,
   info: {
     title: "Demo Backy Public API",
     version: "backy-public.v1",
@@ -2931,6 +2948,7 @@ const openApi = {
       },
       SiteSummary: siteSummary,
       MediaFileCategoryDiscovery: openApiMediaFileCategories,
+      LiveManagementDiscovery: openApiLiveManagement,
       SiteEnvelope: siteEnvelope,
       SiteListEnvelope: siteListEnvelope,
       RouteResolveEnvelope: {
@@ -2965,6 +2983,7 @@ const openApiComponentName =
   "ErrorEnvelope" satisfies GeneratedBackyOpenApiComponentName;
 const openApiComponents = {
   MediaFileCategoryDiscovery: openApiMediaFileCategories,
+  LiveManagementDiscovery: openApiLiveManagement,
   ErrorEnvelope: {
     success: false,
     requestId: "req_error",
