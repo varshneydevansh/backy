@@ -841,6 +841,117 @@ export interface BackyCollectionRecordDeleteResult {
   slug?: string;
 }
 
+export type BackyAdminCollectionStatus =
+  | "draft"
+  | "published"
+  | "archived"
+  | string;
+
+export interface BackyAdminCollectionListOptions
+  extends BackyLiveManagementRequestOptions {
+  limit?: number;
+  offset?: number;
+}
+
+export interface BackyAdminCollectionCreateInput {
+  name: string;
+  slug?: string;
+  status?: BackyAdminCollectionStatus;
+  fields?: BackyFieldSchema[];
+  permissions?: Record<string, boolean>;
+  routePattern?: string;
+  listRoutePattern?: string;
+  frontendDesignTemplateId?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminCollectionUpdateInput
+  extends Partial<Omit<BackyAdminCollectionCreateInput, "name">> {
+  name?: string;
+}
+
+export type BackyAdminCollectionsResponse = BackyEnvelope<
+  {
+    collections: BackyCollectionSchema[];
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminCollectionResponse = BackyEnvelope<
+  {
+    collection: BackyCollectionSchema;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminCollectionDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    collectionId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export interface BackyAdminCollectionRecordListOptions
+  extends BackyLiveManagementRequestOptions {
+  status?: string;
+  slug?: string;
+  q?: string;
+  search?: string;
+  fieldKey?: string;
+  fieldValue?: string;
+  sortBy?: string;
+  sortDirection?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
+}
+
+export interface BackyAdminCollectionRecordCreateInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> {
+  values: TValues;
+  slug?: string;
+  status?: BackyAdminCollectionStatus;
+  frontendDesignTemplateId?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyAdminCollectionRecordUpdateInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> extends Partial<Omit<BackyAdminCollectionRecordCreateInput<TValues>, "values">> {
+  values?: Partial<TValues>;
+}
+
+export type BackyAdminCollectionRecordsResponse<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> = BackyEnvelope<
+  {
+    collection: BackyCollectionSchema;
+    records: Array<BackyCollectionRecord<TValues>>;
+    pagination?: BackyPagination;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminCollectionRecordResponse<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> = BackyEnvelope<
+  {
+    collection?: BackyCollectionSchema;
+    record: BackyCollectionRecord<TValues>;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
+export type BackyAdminCollectionRecordDeleteResponse = BackyEnvelope<
+  {
+    deleted: boolean;
+    recordId: string;
+    cacheInvalidation?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
+
 export interface BackyCommerceProductDesign {
   templateId?: string;
   templateName?: string;
@@ -7433,6 +7544,199 @@ export class BackyClient {
       {
         ifNoneMatch: options.etag,
         requestId: options.requestId,
+      },
+    );
+  }
+
+  adminCollections(
+    options: BackyAdminCollectionListOptions = {},
+  ): Promise<BackyAdminCollectionsResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = normalizeListQuery({
+      limit: rest.limit,
+      offset: rest.offset,
+    });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  createAdminCollection(
+    input: BackyAdminCollectionCreateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminCollection(
+    collectionId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminCollection(
+    collectionId: string,
+    input: BackyAdminCollectionUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionResponse> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminCollection(
+    collectionId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminCollectionRecords<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    collectionId: string,
+    options: BackyAdminCollectionRecordListOptions = {},
+  ): Promise<BackyAdminCollectionRecordsResponse<TValues>> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = {
+      status: rest.status,
+      slug: rest.slug,
+      q: rest.q,
+      search: rest.search,
+      fieldKey: rest.fieldKey,
+      fieldValue: rest.fieldValue,
+      sortBy: rest.sortBy,
+      sortDirection: rest.sortDirection,
+      limit: rest.limit,
+      offset: rest.offset,
+    };
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  createAdminCollectionRecord<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    collectionId: string,
+    input: BackyAdminCollectionRecordCreateInput<TValues>,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionRecordResponse<TValues>> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  adminCollectionRecord<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    collectionId: string,
+    recordId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionRecordResponse<TValues>> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`,
+      {
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  updateAdminCollectionRecord<
+    TValues extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    collectionId: string,
+    recordId: string,
+    input: BackyAdminCollectionRecordUpdateInput<TValues>,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionRecordResponse<TValues>> {
+    const { requestId: inputRequestId, ...body } = input;
+    const requestId =
+      typeof inputRequestId === "string" ? inputRequestId : undefined;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`,
+      {
+        method: "PATCH",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  deleteAdminCollectionRecord(
+    collectionId: string,
+    recordId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminCollectionRecordDeleteResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`,
+      {
+        method: "DELETE",
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }

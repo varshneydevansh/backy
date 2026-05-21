@@ -26,6 +26,12 @@ import type {
   BackyAdminBlogPostResponse,
   BackyAdminBlogPostRevisionsResponse,
   BackyAdminBlogPostsResponse,
+  BackyAdminCollectionDeleteResponse,
+  BackyAdminCollectionRecordDeleteResponse,
+  BackyAdminCollectionRecordResponse,
+  BackyAdminCollectionRecordsResponse,
+  BackyAdminCollectionResponse,
+  BackyAdminCollectionsResponse,
   BackySiteSettingsScope,
   BackyManifestLocalizedRoutePatternGroup,
   BackyManifestPageResource,
@@ -478,6 +484,66 @@ type RollbackAdminBlogPostMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["rollbackAdminBlogPost"]>,
     BackyAdminBlogPostResponse
+  >
+>;
+type AdminCollectionsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCollections"]>,
+    BackyAdminCollectionsResponse
+  >
+>;
+type CreateAdminCollectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminCollection"]>,
+    BackyAdminCollectionResponse
+  >
+>;
+type AdminCollectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCollection"]>,
+    BackyAdminCollectionResponse
+  >
+>;
+type UpdateAdminCollectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminCollection"]>,
+    BackyAdminCollectionResponse
+  >
+>;
+type DeleteAdminCollectionMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminCollection"]>,
+    BackyAdminCollectionDeleteResponse
+  >
+>;
+type AdminCollectionRecordsMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCollectionRecords"]>,
+    BackyAdminCollectionRecordsResponse
+  >
+>;
+type CreateAdminCollectionRecordMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["createAdminCollectionRecord"]>,
+    BackyAdminCollectionRecordResponse
+  >
+>;
+type AdminCollectionRecordMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["adminCollectionRecord"]>,
+    BackyAdminCollectionRecordResponse
+  >
+>;
+type UpdateAdminCollectionRecordMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["updateAdminCollectionRecord"]>,
+    BackyAdminCollectionRecordResponse
+  >
+>;
+type DeleteAdminCollectionRecordMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["deleteAdminCollectionRecord"]>,
+    BackyAdminCollectionRecordDeleteResponse
   >
 >;
 type AdminFormsMethodReturnsContract = Assert<
@@ -1437,6 +1503,116 @@ const sdkAdminBlogPostRevisionsEnvelope = {
     },
   },
 } satisfies BackyAdminBlogPostRevisionsResponse;
+
+const sdkAdminCollection = {
+  id: "collection_projects",
+  siteId: "site_demo",
+  slug: "projects",
+  name: "Projects",
+  status: "published",
+  permissions: {
+    publicRead: true,
+    publicCreate: false,
+  },
+  fields: [
+    {
+      key: "title",
+      label: "Title",
+      type: "text",
+      required: true,
+    },
+    {
+      key: "slug",
+      label: "Slug",
+      type: "slug",
+      unique: true,
+    },
+  ],
+  routePattern: "/projects/:recordSlug",
+  listRoutePattern: "/projects",
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminCollectionsEnvelope = {
+  success: true,
+  requestId: "req_admin_collections",
+  data: {
+    collections: [sdkAdminCollection],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminCollectionsResponse;
+
+const sdkAdminCollectionEnvelope = {
+  success: true,
+  requestId: "req_admin_collection",
+  data: {
+    collection: sdkAdminCollection,
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminCollectionResponse;
+
+const sdkAdminCollectionDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_collection_delete",
+  data: {
+    deleted: true,
+    collectionId: "collection_projects",
+  },
+} satisfies BackyAdminCollectionDeleteResponse;
+
+const sdkAdminCollectionRecord = {
+  id: "record_project_1",
+  slug: "launch-site",
+  status: "published",
+  values: {
+    title: "Launch Site",
+    slug: "launch-site",
+  },
+  updatedAt: "2026-05-21T00:00:00.000Z",
+};
+
+const sdkAdminCollectionRecordsEnvelope = {
+  success: true,
+  requestId: "req_admin_collection_records",
+  data: {
+    collection: sdkAdminCollection,
+    records: [sdkAdminCollectionRecord],
+    pagination: {
+      total: 1,
+      limit: 25,
+      offset: 0,
+      hasMore: false,
+    },
+  },
+} satisfies BackyAdminCollectionRecordsResponse;
+
+const sdkAdminCollectionRecordEnvelope = {
+  success: true,
+  requestId: "req_admin_collection_record",
+  data: {
+    collection: sdkAdminCollection,
+    record: sdkAdminCollectionRecord,
+    cacheInvalidation: {
+      scope: "content",
+    },
+  },
+} satisfies BackyAdminCollectionRecordResponse;
+
+const sdkAdminCollectionRecordDeleteEnvelope = {
+  success: true,
+  requestId: "req_admin_collection_record_delete",
+  data: {
+    deleted: true,
+    recordId: "record_project_1",
+  },
+} satisfies BackyAdminCollectionRecordDeleteResponse;
 
 const sdkCommerceProviderCertification = {
   schemaVersion: "backy.commerce-provider-certification-handoff.v1",

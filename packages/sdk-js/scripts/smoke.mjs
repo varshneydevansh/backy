@@ -1331,6 +1331,21 @@ if (firstAdminBlogPostId) {
   assert(Array.isArray(postRevisions.data.revisions), 'adminBlogPostRevisions() missing revisions array');
 }
 
+const adminCollections = await privateClient.adminCollections({ limit: 5 });
+assert(Array.isArray(adminCollections.data.collections), 'adminCollections() missing collections array');
+const firstAdminCollectionId = adminCollections.data.collections[0]?.id;
+if (firstAdminCollectionId) {
+  const adminCollection = await privateClient.adminCollection(firstAdminCollectionId);
+  assert(adminCollection.data.collection?.id === firstAdminCollectionId, 'adminCollection() returned wrong collection');
+  const adminCollectionRecords = await privateClient.adminCollectionRecords(firstAdminCollectionId, { limit: 5 });
+  assert(Array.isArray(adminCollectionRecords.data.records), 'adminCollectionRecords() missing records array');
+  const firstAdminRecordId = adminCollectionRecords.data.records[0]?.id;
+  if (firstAdminRecordId) {
+    const adminCollectionRecord = await privateClient.adminCollectionRecord(firstAdminCollectionId, firstAdminRecordId);
+    assert(adminCollectionRecord.data.record?.id === firstAdminRecordId, 'adminCollectionRecord() returned wrong record');
+  }
+}
+
 const adminMedia = await privateClient.adminMedia({ limit: 5 });
 assert(Array.isArray(adminMedia.data.media), 'adminMedia() missing media array');
 assert(adminMedia.data.quota, 'adminMedia() missing quota payload');
