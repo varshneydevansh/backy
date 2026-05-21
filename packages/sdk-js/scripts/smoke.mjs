@@ -2128,6 +2128,146 @@ if (runWriteSmoke) {
     assert(revalidatedRecords.notModified === true, 'recordsCached() SDK smoke revalidation failed');
     writeChecks.push('recordsCached');
 
+    const importedRecordSlug = `sdk-imported-record-${Date.now()}`;
+    const importedRecords = await writeClient.importAdminCollectionRecordsCsv(
+      fixture.collectionId,
+      [
+        'slug,status,title,summary,category',
+        `${importedRecordSlug},draft,SDK Imported Record,Imported through SDK CSV,Featured`,
+      ].join('\n'),
+      { requestId: 'sdk-record-csv-import' },
+    );
+    const importedRecord = importedRecords.data.records?.[0];
+    assert(importedRecords.data.import?.created === 1, 'importAdminCollectionRecordsCsv() should create one record');
+    assert(importedRecords.data.import?.errors?.length === 0, 'importAdminCollectionRecordsCsv() returned row errors');
+    assert(importedRecord?.slug === importedRecordSlug, 'importAdminCollectionRecordsCsv() returned wrong record slug');
+    assert(importedRecord.values?.title === 'SDK Imported Record', 'importAdminCollectionRecordsCsv() did not map CSV values');
+    writeChecks.push('importAdminCollectionRecordsCsv');
+
+    const bulkPublished = await writeClient.bulkAdminCollectionRecords(fixture.collectionId, {
+      action: 'updateStatus',
+      recordIds: [importedRecord.id],
+      status: 'published',
+      requestId: 'sdk-record-bulk-publish',
+    });
+    assert(bulkPublished.data.updated === 1, 'bulkAdminCollectionRecords() did not update record status');
+    assert(bulkPublished.data.records?.[0]?.status === 'published', 'bulkAdminCollectionRecords() returned wrong status');
+    writeChecks.push('bulkAdminCollectionRecords:updateStatus');
+
+    const bulkDeleted = await writeClient.bulkAdminCollectionRecords(fixture.collectionId, {
+      action: 'delete',
+      recordIds: [importedRecord.id],
+      requestId: 'sdk-record-bulk-delete',
+    });
+    assert(bulkDeleted.data.deleted === 1, 'bulkAdminCollectionRecords() did not delete imported record');
+    writeChecks.push('bulkAdminCollectionRecords:delete');
+
+    const productAliasSlug = `sdk-product-alias-${Date.now()}`;
+    const importedProductAlias = await writeClient.importAdminCommerceProductsCsv(
+      [
+        'slug,status,title,summary,category',
+        `${productAliasSlug},draft,SDK Product Alias Record,Imported through product batch alias,Featured`,
+      ].join('\n'),
+      { collectionId: fixture.collectionId, requestId: 'sdk-product-alias-import' },
+    );
+    const productAliasRecord = importedProductAlias.data.records?.[0];
+    assert(importedProductAlias.data.import?.created === 1, 'importAdminCommerceProductsCsv() should create one record through override collection');
+    assert(productAliasRecord?.slug === productAliasSlug, 'importAdminCommerceProductsCsv() returned wrong alias record');
+    writeChecks.push('importAdminCommerceProductsCsv:override');
+
+    const productAliasBulkDelete = await writeClient.bulkAdminCommerceProducts(
+      {
+        action: 'delete',
+        recordIds: [productAliasRecord.id],
+        requestId: 'sdk-product-alias-bulk-delete',
+      },
+      { collectionId: fixture.collectionId },
+    );
+    assert(productAliasBulkDelete.data.deleted === 1, 'bulkAdminCommerceProducts() did not delete override collection record');
+    writeChecks.push('bulkAdminCommerceProducts:override');
+
+    const orderAliasSlug = `sdk-order-alias-${Date.now()}`;
+    const importedOrderAlias = await writeClient.importAdminCommerceOrdersCsv(
+      [
+        'slug,status,title,summary,category',
+        `${orderAliasSlug},draft,SDK Order Alias Record,Imported through order batch alias,Standard`,
+      ].join('\n'),
+      { collectionId: fixture.collectionId, requestId: 'sdk-order-alias-import' },
+    );
+    const orderAliasRecord = importedOrderAlias.data.records?.[0];
+    assert(importedOrderAlias.data.import?.created === 1, 'importAdminCommerceOrdersCsv() should create one record through override collection');
+    assert(orderAliasRecord?.slug === orderAliasSlug, 'importAdminCommerceOrdersCsv() returned wrong alias record');
+    writeChecks.push('importAdminCommerceOrdersCsv:override');
+
+    const orderAliasBulkDelete = await writeClient.bulkAdminCommerceOrders(
+      {
+        action: 'delete',
+        recordIds: [orderAliasRecord.id],
+        requestId: 'sdk-order-alias-bulk-delete',
+      },
+      { collectionId: fixture.collectionId },
+    );
+    assert(orderAliasBulkDelete.data.deleted === 1, 'bulkAdminCommerceOrders() did not delete override collection record');
+    writeChecks.push('bulkAdminCommerceOrders:override');
+
+    const backupCollectionSlug = `sdk-backup-collection-${Date.now()}`;
+    const importedBackup = await writeClient.importAdminCollectionsBackup(
+      {
+        backup: {
+          schemaVersion: 'backy.collections.backup.v1',
+          exportedAt: new Date().toISOString(),
+          siteId: fixture.siteId,
+          collectionCount: 1,
+          recordCount: 1,
+        },
+        collections: [
+          {
+            name: 'SDK Backup Collection',
+            slug: backupCollectionSlug,
+            status: 'published',
+            fields: [
+              { key: 'title', label: 'Title', type: 'text', required: true },
+              { key: 'summary', label: 'Summary', type: 'richText' },
+            ],
+            permissions: {
+              publicRead: true,
+            },
+            records: [
+              {
+                slug: 'sdk-backup-record',
+                status: 'published',
+                values: {
+                  title: 'SDK Backup Record',
+                  summary: 'Imported through the SDK backup bridge.',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { requestId: 'sdk-collections-backup-import' },
+    );
+    const backupCollection = importedBackup.data.collections?.[0];
+    assert(importedBackup.data.import?.createdCollections === 1, 'importAdminCollectionsBackup() should create one collection');
+    assert(importedBackup.data.import?.createdRecords === 1, 'importAdminCollectionsBackup() should create one record');
+    assert(backupCollection?.slug === backupCollectionSlug, 'importAdminCollectionsBackup() returned wrong collection slug');
+    writeChecks.push('importAdminCollectionsBackup');
+
+    const backupExport = await writeClient.exportAdminCollectionsBackup({
+      collectionIds: [backupCollection.id],
+      includeRecords: true,
+      requestId: 'sdk-collections-backup-export-records',
+    });
+    assert(backupExport.data.backup?.recordCount === 1, 'exportAdminCollectionsBackup() did not include imported backup records');
+    assert(backupExport.data.collections?.[0]?.records?.[0]?.slug === 'sdk-backup-record', 'exportAdminCollectionsBackup() returned wrong backup record');
+    writeChecks.push('exportAdminCollectionsBackup:includeRecords');
+
+    const deletedBackupCollection = await writeClient.deleteAdminCollection(backupCollection.id, {
+      requestId: 'sdk-delete-backup-collection',
+    });
+    assert(deletedBackupCollection.data.deleted === true, 'deleteAdminCollection() did not delete imported backup collection');
+    writeChecks.push('deleteAdminCollection');
+
     const form = await writeClient.form('sdk-smoke-form');
     assert(form.data.form?.id === 'sdk-smoke-form', 'form() missing SDK smoke form');
     writeChecks.push('form');
