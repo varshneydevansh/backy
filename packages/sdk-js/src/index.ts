@@ -8046,6 +8046,45 @@ export interface BackyManifestThemeModule {
   [key: string]: unknown;
 }
 
+export interface BackyManifestEditorCompositionCommand {
+  id: "group" | "ungroup";
+  label: string;
+  shortcut: string;
+  sdkHelper: "groupBackyContentElements" | "ungroupBackyContentElements";
+  minSelected: number;
+  sameParentRequired: boolean;
+  unlockedRequired: boolean;
+  createsEditorGroup?: boolean;
+  editorGroupRequired?: boolean;
+  preservesResponsiveGeometry: boolean;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestEditorComposition {
+  schemaVersion: "backy.editor-composition-commands.v1";
+  sdkHelpers: {
+    listElements: "listBackyContentElements";
+    findElement: "findBackyContentElement";
+    group: "groupBackyContentElements";
+    ungroup: "ungroupBackyContentElements";
+    patchElement: "patchBackyContentElement";
+    patchElements: "patchBackyContentElements";
+    buildPageUpdate: "buildBackyLiveManagedPageEditableMapUpdate";
+    buildBlogPostUpdate: "buildBackyLiveManagedBlogPostEditableMapUpdate";
+    [key: string]: unknown;
+  };
+  commands: BackyManifestEditorCompositionCommand[];
+  constraints: {
+    sameParentRequired: true;
+    lockedLayersBlocked: true;
+    editorGroupMarker: "props.editorGroup";
+    responsiveBreakpoints: Array<"tablet" | "mobile">;
+    updateTarget: "content";
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyManifestLiveManagementModule {
   schemaVersion: "backy.live-management.v1";
   enabled: boolean;
@@ -8082,9 +8121,12 @@ export interface BackyManifestLiveManagementModule {
     cacheInvalidation: boolean;
     auditTrail: boolean;
     webhookDelivery: boolean;
+    editorComposition: boolean;
+    editorGrouping: boolean;
     [key: string]: unknown;
   };
   editableTargets: string[];
+  editorComposition: BackyManifestEditorComposition;
   updateBody: {
     expectedUpdatedAt: string;
     content: string;

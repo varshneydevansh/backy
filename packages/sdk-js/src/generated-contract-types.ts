@@ -820,6 +820,8 @@ export type GeneratedBackyOpenApiLiveManagementDiscovery = {
     inlineFormControls: boolean;
     inlineLayout?: boolean;
     inlineAppearance?: boolean;
+    editorComposition: boolean;
+    editorGrouping: boolean;
     [key: string]: unknown;
   };
   editableTargets: Array<string>;
@@ -829,6 +831,42 @@ export type GeneratedBackyOpenApiLiveManagementDiscovery = {
     image: Array<string>;
     media: Array<string>;
     formControls: Array<"form" | "input" | "textarea" | "select" | "checkbox" | "radio">;
+    [key: string]: unknown;
+  };
+  editorComposition: {
+    schemaVersion: "backy.editor-composition-commands.v1";
+    sdkHelpers: {
+      listElements: "listBackyContentElements";
+      findElement: "findBackyContentElement";
+      group: "groupBackyContentElements";
+      ungroup: "ungroupBackyContentElements";
+      patchElement: "patchBackyContentElement";
+      patchElements: "patchBackyContentElements";
+      buildPageUpdate: "buildBackyLiveManagedPageEditableMapUpdate";
+      buildBlogPostUpdate: "buildBackyLiveManagedBlogPostEditableMapUpdate";
+      [key: string]: unknown;
+    };
+    commands: Array<{
+      id: "group" | "ungroup";
+      label: string;
+      shortcut: string;
+      sdkHelper: "groupBackyContentElements" | "ungroupBackyContentElements";
+      minSelected: number;
+      sameParentRequired: boolean;
+      unlockedRequired: boolean;
+      createsEditorGroup?: boolean;
+      editorGroupRequired?: boolean;
+      preservesResponsiveGeometry: boolean;
+      [key: string]: unknown;
+    }>;
+    constraints: {
+      sameParentRequired: true;
+      lockedLayersBlocked: true;
+      editorGroupMarker: "props.editorGroup";
+      responsiveBreakpoints: Array<"tablet" | "mobile">;
+      updateTarget: "content";
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   updateBody: {
@@ -3237,9 +3275,47 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           cacheInvalidation: boolean;
           auditTrail: boolean;
           webhookDelivery: boolean;
+          editorComposition: boolean;
+          editorGrouping: boolean;
           [key: string]: unknown;
         };
         editableTargets: Array<string>;
+        editorComposition: {
+          schemaVersion: "backy.editor-composition-commands.v1";
+          sdkHelpers: {
+            listElements: "listBackyContentElements";
+            findElement: "findBackyContentElement";
+            group: "groupBackyContentElements";
+            ungroup: "ungroupBackyContentElements";
+            patchElement: "patchBackyContentElement";
+            patchElements: "patchBackyContentElements";
+            buildPageUpdate: "buildBackyLiveManagedPageEditableMapUpdate";
+            buildBlogPostUpdate: "buildBackyLiveManagedBlogPostEditableMapUpdate";
+            [key: string]: unknown;
+          };
+          commands: Array<{
+            id: "group" | "ungroup";
+            label: string;
+            shortcut: string;
+            sdkHelper: "groupBackyContentElements" | "ungroupBackyContentElements";
+            minSelected: number;
+            sameParentRequired: boolean;
+            unlockedRequired: boolean;
+            createsEditorGroup?: boolean;
+            editorGroupRequired?: boolean;
+            preservesResponsiveGeometry: boolean;
+            [key: string]: unknown;
+          }>;
+          constraints: {
+            sameParentRequired: true;
+            lockedLayersBlocked: true;
+            editorGroupMarker: "props.editorGroup";
+            responsiveBreakpoints: Array<"tablet" | "mobile">;
+            updateTarget: "content";
+            [key: string]: unknown;
+          };
+          [key: string]: unknown;
+        };
         updateBody: {
           expectedUpdatedAt: string;
           content: string;

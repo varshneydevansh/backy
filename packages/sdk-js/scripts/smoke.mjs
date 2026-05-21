@@ -890,9 +890,17 @@ assert(manifestLiveManagement.auth?.siteScope === true, 'manifest() live-managem
 assert(manifestLiveManagement.capabilities?.editableMap === true, 'manifest() live-management missing editable map capability');
 assert(manifestLiveManagement.capabilities?.postMetadata === true, 'manifest() live-management missing blog post metadata capability');
 assert(manifestLiveManagement.capabilities?.optimisticConcurrency === true, 'manifest() live-management missing optimistic concurrency capability');
+assert(manifestLiveManagement.capabilities?.editorComposition === true, 'manifest() live-management missing editor composition capability');
 assert(manifestLiveManagement.editableTargets?.includes?.('props.content'), 'manifest() live-management missing content editable target');
 assert(manifestLiveManagement.editableTargets?.includes?.('props.formId'), 'manifest() live-management missing form id editable target');
 assert(manifestLiveManagement.editableTargets?.includes?.('props.options'), 'manifest() live-management missing form options editable target');
+assert(manifestLiveManagement.editorComposition?.schemaVersion === 'backy.editor-composition-commands.v1', 'manifest() live-management missing editor composition command contract');
+assert(manifestLiveManagement.editorComposition?.sdkHelpers?.group === 'groupBackyContentElements', 'manifest() live-management missing SDK group helper');
+assert(manifestLiveManagement.editorComposition?.sdkHelpers?.ungroup === 'ungroupBackyContentElements', 'manifest() live-management missing SDK ungroup helper');
+assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'group' && command.shortcut === 'Cmd/Ctrl+G' && command.minSelected === 2), 'manifest() live-management missing group command metadata');
+assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'ungroup' && command.shortcut === 'Shift+Cmd/Ctrl+G' && command.editorGroupRequired === true), 'manifest() live-management missing ungroup command metadata');
+assert(manifestLiveManagement.editorComposition?.constraints?.editorGroupMarker === 'props.editorGroup', 'manifest() live-management missing editor group marker constraint');
+assert(manifestLiveManagement.editorComposition?.constraints?.responsiveBreakpoints?.includes?.('mobile'), 'manifest() live-management missing responsive grouping breakpoint metadata');
 assert(manifestLiveManagement.updateBody?.expectedUpdatedAt, 'manifest() live-management missing expectedUpdatedAt update guidance');
 assert(manifestLiveManagement.errors?.conflict === 'PAGE_VERSION_CONFLICT', 'manifest() live-management conflict code drifted');
 assert(manifestLiveManagement.errors?.postConflict === 'BLOG_VERSION_CONFLICT', 'manifest() live-management blog conflict code drifted');
@@ -1046,6 +1054,9 @@ assert(openapi.paths?.[manifest.data.endpoints.blogAuthors]?.get, 'openapi() mis
 assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get, 'openapi() missing manifest-advertised blog RSS path');
 assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get?.['x-backy-feed']?.endpoint === manifest.data.endpoints.blogRss, 'openapi() missing blog RSS feed discovery extension');
 assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'openapi() missing blog feed discovery schema');
+assert(openapi.components?.schemas?.LiveManagementDiscovery?.properties?.editorComposition, 'openapi() missing editor composition discovery schema');
+assert(openapi['x-backy-live-management']?.editorComposition?.sdkHelpers?.group === 'groupBackyContentElements', 'openapi() missing live-management group helper metadata');
+assert(openapi['x-backy-live-management']?.editorComposition?.commands?.some?.((command) => command.id === 'ungroup' && command.shortcut === 'Shift+Cmd/Ctrl+G'), 'openapi() missing live-management ungroup command metadata');
 assert(openapi['x-backy-database-certification']?.schemaVersion === manifest.data.contract.databaseCertification.schemaVersion, 'openapi() missing database certification schema extension');
 assert(openapi['x-backy-database-certification']?.gate?.command === manifest.data.contract.databaseCertification.gate.command, 'openapi() database certification command drifted from manifest');
 assert(openapi['x-backy-database-certification']?.operatorCommandTemplate?.command === manifest.data.contract.databaseCertification.operatorCommandTemplate.command, 'openapi() database certification operator command drifted from manifest');

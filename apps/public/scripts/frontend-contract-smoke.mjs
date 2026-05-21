@@ -191,26 +191,39 @@ assert(
     manifestRoute.includes("'props.submitLabel'") &&
     manifestRoute.includes("'props.options'") &&
     manifestRoute.includes("'props.required'") &&
+    manifestRoute.includes("schemaVersion: 'backy.editor-composition-commands.v1'") &&
+    manifestRoute.includes("group: 'groupBackyContentElements'") &&
+    manifestRoute.includes("ungroup: 'ungroupBackyContentElements'") &&
+    manifestRoute.includes("shortcut: 'Cmd/Ctrl+G'") &&
+    manifestRoute.includes("editorGroupMarker: 'props.editorGroup'") &&
     manifestRoute.includes("conflict: 'PAGE_VERSION_CONFLICT'") &&
     manifestRoute.includes("postConflict: 'BLOG_VERSION_CONFLICT'") &&
     openApiRoute.includes('"x-backy-live-management"') &&
     openApiRoute.includes('liveManagementDiscovery') &&
     openApiRoute.includes('LiveManagementDiscovery') &&
     openApiRoute.includes('inlineFormControls') &&
+    openApiRoute.includes('"backy.editor-composition-commands.v1"') &&
+    openApiRoute.includes('"groupBackyContentElements"') &&
+    openApiRoute.includes('"ungroupBackyContentElements"') &&
     openApiRoute.includes('formControls: ["form", "input", "textarea", "select", "checkbox", "radio"]') &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(input.site.id)') &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(site.id)') &&
     frontendManifestSchema.includes('"backy.live-management.v1"') &&
     frontendManifestSchema.includes('"postConflict"') &&
     frontendManifestSchema.includes('"optimisticConcurrency"') &&
+    frontendManifestSchema.includes('"editorComposition"') &&
+    frontendManifestSchema.includes('"backy.editor-composition-commands.v1"') &&
     frontendManifestSchema.includes('"PAGE_VERSION_CONFLICT"') &&
     frontendManifestSchema.includes('"BLOG_VERSION_CONFLICT"') &&
     sdkSource.includes('BackyManifestLiveManagementModule') &&
+    sdkSource.includes('BackyManifestEditorComposition') &&
     sdkSource.includes('post: string;') &&
     sdkSource.includes('GeneratedBackyOpenApiLiveManagementDiscovery') &&
     generatedSdkTypes.includes('"x-backy-live-management"?: GeneratedBackyOpenApiLiveManagementDiscovery') &&
     sdkSmoke.includes('manifest() missing live-management discovery module') &&
     sdkSmoke.includes('manifest() live-management missing form id editable target') &&
+    sdkSmoke.includes('manifest() live-management missing editor composition command contract') &&
+    sdkSmoke.includes('openapi() missing live-management group helper metadata') &&
     generatedSdkSmoke.includes('props.formId') &&
     sdkSmoke.includes('manifest() live-management blog post endpoint drifted') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestLiveManagementDiscovery'),

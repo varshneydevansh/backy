@@ -863,13 +863,75 @@
                     "optimisticConcurrency": { "type": "boolean" },
                     "cacheInvalidation": { "type": "boolean" },
                     "auditTrail": { "type": "boolean" },
-                    "webhookDelivery": { "type": "boolean" }
+                    "webhookDelivery": { "type": "boolean" },
+                    "editorComposition": { "type": "boolean" },
+                    "editorGrouping": { "type": "boolean" }
                   },
-                  "required": ["pageMetadata", "postMetadata", "contentDocument", "canvasElements", "editableMap", "optimisticConcurrency", "cacheInvalidation", "auditTrail", "webhookDelivery"]
+                  "required": ["pageMetadata", "postMetadata", "contentDocument", "canvasElements", "editableMap", "optimisticConcurrency", "cacheInvalidation", "auditTrail", "webhookDelivery", "editorComposition", "editorGrouping"]
                 },
                 "editableTargets": {
                   "type": "array",
                   "items": { "type": "string", "minLength": 1 }
+                },
+                "editorComposition": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.editor-composition-commands.v1" },
+                    "sdkHelpers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "listElements": { "const": "listBackyContentElements" },
+                        "findElement": { "const": "findBackyContentElement" },
+                        "group": { "const": "groupBackyContentElements" },
+                        "ungroup": { "const": "ungroupBackyContentElements" },
+                        "patchElement": { "const": "patchBackyContentElement" },
+                        "patchElements": { "const": "patchBackyContentElements" },
+                        "buildPageUpdate": { "const": "buildBackyLiveManagedPageEditableMapUpdate" },
+                        "buildBlogPostUpdate": { "const": "buildBackyLiveManagedBlogPostEditableMapUpdate" }
+                      },
+                      "required": ["listElements", "findElement", "group", "ungroup", "patchElement", "patchElements", "buildPageUpdate", "buildBlogPostUpdate"]
+                    },
+                    "commands": {
+                      "type": "array",
+                      "minItems": 2,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "id": { "enum": ["group", "ungroup"] },
+                          "label": { "type": "string", "minLength": 1 },
+                          "shortcut": { "type": "string", "minLength": 1 },
+                          "sdkHelper": { "enum": ["groupBackyContentElements", "ungroupBackyContentElements"] },
+                          "minSelected": { "type": "integer", "minimum": 1 },
+                          "sameParentRequired": { "type": "boolean" },
+                          "unlockedRequired": { "type": "boolean" },
+                          "createsEditorGroup": { "type": "boolean" },
+                          "editorGroupRequired": { "type": "boolean" },
+                          "preservesResponsiveGeometry": { "type": "boolean" }
+                        },
+                        "required": ["id", "label", "shortcut", "sdkHelper", "minSelected", "sameParentRequired", "unlockedRequired", "preservesResponsiveGeometry"]
+                      }
+                    },
+                    "constraints": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "sameParentRequired": { "const": true },
+                        "lockedLayersBlocked": { "const": true },
+                        "editorGroupMarker": { "const": "props.editorGroup" },
+                        "responsiveBreakpoints": {
+                          "type": "array",
+                          "items": { "enum": ["tablet", "mobile"] },
+                          "contains": { "const": "mobile" }
+                        },
+                        "updateTarget": { "const": "content" }
+                      },
+                      "required": ["sameParentRequired", "lockedLayersBlocked", "editorGroupMarker", "responsiveBreakpoints", "updateTarget"]
+                    }
+                  },
+                  "required": ["schemaVersion", "sdkHelpers", "commands", "constraints"]
                 },
                 "updateBody": {
                   "type": "object",
@@ -893,7 +955,7 @@
                   "required": ["conflict", "postConflict", "forbidden", "postForbidden", "validation"]
                 }
               },
-              "required": ["schemaVersion", "enabled", "endpoints", "methods", "auth", "capabilities", "editableTargets", "updateBody", "errors"]
+              "required": ["schemaVersion", "enabled", "endpoints", "methods", "auth", "capabilities", "editableTargets", "editorComposition", "updateBody", "errors"]
             },
             "pages": {
               "type": "object",
